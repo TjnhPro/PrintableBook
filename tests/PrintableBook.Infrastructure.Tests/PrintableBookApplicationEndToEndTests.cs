@@ -214,6 +214,46 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.Equal([result.PublishedOutputs.CoverPdf.Value, result.PublishedOutputs.InteriorPdf.Value], persistedState.PublishedArtifactReferences);
     }
 
+    [Fact]
+    public async Task ProcessBookAsync_records_cancellation_when_it_arrives_before_publish()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "CancelledBook"));
+        await CreateBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        using var cancellation = new CancellationTokenSource();
+        var blockingPublisher = new BlockingBeforePublishOutputPublisher();
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem),
+            workspaceFactory,
+            stateStore,
+            new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem),
+            new DiskBackedInteriorPagePipeline(
+                new MagickArtworkTrimProcessor(),
+                new MagickSquareCanvasProcessor(),
+                new MagickArtworkResizeProcessor(),
+                new MagickFrameProcessor(),
+                new MagickFinalInteriorPageProcessor(),
+                new MagickImageInspector()),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new MagickPrintableBookPdfExporter(),
+            blockingPublisher);
+        var command = CreateCommand("cancelled-book", bookDirectory);
+
+        var processing = processor.ProcessBookAsync(command, cancellation.Token).AsTask();
+        await blockingPublisher.WaitUntilStartedAsync();
+        cancellation.Cancel();
+
+        var result = await processing;
+        Assert.Equal(BookProcessingStatus.Cancelled, result.Status);
+        Assert.Null(result.PublishedOutputs);
+        Assert.False(Directory.Exists(command.FinalOutputRoot.Value));
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        Assert.Equal(BookProcessingStatus.Cancelled, (await stateStore.LoadAsync(workspace))!.Status);
+    }
+
     private PrintableBookProcessingCommand CreateCommand(string bookId, DirectoryReference bookDirectory) => new(
         new BookId(bookId),
         bookDirectory,
@@ -293,5 +333,21 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             cancellation.Cancel();
             return published;
         }
+    }
+
+    private sealed class BlockingBeforePublishOutputPublisher : IBookOutputPublisher
+    {
+        private readonly TaskCompletionSource started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async ValueTask<PublishedBookOutputs> PublishAsync(
+            BookOutputPublicationRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            started.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("The publisher should be cancelled before publishing output.");
+        }
+
+        public Task WaitUntilStartedAsync() => started.Task;
     }
 }
