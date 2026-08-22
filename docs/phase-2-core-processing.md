@@ -15,7 +15,7 @@ The workspace separates disposable intermediates from durable standardized pages
 └── output-temp/           temporary Cover and Interior PDFs
 ```
 
-After a validated publish, only `cache/` and `output-temp/` are cleaned. `processed/`, state, logs, errors, and the shuffle map remain available for re-shuffling, PDF rebuilds, and recovery; a failed run retains its diagnostic and reusable workspace data.
+After a validated publish, the Book workspace is retained. State, logs, processed PNGs, the shuffle map, and intermediate cache remain available for recovery, debugging, re-shuffling, PDF rebuilds, and future UI inspection. The publisher may move the temporary PDF set into the final versioned directory, but processing does not run an automatic workspace cleanup step. Cleanup will be exposed later as an explicit user action; a failed run likewise retains its diagnostic and reusable workspace data.
 
 Image processing uses Magick.NET in Infrastructure. Magick.NET's PDF encoder writes output; PDFsharp reopens documents for inspection. Their implementation types do not leak into Core or Desktop.
 
