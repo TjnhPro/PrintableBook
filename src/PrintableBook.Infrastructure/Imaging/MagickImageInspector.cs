@@ -13,8 +13,11 @@ public sealed class MagickImageInspector : IImageInspector
         cancellationToken.ThrowIfCancellationRequested();
         using var magickImage = new MagickImage(image.Value);
         var density = magickImage.Density.ChangeUnits(DensityUnit.PixelsPerInch);
+        ImageDensity? resolvedDensity = density.X > 0 && density.Y > 0
+            ? new ImageDensity(density.X, density.Y)
+            : null;
         return ValueTask.FromResult(new ImageInfo(
             new ImageSize((int)magickImage.Width, (int)magickImage.Height),
-            new ImageDensity(density.X, density.Y)));
+            resolvedDensity));
     }
 }

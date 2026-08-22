@@ -22,8 +22,9 @@ public sealed class MagickImageInspectorTests : IAsyncLifetime
         var info = await new MagickImageInspector().GetInfoAsync(new FileReference(source));
 
         Assert.Equal(new ImageSize(64, 32), info.Size);
-        Assert.Equal(300, info.Density.Horizontal, precision: 2);
-        Assert.Equal(300, info.Density.Vertical, precision: 2);
+        Assert.NotNull(info.Density);
+        Assert.Equal(300, info.Density.Value.Horizontal, precision: 2);
+        Assert.Equal(300, info.Density.Value.Vertical, precision: 2);
     }
 
     public Task InitializeAsync() => Task.CompletedTask;
