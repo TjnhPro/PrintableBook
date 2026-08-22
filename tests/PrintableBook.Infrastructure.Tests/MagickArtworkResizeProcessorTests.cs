@@ -30,7 +30,7 @@ public sealed class MagickArtworkResizeProcessorTests : IAsyncLifetime
         await new MagickArtworkResizeProcessor().ResizeAsync(new ArtworkResizeRequest(
             new FileReference(source),
             new FileReference(target),
-            new ImageSize(400, 400),
+            400,
             new ImageDensity(300, 300)));
 
         var info = await new MagickImageInspector().GetInfoAsync(new FileReference(target));
@@ -42,7 +42,7 @@ public sealed class MagickArtworkResizeProcessorTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ResizeAsync_rejects_a_non_square_target_for_normalized_artwork()
+    public async Task ResizeAsync_rejects_a_non_positive_maximum_side()
     {
         Directory.CreateDirectory(rootPath);
         var source = Path.Combine(rootPath, "square.png");
@@ -51,10 +51,10 @@ public sealed class MagickArtworkResizeProcessorTests : IAsyncLifetime
             image.Write(source);
         }
 
-        await Assert.ThrowsAsync<ArgumentException>(() => new MagickArtworkResizeProcessor().ResizeAsync(new ArtworkResizeRequest(
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => new MagickArtworkResizeProcessor().ResizeAsync(new ArtworkResizeRequest(
             new FileReference(source),
             new FileReference(Path.Combine(rootPath, "target.png")),
-            new ImageSize(400, 300),
+            0,
             new ImageDensity(300, 300))).AsTask());
     }
 

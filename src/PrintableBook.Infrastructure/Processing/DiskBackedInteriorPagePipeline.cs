@@ -74,7 +74,7 @@ public sealed class DiskBackedInteriorPagePipeline(
             {
                 DeleteDownstream(framed, finalPage);
                 await resizeProcessor.ResizeAsync(
-                    new ArtworkResizeRequest(canvas, resized, request.TargetSize, request.TargetDensity), cancellationToken);
+                    new ArtworkResizeRequest(canvas, resized, request.TargetSize.Width, request.TargetDensity), cancellationToken);
             }
 
             if (!await IsReadableAsync(framed, request.TargetSize, cancellationToken))

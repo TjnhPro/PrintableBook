@@ -9,19 +9,18 @@ public sealed class MagickArtworkResizeProcessor : IArtworkResizeProcessor
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
-        if (request.TargetSize.Width != request.TargetSize.Height)
+        if (request.MaximumSide <= 0)
         {
-            throw new ArgumentException("Normalized artwork requires a square resize target.", nameof(request));
+            throw new ArgumentOutOfRangeException(nameof(request), "The maximum artwork side must be positive.");
         }
 
         using var image = new MagickImage(request.Source.Value);
-        if (image.Width != image.Height)
-        {
-            throw new ArgumentException("Artwork must be square before resizing.", nameof(request));
-        }
-
         image.FilterType = FilterType.Lanczos;
-        image.Resize((uint)request.TargetSize.Width, (uint)request.TargetSize.Height);
+        var sourceMaximumSide = Math.Max(image.Width, image.Height);
+        var scale = request.MaximumSide / (double)sourceMaximumSide;
+        var targetWidth = (uint)Math.Round(image.Width * scale, MidpointRounding.AwayFromZero);
+        var targetHeight = (uint)Math.Round(image.Height * scale, MidpointRounding.AwayFromZero);
+        image.Resize(targetWidth, targetHeight);
         image.Density = new Density(
             request.TargetDensity.Horizontal,
             request.TargetDensity.Vertical,

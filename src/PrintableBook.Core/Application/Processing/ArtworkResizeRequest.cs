@@ -5,5 +5,5 @@ namespace PrintableBook.Core.Application.Processing;
 public sealed record ArtworkResizeRequest(
     FileReference Source,
     FileReference Target,
-    ImageSize TargetSize,
+    int MaximumSide,
     ImageDensity TargetDensity);
