@@ -32,7 +32,8 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new MagickSquareCanvasProcessor(),
             new MagickArtworkResizeProcessor(),
             new MagickFrameProcessor(),
-            new MagickFinalInteriorPageProcessor());
+            new MagickFinalInteriorPageProcessor(),
+            new MagickImageInspector());
         var queueBookProcessor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem),
             workspaceFactory,

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Processing;
 
@@ -11,7 +12,8 @@ public sealed class DiskBackedInteriorPagePipeline(
     ISquareCanvasProcessor squareCanvasProcessor,
     IArtworkResizeProcessor resizeProcessor,
     IFrameProcessor frameProcessor,
-    IFinalInteriorPageProcessor finalPageProcessor) : IInteriorPagePipeline
+    IFinalInteriorPageProcessor finalPageProcessor,
+    IImageInspector imageInspector) : IInteriorPagePipeline
 {
     public async ValueTask<InteriorPageProcessingResult> ProcessAsync(
         InteriorPagePipelineRequest request,
@@ -30,23 +32,54 @@ public sealed class DiskBackedInteriorPagePipeline(
         var resized = new FileReference(Path.Combine(pageCache, "resize.png"));
         var framed = new FileReference(Path.Combine(pageCache, "frame.png"));
         var finalPage = new FileReference(Path.Combine(request.Workspace.OutputDirectory.Value, "interior", $"{request.PageId}.png"));
+        var cacheStampFile = Path.Combine(pageCache, "input-stamp.json");
+        var cacheStamp = CacheInputStamp.Create(request);
 
         try
         {
-            var trimResult = await trimProcessor.TrimAsync(
-                new ArtworkTrimRequest(request.Source, trimmed, request.ArtworkDetectionThreshold), cancellationToken);
-            if (!trimResult.HasArtwork)
+            if (!await HasMatchingStampAsync(cacheStampFile, cacheStamp, cancellationToken))
             {
-                throw new InvalidDataException("No black or near-black artwork was detected.");
+                Directory.Delete(pageCache, recursive: true);
+                Directory.CreateDirectory(pageCache);
+                await File.WriteAllTextAsync(cacheStampFile, JsonSerializer.Serialize(cacheStamp), cancellationToken);
             }
 
-            await squareCanvasProcessor.NormalizeAsync(new SquareCanvasRequest(trimmed, canvas), cancellationToken);
-            await resizeProcessor.ResizeAsync(
-                new ArtworkResizeRequest(canvas, resized, request.TargetSize, request.TargetDensity), cancellationToken);
-            await frameProcessor.ApplyAsync(
-                new FrameOverlayRequest(resized, framed, request.Frame, request.IsFrameEnabled), cancellationToken);
-            await finalPageProcessor.ProduceAsync(
-                new FinalInteriorPageRequest(framed, finalPage, request.TargetSize, request.TargetDensity), cancellationToken);
+            if (!await IsReadableAsync(trimmed, null, cancellationToken))
+            {
+                DeleteDownstream(canvas, resized, framed, finalPage);
+                var trimResult = await trimProcessor.TrimAsync(
+                    new ArtworkTrimRequest(request.Source, trimmed, request.ArtworkDetectionThreshold), cancellationToken);
+                if (!trimResult.HasArtwork)
+                {
+                    throw new InvalidDataException("No black or near-black artwork was detected.");
+                }
+            }
+
+            if (!await IsReadableAsync(canvas, null, cancellationToken))
+            {
+                DeleteDownstream(resized, framed, finalPage);
+                await squareCanvasProcessor.NormalizeAsync(new SquareCanvasRequest(trimmed, canvas), cancellationToken);
+            }
+
+            if (!await IsReadableAsync(resized, request.TargetSize, cancellationToken))
+            {
+                DeleteDownstream(framed, finalPage);
+                await resizeProcessor.ResizeAsync(
+                    new ArtworkResizeRequest(canvas, resized, request.TargetSize, request.TargetDensity), cancellationToken);
+            }
+
+            if (!await IsReadableAsync(framed, request.TargetSize, cancellationToken))
+            {
+                DeleteDownstream(finalPage);
+                await frameProcessor.ApplyAsync(
+                    new FrameOverlayRequest(resized, framed, request.Frame, request.IsFrameEnabled), cancellationToken);
+            }
+
+            if (!await IsReadableAsync(finalPage, request.TargetSize, cancellationToken))
+            {
+                await finalPageProcessor.ProduceAsync(
+                    new FinalInteriorPageRequest(framed, finalPage, request.TargetSize, request.TargetDensity), cancellationToken);
+            }
 
             return new InteriorPageProcessingResult(request.PageId, request.Source, finalPage);
         }
@@ -70,4 +103,84 @@ public sealed class DiskBackedInteriorPagePipeline(
         !File.Exists(resized.Value) ? "resize" :
         !File.Exists(framed.Value) ? "frame" :
         "final-page";
+
+    private async ValueTask<bool> IsReadableAsync(FileReference image, ImageSize? expectedSize, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(image.Value))
+        {
+            return false;
+        }
+
+        try
+        {
+            var info = await imageInspector.GetInfoAsync(image, cancellationToken);
+            return expectedSize is null || info.Size == expectedSize.Value;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static async ValueTask<bool> HasMatchingStampAsync(string cacheStampFile, CacheInputStamp expected, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(cacheStampFile))
+        {
+            return false;
+        }
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(cacheStampFile, cancellationToken);
+            return string.Equals(json, JsonSerializer.Serialize(expected), StringComparison.Ordinal);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
+    private static void DeleteDownstream(params FileReference[] files)
+    {
+        foreach (var file in files)
+        {
+            if (File.Exists(file.Value))
+            {
+                File.Delete(file.Value);
+            }
+        }
+    }
+
+    private sealed record CacheInputStamp(
+        string SourcePath,
+        long SourceLength,
+        long SourceLastWriteUtcTicks,
+        byte Threshold,
+        ImageSize TargetSize,
+        ImageDensity TargetDensity,
+        string? FramePath,
+        bool IsFrameEnabled)
+    {
+        public static CacheInputStamp Create(InteriorPagePipelineRequest request)
+        {
+            var source = new FileInfo(request.Source.Value);
+            return new CacheInputStamp(
+                source.FullName,
+                source.Length,
+                source.LastWriteTimeUtc.Ticks,
+                request.ArtworkDetectionThreshold.Value,
+                request.TargetSize,
+                request.TargetDensity,
+                request.Frame?.Value,
+                request.IsFrameEnabled);
+        }
+    }
 }
