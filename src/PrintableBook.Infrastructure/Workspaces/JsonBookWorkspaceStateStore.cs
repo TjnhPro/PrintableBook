@@ -39,6 +39,20 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
         return ValueTask.CompletedTask;
     }
 
+    public async ValueTask<IReadOnlyList<BookProcessingLogEntry>> LoadLogsAsync(BookWorkspace workspace, CancellationToken cancellationToken = default)
+    {
+        var logFile = Path.Combine(workspace.WorkingDirectory.Value, "logs", "processing.jsonl");
+        if (!File.Exists(logFile)) return [];
+        var entries = new List<BookProcessingLogEntry>();
+        foreach (var line in await File.ReadAllLinesAsync(logFile, cancellationToken))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var entry = JsonSerializer.Deserialize<BookProcessingLogEntry>(line, JsonOptions);
+            if (entry is not null) entries.Add(entry);
+        }
+        return entries;
+    }
+
     public ValueTask SaveErrorAsync(BookWorkspace workspace, ProcessingFailure failure, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(failure);

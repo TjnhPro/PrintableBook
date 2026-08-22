@@ -92,12 +92,16 @@ test("snapshot rendering keeps discovery, settings, and brand data in the bridge
   assert.match(content.innerHTML, /D:\/PrintableBook/);
 });
 
-test("phase 4 page markup includes durable process, output, and diagnostics states", () => {
+test("phase 4 page markup includes durable process, output, diagnostics, and bridge workflow states", () => {
   const script = readFileSync(appScriptPath, "utf8");
 
-  for (const state of ["Live session monitor", "Selected queue", "Published outputs", "Application diagnostics", "Settings saved"]) {
+  for (const state of ["Live session", "Selected queue", "Published outputs", "Application diagnostics", "Settings saved", "Brand settings", "Processing history", "Interior page detail"]) {
     assert.match(script, new RegExp(state));
   }
   assert.match(script, /command: "settings\.save"/);
+  assert.match(script, /command: "brand\.settings\.save"/);
+  assert.match(script, /command: "book\.validate"/);
+  assert.match(script, /command: "process\.start"/);
+  assert.match(script, /command: "process\.cancel"/);
   assert.match(script, /command: "app\.refresh"/);
 });
