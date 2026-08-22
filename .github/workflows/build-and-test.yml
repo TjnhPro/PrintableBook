@@ -34,6 +34,9 @@ jobs:
       - name: Run Core tests
         run: dotnet test tests/PrintableBook.Core.Tests/PrintableBook.Core.Tests.csproj --configuration Release --no-build
 
+      - name: Run Infrastructure integration tests
+        run: dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build
+
       - name: Run Desktop bridge tests
         run: dotnet test tests/PrintableBook.Desktop.Tests/PrintableBook.Desktop.Tests.csproj --configuration Release --no-build
 
