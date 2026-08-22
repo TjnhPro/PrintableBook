@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Domain.Processing;
 
@@ -45,14 +46,15 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
     {
         var logFile = Path.Combine(workspace.WorkingDirectory.Value, "logs", "processing.jsonl");
         if (!File.Exists(logFile)) return [];
-        var entries = new List<BookProcessingLogEntry>();
-        foreach (var line in await File.ReadAllLinesAsync(logFile, cancellationToken))
+
+        try
         {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            var entry = JsonSerializer.Deserialize<BookProcessingLogEntry>(line, JsonOptions);
-            if (entry is not null) entries.Add(entry);
+            return ParseLogs(await File.ReadAllTextAsync(logFile, cancellationToken));
         }
-        return entries;
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException($"The workspace processing log '{logFile}' is invalid.", exception);
+        }
     }
 
     public ValueTask SaveErrorAsync(BookWorkspace workspace, ProcessingFailure failure, CancellationToken cancellationToken = default)
@@ -66,4 +68,22 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
 
     private static FileReference StateFile(BookWorkspace workspace) =>
         new(Path.Combine(workspace.WorkingDirectory.Value, "state", "book-state.json"));
+
+    private static IReadOnlyList<BookProcessingLogEntry> ParseLogs(string content)
+    {
+        var reader = new Utf8JsonReader(
+            Encoding.UTF8.GetBytes(content),
+            new JsonReaderOptions { AllowMultipleValues = true });
+        var entries = new List<BookProcessingLogEntry>();
+
+        while (reader.Read())
+        {
+            if (reader.TokenType != JsonTokenType.StartObject) continue;
+
+            var entry = JsonSerializer.Deserialize<BookProcessingLogEntry>(ref reader, LogJsonOptions);
+            if (entry is not null) entries.Add(entry);
+        }
+
+        return entries;
+    }
 }

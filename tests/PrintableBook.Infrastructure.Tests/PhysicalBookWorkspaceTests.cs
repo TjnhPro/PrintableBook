@@ -4,6 +4,7 @@ using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 using PrintableBook.Infrastructure.FileSystem;
 using PrintableBook.Infrastructure.Workspaces;
+using System.Text.Json;
 
 namespace PrintableBook.Infrastructure.Tests;
 
@@ -54,6 +55,27 @@ public sealed class PhysicalBookWorkspaceTests : IAsyncLifetime
         var restored = await store.LoadLogsAsync(workspace);
 
         Assert.Equal([entry], restored);
+    }
+
+    [Fact]
+    public async Task LoadLogsAsync_reads_legacy_indented_json_records()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "Book-Legacy-Logs"));
+        var fileSystem = new PhysicalFileSystem();
+        var workspace = await new PhysicalBookWorkspaceFactory(fileSystem).CreateAsync(new BookId("book-legacy-logs"), bookDirectory);
+        var store = new JsonBookWorkspaceStateStore(fileSystem);
+        var first = new BookProcessingLogEntry(DateTimeOffset.Parse("2026-08-22T10:00:00Z"), "book.started", null);
+        var second = new BookProcessingLogEntry(DateTimeOffset.Parse("2026-08-22T10:01:00Z"), "step.completed", "publish");
+        var logFile = Path.Combine(workspace.WorkingDirectory.Value, "logs", "processing.jsonl");
+        var legacyOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web) { WriteIndented = true };
+
+        await File.WriteAllTextAsync(
+            logFile,
+            JsonSerializer.Serialize(first, legacyOptions) + Environment.NewLine + JsonSerializer.Serialize(second, legacyOptions));
+
+        var restored = await store.LoadLogsAsync(workspace);
+
+        Assert.Equal([first, second], restored);
     }
 
     [Fact]
