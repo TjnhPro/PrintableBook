@@ -6,7 +6,7 @@ internal static class CertificationArtifactStore
 {
     public static void Capture(string stage, string caseId, params string[] files)
     {
-        var target = Path.Combine(FindRepositoryRoot(), "TestResults", "Phase3", stage, caseId);
+        var target = Path.Combine(FindRepositoryRoot(), "TestResults", "InteriorProcessing", stage, caseId);
         Directory.CreateDirectory(target);
         foreach (var file in files.Where(File.Exists))
         {
