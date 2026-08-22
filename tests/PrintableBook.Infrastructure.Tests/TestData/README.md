@@ -1,5 +1,14 @@
-# Integration test fixtures
+# Test data and scopes
 
-Add only small, deterministic, redistributable PNG or PDF inputs here when a real Infrastructure processor is implemented.
+Infrastructure tests are split into two scopes.
 
-Each processor test must open the real input, produce a real output, then inspect that output (for example dimensions, page count, or metadata). Do not use mocks to prove image or PDF correctness.
+| Scope | Data location | CI | Purpose |
+| --- | --- | --- | --- |
+| `Repository` | `TestData/` | Required | Small, deterministic, redistributable inputs committed with the code. |
+| `LocalCorpus` | `TestResults/InteriorProcessing/trim/custom/` | Opt-in only | User-supplied real artwork used for manual visual and processing review. |
+
+Tests without the `TestScope=LocalCorpus` trait are repository tests. Add only small, deterministic, redistributable PNG or PDF inputs to `TestData/`.
+
+Each repository processor test must open a real input, produce a real output, then inspect that output (for example dimensions, page count, or metadata). Do not use mocks to prove image or PDF correctness.
+
+Local corpus files and their generated `output/` and `report.json` remain ignored by Git. They must never become an implicit requirement of a clean checkout or the default CI suite.

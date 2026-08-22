@@ -9,6 +9,7 @@ namespace PrintableBook.Infrastructure.Tests;
 /// Executes user-supplied artwork from TestResults/InteriorProcessing/trim/custom.
 /// It is deliberately a real-file corpus, not a mocked processor test.
 /// </summary>
+[Trait(InfrastructureTestScopes.TraitName, InfrastructureTestScopes.LocalCorpus)]
 public sealed class CustomTrimCorpusTests
 {
     [Fact]
