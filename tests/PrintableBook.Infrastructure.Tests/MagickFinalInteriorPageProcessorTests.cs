@@ -40,7 +40,7 @@ public sealed class MagickFinalInteriorPageProcessorTests : IAsyncLifetime
     {
         Directory.CreateDirectory(rootPath);
         var source = Path.Combine(rootPath, "wrong-size.png");
-        using (var image = new MagickImage(MagickColors.White, 200, 200))
+        using (var image = new MagickImage(MagickColors.White, 400, 400))
         {
             image.Write(source);
         }
