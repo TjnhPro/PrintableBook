@@ -46,5 +46,15 @@ test("bridge accepts the JSON response emitted by the .NET host", () => {
     })
   });
 
-  assert.equal(status.textContent, "Desktop bridge connected.");
+  assert.equal(status.textContent, "Connected");
+});
+
+test("webview shell exposes every top-level desktop route", () => {
+  const page = readFileSync(join(process.cwd(), "src", "PrintableBook.Desktop", "Frontend", "index.html"), "utf8");
+
+  for (const route of ["configuration", "brands", "books", "process", "outputs", "diagnostics"]) {
+    assert.match(page, new RegExp(`data-route="${route}"`));
+  }
+  assert.match(page, /css\/tailwind\.css/);
+  assert.match(page, /id="app-content"/);
 });
