@@ -2,15 +2,17 @@ using PrintableBook.Core.Application.Commands;
 using PrintableBook.Core.Application.Progress;
 using PrintableBook.Core.Application.Results;
 
-namespace PrintableBook.Core.Application.Services;
+namespace PrintableBook.Core.Application.Pipelines;
 
 /// <summary>
-/// Application-level processing entry point used by presentation hosts.
+/// A replaceable processing step. Returning null allows the next stage to continue.
 /// </summary>
-public interface IPrintableBookApplication
+public interface IBookProcessingStage
 {
-    ValueTask<ProcessingResult> ProcessAsync(
-        ProcessingRequest request,
+    string Name { get; }
+
+    ValueTask<ProcessingResult?> ProcessAsync(
+        ProcessingContext context,
         IProgress<ProcessingProgress>? progress = null,
         CancellationToken cancellationToken = default);
 }

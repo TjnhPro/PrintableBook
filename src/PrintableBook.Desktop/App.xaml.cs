@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
-using PrintableBook.Core.Application.Services;
+using PrintableBook.Core.DependencyInjection;
+using PrintableBook.Infrastructure.DependencyInjection;
 using System.Windows;
 
 namespace PrintableBook.Desktop;
@@ -13,7 +14,8 @@ public partial class App : Application
         base.OnStartup(e);
 
         var services = new ServiceCollection();
-        services.AddSingleton<IPrintableBookApplication, PrintableBookApplication>();
+        services.AddPrintableBookCore();
+        services.AddPrintableBookInfrastructure();
         services.AddSingleton<MainWindow>();
 
         serviceProvider = services.BuildServiceProvider();
