@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Scanning;
 using PrintableBook.Infrastructure.FileSystem;
+using PrintableBook.Infrastructure.Imaging;
 using PrintableBook.Infrastructure.Scanning;
 
 namespace PrintableBook.Infrastructure.DependencyInjection;
@@ -15,6 +16,7 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddSingleton<IFileSystem, PhysicalFileSystem>();
+        services.AddSingleton<IImageInspector, MagickImageInspector>();
         services.AddSingleton<IBookSourceScanner, BookSourceScanner>();
         return services;
     }

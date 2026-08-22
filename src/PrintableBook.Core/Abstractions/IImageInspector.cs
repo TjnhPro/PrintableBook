@@ -6,4 +6,6 @@ namespace PrintableBook.Core.Abstractions;
 public interface IImageInspector
 {
     ValueTask<ImageSize> GetSizeAsync(FileReference image, CancellationToken cancellationToken = default);
+
+    ValueTask<ImageInfo> GetInfoAsync(FileReference image, CancellationToken cancellationToken = default);
 }
