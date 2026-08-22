@@ -15,22 +15,31 @@ const appScriptPath = join(
 
 function loadBridge() {
   const status = { textContent: "" };
+  const content = { innerHTML: "", addEventListener: () => { } };
+  const brandSelect = { innerHTML: "", value: "" };
+  const refreshButton = { addEventListener: () => { } };
+  const messages = [];
   let messageHandler;
+  const browserWindow = {
+    chrome: {
+      webview: {
+        addEventListener: (_eventName, handler) => { messageHandler = handler; },
+        postMessage: (message) => { messages.push(JSON.parse(message)); }
+      }
+    }
+  };
 
   vm.runInNewContext(readFileSync(appScriptPath, "utf8"), {
     crypto: { randomUUID: () => "request-1" },
-    document: { getElementById: () => status },
-    window: {
-      chrome: {
-        webview: {
-          addEventListener: (_eventName, handler) => { messageHandler = handler; },
-          postMessage: () => { }
-        }
-      }
-    }
+    document: {
+      getElementById: (id) => ({ "bridge-status": status, "app-content": content, "brand-select": brandSelect, "refresh-button": refreshButton }[id]),
+      querySelectorAll: () => [],
+      querySelector: () => null
+    },
+    window: browserWindow
   });
 
-  return { messageHandler, status };
+  return { messageHandler, status, content, brandSelect, messages };
 }
 
 test("bridge accepts the JSON response emitted by the .NET host", () => {
@@ -57,4 +66,38 @@ test("webview shell exposes every top-level desktop route", () => {
   }
   assert.match(page, /css\/tailwind\.css/);
   assert.match(page, /id="app-content"/);
+});
+
+test("snapshot rendering keeps discovery, settings, and brand data in the bridge response", () => {
+  const { messageHandler, status, content, brandSelect, messages } = loadBridge();
+
+  assert.deepEqual(messages.map((message) => message.command), ["app.ping", "app.refresh"]);
+  messageHandler({
+    data: {
+      version: 1,
+      id: "refresh-1",
+      ok: true,
+      command: "app.snapshot",
+      payload: {
+        discovery: { paths: { root: { value: "D:/PrintableBook" } }, brands: [{ name: "Amazon" }], books: [{ name: "Book 001" }] },
+        globalSettings: { maximumPageConcurrency: 6, dpi: 300 }
+      }
+    }
+  });
+
+  assert.equal(status.textContent, "Connected");
+  assert.match(brandSelect.innerHTML, /Amazon/);
+  assert.match(content.innerHTML, /Maximum page concurrency/);
+  assert.match(content.innerHTML, /value="6"/);
+  assert.match(content.innerHTML, /D:\/PrintableBook/);
+});
+
+test("phase 4 page markup includes durable process, output, and diagnostics states", () => {
+  const script = readFileSync(appScriptPath, "utf8");
+
+  for (const state of ["Live session monitor", "Selected queue", "Published outputs", "Application diagnostics", "Settings saved"]) {
+    assert.match(script, new RegExp(state));
+  }
+  assert.match(script, /command: "settings\.save"/);
+  assert.match(script, /command: "app\.refresh"/);
 });

@@ -12,10 +12,10 @@ public partial class MainWindow : Window
     private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new(System.Text.Json.JsonSerializerDefaults.Web);
     private readonly WebViewBridgeRouter bridgeRouter;
 
-    public MainWindow(IPrintableBookApplication application, IApplicationSnapshotService snapshotService)
+    public MainWindow(IPrintableBookApplication application, IApplicationSnapshotService snapshotService, IGlobalSettingsStore settingsStore)
     {
         Application = application;
-        bridgeRouter = new WebViewBridgeRouter(snapshotService);
+        bridgeRouter = new WebViewBridgeRouter(snapshotService, settingsStore);
         InitializeComponent();
     }
 

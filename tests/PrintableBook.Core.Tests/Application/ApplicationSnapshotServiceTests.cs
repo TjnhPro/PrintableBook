@@ -11,11 +11,14 @@ public sealed class ApplicationSnapshotServiceTests
     public async Task RefreshAsync_returns_one_coherent_discovery_snapshot()
     {
         var discovery = new StubDiscovery();
-        var snapshot = await new ApplicationSnapshotService(discovery).RefreshAsync();
+        var settings = new StubSettingsStore();
+        var snapshot = await new ApplicationSnapshotService(discovery, settings).RefreshAsync();
 
         Assert.Equal("Brand A", Assert.Single(snapshot.Discovery.Brands).Name);
         Assert.Equal("Book A", Assert.Single(snapshot.Discovery.Books).Name);
         Assert.Equal(1, discovery.CallCount);
+        Assert.Equal(GlobalSettings.Default, snapshot.GlobalSettings);
+        Assert.Equal(1, settings.LoadCallCount);
     }
 
     private sealed class StubDiscovery : IApplicationRootDiscovery
@@ -28,5 +31,17 @@ public sealed class ApplicationSnapshotServiceTests
             var id = new BookId("Book A");
             return ValueTask.FromResult(new ApplicationDiscovery(paths, [new DiscoveredBrand("Brand A", new DirectoryReference("brands/Brand A"))], [new DiscoveredBook("Book A", id, new DirectoryReference("sources/Book A"), new BookWorkspace(id, new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("temp")))]));
         }
+    }
+
+    private sealed class StubSettingsStore : IGlobalSettingsStore
+    {
+        public int LoadCallCount { get; private set; }
+        public ValueTask<GlobalSettings> LoadAsync(CancellationToken cancellationToken = default)
+        {
+            LoadCallCount++;
+            return ValueTask.FromResult(GlobalSettings.Default);
+        }
+
+        public ValueTask SaveAsync(GlobalSettings settings, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 }
