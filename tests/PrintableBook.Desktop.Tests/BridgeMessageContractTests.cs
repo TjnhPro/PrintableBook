@@ -89,7 +89,7 @@ public sealed class BridgeMessageContractTests
         var snapshot = new ApplicationSnapshot(
             new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [], []),
             GlobalSettings.Default,
-            [new BookDesktopSummary(id, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [])],
+            [new BookDesktopSummary(id, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 0)],
             DateTimeOffset.UnixEpoch);
 
         var response = await new WebViewBridgeRouter(new StubSnapshotService(snapshot))

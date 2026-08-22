@@ -8,7 +8,7 @@ namespace PrintableBook.Core.Application.Desktop;
 
 public sealed record BookValidationCheck(string Code, string Message, bool IsSuccess);
 public sealed record InteriorPageSummary(string PageId, string Status, string FinalPagePath);
-public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs);
+public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount);
 public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt);
 
 public interface IApplicationSnapshotService
@@ -53,7 +53,8 @@ public sealed class ApplicationSnapshotService(
                 state.Failure?.Message,
                 state.PublishedArtifactReferences ?? [],
                 interiorPages.OrderBy(page => page.PageId, StringComparer.Ordinal).ToArray(),
-                await stateStore.LoadLogsAsync(book.Workspace, cancellationToken)));
+                await stateStore.LoadLogsAsync(book.Workspace, cancellationToken),
+                scan.Source?.GetAssets(BookAssetKind.Interior).Count ?? 0));
         }
 
         return new ApplicationSnapshot(discoverySnapshot, settings, summaries, DateTimeOffset.UtcNow);

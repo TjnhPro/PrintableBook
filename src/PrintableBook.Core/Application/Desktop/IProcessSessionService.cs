@@ -8,7 +8,7 @@ using PrintableBook.Core.Domain.Processing;
 namespace PrintableBook.Core.Application.Desktop;
 
 public sealed record ProcessQueueEntry(BookId BookId, BookProcessingStatus Status, string? Detail);
-public sealed record ProcessSessionSnapshot(bool IsActive, bool IsCancelling, string? BrandName, BookId? CurrentBookId, string? CurrentStep, IReadOnlyList<ProcessQueueEntry> Queue);
+public sealed record ProcessSessionSnapshot(bool IsActive, bool IsCancelling, string? BrandName, BookId? CurrentBookId, string? CurrentStep, IReadOnlyList<ProcessQueueEntry> Queue, int PagesCompleted = 0, int PagesTotal = 0, int WorkerLimit = 0);
 
 public interface IProcessSessionService
 {
@@ -26,10 +26,23 @@ public sealed class ProcessSessionService(
     private ProcessSessionSnapshot snapshot = new(false, false, null, null, null, []);
     private CancellationTokenSource? cancellation;
 
-    public ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default)
+    public async ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        lock (sync) return ValueTask.FromResult(snapshot);
+        ProcessSessionSnapshot current;
+        lock (sync) current = snapshot;
+        if (!current.IsActive || current.CurrentBookId is null) return current;
+        var refreshed = await snapshotService.RefreshAsync(cancellationToken);
+        var summary = refreshed.BookSummaries.FirstOrDefault(item => item.BookId == current.CurrentBookId);
+        if (summary is null) return current;
+        lock (sync)
+        {
+            if (snapshot.IsActive && snapshot.CurrentBookId == current.CurrentBookId)
+            {
+                snapshot = snapshot with { CurrentStep = summary.CurrentStep ?? snapshot.CurrentStep, PagesCompleted = summary.InteriorPages.Count, PagesTotal = summary.InteriorSourcePageCount, WorkerLimit = refreshed.GlobalSettings.MaximumPageConcurrency };
+            }
+            return snapshot;
+        }
     }
 
     public async ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, CancellationToken cancellationToken = default)
@@ -58,7 +71,7 @@ public sealed class ProcessSessionService(
         {
             if (snapshot.IsActive) return snapshot;
             cancellation = new CancellationTokenSource();
-            snapshot = new ProcessSessionSnapshot(true, false, brandName, selected[0].Id, "Preparing", selected.Select((book, index) => new ProcessQueueEntry(book.Id, index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Preparing" : "Waiting")).ToArray());
+            snapshot = new ProcessSessionSnapshot(true, false, brandName, selected[0].Id, "Preparing", selected.Select((book, index) => new ProcessQueueEntry(book.Id, index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Preparing" : "Waiting")).ToArray(), 0, 0, applicationSnapshot.GlobalSettings.MaximumPageConcurrency);
         }
 
         _ = ExecuteAsync(applicationSnapshot, selected, brandName, cancellation.Token);
