@@ -14,7 +14,7 @@ public sealed class ApplicationSnapshotService(IApplicationRootDiscovery discove
     public async ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
         var discoverySnapshot = await discovery.DiscoverAsync(cancellationToken);
-        var settings = await settingsStore.LoadAsync(cancellationToken);
+        var settings = await settingsStore.LoadAsync(discoverySnapshot.Paths, cancellationToken);
         return new ApplicationSnapshot(discoverySnapshot, settings, DateTimeOffset.UtcNow);
     }
 }

@@ -42,6 +42,12 @@ public sealed class ApplicationSnapshotServiceTests
             return ValueTask.FromResult(GlobalSettings.Default);
         }
 
+        public ValueTask<GlobalSettings> LoadAsync(ApplicationPaths paths, CancellationToken cancellationToken = default)
+        {
+            LoadCallCount++;
+            return ValueTask.FromResult(GlobalSettings.Default);
+        }
+
         public ValueTask SaveAsync(GlobalSettings settings, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 }

@@ -1,3 +1,5 @@
+using PrintableBook.Core.Application.Discovery;
+
 namespace PrintableBook.Core.Application.Desktop;
 
 public sealed record GlobalSettings(int MaximumPageConcurrency, byte ArtworkDetectionThreshold, int ArtworkMaximumSide, int WorkingPageWidth, int WorkingPageHeight, int FinalPageWidth, int FinalPageHeight, int Dpi, double InteriorPdfWidthInches, double InteriorPdfHeightInches)
@@ -8,5 +10,6 @@ public sealed record GlobalSettings(int MaximumPageConcurrency, byte ArtworkDete
 public interface IGlobalSettingsStore
 {
     ValueTask<GlobalSettings> LoadAsync(CancellationToken cancellationToken = default);
+    ValueTask<GlobalSettings> LoadAsync(ApplicationPaths paths, CancellationToken cancellationToken = default);
     ValueTask SaveAsync(GlobalSettings settings, CancellationToken cancellationToken = default);
 }

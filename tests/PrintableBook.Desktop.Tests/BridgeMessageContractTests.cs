@@ -88,6 +88,7 @@ public sealed class BridgeMessageContractTests
     {
         public GlobalSettings? Saved { get; private set; }
         public ValueTask<GlobalSettings> LoadAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(GlobalSettings.Default);
+        public ValueTask<GlobalSettings> LoadAsync(ApplicationPaths paths, CancellationToken cancellationToken = default) => ValueTask.FromResult(GlobalSettings.Default);
         public ValueTask SaveAsync(GlobalSettings settings, CancellationToken cancellationToken = default)
         {
             Saved = settings;
