@@ -10,11 +10,18 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\PrintableBook.Core\PrintableBook.Core.csproj" />
     <ProjectReference Include="..\PrintableBook.Infrastructure\PrintableBook.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Frontend\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>
