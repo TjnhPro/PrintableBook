@@ -30,6 +30,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IInteriorPagePipeline, DiskBackedInteriorPagePipeline>();
         services.AddSingleton<IOrderedBookAssembler, OrderedBookAssembler>();
         services.AddSingleton<IPrintableBookPdfExporter, MagickPrintableBookPdfExporter>();
+        services.AddSingleton<IPdfDocumentInspector, PdfSharpDocumentInspector>();
+        services.AddSingleton<IBookOutputPublisher, ValidatedBookOutputPublisher>();
         services.AddSingleton<IBookSourceScanner, BookSourceScanner>();
         services.AddSingleton<IBookWorkspaceFactory, PhysicalBookWorkspaceFactory>();
         services.AddSingleton<IBookWorkspaceStateStore, JsonBookWorkspaceStateStore>();
