@@ -31,6 +31,7 @@ public sealed class MagickFrameCertificationTests : IAsyncLifetime
         Assert.Equal((byte)0, output.GetPixels().GetPixel((int)width / 2, (int)height / 2)[0]);
         Assert.Equal((byte)0, output.GetPixels().GetPixel(0, 0)[0]);
         Assert.Equal((byte)0, output.GetPixels().GetPixel((int)width - 1, (int)height - 1)[0]);
+        CertificationArtifactStore.Capture("frame", id, page, frame, target);
     }
 
     [Fact]
@@ -45,6 +46,7 @@ public sealed class MagickFrameCertificationTests : IAsyncLifetime
             new FileReference(page), new FileReference(target), null, false));
 
         Assert.Equal(await File.ReadAllBytesAsync(page), await File.ReadAllBytesAsync(target));
+        CertificationArtifactStore.Capture("frame", "off", page, target);
     }
 
     [Fact]

@@ -37,6 +37,7 @@ public sealed class MagickFinalPageCertificationTests : IAsyncLifetime
         Assert.Equal((byte)255, outputPixels.GetPixel(2569, 2586)[0]);
         Assert.Equal((byte)255, outputPixels.GetPixel(19, 36)[0]);
         Assert.Equal((byte)255, outputPixels.GetPixel(19, 2587)[0]);
+        CertificationArtifactStore.Capture("final-page", "2550-to-2588x2625", source, target);
     }
 
     public Task InitializeAsync() => Task.CompletedTask;

@@ -40,6 +40,7 @@ public sealed class MagickWorkingPageCertificationTests : IAsyncLifetime
         Assert.Equal((byte)255, outputPixels.GetPixel(expectedX + width, expectedY + height - 1)[0]);
         Assert.Equal(expectedX, (2550 - width) / 2);
         Assert.Equal(expectedY, (2550 - height) / 2);
+        CertificationArtifactStore.Capture("working-page", id, source, target);
     }
 
     public Task InitializeAsync() => Task.CompletedTask;

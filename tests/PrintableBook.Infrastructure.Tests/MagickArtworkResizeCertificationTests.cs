@@ -49,6 +49,7 @@ public sealed class MagickArtworkResizeCertificationTests : IAsyncLifetime
         Assert.Equal(300, info.Density!.Value.Horizontal, precision: 2);
         using var output = new MagickImage(target);
         Assert.True(HasDarkPixelNear(output, expectedWidth / 2, expectedHeight / 2));
+        CertificationArtifactStore.Capture("resize", id, source, target);
     }
 
     public Task InitializeAsync() => Task.CompletedTask;

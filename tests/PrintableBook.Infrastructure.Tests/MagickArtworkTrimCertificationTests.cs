@@ -67,6 +67,7 @@ public sealed class MagickArtworkTrimCertificationTests : IAsyncLifetime
         using var output = new MagickImage(target);
         Assert.InRange(output.GetPixels().GetPixel(0, 0)[0], (byte)0, fixture.Threshold);
         Assert.InRange(output.GetPixels().GetPixel(fixture.Width - 1, fixture.Height - 1)[0], (byte)0, fixture.Threshold);
+        CertificationArtifactStore.Capture("trim", fixture.Id, source, target);
     }
 
     [Fact]
@@ -85,6 +86,7 @@ public sealed class MagickArtworkTrimCertificationTests : IAsyncLifetime
 
         Assert.False(result.HasArtwork);
         Assert.False(File.Exists(target.Value));
+        CertificationArtifactStore.Capture("trim", "all-white", source);
     }
 
     [Fact]
