@@ -31,6 +31,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
 
         try
         {
+            state = await BeginStepAsync(state, "scan", cancellationToken);
             var scan = await sourceScanner.ScanAsync(command.BookId, command.BookDirectory, cancellationToken);
             if (!scan.IsSuccess)
             {
@@ -40,6 +41,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             state = await CompleteStepAsync(state, "scan", cancellationToken);
             var source = scan.Source!;
             var cover = source.GetAssets(BookAssetKind.Cover).Single().Reference;
+            state = await BeginStepAsync(state, "cover-validation", cancellationToken);
             var coverValidation = await coverValidator.ValidateAsync(
                 new CoverValidationRequest(new FileReference(cover), command.MinimumCoverSize), cancellationToken);
             if (!coverValidation.IsValid)
@@ -59,11 +61,13 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     command.Frame,
                     command.IsFrameEnabled))
                 .ToArray();
+            state = await BeginStepAsync(state, "interior-pages", cancellationToken);
             await using var concurrencyController = BookPageConcurrencyController.Create(command.MaximumPageConcurrency);
             var pageResults = await new BoundedInteriorPageBatchProcessor(interiorPagePipeline)
                 .ProcessAsync(interiorRequests, concurrencyController, cancellationToken);
             state = await CompleteStepAsync(state, "interior-pages", cancellationToken);
 
+            state = await BeginStepAsync(state, "shuffle", cancellationToken);
             var shuffleMap = await shuffleStore.LoadAsync(workspace, cancellationToken);
             if (!IsCompatible(shuffleMap, pageResults, command.ShuffleSeed))
             {
@@ -72,6 +76,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             }
 
             state = await CompleteStepAsync(state, "shuffle", cancellationToken);
+            state = await BeginStepAsync(state, "assembly", cancellationToken);
             var assembly = await bookAssembler.AssembleAsync(new OrderedBookAssemblyRequest(
                 workspace,
                 source.GetAssets(BookAssetKind.Intro).Select(asset => new FileReference(asset.Reference)).ToArray(),
@@ -80,6 +85,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 command.TargetInteriorSize), cancellationToken);
             state = await CompleteStepAsync(state, "assembly", cancellationToken);
 
+            state = await BeginStepAsync(state, "pdf-export", cancellationToken);
             var pdfOutput = await pdfExporter.ExportAsync(new PrintableBookPdfExportRequest(
                 new FileReference(cover),
                 assembly.OrderedPages,
@@ -87,6 +93,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 command.CoverPdfPageSize,
                 command.InteriorPdfPageSize), cancellationToken);
             state = await CompleteStepAsync(state, "pdf-export", cancellationToken);
+            state = await BeginStepAsync(state, "publish", cancellationToken);
             var published = await outputPublisher.PublishAsync(new BookOutputPublicationRequest(
                 pdfOutput,
                 command.FinalOutputRoot,
@@ -137,6 +144,13 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             var completed = currentState.CompleteStep(step, DateTimeOffset.UtcNow);
             await PersistStateAsync(completed, "step.completed", step, token);
             return completed;
+        }
+
+        async ValueTask<BookProcessingState> BeginStepAsync(BookProcessingState currentState, string step, CancellationToken token)
+        {
+            var started = currentState.BeginStep(step, DateTimeOffset.UtcNow);
+            await PersistStateAsync(started, "step.started", step, token);
+            return started;
         }
 
         async ValueTask PersistStateAsync(BookProcessingState currentState, string eventName, string detail, CancellationToken token)

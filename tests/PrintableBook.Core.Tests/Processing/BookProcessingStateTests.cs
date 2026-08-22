@@ -6,6 +6,30 @@ namespace PrintableBook.Core.Tests.Processing;
 public sealed class BookProcessingStateTests
 {
     [Fact]
+    public void BeginStep_marks_the_active_step_without_marking_it_complete()
+    {
+        var running = BookProcessingState.NotStarted(new BookId("book-one"))
+            .Start(DateTimeOffset.Parse("2026-08-22T10:00:00Z"))
+            .BeginStep("interior-pages", DateTimeOffset.Parse("2026-08-22T10:01:00Z"));
+
+        Assert.Equal(BookProcessingStatus.Running, running.Status);
+        Assert.Equal("interior-pages", running.CurrentStep);
+        Assert.Null(running.LastCompletedStep);
+    }
+
+    [Fact]
+    public void CompleteStep_clears_the_active_step_after_work_finishes()
+    {
+        var completedStep = BookProcessingState.NotStarted(new BookId("book-one"))
+            .Start(DateTimeOffset.Parse("2026-08-22T10:00:00Z"))
+            .BeginStep("interior-pages", DateTimeOffset.Parse("2026-08-22T10:01:00Z"))
+            .CompleteStep("interior-pages", DateTimeOffset.Parse("2026-08-22T10:02:00Z"));
+
+        Assert.Null(completedStep.CurrentStep);
+        Assert.Equal("interior-pages", completedStep.LastCompletedStep);
+    }
+
+    [Fact]
     public void Failure_records_the_failed_step_reason_and_a_resumable_state()
     {
         var started = BookProcessingState.NotStarted(new BookId("book-one"))

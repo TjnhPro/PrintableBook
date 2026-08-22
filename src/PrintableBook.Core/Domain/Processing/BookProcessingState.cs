@@ -40,7 +40,7 @@ public sealed record BookProcessingState(
         ConfigurationFingerprint = configurationFingerprint
     };
 
-    public BookProcessingState CompleteStep(string step, DateTimeOffset timestamp)
+    public BookProcessingState BeginStep(string step, DateTimeOffset timestamp)
     {
         if (string.IsNullOrWhiteSpace(step))
         {
@@ -51,6 +51,22 @@ public sealed record BookProcessingState(
         {
             Status = BookProcessingStatus.Running,
             CurrentStep = step,
+            UpdatedAt = timestamp,
+            MayResume = false
+        };
+    }
+
+    public BookProcessingState CompleteStep(string step, DateTimeOffset timestamp)
+    {
+        if (string.IsNullOrWhiteSpace(step))
+        {
+            throw new ArgumentException("A processing step is required.", nameof(step));
+        }
+
+        return this with
+        {
+            Status = BookProcessingStatus.Running,
+            CurrentStep = null,
             LastCompletedStep = step,
             UpdatedAt = timestamp
         };

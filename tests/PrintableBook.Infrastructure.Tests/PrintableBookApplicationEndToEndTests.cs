@@ -96,6 +96,61 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.Equal(456, (await new JsonInteriorShuffleStore(fileSystem).LoadAsync(workspace))!.Seed);
     }
 
+    [Fact]
+    public async Task ProcessBookAsync_persists_the_active_interior_step_while_the_page_pipeline_is_running()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "InterruptedBook"));
+        await CreateBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var blockingPipeline = new BlockingInteriorPagePipeline(new DiskBackedInteriorPagePipeline(
+            new MagickArtworkTrimProcessor(),
+            new MagickSquareCanvasProcessor(),
+            new MagickArtworkResizeProcessor(),
+            new MagickFrameProcessor(),
+            new MagickFinalInteriorPageProcessor(),
+            new MagickImageInspector()));
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem),
+            workspaceFactory,
+            stateStore,
+            new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem),
+            blockingPipeline,
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new MagickPrintableBookPdfExporter(),
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+        var command = CreateCommand("interrupted-book", bookDirectory);
+
+        var processing = processor.ProcessBookAsync(command).AsTask();
+        await blockingPipeline.WaitUntilStartedAsync();
+
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        var stateWhileRunning = await stateStore.LoadAsync(workspace);
+        Assert.Equal(BookProcessingStatus.Running, stateWhileRunning!.Status);
+        Assert.Equal("interior-pages", stateWhileRunning.CurrentStep);
+        Assert.Equal("cover-validation", stateWhileRunning.LastCompletedStep);
+
+        blockingPipeline.Release();
+        Assert.Equal(BookProcessingStatus.Completed, (await processing).Status);
+    }
+
+    private PrintableBookProcessingCommand CreateCommand(string bookId, DirectoryReference bookDirectory) => new(
+        new BookId(bookId),
+        bookDirectory,
+        new DirectoryReference(Path.Combine(rootPath, "Final")),
+        new ImageSize(300, 300),
+        new ImageSize(300, 300),
+        new ImageDensity(300, 300),
+        new PhysicalPageSize(1, 1),
+        new PhysicalPageSize(1, 1),
+        2,
+        new ArtworkDetectionThreshold(20),
+        null,
+        false,
+        123);
+
     private async Task CreateBookFixtureAsync(DirectoryReference bookDirectory)
     {
         var coverDirectory = Path.Combine(bookDirectory.Value, "Cover");
@@ -127,5 +182,24 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         }
 
         return Task.CompletedTask;
+    }
+
+    private sealed class BlockingInteriorPagePipeline(IInteriorPagePipeline inner) : IInteriorPagePipeline
+    {
+        private readonly TaskCompletionSource started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async ValueTask<InteriorPageProcessingResult> ProcessAsync(
+            InteriorPagePipelineRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            started.TrySetResult();
+            await release.Task.WaitAsync(cancellationToken);
+            return await inner.ProcessAsync(request, cancellationToken);
+        }
+
+        public Task WaitUntilStartedAsync() => started.Task;
+
+        public void Release() => release.TrySetResult();
     }
 }
