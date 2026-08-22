@@ -37,7 +37,7 @@
     if (action === "save-brand-settings") { const editor = document.querySelector?.("[data-brand-settings]"); window.chrome.webview.postMessage(JSON.stringify({ version: 1, id: crypto.randomUUID(), command: "brand.settings.save", payload: { brandName: uiState.selectedBrand, json: editor?.value ?? "{}" } })); }
     if (action === "queue-book") { const id = target.dataset.bookId; if (target.checked) uiState.selectedBookIds.add(id); else uiState.selectedBookIds.delete(id); }
     if (action === "validate-book") window.chrome.webview.postMessage(JSON.stringify({ version: 1, id: crypto.randomUUID(), command: "book.validate", payload: { bookId: target.dataset.bookId } }));
-    if (action === "go-process") setRoute("process");
+    if (action === "go-process") { if (uiState.selectedBookId) uiState.selectedBookIds.add(uiState.selectedBookId); setRoute("process"); }
     if (action === "start-process") window.chrome.webview.postMessage(JSON.stringify({ version: 1, id: crypto.randomUUID(), command: "process.start", payload: { bookIds: [...uiState.selectedBookIds], brandName: uiState.selectedBrand || brandSelect?.value || null } }));
     if (action === "cancel-process") window.chrome.webview.postMessage(JSON.stringify({ version: 1, id: crypto.randomUUID(), command: "process.cancel" }));
   });

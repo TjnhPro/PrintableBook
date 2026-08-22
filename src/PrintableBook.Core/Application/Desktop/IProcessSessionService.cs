@@ -37,7 +37,12 @@ public sealed class ProcessSessionService(
         ArgumentNullException.ThrowIfNull(bookIds);
         if (bookIds.Count == 0) throw new ArgumentException("Select at least one Book before starting processing.", nameof(bookIds));
 
+        if (string.IsNullOrWhiteSpace(brandName)) throw new ArgumentException("Select one Brand before starting processing.", nameof(brandName));
         var applicationSnapshot = await snapshotService.RefreshAsync(cancellationToken);
+        if (!applicationSnapshot.Discovery.Brands.Any(brand => string.Equals(brand.Name, brandName, StringComparison.Ordinal)))
+        {
+            throw new ArgumentException("The selected Brand no longer exists.", nameof(brandName));
+        }
         var selected = applicationSnapshot.Discovery.Books
             .Where(book => bookIds.Contains(book.Id.Value, StringComparer.Ordinal))
             .ToArray();
@@ -92,7 +97,7 @@ public sealed class ProcessSessionService(
                 book.Id,
                 book.Directory,
                 new DirectoryReference(Path.Combine(applicationSnapshot.Discovery.Paths.Root.Value, "outputs")),
-                new ImageSize(1, 1),
+                new ImageSize(settings.ArtworkMaximumSide, settings.ArtworkMaximumSide),
                 new ImageSize(settings.FinalPageWidth, settings.FinalPageHeight),
                 new ImageDensity(settings.Dpi, settings.Dpi),
                 new PhysicalPageSize(settings.InteriorPdfWidthInches, settings.InteriorPdfHeightInches),
