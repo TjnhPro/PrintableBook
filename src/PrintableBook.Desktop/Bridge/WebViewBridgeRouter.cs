@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PrintableBook.Core.Application.Desktop;
+using PrintableBook.Core.Application.Discovery;
 
 namespace PrintableBook.Desktop.Bridge;
 
@@ -9,7 +10,9 @@ namespace PrintableBook.Desktop.Bridge;
 internal sealed class WebViewBridgeRouter(
     IApplicationSnapshotService? snapshotService = null,
     IGlobalSettingsStore? settingsStore = null,
-    IProcessSessionService? processSessionService = null)
+    IProcessSessionService? processSessionService = null,
+    IApplicationRootDiscovery? rootDiscovery = null,
+    IBrandSettingsStore? brandSettingsStore = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -67,6 +70,42 @@ internal sealed class WebViewBridgeRouter(
             }
         }
 
+        if (request.Command is "brand.settings.get" or "brand.settings.save")
+        {
+            if (rootDiscovery is null || brandSettingsStore is null || request.Payload is not { } brandPayload ||
+                !brandPayload.TryGetProperty("brandName", out var brandNameElement) || string.IsNullOrWhiteSpace(brandNameElement.GetString()))
+            {
+                return BridgeResponse.UnsupportedCommand(request.Id);
+            }
+
+            var brand = (await rootDiscovery.DiscoverAsync(cancellationToken)).Brands
+                .FirstOrDefault(item => string.Equals(item.Name, brandNameElement.GetString(), StringComparison.Ordinal));
+            if (brand is null) return new BridgeResponse(Version, request.Id, false, null, "brand_not_found");
+
+            try
+            {
+                if (request.Command == "brand.settings.get")
+                {
+                    return BridgeResponse.Succeeded(request.Id, "brand.settings", await brandSettingsStore.LoadAsync(brand.Directory, cancellationToken));
+                }
+
+                if (!brandPayload.TryGetProperty("json", out var jsonElement) || jsonElement.ValueKind != JsonValueKind.String)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_settings");
+                }
+                await brandSettingsStore.SaveAsync(brand.Directory, jsonElement.GetString()!, cancellationToken);
+                return BridgeResponse.Succeeded(request.Id, "brand.settings.saved", jsonElement.GetString()!);
+            }
+            catch (JsonException)
+            {
+                return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_settings");
+            }
+            catch (ArgumentException)
+            {
+                return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_settings");
+            }
+        }
+
         if (request.Command != "settings.save" || settingsStore is null || request.Payload is not { } payload)
         {
             return BridgeResponse.UnsupportedCommand(request.Id);
@@ -92,7 +131,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "book.validate" or "settings.save" or "process.get" or "process.cancel" or "process.start" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "book.validate" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

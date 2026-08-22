@@ -2,6 +2,7 @@ using System.IO;
 using Microsoft.Web.WebView2.Core;
 using PrintableBook.Core.Application.Services;
 using PrintableBook.Core.Application.Desktop;
+using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Desktop.Bridge;
 using System.Windows;
 
@@ -12,10 +13,10 @@ public partial class MainWindow : Window
     private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new(System.Text.Json.JsonSerializerDefaults.Web);
     private readonly WebViewBridgeRouter bridgeRouter;
 
-    public MainWindow(IPrintableBookApplication application, IApplicationSnapshotService snapshotService, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService)
+    public MainWindow(IPrintableBookApplication application, IApplicationSnapshotService snapshotService, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore)
     {
         Application = application;
-        bridgeRouter = new WebViewBridgeRouter(snapshotService, settingsStore, processSessionService);
+        bridgeRouter = new WebViewBridgeRouter(snapshotService, settingsStore, processSessionService, rootDiscovery, brandSettingsStore);
         InitializeComponent();
     }
 
