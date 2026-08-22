@@ -1,0 +1,111 @@
+using ImageMagick;
+using PrintableBook.Core.Abstractions;
+using PrintableBook.Core.Application.Pipelines;
+using PrintableBook.Core.Application.Execution;
+using PrintableBook.Core.Application.Processing;
+using PrintableBook.Core.Application.Services;
+using PrintableBook.Core.Domain.Books;
+using PrintableBook.Core.Domain.Processing;
+using PrintableBook.Infrastructure.FileSystem;
+using PrintableBook.Infrastructure.Imaging;
+using PrintableBook.Infrastructure.Pdf;
+using PrintableBook.Infrastructure.Processing;
+using PrintableBook.Infrastructure.Scanning;
+using PrintableBook.Infrastructure.Workspaces;
+
+namespace PrintableBook.Infrastructure.Tests;
+
+public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
+{
+    private readonly string rootPath = Path.Combine(Path.GetTempPath(), $"PrintableBook.EndToEndTests.{Guid.NewGuid():N}");
+
+    [Fact]
+    public async Task ProcessBooksAsync_processes_a_real_book_folder_and_publishes_validated_outputs()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "SampleBook"));
+        await CreateBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var pagePipeline = new DiskBackedInteriorPagePipeline(
+            new MagickArtworkTrimProcessor(),
+            new MagickSquareCanvasProcessor(),
+            new MagickArtworkResizeProcessor(),
+            new MagickFrameProcessor(),
+            new MagickFinalInteriorPageProcessor());
+        var queueBookProcessor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem),
+            workspaceFactory,
+            stateStore,
+            new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem),
+            pagePipeline,
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new MagickPrintableBookPdfExporter(),
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+        var application = new PrintableBookApplication(
+            new BookProcessingPipeline(Array.Empty<IBookProcessingStage>()),
+            new BookProcessingQueueProcessor(new ProcessingSessionGate(), queueBookProcessor));
+
+        var result = await application.ProcessBooksAsync(new BookProcessingQueueRequest([
+            new PrintableBookProcessingCommand(
+                new BookId("sample-book"),
+                bookDirectory,
+                new DirectoryReference(Path.Combine(rootPath, "Final")),
+                new ImageSize(300, 300),
+                new ImageSize(300, 300),
+                new ImageDensity(300, 300),
+                new PhysicalPageSize(1, 1),
+                2,
+                new ArtworkDetectionThreshold(20),
+                null,
+                false,
+                123)
+        ]));
+
+        var bookResult = Assert.Single(result.Books);
+        Assert.False(result.IsAlreadyRunning);
+        Assert.Equal(BookProcessingStatus.Completed, bookResult.Status);
+        Assert.NotNull(bookResult.PublishedOutputs);
+        Assert.True(File.Exists(bookResult.PublishedOutputs!.CoverPdf.Value));
+        Assert.True(File.Exists(bookResult.PublishedOutputs.InteriorPdf.Value));
+        var workspace = await workspaceFactory.CreateAsync(new BookId("sample-book"), bookDirectory);
+        var state = await stateStore.LoadAsync(workspace);
+        Assert.Equal(BookProcessingStatus.Completed, state!.Status);
+        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "state", "interior-shuffle.json")));
+        Assert.True(File.Exists(Path.Combine(bookResult.PublishedOutputs.PublishedDirectory.Value, "interior", "page-0001.png")));
+    }
+
+    private async Task CreateBookFixtureAsync(DirectoryReference bookDirectory)
+    {
+        var coverDirectory = Path.Combine(bookDirectory.Value, "Cover");
+        var interiorDirectory = Path.Combine(bookDirectory.Value, "Interior");
+        Directory.CreateDirectory(coverDirectory);
+        Directory.CreateDirectory(interiorDirectory);
+        await WriteImageAsync(Path.Combine(coverDirectory, "cover.png"), 10, 10, 289, 289);
+        await WriteImageAsync(Path.Combine(interiorDirectory, "page-01.png"), 40, 20, 259, 279);
+        await WriteImageAsync(Path.Combine(interiorDirectory, "page-02.png"), 20, 40, 279, 259);
+    }
+
+    private static Task WriteImageAsync(string path, int minX, int minY, int maxX, int maxY)
+    {
+        using var image = new MagickImage(MagickColors.White, 300, 300);
+        image.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
+        image.GetPixels().SetPixel(minX, minY, [0, 0, 0]);
+        image.GetPixels().SetPixel(maxX, maxY, [0, 0, 0]);
+        image.Write(path);
+        return Task.CompletedTask;
+    }
+
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    public Task DisposeAsync()
+    {
+        if (Directory.Exists(rootPath))
+        {
+            Directory.Delete(rootPath, recursive: true);
+        }
+
+        return Task.CompletedTask;
+    }
+}
