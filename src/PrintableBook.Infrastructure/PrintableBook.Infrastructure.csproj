@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\PrintableBook.Core\PrintableBook.Core.csproj" />
+  </ItemGroup>
+
 </Project>
