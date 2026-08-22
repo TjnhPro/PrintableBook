@@ -22,6 +22,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISquareCanvasProcessor, MagickSquareCanvasProcessor>();
         services.AddSingleton<IArtworkResizeProcessor, MagickArtworkResizeProcessor>();
         services.AddSingleton<IFrameProcessor, MagickFrameProcessor>();
+        services.AddSingleton<IFinalInteriorPageProcessor, MagickFinalInteriorPageProcessor>();
         services.AddSingleton<IBookSourceScanner, BookSourceScanner>();
         return services;
     }
