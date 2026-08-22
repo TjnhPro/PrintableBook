@@ -24,6 +24,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IArtworkResizeProcessor, MagickArtworkResizeProcessor>();
         services.AddSingleton<IFrameProcessor, MagickFrameProcessor>();
         services.AddSingleton<IFinalInteriorPageProcessor, MagickFinalInteriorPageProcessor>();
+        services.AddSingleton<ICoverValidator, MagickCoverValidator>();
         services.AddSingleton<IBookSourceScanner, BookSourceScanner>();
         services.AddSingleton<IBookWorkspaceFactory, PhysicalBookWorkspaceFactory>();
         services.AddSingleton<IBookWorkspaceStateStore, JsonBookWorkspaceStateStore>();
