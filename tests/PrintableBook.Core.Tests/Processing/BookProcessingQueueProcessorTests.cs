@@ -19,7 +19,7 @@ public sealed class BookProcessingQueueProcessorTests
         var request = new BookProcessingQueueRequest([Command("book-one")]);
 
         var firstRun = processor.ProcessAsync(request).AsTask();
-        await Task.Yield();
+        await bookProcessor.WaitUntilStartedAsync();
         var secondRun = await processor.ProcessAsync(request);
 
         Assert.True(secondRun.IsAlreadyRunning);
@@ -57,12 +57,16 @@ public sealed class BookProcessingQueueProcessorTests
     private sealed class BlockingBookProcessor : IBookProcessingQueueBookProcessor
     {
         private readonly TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource started = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async ValueTask<BookProcessingQueueBookResult> ProcessBookAsync(PrintableBookProcessingCommand command, CancellationToken cancellationToken = default)
         {
+            started.TrySetResult();
             await release.Task.WaitAsync(cancellationToken);
             return BookProcessingQueueBookResult.Completed(command.BookId, null);
         }
+
+        public Task WaitUntilStartedAsync() => started.Task;
 
         public Task ReleaseAsync() => release.TrySetResult() ? Task.CompletedTask : Task.CompletedTask;
     }
