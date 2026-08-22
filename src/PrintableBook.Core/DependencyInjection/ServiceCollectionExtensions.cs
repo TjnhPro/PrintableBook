@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using PrintableBook.Core.Application.Execution;
+using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Pipelines;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Services;
@@ -12,6 +13,7 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddSingleton<IProcessingSessionGate, ProcessingSessionGate>();
+        services.AddSingleton<IApplicationSnapshotService, ApplicationSnapshotService>();
         services.AddSingleton<IBookProcessingPipeline, BookProcessingPipeline>();
         services.AddSingleton<IBookProcessingQueueBookProcessor, WorkspaceBookProcessingQueueBookProcessor>();
         services.AddSingleton<BookProcessingQueueProcessor>();
