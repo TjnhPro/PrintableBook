@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using PrintableBook.Core.Application.Services;
 using PrintableBook.Core.Application.Desktop;
@@ -10,7 +11,7 @@ namespace PrintableBook.Desktop;
 
 public partial class MainWindow : Window
 {
-    private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new(System.Text.Json.JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly WebViewBridgeRouter bridgeRouter;
 
     public MainWindow(IPrintableBookApplication application, IApplicationSnapshotService snapshotService, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService)
@@ -47,6 +48,6 @@ public partial class MainWindow : Window
             response = BridgeResponse.Failed("desktop-message", "desktop_bridge_failed", exception);
         }
 
-        Browser.CoreWebView2.PostWebMessageAsJson(System.Text.Json.JsonSerializer.Serialize(response, JsonOptions));
+        Browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(response, JsonOptions));
     }
 }
