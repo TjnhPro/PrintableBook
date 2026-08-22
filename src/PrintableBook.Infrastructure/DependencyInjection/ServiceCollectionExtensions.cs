@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Scanning;
 using PrintableBook.Core.Application.Discovery;
+using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Infrastructure.FileSystem;
 using PrintableBook.Infrastructure.Discovery;
@@ -23,6 +24,7 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         services.AddSingleton<IFileSystem, PhysicalFileSystem>();
         services.AddSingleton<IApplicationRootDiscovery, PhysicalApplicationRootDiscovery>();
+        services.AddSingleton<IGlobalSettingsStore, JsonGlobalSettingsStore>();
         services.AddSingleton<IImageInspector, MagickImageInspector>();
         services.AddSingleton<IArtworkTrimProcessor, MagickArtworkTrimProcessor>();
         services.AddSingleton<ISquareCanvasProcessor, MagickSquareCanvasProcessor>();
