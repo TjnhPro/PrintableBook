@@ -19,7 +19,20 @@ See [Phase 2 processing](docs/phase-2-core-processing.md), [image-engine.md](doc
 dotnet restore PrintableBook.sln
 dotnet build PrintableBook.sln --configuration Release --no-restore
 dotnet test tests/PrintableBook.Core.Tests/PrintableBook.Core.Tests.csproj --configuration Release --no-build
-dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build
+dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "TestScope!=LocalCorpus"
 dotnet test tests/PrintableBook.Desktop.Tests/PrintableBook.Desktop.Tests.csproj --configuration Release --no-build
 node --test tests/PrintableBook.Desktop.Bridge.Tests/app-bridge.test.mjs
 ```
+
+### Local artwork corpus
+
+The regular and CI suite runs repository-owned tests only: deterministic fixtures tracked in `tests/**/TestData/`. User-supplied artwork is a separate `LocalCorpus` scope. It stays in `TestResults/InteriorProcessing/trim/custom/`, is ignored by Git, and writes its review `report.json` and rendered files to its local `output/` folder.
+
+Run that corpus only after placing real images in the folder:
+
+```powershell
+$env:PRINTABLEBOOK_RUN_LOCAL_CORPUS = "true"
+dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "TestScope=LocalCorpus"
+```
+
+Without the environment variable, local-corpus tests are reported as skipped. This is deliberate: an empty clean checkout must never depend on user artwork.
