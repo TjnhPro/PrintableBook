@@ -2,12 +2,9 @@ using PrintableBook.Core.Application.Commands;
 using PrintableBook.Core.Application.Progress;
 using PrintableBook.Core.Application.Results;
 
-namespace PrintableBook.Core.Application.Services;
+namespace PrintableBook.Core.Application.Pipelines;
 
-/// <summary>
-/// Application-level processing entry point used by presentation hosts.
-/// </summary>
-public interface IPrintableBookApplication
+public interface IBookProcessingPipeline
 {
     ValueTask<ProcessingResult> ProcessAsync(
         ProcessingRequest request,
