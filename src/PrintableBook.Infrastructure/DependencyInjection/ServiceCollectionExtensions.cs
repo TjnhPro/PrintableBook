@@ -5,6 +5,7 @@ using PrintableBook.Core.Application.Processing;
 using PrintableBook.Infrastructure.FileSystem;
 using PrintableBook.Infrastructure.Imaging;
 using PrintableBook.Infrastructure.Scanning;
+using PrintableBook.Infrastructure.Workspaces;
 
 namespace PrintableBook.Infrastructure.DependencyInjection;
 
@@ -24,6 +25,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IFrameProcessor, MagickFrameProcessor>();
         services.AddSingleton<IFinalInteriorPageProcessor, MagickFinalInteriorPageProcessor>();
         services.AddSingleton<IBookSourceScanner, BookSourceScanner>();
+        services.AddSingleton<IBookWorkspaceFactory, PhysicalBookWorkspaceFactory>();
+        services.AddSingleton<IBookWorkspaceStateStore, JsonBookWorkspaceStateStore>();
         return services;
     }
 }
