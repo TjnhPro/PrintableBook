@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBookSourceScanner, BookSourceScanner>();
         services.AddSingleton<IBookWorkspaceFactory, PhysicalBookWorkspaceFactory>();
         services.AddSingleton<IBookWorkspaceStateStore, JsonBookWorkspaceStateStore>();
+        services.AddSingleton<IInteriorShuffleStore, JsonInteriorShuffleStore>();
         return services;
     }
 }

@@ -1,4 +1,5 @@
 using PrintableBook.Core.Abstractions;
+using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 using PrintableBook.Infrastructure.FileSystem;
@@ -31,6 +32,26 @@ public sealed class PhysicalBookWorkspaceTests : IAsyncLifetime
         Assert.Equal(BookProcessingStatus.Failed, restored!.Status);
         Assert.Equal("resize", restored.FailedStep);
         Assert.True(File.Exists(Path.Combine(bookDirectory.Value, ".workspace", "errors", "latest-error.json")));
+    }
+
+    [Fact]
+    public async Task Shuffle_store_round_trips_the_generated_page_order_without_renaming_sources()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "Book-Two"));
+        var fileSystem = new PhysicalFileSystem();
+        var workspace = await new PhysicalBookWorkspaceFactory(fileSystem).CreateAsync(new BookId("book-two"), bookDirectory);
+        var shuffleMap = InteriorShuffleIndexGenerator.Generate(
+            [new FileReference("a.png"), new FileReference("b.png"), new FileReference("c.png")],
+            seed: 73);
+        var store = new JsonInteriorShuffleStore(fileSystem);
+
+        await store.SaveAsync(workspace, shuffleMap);
+
+        var restored = await store.LoadAsync(workspace);
+        Assert.NotNull(restored);
+        Assert.Equal(shuffleMap.Entries, restored.Entries);
+        Assert.Equal(73, restored.Seed);
+        Assert.True(File.Exists(Path.Combine(bookDirectory.Value, ".workspace", "state", "interior-shuffle.json")));
     }
 
     public Task InitializeAsync() => Task.CompletedTask;
