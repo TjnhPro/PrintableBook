@@ -12,7 +12,7 @@ namespace PrintableBook.Infrastructure.Tests;
 [Trait(InfrastructureTestScopes.TraitName, InfrastructureTestScopes.LocalCorpus)]
 public sealed class CustomTrimCorpusTests
 {
-    [Fact]
+    [LocalCorpusFact]
     public async Task TrimAsync_processes_every_user_supplied_custom_image_and_writes_a_review_report()
     {
         var customDirectory = FindCustomDirectory();
