@@ -45,16 +45,26 @@ public sealed class PhysicalBookWorkspaceTests : IAsyncLifetime
         var fileSystem = new PhysicalFileSystem();
         var workspace = await new PhysicalBookWorkspaceFactory(fileSystem).CreateAsync(new BookId("book-logs"), bookDirectory);
         var store = new JsonBookWorkspaceStateStore(fileSystem);
-        var entry = new BookProcessingLogEntry(
+        var first = new BookProcessingLogEntry(
             DateTimeOffset.Parse("2026-08-22T10:00:00Z"),
             "step.completed",
             "publish");
+        var second = new BookProcessingLogEntry(
+            DateTimeOffset.Parse("2026-08-22T10:01:00Z"),
+            "book.completed");
 
-        await store.AppendLogAsync(workspace, entry);
+        await store.AppendLogAsync(workspace, first);
+        await store.AppendLogAsync(workspace, second);
 
         var restored = await store.LoadLogsAsync(workspace);
+        var logFile = Path.Combine(workspace.WorkingDirectory.Value, "logs", "processing.jsonl");
+        var records = (await File.ReadAllLinesAsync(logFile))
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .ToArray();
 
-        Assert.Equal([entry], restored);
+        Assert.Equal([first, second], restored);
+        Assert.Equal(2, records.Length);
+        Assert.All(records, record => Assert.NotNull(JsonSerializer.Deserialize<BookProcessingLogEntry>(record, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
     }
 
     [Fact]
