@@ -4,7 +4,9 @@ Printable Book is a Windows desktop application for preparing printable colourin
 
 ## Development status
 
-Phase 1 Foundation is in review. The repository now has platform-neutral domain/configuration models, technical adapter contracts, a pipeline/application boundary, an isolated WebView2 bridge, and test foundations. Real image/PDF processing remains deferred to Phase 2.
+Phase 2 Core Processing MVP is complete on the `phase-2` branch. The repository now processes one or more Book folders through persistent workspaces, bounded per-page image processing, deterministic shuffle maps, real PNG/PDF output validation, atomic versioned publishing, and retry-safe disk cache reuse. The WPF/WebView2 host remains a thin presentation boundary.
+
+See [Phase 2 processing](docs/phase-2-core-processing.md), [image-engine.md](docs/image-engine.md), and [pdf-engine.md](docs/pdf-engine.md) for the implemented boundaries and engine decisions.
 
 ## Development prerequisites
 
