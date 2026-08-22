@@ -5,6 +5,7 @@ using PrintableBook.Core.Application.Processing;
 using PrintableBook.Infrastructure.FileSystem;
 using PrintableBook.Infrastructure.Imaging;
 using PrintableBook.Infrastructure.Processing;
+using PrintableBook.Infrastructure.Pdf;
 using PrintableBook.Infrastructure.Scanning;
 using PrintableBook.Infrastructure.Workspaces;
 
@@ -28,6 +29,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICoverValidator, MagickCoverValidator>();
         services.AddSingleton<IInteriorPagePipeline, DiskBackedInteriorPagePipeline>();
         services.AddSingleton<IOrderedBookAssembler, OrderedBookAssembler>();
+        services.AddSingleton<IPrintableBookPdfExporter, MagickPrintableBookPdfExporter>();
         services.AddSingleton<IBookSourceScanner, BookSourceScanner>();
         services.AddSingleton<IBookWorkspaceFactory, PhysicalBookWorkspaceFactory>();
         services.AddSingleton<IBookWorkspaceStateStore, JsonBookWorkspaceStateStore>();
