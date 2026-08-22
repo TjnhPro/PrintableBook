@@ -2,6 +2,7 @@ using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Execution;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Domain.Books;
+using PrintableBook.Core.Domain.Processing;
 
 namespace PrintableBook.Core.Tests.Processing;
 
@@ -25,6 +26,18 @@ public sealed class BookProcessingQueueProcessorTests
         await bookProcessor.ReleaseAsync();
         var firstResult = await firstRun;
         Assert.False(firstResult.IsAlreadyRunning);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_runs_books_in_order_and_continues_after_a_failed_book()
+    {
+        var bookProcessor = new RecordingBookProcessor();
+        var processor = new BookProcessingQueueProcessor(new ProcessingSessionGate(), bookProcessor);
+
+        var result = await processor.ProcessAsync(new BookProcessingQueueRequest([Command("failed-book"), Command("next-book")]));
+
+        Assert.Equal(["failed-book", "next-book"], bookProcessor.ProcessedBookIds);
+        Assert.Equal([BookProcessingStatus.Failed, BookProcessingStatus.Completed], result.Books.Select(book => book.Status));
     }
 
     private static PrintableBookProcessingCommand Command(string bookId) => new(
@@ -52,5 +65,18 @@ public sealed class BookProcessingQueueProcessorTests
         }
 
         public Task ReleaseAsync() => release.TrySetResult() ? Task.CompletedTask : Task.CompletedTask;
+    }
+
+    private sealed class RecordingBookProcessor : IBookProcessingQueueBookProcessor
+    {
+        public List<string> ProcessedBookIds { get; } = [];
+
+        public ValueTask<BookProcessingQueueBookResult> ProcessBookAsync(PrintableBookProcessingCommand command, CancellationToken cancellationToken = default)
+        {
+            ProcessedBookIds.Add(command.BookId.Value);
+            return ValueTask.FromResult(command.BookId.Value == "failed-book"
+                ? new BookProcessingQueueBookResult(command.BookId, BookProcessingStatus.Failed, new ProcessingFailure("test.failure", "Expected failure."), null)
+                : BookProcessingQueueBookResult.Completed(command.BookId, null));
+        }
     }
 }
