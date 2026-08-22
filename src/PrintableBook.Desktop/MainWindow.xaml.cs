@@ -1,6 +1,7 @@
 using System.IO;
 using Microsoft.Web.WebView2.Core;
 using PrintableBook.Core.Application.Services;
+using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Desktop.Bridge;
 using System.Windows;
 
@@ -9,11 +10,12 @@ namespace PrintableBook.Desktop;
 public partial class MainWindow : Window
 {
     private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new(System.Text.Json.JsonSerializerDefaults.Web);
-    private readonly WebViewBridgeRouter bridgeRouter = new();
+    private readonly WebViewBridgeRouter bridgeRouter;
 
-    public MainWindow(IPrintableBookApplication application)
+    public MainWindow(IPrintableBookApplication application, IApplicationSnapshotService snapshotService)
     {
         Application = application;
+        bridgeRouter = new WebViewBridgeRouter(snapshotService);
         InitializeComponent();
     }
 
@@ -28,9 +30,9 @@ public partial class MainWindow : Window
         Browser.CoreWebView2.Navigate(new Uri(pagePath).AbsoluteUri);
     }
 
-    private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        var response = bridgeRouter.Handle(WebViewMessageReader.ReadOrNull(e.TryGetWebMessageAsString));
+        var response = await bridgeRouter.HandleAsync(WebViewMessageReader.ReadOrNull(e.TryGetWebMessageAsString));
         Browser.CoreWebView2.PostWebMessageAsJson(System.Text.Json.JsonSerializer.Serialize(response, JsonOptions));
     }
 }

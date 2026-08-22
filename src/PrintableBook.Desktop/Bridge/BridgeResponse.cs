@@ -1,6 +1,6 @@
 namespace PrintableBook.Desktop.Bridge;
 
-internal sealed record BridgeResponse(int Version, string? Id, bool Ok, string? Command, string? Error)
+internal sealed record BridgeResponse(int Version, string? Id, bool Ok, string? Command, string? Error, object? Payload = null)
 {
     public static BridgeResponse Pong(string id) => new(WebViewBridgeRouter.Version, id, true, "app.pong", null);
 
@@ -8,4 +8,7 @@ internal sealed record BridgeResponse(int Version, string? Id, bool Ok, string? 
 
     public static BridgeResponse UnsupportedCommand(string id) =>
         new(WebViewBridgeRouter.Version, id, false, null, "unsupported_command");
+
+    public static BridgeResponse Succeeded(string id, string command, object payload) =>
+        new(WebViewBridgeRouter.Version, id, true, command, null, payload);
 }
