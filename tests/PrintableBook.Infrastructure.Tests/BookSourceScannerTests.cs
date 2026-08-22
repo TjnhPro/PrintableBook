@@ -91,6 +91,23 @@ public sealed class BookSourceScannerTests : IAsyncLifetime
         Assert.Equal("book.interior_empty", result.Failure!.Code);
     }
 
+    [Fact]
+    public async Task ScanAsync_supports_the_discovered_book_folder_layout_and_jpeg_interiors()
+    {
+        await CreatePngAsync("Source cover", "page-001.png");
+        await CreatePngAsync("Source cover", "page-002.png");
+        await CreateJpegAsync("Book interior", "page-001.jpg");
+        await CreateJpegAsync("Book interior", "page-002.jpeg");
+        await CreateJpegAsync("Book colored", "page-001.jpg");
+
+        var result = await CreateScanner().ScanAsync(new BookId("book-one"), new DirectoryReference(rootPath));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, result.Source!.GetAssets(BookAssetKind.Cover).Count);
+        Assert.Equal(["page-001.jpg", "page-002.jpeg"], result.Source.GetAssets(BookAssetKind.Interior).Select(asset => Path.GetFileName(asset.Reference)));
+        Assert.Single(result.Source.GetAssets(BookAssetKind.Colored));
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
 
     public Task DisposeAsync()
@@ -118,6 +135,16 @@ public sealed class BookSourceScannerTests : IAsyncLifetime
         Directory.CreateDirectory(directory);
         using var image = new MagickImage(MagickColors.White, 12, 12);
         image.GetPixels().SetPixel(6, 6, [0, 0, 0]);
+        image.Write(Path.Combine(directory, name));
+        return Task.CompletedTask;
+    }
+
+    private Task CreateJpegAsync(string group, string name)
+    {
+        var directory = Path.Combine(rootPath, group);
+        Directory.CreateDirectory(directory);
+        using var image = new MagickImage(MagickColors.White, 12, 12);
+        image.Format = MagickFormat.Jpeg;
         image.Write(Path.Combine(directory, name));
         return Task.CompletedTask;
     }
