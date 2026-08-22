@@ -6,6 +6,5 @@ namespace PrintableBook.Infrastructure.Tests;
 internal static class InfrastructureTestScopes
 {
     public const string TraitName = "TestScope";
-    public const string Repository = "Repository";
     public const string LocalCorpus = "LocalCorpus";
 }
