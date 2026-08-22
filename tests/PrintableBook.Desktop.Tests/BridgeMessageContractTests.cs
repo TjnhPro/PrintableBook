@@ -100,6 +100,25 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task CoverSelectionIsRoutedThroughTheCSharpOwner()
+    {
+        var id = new BookId("Book One");
+        var snapshot = new ApplicationSnapshot(
+            new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [], []),
+            GlobalSettings.Default,
+            [new BookDesktopSummary(id, "Needs selection", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 0)],
+            DateTimeOffset.UnixEpoch);
+        var selection = new StubCoverSelectionService();
+
+        var response = await new WebViewBridgeRouter(new StubSnapshotService(snapshot), coverSelectionService: selection)
+            .HandleAsync("""{"version":1,"id":"request-6a","command":"book.cover.select","payload":{"bookId":"Book One","coverReference":"cover-a.png"}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("app.snapshot", response.Command);
+        Assert.Equal(("Book One", "cover-a.png"), selection.LastSelection);
+    }
+
+    [Fact]
     public async Task ProcessStatusIsProvidedByTheCSharpSessionOwner()
     {
         var id = new BookId("Book One");
@@ -134,5 +153,15 @@ public sealed class BridgeMessageContractTests
         public ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
         public ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
         public ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
+    }
+
+    private sealed class StubCoverSelectionService : IBookCoverSelectionService
+    {
+        public (string BookId, string CoverReference)? LastSelection { get; private set; }
+        public ValueTask SelectAsync(string bookId, string coverReference, CancellationToken cancellationToken = default)
+        {
+            LastSelection = (bookId, coverReference);
+            return ValueTask.CompletedTask;
+        }
     }
 }

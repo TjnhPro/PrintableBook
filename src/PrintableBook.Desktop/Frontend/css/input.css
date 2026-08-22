@@ -1,4 +1,89 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@layer components { .nav-item { @apply flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950; } .nav-item-active { @apply bg-violet-50 text-violet-700; } .control { @apply h-9 rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-slate-50 disabled:text-slate-500; } .button-primary { @apply inline-flex h-9 items-center rounded-md bg-violet-600 px-3 text-sm font-medium text-white shadow-sm hover:bg-violet-700; } .button-secondary { @apply inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50; } .panel { @apply rounded-xl border border-slate-200 bg-white p-5 shadow-sm; } .panel-title { @apply text-sm font-semibold text-slate-900; } .field { @apply grid gap-1.5 text-xs font-medium text-slate-600; } .eyebrow { @apply text-xs font-semibold uppercase tracking-[0.16em] text-violet-700; } }
+@layer components {
+  .nav-item { @apply flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950; }
+  .nav-item-active { @apply bg-violet-50 text-violet-700; }
+  .control { @apply h-9 rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-slate-50 disabled:text-slate-500; }
+  .button-primary { @apply inline-flex h-9 items-center justify-center rounded-md bg-violet-600 px-3 text-sm font-medium text-white shadow-sm hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-300; }
+  .button-secondary { @apply inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50; }
+  .button-danger { @apply inline-flex h-9 items-center justify-center rounded-md bg-rose-500 px-3 text-sm font-medium text-white shadow-sm hover:bg-rose-600; }
+  .panel { @apply rounded-xl border border-slate-200 bg-white p-5 shadow-sm; }
+  .panel-title { @apply text-sm font-semibold text-slate-900; }
+  .field { @apply grid gap-1.5 text-xs font-medium text-slate-600; }
+  .eyebrow { @apply text-xs font-semibold uppercase tracking-[0.16em] text-violet-700; }
+  .page-header { @apply flex items-start justify-between gap-6; }
+  .page-header h1 { @apply text-2xl font-semibold tracking-tight text-slate-950; }
+  .page-header p { @apply mt-1 text-sm text-slate-500; }
+  .page-actions { @apply flex items-center gap-2; }
+  .detail-stack { @apply mt-6 grid gap-4; }
+  .form-grid { @apply mt-4 grid gap-4; }
+  .form-grid.two { @apply grid-cols-2; }
+  .form-grid.three { @apply grid-cols-3; }
+  .path-grid { @apply mt-4 grid grid-cols-3 gap-4 text-sm; }
+  .path-grid dt { @apply text-xs font-medium text-slate-500; }
+  .path-grid dd { @apply mt-1 break-all text-slate-700; }
+  .master-detail { @apply mt-5 grid grid-cols-[340px_minmax(0,1fr)] gap-5; }
+  .detail-pane { @apply min-w-0; }
+  .list-title { @apply text-sm font-semibold text-slate-900; }
+  .item-list { @apply mt-3 divide-y divide-slate-100; }
+  .item-list > li { @apply flex min-h-12 cursor-pointer items-center justify-between gap-3 px-2 py-3 text-sm hover:bg-slate-50; }
+  .item-list > li.selected { @apply -mx-2 rounded-md bg-violet-50 px-2 text-violet-950; }
+  .book-row div { @apply grid min-w-0 gap-1; }
+  .book-row strong { @apply truncate font-medium; }
+  .book-row small { @apply text-xs text-slate-500; }
+  .empty-row, .empty-copy { @apply text-sm text-slate-500; }
+  .detail-path { @apply mt-1 break-all text-xs text-slate-500; }
+  .data-table { @apply mt-4 w-full text-left text-sm; }
+  .data-table thead { @apply border-b border-slate-200 text-xs font-medium uppercase tracking-wide text-slate-500; }
+  .data-table th { @apply px-2 py-2; }
+  .data-table td { @apply border-b border-slate-100 px-2 py-2 align-top text-slate-600; }
+  .status-badge { @apply inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium; }
+  .status-good { @apply bg-emerald-50 text-emerald-700; }
+  .status-bad { @apply bg-rose-50 text-rose-700; }
+  .status-warn { @apply bg-amber-50 text-amber-700; }
+  .status-muted { @apply bg-slate-100 text-slate-600; }
+  .status-filters { @apply mt-5 flex items-center gap-2; }
+  .status-filters button { @apply inline-flex items-center gap-2 rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200; }
+  .status-filters button.active { @apply bg-violet-100 text-violet-700; }
+  .status-filters strong { @apply font-semibold; }
+  .book-heading { @apply flex items-start justify-between gap-5; }
+  .book-heading h2 { @apply text-lg font-semibold text-slate-950; }
+  .book-heading p { @apply mt-1 break-all text-xs text-slate-500; }
+  .detail-tabs { @apply mt-5 flex border-b border-slate-200; }
+  .detail-tab { @apply border-b-2 border-transparent px-3 py-2 text-sm font-medium text-slate-500 hover:text-slate-900; }
+  .detail-tab.active { @apply border-violet-600 text-violet-700; }
+  .tab-body { @apply pt-4; }
+  .summary-grid { @apply grid grid-cols-4 gap-3; }
+  .summary-grid > div { @apply rounded-lg bg-slate-50 p-3; }
+  .summary-grid span { @apply block text-xs font-medium text-slate-500; }
+  .summary-grid strong { @apply mt-1 block text-sm font-semibold text-slate-800; }
+  .check-list { @apply mt-3 grid gap-2 text-sm; }
+  .check-list li { @apply flex gap-2; }
+  .check-list .success { @apply text-emerald-700; }
+  .check-list .failure { @apply text-rose-700; }
+  .check-list span { @apply text-slate-700; }
+  .panel-note { @apply mt-2 text-sm text-slate-500; }
+  .candidate-list { @apply mt-3 divide-y divide-slate-100; }
+  .candidate-list li { @apply flex items-center justify-between gap-4 py-2 text-sm text-slate-600; }
+  .artifact-list { @apply mt-3 grid gap-2 break-all text-sm text-slate-600; }
+  .settings-editor { @apply mt-3 h-40 w-full py-2 font-mono; }
+  .process-grid, .diagnostics-grid { @apply mt-6 grid grid-cols-2 gap-5; }
+  .queue-list { @apply mt-3 divide-y divide-slate-100; }
+  .queue-list li { @apply grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 py-3 text-sm; }
+  .queue-list small { @apply col-span-2 mt-1 text-xs text-slate-500; }
+  .process-book { @apply mt-4 flex items-center justify-between text-sm; }
+  .process-book span, .progress-copy { @apply text-slate-500; }
+  .progress-track { @apply mt-4 h-2 overflow-hidden rounded-full bg-slate-100; }
+  .progress-track span { @apply block h-full rounded-full bg-violet-600; }
+  .progress-copy { @apply mt-2 text-sm; }
+  .output-grid { @apply mt-6 grid grid-cols-2 gap-5; }
+  .output-card { @apply flex items-center gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm; }
+  .output-card h2 { @apply text-sm font-semibold text-slate-900; }
+  .output-card p, .output-card small { @apply mt-1 block text-xs text-slate-500; }
+  .pdf-mark { @apply grid h-12 w-10 place-items-center rounded border border-rose-200 bg-rose-50 text-xs font-bold text-rose-600; }
+  .diagnostic-select { @apply w-80; }
+  .log-list { @apply mt-3 grid gap-2 text-sm; }
+  .log-list li { @apply flex gap-4 rounded bg-slate-50 px-3 py-2; }
+  .log-list time { @apply shrink-0 font-mono text-xs text-slate-500; }
+}
