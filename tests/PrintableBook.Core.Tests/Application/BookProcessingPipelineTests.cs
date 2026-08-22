@@ -40,7 +40,7 @@ public sealed class BookProcessingPipelineTests
             new Book(new BookId("book-one"), new BookSource([])),
             new BrandProfile(new BrandId("brand-one")),
             new EffectiveProcessingSettings(new Dictionary<string, string?>()),
-            new BookWorkspace(new BookId("book-one"), new DirectoryReference("work"), new DirectoryReference("output")),
+            new BookWorkspace(new BookId("book-one"), new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("output-temp")),
             ProcessingOptions.Empty));
 
     private sealed class ReturningStage(ProcessingResult? result) : IBookProcessingStage
