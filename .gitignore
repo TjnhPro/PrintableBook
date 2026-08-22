@@ -1,0 +1,37 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+[Tt]est[Rr]esult*/
+[Tt]est[Rr]esults/
+
+# Visual Studio and local user settings
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Web assets and local WebView2 data
+node_modules/
+wwwroot/assets/tailwind.css.map
+WebView2Data/
+WebView2/
+
+# Generated printable-book artifacts
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.tmp
+*.temp
+artifacts/
+
+# Tooling workspaces
+.worktrees/
+.superpowers/
+
+# OS files
+.DS_Store
+Thumbs.db
