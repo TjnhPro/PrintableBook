@@ -1,4 +1,5 @@
 using ImageMagick;
+using PdfSharp.Pdf.IO;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Pipelines;
 using PrintableBook.Core.Application.Execution;
@@ -69,11 +70,25 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.NotNull(bookResult.PublishedOutputs);
         Assert.True(File.Exists(bookResult.PublishedOutputs!.CoverPdf.Value));
         Assert.True(File.Exists(bookResult.PublishedOutputs.InteriorPdf.Value));
+        using (var coverPdf = PdfReader.Open(bookResult.PublishedOutputs.CoverPdf.Value))
+        using (var interiorPdf = PdfReader.Open(bookResult.PublishedOutputs.InteriorPdf.Value))
+        {
+            Assert.Single(coverPdf.Pages);
+            Assert.Equal(2, interiorPdf.Pages.Count);
+            Assert.Equal(72, coverPdf.Pages[0].Width.Point, precision: 3);
+            Assert.Equal(72, interiorPdf.Pages[1].Height.Point, precision: 3);
+        }
         var workspace = await workspaceFactory.CreateAsync(new BookId("sample-book"), bookDirectory);
         var state = await stateStore.LoadAsync(workspace);
         Assert.Equal(BookProcessingStatus.Completed, state!.Status);
+        Assert.NotNull(state.ConfigurationFingerprint);
+        Assert.Equal([bookResult.PublishedOutputs.CoverPdf.Value, bookResult.PublishedOutputs.InteriorPdf.Value], state.PublishedArtifactReferences);
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "state", "interior-shuffle.json")));
         Assert.True(File.Exists(Path.Combine(bookResult.PublishedOutputs.PublishedDirectory.Value, "interior", "page-0001.png")));
+        var finalPageInfo = await new MagickImageInspector().GetInfoAsync(new FileReference(
+            Path.Combine(bookResult.PublishedOutputs.PublishedDirectory.Value, "interior", "page-0001.png")));
+        Assert.Equal(new ImageSize(300, 300), finalPageInfo.Size);
+        Assert.Equal(300, finalPageInfo.Density!.Value.Horizontal, precision: 2);
 
         var reshuffled = await application.ProcessBooksAsync(new BookProcessingQueueRequest([command with { ShuffleSeed = 456 }]));
         Assert.Equal(BookProcessingStatus.Completed, Assert.Single(reshuffled.Books).Status);

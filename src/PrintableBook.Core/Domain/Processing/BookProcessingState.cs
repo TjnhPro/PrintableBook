@@ -13,7 +13,9 @@ public sealed record BookProcessingState(
     string? FailedStep,
     ProcessingFailure? Failure,
     DateTimeOffset UpdatedAt,
-    bool MayResume)
+    bool MayResume,
+    string? ConfigurationFingerprint = null,
+    IReadOnlyList<string>? PublishedArtifactReferences = null)
 {
     public static BookProcessingState NotStarted(BookId bookId) => new(
         bookId,
@@ -23,16 +25,19 @@ public sealed record BookProcessingState(
         null,
         null,
         DateTimeOffset.MinValue,
-        false);
+        false,
+        null,
+        []);
 
-    public BookProcessingState Start(DateTimeOffset timestamp) => this with
+    public BookProcessingState Start(DateTimeOffset timestamp, string? configurationFingerprint = null) => this with
     {
         Status = BookProcessingStatus.Running,
         CurrentStep = null,
         FailedStep = null,
         Failure = null,
         UpdatedAt = timestamp,
-        MayResume = false
+        MayResume = false,
+        ConfigurationFingerprint = configurationFingerprint
     };
 
     public BookProcessingState CompleteStep(string step, DateTimeOffset timestamp)
@@ -84,4 +89,10 @@ public sealed record BookProcessingState(
         UpdatedAt = timestamp,
         MayResume = false
     };
+
+    public BookProcessingState RecordPublishedArtifacts(IEnumerable<string> artifactReferences)
+    {
+        ArgumentNullException.ThrowIfNull(artifactReferences);
+        return this with { PublishedArtifactReferences = artifactReferences.ToArray() };
+    }
 }

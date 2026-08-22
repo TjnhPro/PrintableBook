@@ -26,7 +26,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
     {
         var workspace = await workspaceFactory.CreateAsync(command.BookId, command.BookDirectory, cancellationToken);
         var priorState = await stateStore.LoadAsync(workspace, cancellationToken);
-        var state = (priorState ?? BookProcessingState.NotStarted(command.BookId)).Start(DateTimeOffset.UtcNow);
+        var state = (priorState ?? BookProcessingState.NotStarted(command.BookId)).Start(DateTimeOffset.UtcNow, CreateConfigurationFingerprint(command));
         await PersistStateAsync(state, "book.started", command.BookId.Value, cancellationToken);
 
         try
@@ -90,7 +90,10 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 pdfOutput,
                 command.FinalOutputRoot,
                 new PrintableBookPdfValidation(1, assembly.OrderedPages.Count, command.PdfPageSize)), cancellationToken);
-            state = state.CompleteStep("publish", DateTimeOffset.UtcNow).Complete(DateTimeOffset.UtcNow);
+            state = state
+                .CompleteStep("publish", DateTimeOffset.UtcNow)
+                .RecordPublishedArtifacts([published.CoverPdf.Value, published.InteriorPdf.Value])
+                .Complete(DateTimeOffset.UtcNow);
             await PersistStateAsync(state, "book.completed", command.BookId.Value, cancellationToken);
             return BookProcessingQueueBookResult.Completed(command.BookId, published);
         }
@@ -143,6 +146,13 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         shuffleMap.Seed == seed &&
         shuffleMap.Entries.Select(entry => entry.Page).OrderBy(page => page.Value)
             .SequenceEqual(pageResults.Select(page => page.Source).OrderBy(page => page.Value));
+
+    private static string CreateConfigurationFingerprint(PrintableBookProcessingCommand command) =>
+        string.Join("|", command.TargetInteriorSize.Width, command.TargetInteriorSize.Height,
+            command.TargetInteriorDensity.Horizontal, command.TargetInteriorDensity.Vertical,
+            command.PdfPageSize.WidthInches, command.PdfPageSize.HeightInches,
+            command.MaximumPageConcurrency, command.ArtworkDetectionThreshold.Value,
+            command.Frame?.Value, command.IsFrameEnabled);
 
     private sealed class BookProcessingFailureException(string step, ProcessingFailure failure) : Exception(failure.Message)
     {
