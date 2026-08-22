@@ -25,6 +25,16 @@ public sealed class BookProcessingPipelineTests
         Assert.Equal(ProcessingStatus.Failure, result.Status);
     }
 
+    [Fact]
+    public async Task ProcessAsync_honours_a_pre_cancelled_token_when_no_stages_are_registered()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var pipeline = new BookProcessingPipeline([]);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pipeline.ProcessAsync(CreateRequest(), cancellationToken: cancellation.Token).AsTask());
+    }
+
     private static ProcessingRequest CreateRequest() => new(
         new ProcessingContext(
             new Book(new BookId("book-one"), new BookSource([])),

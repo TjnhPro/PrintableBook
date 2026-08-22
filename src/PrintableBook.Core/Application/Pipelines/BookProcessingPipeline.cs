@@ -18,6 +18,7 @@ public sealed class BookProcessingPipeline(IEnumerable<IBookProcessingStage> sta
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
 
         foreach (var stage in stages)
         {

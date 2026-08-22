@@ -39,6 +39,16 @@ public sealed class ProcessingSettingsResolverTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => resolver.ResolveAsync().AsTask());
     }
 
+    [Fact]
+    public async Task ResolveAsync_honours_a_pre_cancelled_token_when_no_sources_are_registered()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new ProcessingSettingsResolver([]).ResolveAsync(cancellation.Token).AsTask());
+    }
+
     private sealed class DictionaryProcessingSettingsSource(IReadOnlyDictionary<string, string?> values)
         : IProcessingSettingsSource
     {

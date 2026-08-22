@@ -30,7 +30,7 @@ public partial class MainWindow : Window
 
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        var response = bridgeRouter.Handle(e.TryGetWebMessageAsString());
+        var response = bridgeRouter.Handle(WebViewMessageReader.ReadOrNull(e.TryGetWebMessageAsString));
         Browser.CoreWebView2.PostWebMessageAsJson(System.Text.Json.JsonSerializer.Serialize(response, JsonOptions));
     }
 }

@@ -11,9 +11,11 @@ public sealed class ProcessingSettingsResolver(IEnumerable<IProcessingSettingsSo
     public async ValueTask<EffectiveProcessingSettings> ResolveAsync(CancellationToken cancellationToken = default)
     {
         var effectiveValues = new Dictionary<string, string?>(StringComparer.Ordinal);
+        cancellationToken.ThrowIfCancellationRequested();
 
         foreach (var source in sources)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var values = await source.LoadAsync(cancellationToken);
 
             foreach (var (key, value) in values)

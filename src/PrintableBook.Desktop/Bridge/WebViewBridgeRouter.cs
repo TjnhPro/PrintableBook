@@ -11,12 +11,20 @@ internal sealed class WebViewBridgeRouter
 
     public const int Version = 1;
 
-    public BridgeResponse Handle(string json)
+    public BridgeResponse Handle(string? json)
     {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return BridgeResponse.InvalidRequest();
+        }
+
         try
         {
             var request = JsonSerializer.Deserialize<BridgeRequest>(json, JsonOptions);
-            if (request is null || request.Version != Version || string.IsNullOrWhiteSpace(request.Id))
+            if (request is null ||
+                request.Version != Version ||
+                string.IsNullOrWhiteSpace(request.Id) ||
+                string.IsNullOrWhiteSpace(request.Command))
             {
                 return BridgeResponse.InvalidRequest();
             }
