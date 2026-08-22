@@ -56,6 +56,7 @@ public sealed class BridgeMessageContractTests
             new ApplicationDiscovery(
                 new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [], []),
             GlobalSettings.Default,
+            [],
             DateTimeOffset.UnixEpoch);
         var router = new WebViewBridgeRouter(new StubSnapshotService(snapshot));
 

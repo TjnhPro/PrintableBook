@@ -1,7 +1,9 @@
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
+using PrintableBook.Core.Application.Scanning;
 using PrintableBook.Core.Domain.Books;
+using PrintableBook.Core.Domain.Processing;
 
 namespace PrintableBook.Core.Tests.Application;
 
@@ -12,13 +14,14 @@ public sealed class ApplicationSnapshotServiceTests
     {
         var discovery = new StubDiscovery();
         var settings = new StubSettingsStore();
-        var snapshot = await new ApplicationSnapshotService(discovery, settings).RefreshAsync();
+        var snapshot = await new ApplicationSnapshotService(discovery, settings, new StubScanner(), new StubStateStore()).RefreshAsync();
 
         Assert.Equal("Brand A", Assert.Single(snapshot.Discovery.Brands).Name);
         Assert.Equal("Book A", Assert.Single(snapshot.Discovery.Books).Name);
         Assert.Equal(1, discovery.CallCount);
         Assert.Equal(GlobalSettings.Default, snapshot.GlobalSettings);
         Assert.Equal(1, settings.LoadCallCount);
+        Assert.Equal("Ready", Assert.Single(snapshot.BookSummaries).ValidationStatus);
     }
 
     private sealed class StubDiscovery : IApplicationRootDiscovery
@@ -49,5 +52,21 @@ public sealed class ApplicationSnapshotServiceTests
         }
 
         public ValueTask SaveAsync(GlobalSettings settings, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    }
+
+    private sealed class StubScanner : IBookSourceScanner
+    {
+        public ValueTask<BookSourceScanResult> ScanAsync(BookId bookId, DirectoryReference bookDirectory, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(BookSourceScanResult.Succeeded(new BookSource([
+                new BookAsset("cover.png", BookAssetKind.Cover),
+                new BookAsset("page-1.png", BookAssetKind.Interior)])));
+    }
+
+    private sealed class StubStateStore : IBookWorkspaceStateStore
+    {
+        public ValueTask<BookProcessingState?> LoadAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) => ValueTask.FromResult<BookProcessingState?>(null);
+        public ValueTask SaveAsync(BookWorkspace workspace, BookProcessingState state, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask AppendLogAsync(BookWorkspace workspace, BookProcessingLogEntry entry, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask SaveErrorAsync(BookWorkspace workspace, ProcessingFailure failure, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 }
