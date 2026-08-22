@@ -6,7 +6,10 @@ namespace PrintableBook.Desktop.Bridge;
 /// <summary>
 /// Parses and routes the narrow, versioned messages accepted from the WebView.
 /// </summary>
-internal sealed class WebViewBridgeRouter(IApplicationSnapshotService? snapshotService = null, IGlobalSettingsStore? settingsStore = null)
+internal sealed class WebViewBridgeRouter(
+    IApplicationSnapshotService? snapshotService = null,
+    IGlobalSettingsStore? settingsStore = null,
+    IProcessSessionService? processSessionService = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -40,6 +43,30 @@ internal sealed class WebViewBridgeRouter(IApplicationSnapshotService? snapshotS
             return BridgeResponse.Succeeded(request.Id, "app.snapshot", snapshot);
         }
 
+        if (request.Command is "process.get" or "process.cancel" or "process.start")
+        {
+            if (processSessionService is null) return BridgeResponse.UnsupportedCommand(request.Id);
+            try
+            {
+                var process = request.Command switch
+                {
+                    "process.get" => await processSessionService.GetAsync(cancellationToken),
+                    "process.cancel" => await processSessionService.CancelAsync(cancellationToken),
+                    "process.start" => await StartProcessAsync(request, processSessionService, cancellationToken),
+                    _ => throw new InvalidOperationException("Unsupported process command.")
+                };
+                return BridgeResponse.Succeeded(request.Id, "process.snapshot", process);
+            }
+            catch (ArgumentException exception)
+            {
+                return new BridgeResponse(Version, request.Id, false, null, exception.Message);
+            }
+            catch (InvalidOperationException exception)
+            {
+                return new BridgeResponse(Version, request.Id, false, null, exception.Message);
+            }
+        }
+
         if (request.Command != "settings.save" || settingsStore is null || request.Payload is not { } payload)
         {
             return BridgeResponse.UnsupportedCommand(request.Id);
@@ -65,7 +92,7 @@ internal sealed class WebViewBridgeRouter(IApplicationSnapshotService? snapshotS
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "book.validate" or "settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "book.validate" or "settings.save" or "process.get" or "process.cancel" or "process.start" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 
@@ -86,5 +113,27 @@ internal sealed class WebViewBridgeRouter(IApplicationSnapshotService? snapshotS
         {
             return false;
         }
+    }
+
+    private static async ValueTask<ProcessSessionSnapshot> StartProcessAsync(BridgeRequest request, IProcessSessionService sessionService, CancellationToken cancellationToken)
+    {
+        if (request.Payload is not { } payload ||
+            !payload.TryGetProperty("bookIds", out var bookIdsElement) ||
+            bookIdsElement.ValueKind != JsonValueKind.Array)
+        {
+            throw new ArgumentException("A process start request requires Book ids.");
+        }
+
+        var bookIds = bookIdsElement.EnumerateArray()
+            .Where(value => value.ValueKind == JsonValueKind.String)
+            .Select(value => value.GetString())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Cast<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var brandName = payload.TryGetProperty("brandName", out var brandElement) && brandElement.ValueKind == JsonValueKind.String
+            ? brandElement.GetString()
+            : null;
+        return await sessionService.StartAsync(bookIds, brandName, cancellationToken);
     }
 }

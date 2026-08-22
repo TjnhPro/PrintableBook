@@ -14,6 +14,7 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         services.AddSingleton<IProcessingSessionGate, ProcessingSessionGate>();
         services.AddSingleton<IApplicationSnapshotService, ApplicationSnapshotService>();
+        services.AddSingleton<IProcessSessionService, ProcessSessionService>();
         services.AddSingleton<IBookProcessingPipeline, BookProcessingPipeline>();
         services.AddSingleton<IBookProcessingQueueBookProcessor, WorkspaceBookProcessingQueueBookProcessor>();
         services.AddSingleton<BookProcessingQueueProcessor>();

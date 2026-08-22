@@ -99,6 +99,19 @@ public sealed class BridgeMessageContractTests
         Assert.Equal("app.snapshot", response.Command);
     }
 
+    [Fact]
+    public async Task ProcessStatusIsProvidedByTheCSharpSessionOwner()
+    {
+        var id = new BookId("Book One");
+        var session = new ProcessSessionSnapshot(true, false, "Amazon", id, "interior-pages", [new ProcessQueueEntry(id, BookProcessingStatus.Running, null)]);
+        var response = await new WebViewBridgeRouter(processSessionService: new StubProcessSessionService(session))
+            .HandleAsync("""{"version":1,"id":"request-7","command":"process.get"}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("process.snapshot", response.Command);
+        Assert.Same(session, response.Payload);
+    }
+
     private sealed class StubSnapshotService(ApplicationSnapshot snapshot) : IApplicationSnapshotService
     {
         public ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
@@ -114,5 +127,12 @@ public sealed class BridgeMessageContractTests
             Saved = settings;
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class StubProcessSessionService(ProcessSessionSnapshot snapshot) : IProcessSessionService
+    {
+        public ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
+        public ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
+        public ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
     }
 }
