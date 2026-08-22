@@ -14,40 +14,16 @@ internal sealed class WebViewBridgeRouter(IApplicationSnapshotService? snapshotS
 
     public BridgeResponse Handle(string? json)
     {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return BridgeResponse.InvalidRequest();
-        }
-
-        try
-        {
-            var request = JsonSerializer.Deserialize<BridgeRequest>(json, JsonOptions);
-            if (request is null ||
-                request.Version != Version ||
-                string.IsNullOrWhiteSpace(request.Id) ||
-                string.IsNullOrWhiteSpace(request.Command))
-            {
-                return BridgeResponse.InvalidRequest();
-            }
-
-            return request.Command switch
-            {
-                "app.ping" => BridgeResponse.Pong(request.Id),
-                "app.refresh" or "settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
-                _ => BridgeResponse.UnsupportedCommand(request.Id)
-            };
-        }
-        catch (JsonException)
-        {
-            return BridgeResponse.InvalidRequest();
-        }
+        return TryParseRequest(json, out var request)
+            ? RouteSynchronous(request)
+            : BridgeResponse.InvalidRequest();
     }
 
     public async ValueTask<BridgeResponse> HandleAsync(string? json, CancellationToken cancellationToken = default)
     {
-        var response = Handle(json);
-        if (response.Error is not null || response.Command is not null || string.IsNullOrWhiteSpace(json)) return response;
-        var request = JsonSerializer.Deserialize<BridgeRequest>(json, JsonOptions)!;
+        if (!TryParseRequest(json, out var request)) return BridgeResponse.InvalidRequest();
+        var response = RouteSynchronous(request);
+        if (response.Error is not null || response.Command is not null) return response;
         if (request.Command == "app.refresh")
         {
             return snapshotService is null
@@ -74,6 +50,32 @@ internal sealed class WebViewBridgeRouter(IApplicationSnapshotService? snapshotS
         catch (ArgumentOutOfRangeException)
         {
             return new BridgeResponse(Version, request.Id, false, null, "invalid_settings");
+        }
+    }
+
+    private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
+    {
+        "app.ping" => BridgeResponse.Pong(request.Id),
+        "app.refresh" or "settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
+        _ => BridgeResponse.UnsupportedCommand(request.Id)
+    };
+
+    private static bool TryParseRequest(string? json, out BridgeRequest request)
+    {
+        request = default!;
+        if (string.IsNullOrWhiteSpace(json)) return false;
+
+        try
+        {
+            request = JsonSerializer.Deserialize<BridgeRequest>(json, JsonOptions)!;
+            return request is not null &&
+                request.Version == Version &&
+                !string.IsNullOrWhiteSpace(request.Id) &&
+                !string.IsNullOrWhiteSpace(request.Command);
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 }
