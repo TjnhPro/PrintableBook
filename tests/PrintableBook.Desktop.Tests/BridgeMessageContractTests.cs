@@ -70,6 +70,18 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task RefreshFailureReturnsACorrelatedBridgeErrorInsteadOfEscapingTheDesktopMessageHandler()
+    {
+        var router = new WebViewBridgeRouter(new ThrowingSnapshotService(new InvalidDataException("The workspace processing log is invalid.")));
+
+        var response = await router.HandleAsync("""{"version":1,"id":"request-refresh-failure","command":"app.refresh"}""");
+
+        Assert.False(response.Ok);
+        Assert.Equal("request-refresh-failure", response.Id);
+        Assert.Equal("app_refresh_failed: The workspace processing log is invalid.", response.Error);
+    }
+
+    [Fact]
     public async Task SettingsSaveRequestIsValidatedAndOwnedByTheDesktopBridge()
     {
         var settingsStore = new StubSettingsStore();
@@ -134,6 +146,11 @@ public sealed class BridgeMessageContractTests
     private sealed class StubSnapshotService(ApplicationSnapshot snapshot) : IApplicationSnapshotService
     {
         public ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
+    }
+
+    private sealed class ThrowingSnapshotService(Exception exception) : IApplicationSnapshotService
+    {
+        public ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default) => ValueTask.FromException<ApplicationSnapshot>(exception);
     }
 
     private sealed class StubSettingsStore : IGlobalSettingsStore

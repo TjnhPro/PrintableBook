@@ -11,4 +11,7 @@ internal sealed record BridgeResponse(int Version, string? Id, bool Ok, string? 
 
     public static BridgeResponse Succeeded(string id, string command, object payload) =>
         new(WebViewBridgeRouter.Version, id, true, command, null, payload);
+
+    public static BridgeResponse Failed(string id, string code, Exception exception) =>
+        new(WebViewBridgeRouter.Version, id, false, null, $"{code}: {exception.Message}");
 }

@@ -29,123 +29,135 @@ internal sealed class WebViewBridgeRouter(
     public async ValueTask<BridgeResponse> HandleAsync(string? json, CancellationToken cancellationToken = default)
     {
         if (!TryParseRequest(json, out var request)) return BridgeResponse.InvalidRequest();
-        var response = RouteSynchronous(request);
-        if (response.Error is not null || response.Command is not null) return response;
-        if (request.Command is "app.refresh" or "book.validate")
+
+        try
         {
-            if (snapshotService is null) return BridgeResponse.UnsupportedCommand(request.Id);
-            var snapshot = await snapshotService.RefreshAsync(cancellationToken);
-            if (request.Command == "book.validate" &&
-                (request.Payload is not { } validationPayload ||
-                 !validationPayload.TryGetProperty("bookId", out var bookId) ||
-                 string.IsNullOrWhiteSpace(bookId.GetString()) ||
-                 !snapshot.BookSummaries.Any(summary => summary.BookId.Value == bookId.GetString())))
+            var response = RouteSynchronous(request);
+            if (response.Error is not null || response.Command is not null) return response;
+            if (request.Command is "app.refresh" or "book.validate")
             {
-                return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
-            }
-
-            return BridgeResponse.Succeeded(request.Id, "app.snapshot", snapshot);
-        }
-
-        if (request.Command == "book.cover.select")
-        {
-            if (snapshotService is null || coverSelectionService is null || request.Payload is not { } coverPayload ||
-                !coverPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
-                !coverPayload.TryGetProperty("coverReference", out var coverElement) || string.IsNullOrWhiteSpace(coverElement.GetString()))
-            {
-                return new BridgeResponse(Version, request.Id, false, null, "invalid_cover_selection");
-            }
-
-            try
-            {
-                await coverSelectionService.SelectAsync(bookIdElement.GetString()!, coverElement.GetString()!, cancellationToken);
-                return BridgeResponse.Succeeded(request.Id, "app.snapshot", await snapshotService.RefreshAsync(cancellationToken));
-            }
-            catch (ArgumentException)
-            {
-                return new BridgeResponse(Version, request.Id, false, null, "invalid_cover_selection");
-            }
-        }
-
-        if (request.Command is "process.get" or "process.cancel" or "process.start")
-        {
-            if (processSessionService is null) return BridgeResponse.UnsupportedCommand(request.Id);
-            try
-            {
-                var process = request.Command switch
+                if (snapshotService is null) return BridgeResponse.UnsupportedCommand(request.Id);
+                var snapshot = await snapshotService.RefreshAsync(cancellationToken);
+                if (request.Command == "book.validate" &&
+                    (request.Payload is not { } validationPayload ||
+                     !validationPayload.TryGetProperty("bookId", out var bookId) ||
+                     string.IsNullOrWhiteSpace(bookId.GetString()) ||
+                     !snapshot.BookSummaries.Any(summary => summary.BookId.Value == bookId.GetString())))
                 {
-                    "process.get" => await processSessionService.GetAsync(cancellationToken),
-                    "process.cancel" => await processSessionService.CancelAsync(cancellationToken),
-                    "process.start" => await StartProcessAsync(request, processSessionService, cancellationToken),
-                    _ => throw new InvalidOperationException("Unsupported process command.")
-                };
-                return BridgeResponse.Succeeded(request.Id, "process.snapshot", process);
-            }
-            catch (ArgumentException exception)
-            {
-                return new BridgeResponse(Version, request.Id, false, null, exception.Message);
-            }
-            catch (InvalidOperationException exception)
-            {
-                return new BridgeResponse(Version, request.Id, false, null, exception.Message);
-            }
-        }
+                    return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+                }
 
-        if (request.Command is "brand.settings.get" or "brand.settings.save")
-        {
-            if (rootDiscovery is null || brandSettingsStore is null || request.Payload is not { } brandPayload ||
-                !brandPayload.TryGetProperty("brandName", out var brandNameElement) || string.IsNullOrWhiteSpace(brandNameElement.GetString()))
+                return BridgeResponse.Succeeded(request.Id, "app.snapshot", snapshot);
+            }
+
+            if (request.Command == "book.cover.select")
+            {
+                if (snapshotService is null || coverSelectionService is null || request.Payload is not { } coverPayload ||
+                    !coverPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
+                    !coverPayload.TryGetProperty("coverReference", out var coverElement) || string.IsNullOrWhiteSpace(coverElement.GetString()))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_cover_selection");
+                }
+
+                try
+                {
+                    await coverSelectionService.SelectAsync(bookIdElement.GetString()!, coverElement.GetString()!, cancellationToken);
+                    return BridgeResponse.Succeeded(request.Id, "app.snapshot", await snapshotService.RefreshAsync(cancellationToken));
+                }
+                catch (ArgumentException)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_cover_selection");
+                }
+            }
+
+            if (request.Command is "process.get" or "process.cancel" or "process.start")
+            {
+                if (processSessionService is null) return BridgeResponse.UnsupportedCommand(request.Id);
+                try
+                {
+                    var process = request.Command switch
+                    {
+                        "process.get" => await processSessionService.GetAsync(cancellationToken),
+                        "process.cancel" => await processSessionService.CancelAsync(cancellationToken),
+                        "process.start" => await StartProcessAsync(request, processSessionService, cancellationToken),
+                        _ => throw new InvalidOperationException("Unsupported process command.")
+                    };
+                    return BridgeResponse.Succeeded(request.Id, "process.snapshot", process);
+                }
+                catch (ArgumentException exception)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, exception.Message);
+                }
+                catch (InvalidOperationException exception)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, exception.Message);
+                }
+            }
+
+            if (request.Command is "brand.settings.get" or "brand.settings.save")
+            {
+                if (rootDiscovery is null || brandSettingsStore is null || request.Payload is not { } brandPayload ||
+                    !brandPayload.TryGetProperty("brandName", out var brandNameElement) || string.IsNullOrWhiteSpace(brandNameElement.GetString()))
+                {
+                    return BridgeResponse.UnsupportedCommand(request.Id);
+                }
+
+                var brand = (await rootDiscovery.DiscoverAsync(cancellationToken)).Brands
+                    .FirstOrDefault(item => string.Equals(item.Name, brandNameElement.GetString(), StringComparison.Ordinal));
+                if (brand is null) return new BridgeResponse(Version, request.Id, false, null, "brand_not_found");
+
+                try
+                {
+                    if (request.Command == "brand.settings.get")
+                    {
+                        return BridgeResponse.Succeeded(request.Id, "brand.settings", await brandSettingsStore.LoadAsync(brand.Directory, cancellationToken));
+                    }
+
+                    if (!brandPayload.TryGetProperty("json", out var jsonElement) || jsonElement.ValueKind != JsonValueKind.String)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_settings");
+                    }
+                    await brandSettingsStore.SaveAsync(brand.Directory, jsonElement.GetString()!, cancellationToken);
+                    return BridgeResponse.Succeeded(request.Id, "brand.settings.saved", jsonElement.GetString()!);
+                }
+                catch (JsonException)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_settings");
+                }
+                catch (ArgumentException)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_settings");
+                }
+            }
+
+            if (request.Command != "settings.save" || settingsStore is null || request.Payload is not { } payload)
             {
                 return BridgeResponse.UnsupportedCommand(request.Id);
             }
 
-            var brand = (await rootDiscovery.DiscoverAsync(cancellationToken)).Brands
-                .FirstOrDefault(item => string.Equals(item.Name, brandNameElement.GetString(), StringComparison.Ordinal));
-            if (brand is null) return new BridgeResponse(Version, request.Id, false, null, "brand_not_found");
-
             try
             {
-                if (request.Command == "brand.settings.get")
-                {
-                    return BridgeResponse.Succeeded(request.Id, "brand.settings", await brandSettingsStore.LoadAsync(brand.Directory, cancellationToken));
-                }
-
-                if (!brandPayload.TryGetProperty("json", out var jsonElement) || jsonElement.ValueKind != JsonValueKind.String)
-                {
-                    return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_settings");
-                }
-                await brandSettingsStore.SaveAsync(brand.Directory, jsonElement.GetString()!, cancellationToken);
-                return BridgeResponse.Succeeded(request.Id, "brand.settings.saved", jsonElement.GetString()!);
+                var settings = payload.Deserialize<GlobalSettings>(JsonOptions);
+                if (settings is null) return new BridgeResponse(Version, request.Id, false, null, "invalid_settings");
+                await settingsStore.SaveAsync(settings, cancellationToken);
+                return BridgeResponse.Succeeded(request.Id, "settings.saved", settings);
             }
             catch (JsonException)
             {
-                return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_settings");
+                return new BridgeResponse(Version, request.Id, false, null, "invalid_settings");
             }
-            catch (ArgumentException)
+            catch (ArgumentOutOfRangeException)
             {
-                return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_settings");
+                return new BridgeResponse(Version, request.Id, false, null, "invalid_settings");
             }
         }
-
-        if (request.Command != "settings.save" || settingsStore is null || request.Payload is not { } payload)
+        catch (OperationCanceledException)
         {
-            return BridgeResponse.UnsupportedCommand(request.Id);
+            throw;
         }
-
-        try
+        catch (Exception exception)
         {
-            var settings = payload.Deserialize<GlobalSettings>(JsonOptions);
-            if (settings is null) return new BridgeResponse(Version, request.Id, false, null, "invalid_settings");
-            await settingsStore.SaveAsync(settings, cancellationToken);
-            return BridgeResponse.Succeeded(request.Id, "settings.saved", settings);
-        }
-        catch (JsonException)
-        {
-            return new BridgeResponse(Version, request.Id, false, null, "invalid_settings");
-        }
-        catch (ArgumentOutOfRangeException)
-        {
-            return new BridgeResponse(Version, request.Id, false, null, "invalid_settings");
+            return BridgeResponse.Failed(request.Id, $"{request.Command.Replace('.', '_')}_failed", exception);
         }
     }
 
