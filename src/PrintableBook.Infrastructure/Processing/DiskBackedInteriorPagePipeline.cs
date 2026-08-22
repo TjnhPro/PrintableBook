@@ -26,21 +26,30 @@ public sealed class DiskBackedInteriorPagePipeline(
         }
 
         var pageCache = Path.Combine(request.Workspace.WorkingDirectory.Value, "cache", request.PageId);
+        var processedInteriorDirectory = Path.Combine(request.Workspace.ProcessedDirectory.Value, "interior");
+        Directory.CreateDirectory(processedInteriorDirectory);
         Directory.CreateDirectory(pageCache);
         var trimmed = new FileReference(Path.Combine(pageCache, "trim.png"));
         var canvas = new FileReference(Path.Combine(pageCache, "canvas.png"));
         var resized = new FileReference(Path.Combine(pageCache, "resize.png"));
         var framed = new FileReference(Path.Combine(pageCache, "frame.png"));
-        var finalPage = new FileReference(Path.Combine(request.Workspace.OutputDirectory.Value, "interior", $"{request.PageId}.png"));
-        var cacheStampFile = Path.Combine(pageCache, "input-stamp.json");
+        var finalPage = new FileReference(Path.Combine(processedInteriorDirectory, $"{request.PageId}.png"));
+        var cacheStampFile = Path.Combine(processedInteriorDirectory, $"{request.PageId}.input-stamp.json");
         var cacheStamp = CacheInputStamp.Create(request);
 
         try
         {
-            if (!await HasMatchingStampAsync(cacheStampFile, cacheStamp, cancellationToken))
+            var hasMatchingStamp = await HasMatchingStampAsync(cacheStampFile, cacheStamp, cancellationToken);
+            if (hasMatchingStamp && await IsReadableAsync(finalPage, request.TargetSize, cancellationToken))
+            {
+                return new InteriorPageProcessingResult(request.PageId, request.Source, finalPage);
+            }
+
+            if (!hasMatchingStamp)
             {
                 Directory.Delete(pageCache, recursive: true);
                 Directory.CreateDirectory(pageCache);
+                DeleteDownstream(finalPage);
                 await File.WriteAllTextAsync(cacheStampFile, JsonSerializer.Serialize(cacheStamp), cancellationToken);
             }
 

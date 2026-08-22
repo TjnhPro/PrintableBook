@@ -26,7 +26,7 @@ public sealed class BoundedInteriorPageBatchProcessorTests
     }
 
     private static InteriorPagePipelineRequest Request(string pageId) => new(
-        new BookWorkspace(new BookId("book-one"), new DirectoryReference("work"), new DirectoryReference("output")),
+        new BookWorkspace(new BookId("book-one"), new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("output-temp")),
         new FileReference($"{pageId}.png"),
         pageId,
         new ArtworkDetectionThreshold(20),

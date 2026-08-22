@@ -27,7 +27,10 @@ public sealed class PhysicalBookWorkspaceTests : IAsyncLifetime
         await store.SaveErrorAsync(workspace, state.Failure!);
 
         Assert.True(Directory.Exists(Path.Combine(bookDirectory.Value, ".workspace", "cache")));
-        Assert.True(Directory.Exists(Path.Combine(bookDirectory.Value, ".workspace", "output")));
+        Assert.True(Directory.Exists(Path.Combine(bookDirectory.Value, ".workspace", "processed", "interior")));
+        Assert.True(Directory.Exists(Path.Combine(bookDirectory.Value, ".workspace", "output-temp")));
+        Assert.Equal(Path.Combine(bookDirectory.Value, ".workspace", "processed"), workspace.ProcessedDirectory.Value);
+        Assert.Equal(Path.Combine(bookDirectory.Value, ".workspace", "output-temp"), workspace.TemporaryOutputDirectory.Value);
         var restored = await store.LoadAsync(workspace);
         Assert.Equal(BookProcessingStatus.Failed, restored!.Status);
         Assert.Equal("resize", restored.FailedStep);

@@ -18,7 +18,8 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
     IInteriorPagePipeline interiorPagePipeline,
     IOrderedBookAssembler bookAssembler,
     IPrintableBookPdfExporter pdfExporter,
-    IBookOutputPublisher outputPublisher) : IBookProcessingQueueBookProcessor
+    IBookOutputPublisher outputPublisher,
+    IBookWorkspaceCleaner workspaceCleaner) : IBookProcessingQueueBookProcessor
 {
     public async ValueTask<BookProcessingQueueBookResult> ProcessBookAsync(
         PrintableBookProcessingCommand command,
@@ -89,7 +90,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             var pdfOutput = await pdfExporter.ExportAsync(new PrintableBookPdfExportRequest(
                 new FileReference(cover),
                 assembly.OrderedPages,
-                workspace.OutputDirectory,
+                workspace.TemporaryOutputDirectory,
                 command.CoverPdfPageSize,
                 command.InteriorPdfPageSize), cancellationToken);
             state = await CompleteStepAsync(state, "pdf-export", cancellationToken);
@@ -102,6 +103,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     assembly.OrderedPages.Count,
                     command.CoverPdfPageSize,
                     command.InteriorPdfPageSize)), cancellationToken);
+            await workspaceCleaner.CleanAfterSuccessfulPublicationAsync(workspace, cancellationToken);
             state = state
                 .CompleteStep("publish", DateTimeOffset.UtcNow)
                 .RecordPublishedArtifacts([published.CoverPdf.Value, published.InteriorPdf.Value])

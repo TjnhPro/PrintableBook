@@ -5,4 +5,5 @@ namespace PrintableBook.Core.Abstractions;
 public sealed record BookWorkspace(
     BookId BookId,
     DirectoryReference WorkingDirectory,
-    DirectoryReference OutputDirectory);
+    DirectoryReference ProcessedDirectory,
+    DirectoryReference TemporaryOutputDirectory);

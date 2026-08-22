@@ -1,5 +1,6 @@
 using ImageMagick;
 using PdfSharp.Pdf.IO;
+using System.Security.Cryptography;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Pipelines;
 using PrintableBook.Core.Application.Execution;
@@ -44,7 +45,8 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             pagePipeline,
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new MagickPrintableBookPdfExporter(),
-            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()),
+            new DisposableBookWorkspaceCleaner(fileSystem));
         var application = new PrintableBookApplication(
             new BookProcessingPipeline(Array.Empty<IBookProcessingStage>()),
             new BookProcessingQueueProcessor(new ProcessingSessionGate(), queueBookProcessor));
@@ -85,15 +87,24 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.NotNull(state.ConfigurationFingerprint);
         Assert.Equal([bookResult.PublishedOutputs.CoverPdf.Value, bookResult.PublishedOutputs.InteriorPdf.Value], state.PublishedArtifactReferences);
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "state", "interior-shuffle.json")));
-        Assert.True(File.Exists(Path.Combine(bookResult.PublishedOutputs.PublishedDirectory.Value, "interior", "page-0001.png")));
+        var processedPage = Path.Combine(workspace.WorkingDirectory.Value, "processed", "interior", "page-0001.png");
+        Assert.True(File.Exists(processedPage));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(workspace.WorkingDirectory.Value, "cache")));
         var finalPageInfo = await new MagickImageInspector().GetInfoAsync(new FileReference(
-            Path.Combine(bookResult.PublishedOutputs.PublishedDirectory.Value, "interior", "page-0001.png")));
+            processedPage));
         Assert.Equal(new ImageSize(300, 300), finalPageInfo.Size);
         Assert.Equal(300, finalPageInfo.Density!.Value.Horizontal, precision: 2);
+        var processedPageHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(processedPage)));
+        var processedPageTimestamp = File.GetLastWriteTimeUtc(processedPage);
 
         var reshuffled = await application.ProcessBooksAsync(new BookProcessingQueueRequest([command with { ShuffleSeed = 456 }]));
-        Assert.Equal(BookProcessingStatus.Completed, Assert.Single(reshuffled.Books).Status);
+        var reshuffledBook = Assert.Single(reshuffled.Books);
+        Assert.Equal(BookProcessingStatus.Completed, reshuffledBook.Status);
         Assert.Equal(456, (await new JsonInteriorShuffleStore(fileSystem).LoadAsync(workspace))!.Seed);
+        Assert.NotEqual(bookResult.PublishedOutputs.InteriorPdf.Value, reshuffledBook.PublishedOutputs!.InteriorPdf.Value);
+        Assert.Equal(processedPageHash, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(processedPage))));
+        Assert.Equal(processedPageTimestamp, File.GetLastWriteTimeUtc(processedPage));
+        Assert.False(Directory.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache")));
     }
 
     [Fact]
@@ -120,7 +131,8 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             blockingPipeline,
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new MagickPrintableBookPdfExporter(),
-            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()),
+            new DisposableBookWorkspaceCleaner(fileSystem));
         var command = CreateCommand("interrupted-book", bookDirectory);
 
         var processing = processor.ProcessBookAsync(command).AsTask();

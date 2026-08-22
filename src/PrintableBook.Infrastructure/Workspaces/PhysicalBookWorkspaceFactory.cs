@@ -14,12 +14,13 @@ public sealed class PhysicalBookWorkspaceFactory(IFileSystem fileSystem) : IBook
         ArgumentNullException.ThrowIfNull(bookDirectory);
 
         var workspaceDirectory = new DirectoryReference(Path.Combine(bookDirectory.Value, ".workspace"));
-        var outputDirectory = new DirectoryReference(Path.Combine(workspaceDirectory.Value, "output"));
-        foreach (var name in new[] { "state", "logs", "errors", "cache", "output" })
+        var processedDirectory = new DirectoryReference(Path.Combine(workspaceDirectory.Value, "processed"));
+        var temporaryOutputDirectory = new DirectoryReference(Path.Combine(workspaceDirectory.Value, "output-temp"));
+        foreach (var name in new[] { "state", "logs", "errors", "cache", "processed", "processed/interior", "output-temp" })
         {
             await fileSystem.CreateDirectoryAsync(new DirectoryReference(Path.Combine(workspaceDirectory.Value, name)), cancellationToken);
         }
 
-        return new BookWorkspace(bookId, workspaceDirectory, outputDirectory);
+        return new BookWorkspace(bookId, workspaceDirectory, processedDirectory, temporaryOutputDirectory);
     }
 }
