@@ -167,11 +167,14 @@ public sealed class DiskBackedInteriorPagePipeline(
         ImageSize TargetSize,
         ImageDensity TargetDensity,
         string? FramePath,
+        long FrameLength,
+        long FrameLastWriteUtcTicks,
         bool IsFrameEnabled)
     {
         public static CacheInputStamp Create(InteriorPagePipelineRequest request)
         {
             var source = new FileInfo(request.Source.Value);
+            var frame = request.Frame is null ? null : new FileInfo(request.Frame.Value);
             return new CacheInputStamp(
                 source.FullName,
                 source.Length,
@@ -180,6 +183,8 @@ public sealed class DiskBackedInteriorPagePipeline(
                 request.TargetSize,
                 request.TargetDensity,
                 request.Frame?.Value,
+                frame?.Exists == true ? frame.Length : 0,
+                frame?.Exists == true ? frame.LastWriteTimeUtc.Ticks : 0,
                 request.IsFrameEnabled);
         }
     }

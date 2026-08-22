@@ -43,10 +43,18 @@ public sealed class BoundedInteriorPageBatchProcessor(IInteriorPagePipeline page
 
         async Task ProcessOneAsync(InteriorPagePipelineRequest request, int index)
         {
-            await concurrencyController.RunAsync(async token =>
+            try
             {
-                results[index] = await pagePipeline.ProcessAsync(request, token);
-            }, remainingWorkCancellation.Token);
+                await concurrencyController.RunAsync(async token =>
+                {
+                    results[index] = await pagePipeline.ProcessAsync(request, token);
+                }, remainingWorkCancellation.Token);
+            }
+            catch
+            {
+                await remainingWorkCancellation.CancelAsync();
+                throw;
+            }
         }
     }
 }

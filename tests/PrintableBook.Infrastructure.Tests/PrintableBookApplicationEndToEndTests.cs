@@ -48,21 +48,20 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new BookProcessingPipeline(Array.Empty<IBookProcessingStage>()),
             new BookProcessingQueueProcessor(new ProcessingSessionGate(), queueBookProcessor));
 
-        var result = await application.ProcessBooksAsync(new BookProcessingQueueRequest([
-            new PrintableBookProcessingCommand(
-                new BookId("sample-book"),
-                bookDirectory,
-                new DirectoryReference(Path.Combine(rootPath, "Final")),
-                new ImageSize(300, 300),
-                new ImageSize(300, 300),
-                new ImageDensity(300, 300),
-                new PhysicalPageSize(1, 1),
-                2,
-                new ArtworkDetectionThreshold(20),
-                null,
-                false,
-                123)
-        ]));
+        var command = new PrintableBookProcessingCommand(
+            new BookId("sample-book"),
+            bookDirectory,
+            new DirectoryReference(Path.Combine(rootPath, "Final")),
+            new ImageSize(300, 300),
+            new ImageSize(300, 300),
+            new ImageDensity(300, 300),
+            new PhysicalPageSize(1, 1),
+            2,
+            new ArtworkDetectionThreshold(20),
+            null,
+            false,
+            123);
+        var result = await application.ProcessBooksAsync(new BookProcessingQueueRequest([command]));
 
         var bookResult = Assert.Single(result.Books);
         Assert.False(result.IsAlreadyRunning);
@@ -75,6 +74,10 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.Equal(BookProcessingStatus.Completed, state!.Status);
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "state", "interior-shuffle.json")));
         Assert.True(File.Exists(Path.Combine(bookResult.PublishedOutputs.PublishedDirectory.Value, "interior", "page-0001.png")));
+
+        var reshuffled = await application.ProcessBooksAsync(new BookProcessingQueueRequest([command with { ShuffleSeed = 456 }]));
+        Assert.Equal(BookProcessingStatus.Completed, Assert.Single(reshuffled.Books).Status);
+        Assert.Equal(456, (await new JsonInteriorShuffleStore(fileSystem).LoadAsync(workspace))!.Seed);
     }
 
     private async Task CreateBookFixtureAsync(DirectoryReference bookDirectory)

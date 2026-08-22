@@ -65,7 +65,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             state = await CompleteStepAsync(state, "interior-pages", cancellationToken);
 
             var shuffleMap = await shuffleStore.LoadAsync(workspace, cancellationToken);
-            if (!IsCompatible(shuffleMap, pageResults))
+            if (!IsCompatible(shuffleMap, pageResults, command.ShuffleSeed))
             {
                 shuffleMap = InteriorShuffleIndexGenerator.Generate(pageResults.Select(page => page.Source).ToArray(), command.ShuffleSeed);
                 await shuffleStore.SaveAsync(workspace, shuffleMap, cancellationToken);
@@ -138,8 +138,9 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         }
     }
 
-    private static bool IsCompatible(InteriorShuffleMap? shuffleMap, IReadOnlyList<InteriorPageProcessingResult> pageResults) =>
+    private static bool IsCompatible(InteriorShuffleMap? shuffleMap, IReadOnlyList<InteriorPageProcessingResult> pageResults, int? seed) =>
         shuffleMap is not null &&
+        shuffleMap.Seed == seed &&
         shuffleMap.Entries.Select(entry => entry.Page).OrderBy(page => page.Value)
             .SequenceEqual(pageResults.Select(page => page.Source).OrderBy(page => page.Value));
 
