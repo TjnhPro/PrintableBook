@@ -2,6 +2,8 @@ using PrintableBook.Desktop.Bridge;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
+using PrintableBook.Core.Domain.Books;
+using PrintableBook.Core.Domain.Processing;
 
 namespace PrintableBook.Desktop.Tests;
 
@@ -78,6 +80,23 @@ public sealed class BridgeMessageContractTests
         Assert.True(response.Ok);
         Assert.Equal("settings.saved", response.Command);
         Assert.Equal(6, settingsStore.Saved!.MaximumPageConcurrency);
+    }
+
+    [Fact]
+    public async Task BookValidationRefreshesCSharpOwnedValidationForTheRequestedBook()
+    {
+        var id = new BookId("Book One");
+        var snapshot = new ApplicationSnapshot(
+            new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [], []),
+            GlobalSettings.Default,
+            [new BookDesktopSummary(id, "Ready", [], BookProcessingStatus.NotStarted, null, null, [])],
+            DateTimeOffset.UnixEpoch);
+
+        var response = await new WebViewBridgeRouter(new StubSnapshotService(snapshot))
+            .HandleAsync("""{"version":1,"id":"request-6","command":"book.validate","payload":{"bookId":"Book One"}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("app.snapshot", response.Command);
     }
 
     private sealed class StubSnapshotService(ApplicationSnapshot snapshot) : IApplicationSnapshotService

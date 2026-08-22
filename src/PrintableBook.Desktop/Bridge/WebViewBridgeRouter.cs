@@ -24,11 +24,20 @@ internal sealed class WebViewBridgeRouter(IApplicationSnapshotService? snapshotS
         if (!TryParseRequest(json, out var request)) return BridgeResponse.InvalidRequest();
         var response = RouteSynchronous(request);
         if (response.Error is not null || response.Command is not null) return response;
-        if (request.Command == "app.refresh")
+        if (request.Command is "app.refresh" or "book.validate")
         {
-            return snapshotService is null
-                ? BridgeResponse.UnsupportedCommand(request.Id)
-                : BridgeResponse.Succeeded(request.Id, "app.snapshot", await snapshotService.RefreshAsync(cancellationToken));
+            if (snapshotService is null) return BridgeResponse.UnsupportedCommand(request.Id);
+            var snapshot = await snapshotService.RefreshAsync(cancellationToken);
+            if (request.Command == "book.validate" &&
+                (request.Payload is not { } validationPayload ||
+                 !validationPayload.TryGetProperty("bookId", out var bookId) ||
+                 string.IsNullOrWhiteSpace(bookId.GetString()) ||
+                 !snapshot.BookSummaries.Any(summary => summary.BookId.Value == bookId.GetString())))
+            {
+                return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+            }
+
+            return BridgeResponse.Succeeded(request.Id, "app.snapshot", snapshot);
         }
 
         if (request.Command != "settings.save" || settingsStore is null || request.Payload is not { } payload)
@@ -56,7 +65,7 @@ internal sealed class WebViewBridgeRouter(IApplicationSnapshotService? snapshotS
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "book.validate" or "settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 
