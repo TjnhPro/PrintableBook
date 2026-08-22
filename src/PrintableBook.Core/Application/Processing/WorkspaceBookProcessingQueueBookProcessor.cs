@@ -105,7 +105,9 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     command.InteriorPdfPageSize)), cancellationToken);
             await workspaceCleaner.CleanAfterSuccessfulPublicationAsync(workspace, cancellationToken);
             state = state
-                .CompleteStep("publish", DateTimeOffset.UtcNow)
+                .CompleteStep("publish", DateTimeOffset.UtcNow);
+            await PersistStateAsync(state, "step.completed", "publish", cancellationToken);
+            state = state
                 .RecordPublishedArtifacts([published.CoverPdf.Value, published.InteriorPdf.Value])
                 .Complete(DateTimeOffset.UtcNow);
             await PersistStateAsync(state, "book.completed", command.BookId.Value, cancellationToken);
@@ -127,7 +129,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         catch (InteriorPageProcessingException failure)
         {
             var processingFailure = new ProcessingFailure("interior.page_failed", failure.Message);
-            state = state.Fail($"{failure.PageId}:{failure.Step}", processingFailure, DateTimeOffset.UtcNow);
+            state = state.Fail("interior-pages", processingFailure, DateTimeOffset.UtcNow);
             await stateStore.SaveErrorAsync(workspace, processingFailure, CancellationToken.None);
             await PersistStateAsync(state, "book.failed", processingFailure.Message, CancellationToken.None);
             return new BookProcessingQueueBookResult(command.BookId, BookProcessingStatus.Failed, processingFailure, null);

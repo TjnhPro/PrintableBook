@@ -10,11 +10,13 @@ public sealed class BookProcessingStateTests
     {
         var running = BookProcessingState.NotStarted(new BookId("book-one"))
             .Start(DateTimeOffset.Parse("2026-08-22T10:00:00Z"))
+            .BeginStep("scan", DateTimeOffset.Parse("2026-08-22T10:00:30Z"))
+            .CompleteStep("scan", DateTimeOffset.Parse("2026-08-22T10:00:45Z"))
             .BeginStep("interior-pages", DateTimeOffset.Parse("2026-08-22T10:01:00Z"));
 
         Assert.Equal(BookProcessingStatus.Running, running.Status);
         Assert.Equal("interior-pages", running.CurrentStep);
-        Assert.Null(running.LastCompletedStep);
+        Assert.Equal("scan", running.LastCompletedStep);
     }
 
     [Fact]
@@ -54,9 +56,11 @@ public sealed class BookProcessingStateTests
         var cancelled = BookProcessingState.NotStarted(new BookId("book-one"))
             .Start(DateTimeOffset.UtcNow)
             .CompleteStep("canvas", DateTimeOffset.UtcNow)
+            .BeginStep("resize", DateTimeOffset.UtcNow)
             .Cancel(DateTimeOffset.UtcNow);
 
         Assert.Equal(BookProcessingStatus.Cancelled, cancelled.Status);
+        Assert.Equal("resize", cancelled.CurrentStep);
         Assert.Equal("canvas", cancelled.LastCompletedStep);
         Assert.True(cancelled.MayResume);
     }

@@ -87,6 +87,9 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.Equal(BookProcessingStatus.Completed, state!.Status);
         Assert.NotNull(state.ConfigurationFingerprint);
         Assert.Equal([bookResult.PublishedOutputs.CoverPdf.Value, bookResult.PublishedOutputs.InteriorPdf.Value], state.PublishedArtifactReferences);
+        var processingLog = await File.ReadAllTextAsync(Path.Combine(workspace.WorkingDirectory.Value, "logs", "processing.jsonl"));
+        Assert.Contains("\"event\": \"step.completed\"", processingLog);
+        Assert.Contains("\"step\": \"publish\"", processingLog);
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "state", "interior-shuffle.json")));
         var processedPage = Path.Combine(workspace.WorkingDirectory.Value, "processed", "interior", "page-0001.png");
         Assert.True(File.Exists(processedPage));
@@ -106,6 +109,30 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.Equal(processedPageHash, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(processedPage))));
         Assert.Equal(processedPageTimestamp, File.GetLastWriteTimeUtc(processedPage));
         Assert.False(Directory.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache")));
+
+        var rebuiltPdf = await application.ProcessBooksAsync(new BookProcessingQueueRequest([
+            command with { ShuffleSeed = 456, InteriorPdfPageSize = new PhysicalPageSize(1.25, 1.25) }
+        ]));
+        var rebuiltBook = Assert.Single(rebuiltPdf.Books);
+        using (var rebuiltInterior = PdfReader.Open(rebuiltBook.PublishedOutputs!.InteriorPdf.Value))
+        {
+            Assert.Equal(90, rebuiltInterior.Pages[0].Width.Point, precision: 3);
+            Assert.Equal(90, rebuiltInterior.Pages[0].Height.Point, precision: 3);
+        }
+        Assert.Equal(processedPageHash, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(processedPage))));
+        Assert.Equal(processedPageTimestamp, File.GetLastWriteTimeUtc(processedPage));
+
+        var interruptedState = (await stateStore.LoadAsync(workspace))!
+            .Start(DateTimeOffset.UtcNow)
+            .BeginStep("interior-pages", DateTimeOffset.UtcNow);
+        await stateStore.SaveAsync(workspace, interruptedState);
+        var recovered = await application.ProcessBooksAsync(new BookProcessingQueueRequest([
+            command with { ShuffleSeed = 456, InteriorPdfPageSize = new PhysicalPageSize(1.25, 1.25) }
+        ]));
+        Assert.Equal(BookProcessingStatus.Completed, Assert.Single(recovered.Books).Status);
+        Assert.Equal(BookProcessingStatus.Completed, (await stateStore.LoadAsync(workspace))!.Status);
+        Assert.Equal(processedPageHash, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(processedPage))));
+        Assert.Equal(processedPageTimestamp, File.GetLastWriteTimeUtc(processedPage));
     }
 
     [Fact]
