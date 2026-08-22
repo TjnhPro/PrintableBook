@@ -26,6 +26,7 @@ public sealed class ApplicationRootDiscoveryTests : IAsyncLifetime
         Assert.Equal(["Amazon", "Studio"], snapshot.Brands.Select(brand => brand.Name));
         Assert.Equal(["Book One", "Book Two"], snapshot.Books.Select(book => book.Name));
         Assert.All(snapshot.Books, book => Assert.True(Directory.Exists(Path.Combine(book.Directory.Value, ".workspace"))));
+        Assert.All(snapshot.Brands, brand => Assert.Equal(6, brand.Assets!.Count));
     }
 
     public Task InitializeAsync() => Task.CompletedTask;

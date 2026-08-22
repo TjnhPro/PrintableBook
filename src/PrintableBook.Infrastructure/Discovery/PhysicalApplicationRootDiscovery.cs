@@ -13,7 +13,7 @@ public sealed class PhysicalApplicationRootDiscovery(IFileSystem fileSystem, IBo
         await fileSystem.CreateDirectoryAsync(paths.BrandsDirectory, cancellationToken);
         await fileSystem.CreateDirectoryAsync(paths.SourcesDirectory, cancellationToken);
         var brands = new List<DiscoveredBrand>();
-        await foreach (var directory in fileSystem.EnumerateDirectoriesAsync(paths.BrandsDirectory, cancellationToken)) brands.Add(new DiscoveredBrand(Path.GetFileName(directory.Value), directory));
+        await foreach (var directory in fileSystem.EnumerateDirectoriesAsync(paths.BrandsDirectory, cancellationToken)) brands.Add(new DiscoveredBrand(Path.GetFileName(directory.Value), directory, await DiscoverBrandAssetsAsync(directory, cancellationToken)));
         var books = new List<DiscoveredBook>();
         await foreach (var directory in fileSystem.EnumerateDirectoriesAsync(paths.SourcesDirectory, cancellationToken))
         {
@@ -22,5 +22,28 @@ public sealed class PhysicalApplicationRootDiscovery(IFileSystem fileSystem, IBo
             books.Add(new DiscoveredBook(name, id, directory, await workspaceFactory.CreateAsync(id, directory, cancellationToken)));
         }
         return new ApplicationDiscovery(paths, brands.OrderBy(brand => brand.Name, StringComparer.OrdinalIgnoreCase).ToArray(), books.OrderBy(book => book.Name, StringComparer.OrdinalIgnoreCase).ToArray());
+    }
+
+    private async ValueTask<IReadOnlyList<DiscoveredBrandAsset>> DiscoverBrandAssetsAsync(DirectoryReference brandDirectory, CancellationToken cancellationToken)
+    {
+        var candidates = new[]
+        {
+            ("IntroTemplate", "Folder", true),
+            ("AppPlus", "Folder", true),
+            ("BackCover.psd", "File", false),
+            ("frame.png", "Image", false),
+            ("background.png", "Image", false),
+            ("brand.json", "Settings", false)
+        };
+        var assets = new List<DiscoveredBrandAsset>(candidates.Length);
+        foreach (var (name, type, isDirectory) in candidates)
+        {
+            var path = Path.Combine(brandDirectory.Value, name);
+            var exists = isDirectory
+                ? await fileSystem.DirectoryExistsAsync(new DirectoryReference(path), cancellationToken)
+                : await fileSystem.FileExistsAsync(new FileReference(path), cancellationToken);
+            assets.Add(new DiscoveredBrandAsset(name, type, exists ? "Present" : "Missing", path));
+        }
+        return assets;
     }
 }
