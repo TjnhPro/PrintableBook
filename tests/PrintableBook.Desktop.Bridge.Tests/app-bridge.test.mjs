@@ -38,11 +38,11 @@ test("bridge accepts the JSON response emitted by the .NET host", () => {
 
   messageHandler({
     data: JSON.stringify({
-      Version: 1,
-      Id: "request-1",
-      Ok: true,
-      Command: "app.pong",
-      Error: null
+      version: 1,
+      id: "request-1",
+      ok: true,
+      command: "app.pong",
+      error: null
     })
   });
 
