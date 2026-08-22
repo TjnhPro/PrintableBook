@@ -45,8 +45,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             pagePipeline,
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new MagickPrintableBookPdfExporter(),
-            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()),
-            new DisposableBookWorkspaceCleaner(fileSystem));
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var application = new PrintableBookApplication(
             new BookProcessingPipeline(Array.Empty<IBookProcessingStage>()),
             new BookProcessingQueueProcessor(new ProcessingSessionGate(), queueBookProcessor));
@@ -93,7 +92,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "state", "interior-shuffle.json")));
         var processedPage = Path.Combine(workspace.WorkingDirectory.Value, "processed", "interior", "page-0001.png");
         Assert.True(File.Exists(processedPage));
-        Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(workspace.WorkingDirectory.Value, "cache")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-0001", "trim.png")));
         var finalPageInfo = await new MagickImageInspector().GetInfoAsync(new FileReference(
             processedPage));
         Assert.Equal(new ImageSize(300, 300), finalPageInfo.Size);
@@ -108,7 +107,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.NotEqual(bookResult.PublishedOutputs.InteriorPdf.Value, reshuffledBook.PublishedOutputs!.InteriorPdf.Value);
         Assert.Equal(processedPageHash, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(processedPage))));
         Assert.Equal(processedPageTimestamp, File.GetLastWriteTimeUtc(processedPage));
-        Assert.False(Directory.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-0001", "trim.png")));
 
         var rebuiltPdf = await application.ProcessBooksAsync(new BookProcessingQueueRequest([
             command with { ShuffleSeed = 456, InteriorPdfPageSize = new PhysicalPageSize(1.25, 1.25) }
@@ -159,8 +158,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             blockingPipeline,
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new MagickPrintableBookPdfExporter(),
-            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()),
-            new DisposableBookWorkspaceCleaner(fileSystem));
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("interrupted-book", bookDirectory);
 
         var processing = processor.ProcessBookAsync(command).AsTask();
