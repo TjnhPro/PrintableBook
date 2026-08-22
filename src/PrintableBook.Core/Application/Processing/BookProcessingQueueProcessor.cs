@@ -18,7 +18,8 @@ public sealed record PrintableBookProcessingCommand(
     ArtworkDetectionThreshold ArtworkDetectionThreshold,
     FileReference? Frame,
     bool IsFrameEnabled,
-    int? ShuffleSeed);
+    int? ShuffleSeed,
+    FileReference? SelectedCover = null);
 
 public sealed record BookProcessingQueueRequest(IReadOnlyList<PrintableBookProcessingCommand> Books);
 

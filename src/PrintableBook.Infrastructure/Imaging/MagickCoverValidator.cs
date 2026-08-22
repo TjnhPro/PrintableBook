@@ -27,13 +27,13 @@ public sealed class MagickCoverValidator : ICoverValidator
         {
             return ValueTask.FromResult(CoverValidationResult.Invalid(
                 "cover.unreadable",
-                "Cover must be a readable PNG image."));
+                "Cover must be a readable image."));
         }
         catch (IOException)
         {
             return ValueTask.FromResult(CoverValidationResult.Invalid(
                 "cover.unreadable",
-                "Cover must be a readable PNG image."));
+                "Cover must be a readable image."));
         }
     }
 }

@@ -9,5 +9,5 @@ public sealed record BookSourceScanResult(BookSource? Source, ProcessingFailure?
 
     public static BookSourceScanResult Succeeded(BookSource source) => new(source, null);
 
-    public static BookSourceScanResult Failed(ProcessingFailure failure) => new(null, failure);
+    public static BookSourceScanResult Failed(ProcessingFailure failure, BookSource? source = null) => new(source, failure);
 }

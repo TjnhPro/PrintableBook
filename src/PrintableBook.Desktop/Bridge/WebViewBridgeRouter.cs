@@ -12,7 +12,8 @@ internal sealed class WebViewBridgeRouter(
     IGlobalSettingsStore? settingsStore = null,
     IProcessSessionService? processSessionService = null,
     IApplicationRootDiscovery? rootDiscovery = null,
-    IBrandSettingsStore? brandSettingsStore = null)
+    IBrandSettingsStore? brandSettingsStore = null,
+    IBookCoverSelectionService? coverSelectionService = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -44,6 +45,26 @@ internal sealed class WebViewBridgeRouter(
             }
 
             return BridgeResponse.Succeeded(request.Id, "app.snapshot", snapshot);
+        }
+
+        if (request.Command == "book.cover.select")
+        {
+            if (snapshotService is null || coverSelectionService is null || request.Payload is not { } coverPayload ||
+                !coverPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
+                !coverPayload.TryGetProperty("coverReference", out var coverElement) || string.IsNullOrWhiteSpace(coverElement.GetString()))
+            {
+                return new BridgeResponse(Version, request.Id, false, null, "invalid_cover_selection");
+            }
+
+            try
+            {
+                await coverSelectionService.SelectAsync(bookIdElement.GetString()!, coverElement.GetString()!, cancellationToken);
+                return BridgeResponse.Succeeded(request.Id, "app.snapshot", await snapshotService.RefreshAsync(cancellationToken));
+            }
+            catch (ArgumentException)
+            {
+                return new BridgeResponse(Version, request.Id, false, null, "invalid_cover_selection");
+            }
         }
 
         if (request.Command is "process.get" or "process.cancel" or "process.start")
@@ -131,7 +152,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "book.validate" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "book.validate" or "book.cover.select" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

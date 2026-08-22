@@ -94,6 +94,7 @@ public sealed class ProcessSessionService(
     {
         try
         {
+            var summaries = applicationSnapshot.BookSummaries.ToDictionary(summary => summary.BookId.Value, StringComparer.Ordinal);
             FileReference? frame = null;
             if (!string.IsNullOrWhiteSpace(brandName))
             {
@@ -119,7 +120,8 @@ public sealed class ProcessSessionService(
                 new ArtworkDetectionThreshold(settings.ArtworkDetectionThreshold),
                 frame,
                 frame is not null,
-                null)).ToArray());
+                null,
+                string.IsNullOrWhiteSpace(summaries[book.Id.Value].SelectedCoverReference) ? null : new FileReference(summaries[book.Id.Value].SelectedCoverReference!))).ToArray());
 
             lock (sync) snapshot = snapshot with { CurrentStep = "Processing" };
             var result = await application.ProcessBooksAsync(request, cancellationToken);

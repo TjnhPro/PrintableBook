@@ -15,7 +15,8 @@ public sealed record BookProcessingState(
     DateTimeOffset UpdatedAt,
     bool MayResume,
     string? ConfigurationFingerprint = null,
-    IReadOnlyList<string>? PublishedArtifactReferences = null)
+    IReadOnlyList<string>? PublishedArtifactReferences = null,
+    string? SelectedCoverReference = null)
 {
     public static BookProcessingState NotStarted(BookId bookId) => new(
         bookId,
@@ -110,5 +111,15 @@ public sealed record BookProcessingState(
     {
         ArgumentNullException.ThrowIfNull(artifactReferences);
         return this with { PublishedArtifactReferences = artifactReferences.ToArray() };
+    }
+
+    public BookProcessingState SelectCover(string coverReference)
+    {
+        if (string.IsNullOrWhiteSpace(coverReference))
+        {
+            throw new ArgumentException("A cover reference is required.", nameof(coverReference));
+        }
+
+        return this with { SelectedCoverReference = coverReference };
     }
 }

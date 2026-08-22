@@ -40,7 +40,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
 
             state = await CompleteStepAsync(state, "scan", cancellationToken);
             var source = scan.Source!;
-            var cover = source.GetAssets(BookAssetKind.Cover).Single().Reference;
+            var cover = SelectCover(source, command.SelectedCover).Reference;
             state = await BeginStepAsync(state, "cover-validation", cancellationToken);
             var coverValidation = await coverValidator.ValidateAsync(
                 new CoverValidationRequest(new FileReference(cover), command.MinimumCoverSize), cancellationToken);
@@ -175,6 +175,20 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             command.InteriorPdfPageSize.WidthInches, command.InteriorPdfPageSize.HeightInches,
             command.MaximumPageConcurrency, command.ArtworkDetectionThreshold.Value,
             command.Frame?.Value, command.IsFrameEnabled);
+
+    private static BookAsset SelectCover(BookSource source, FileReference? selectedCover)
+    {
+        var covers = source.GetAssets(BookAssetKind.Cover);
+        if (selectedCover is not null)
+        {
+            var selected = covers.FirstOrDefault(candidate => string.Equals(candidate.Reference, selectedCover.Value, StringComparison.OrdinalIgnoreCase));
+            if (selected is not null) return selected;
+            throw new BookProcessingFailureException("scan", new ProcessingFailure("book.cover_selection_invalid", "The selected cover is no longer available."));
+        }
+
+        if (covers.Count == 1) return covers[0];
+        throw new BookProcessingFailureException("scan", new ProcessingFailure("book.cover_selection_required", "Select one cover candidate before processing."));
+    }
 
     private sealed class BookProcessingFailureException(string step, ProcessingFailure failure) : Exception(failure.Message)
     {
