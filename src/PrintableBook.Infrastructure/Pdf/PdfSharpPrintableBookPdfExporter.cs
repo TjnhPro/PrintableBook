@@ -17,7 +17,8 @@ public sealed class MagickPrintableBookPdfExporter : IPrintableBookPdfExporter
             throw new ArgumentException("At least one interior page is required for PDF export.", nameof(request));
         }
 
-        if (request.PageSize.WidthInches <= 0 || request.PageSize.HeightInches <= 0)
+        if (request.CoverPageSize.WidthInches <= 0 || request.CoverPageSize.HeightInches <= 0 ||
+            request.InteriorPageSize.WidthInches <= 0 || request.InteriorPageSize.HeightInches <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(request), "PDF page dimensions must be positive.");
         }
@@ -25,8 +26,8 @@ public sealed class MagickPrintableBookPdfExporter : IPrintableBookPdfExporter
         Directory.CreateDirectory(request.TemporaryOutputDirectory.Value);
         var coverPdf = new FileReference(Path.Combine(request.TemporaryOutputDirectory.Value, "cover.pdf"));
         var interiorPdf = new FileReference(Path.Combine(request.TemporaryOutputDirectory.Value, "interior.pdf"));
-        WritePdf(coverPdf, [request.Cover], request.PageSize, cancellationToken);
-        WritePdf(interiorPdf, request.OrderedInteriorPages, request.PageSize, cancellationToken);
+        WritePdf(coverPdf, [request.Cover], request.CoverPageSize, cancellationToken);
+        WritePdf(interiorPdf, request.OrderedInteriorPages, request.InteriorPageSize, cancellationToken);
         return ValueTask.FromResult(new PrintableBookPdfExportResult(coverPdf, interiorPdf));
     }
 

@@ -48,6 +48,7 @@ public sealed class BookProcessingQueueProcessorTests
         new ImageSize(100, 100),
         new ImageDensity(300, 300),
         new PhysicalPageSize(8.5, 8.5),
+        new PhysicalPageSize(8.5, 8.5),
         1,
         new ArtworkDetectionThreshold(20),
         null,

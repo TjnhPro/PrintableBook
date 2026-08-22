@@ -84,12 +84,17 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 new FileReference(cover),
                 assembly.OrderedPages,
                 workspace.OutputDirectory,
-                command.PdfPageSize), cancellationToken);
+                command.CoverPdfPageSize,
+                command.InteriorPdfPageSize), cancellationToken);
             state = await CompleteStepAsync(state, "pdf-export", cancellationToken);
             var published = await outputPublisher.PublishAsync(new BookOutputPublicationRequest(
                 pdfOutput,
                 command.FinalOutputRoot,
-                new PrintableBookPdfValidation(1, assembly.OrderedPages.Count, command.PdfPageSize)), cancellationToken);
+                new PrintableBookPdfValidation(
+                    1,
+                    assembly.OrderedPages.Count,
+                    command.CoverPdfPageSize,
+                    command.InteriorPdfPageSize)), cancellationToken);
             state = state
                 .CompleteStep("publish", DateTimeOffset.UtcNow)
                 .RecordPublishedArtifacts([published.CoverPdf.Value, published.InteriorPdf.Value])
@@ -150,7 +155,8 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
     private static string CreateConfigurationFingerprint(PrintableBookProcessingCommand command) =>
         string.Join("|", command.TargetInteriorSize.Width, command.TargetInteriorSize.Height,
             command.TargetInteriorDensity.Horizontal, command.TargetInteriorDensity.Vertical,
-            command.PdfPageSize.WidthInches, command.PdfPageSize.HeightInches,
+            command.CoverPdfPageSize.WidthInches, command.CoverPdfPageSize.HeightInches,
+            command.InteriorPdfPageSize.WidthInches, command.InteriorPdfPageSize.HeightInches,
             command.MaximumPageConcurrency, command.ArtworkDetectionThreshold.Value,
             command.Frame?.Value, command.IsFrameEnabled);
 

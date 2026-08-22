@@ -16,7 +16,8 @@ public sealed record PrintableBookPdfExportRequest(
     FileReference Cover,
     IReadOnlyList<FileReference> OrderedInteriorPages,
     DirectoryReference TemporaryOutputDirectory,
-    PhysicalPageSize PageSize);
+    PhysicalPageSize CoverPageSize,
+    PhysicalPageSize InteriorPageSize);
 
 public sealed record PrintableBookPdfExportResult(FileReference CoverPdf, FileReference InteriorPdf);
 

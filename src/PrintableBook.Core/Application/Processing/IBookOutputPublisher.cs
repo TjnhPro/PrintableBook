@@ -12,7 +12,8 @@ public interface IPdfDocumentInspector
 public sealed record PrintableBookPdfValidation(
     int ExpectedCoverPageCount,
     int ExpectedInteriorPageCount,
-    PhysicalPageSize ExpectedPageSize);
+    PhysicalPageSize ExpectedCoverPageSize,
+    PhysicalPageSize ExpectedInteriorPageSize);
 
 public sealed record BookOutputPublicationRequest(
     PrintableBookPdfExportResult TemporaryOutput,

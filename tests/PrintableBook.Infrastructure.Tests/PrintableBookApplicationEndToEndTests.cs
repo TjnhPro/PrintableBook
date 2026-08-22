@@ -57,6 +57,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new ImageSize(300, 300),
             new ImageDensity(300, 300),
             new PhysicalPageSize(1, 1),
+            new PhysicalPageSize(1, 1),
             2,
             new ArtworkDetectionThreshold(20),
             null,

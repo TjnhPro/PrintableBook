@@ -21,8 +21,8 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
             throw new ArgumentException("Temporary cover and interior PDFs must be in the same directory.", nameof(request));
         }
 
-        await ValidateAsync(request.TemporaryOutput.CoverPdf, request.Validation.ExpectedCoverPageCount, request.Validation.ExpectedPageSize, cancellationToken);
-        await ValidateAsync(request.TemporaryOutput.InteriorPdf, request.Validation.ExpectedInteriorPageCount, request.Validation.ExpectedPageSize, cancellationToken);
+        await ValidateAsync(request.TemporaryOutput.CoverPdf, request.Validation.ExpectedCoverPageCount, request.Validation.ExpectedCoverPageSize, cancellationToken);
+        await ValidateAsync(request.TemporaryOutput.InteriorPdf, request.Validation.ExpectedInteriorPageCount, request.Validation.ExpectedInteriorPageSize, cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(request.FinalOutputRoot.Value);
