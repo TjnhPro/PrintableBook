@@ -104,11 +104,11 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     command.InteriorPdfPageSize)), cancellationToken);
             state = state
                 .CompleteStep("publish", DateTimeOffset.UtcNow);
-            await PersistStateAsync(state, "step.completed", "publish", cancellationToken);
+            await PersistStateAsync(state, "step.completed", "publish", CancellationToken.None);
             state = state
                 .RecordPublishedArtifacts([published.CoverPdf.Value, published.InteriorPdf.Value])
                 .Complete(DateTimeOffset.UtcNow);
-            await PersistStateAsync(state, "book.completed", command.BookId.Value, cancellationToken);
+            await PersistStateAsync(state, "book.completed", command.BookId.Value, CancellationToken.None);
             return BookProcessingQueueBookResult.Completed(command.BookId, published);
         }
         catch (OperationCanceledException)

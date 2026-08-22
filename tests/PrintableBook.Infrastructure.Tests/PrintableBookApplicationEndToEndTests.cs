@@ -174,6 +174,46 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.Equal(BookProcessingStatus.Completed, (await processing).Status);
     }
 
+    [Fact]
+    public async Task ProcessBookAsync_commits_completed_state_when_cancellation_arrives_after_publish()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "CommittedBook"));
+        await CreateBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        using var cancellation = new CancellationTokenSource();
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem),
+            workspaceFactory,
+            stateStore,
+            new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem),
+            new DiskBackedInteriorPagePipeline(
+                new MagickArtworkTrimProcessor(),
+                new MagickSquareCanvasProcessor(),
+                new MagickArtworkResizeProcessor(),
+                new MagickFrameProcessor(),
+                new MagickFinalInteriorPageProcessor(),
+                new MagickImageInspector()),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new MagickPrintableBookPdfExporter(),
+            new CancellingAfterPublishOutputPublisher(
+                new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()),
+                cancellation));
+        var command = CreateCommand("committed-book", bookDirectory);
+
+        var result = await processor.ProcessBookAsync(command, cancellation.Token);
+
+        Assert.Equal(BookProcessingStatus.Completed, result.Status);
+        Assert.NotNull(result.PublishedOutputs);
+        Assert.True(File.Exists(result.PublishedOutputs!.CoverPdf.Value));
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        var persistedState = await stateStore.LoadAsync(workspace);
+        Assert.Equal(BookProcessingStatus.Completed, persistedState!.Status);
+        Assert.Equal([result.PublishedOutputs.CoverPdf.Value, result.PublishedOutputs.InteriorPdf.Value], persistedState.PublishedArtifactReferences);
+    }
+
     private PrintableBookProcessingCommand CreateCommand(string bookId, DirectoryReference bookDirectory) => new(
         new BookId(bookId),
         bookDirectory,
@@ -239,5 +279,19 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         public Task WaitUntilStartedAsync() => started.Task;
 
         public void Release() => release.TrySetResult();
+    }
+
+    private sealed class CancellingAfterPublishOutputPublisher(
+        IBookOutputPublisher inner,
+        CancellationTokenSource cancellation) : IBookOutputPublisher
+    {
+        public async ValueTask<PublishedBookOutputs> PublishAsync(
+            BookOutputPublicationRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            var published = await inner.PublishAsync(request, cancellationToken);
+            cancellation.Cancel();
+            return published;
+        }
     }
 }
