@@ -39,6 +39,7 @@ public sealed class BoundedInteriorPageBatchProcessorTests
     {
         private int active;
         private int maximumObservedConcurrency;
+        private readonly TaskCompletionSource twoOperationsStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public int MaximumObservedConcurrency => Volatile.Read(ref maximumObservedConcurrency);
 
@@ -48,7 +49,12 @@ public sealed class BoundedInteriorPageBatchProcessorTests
             UpdateMaximum(activeNow);
             try
             {
-                await Task.Yield();
+                if (activeNow == 2)
+                {
+                    twoOperationsStarted.TrySetResult();
+                }
+
+                await twoOperationsStarted.Task.WaitAsync(cancellationToken);
                 return new InteriorPageProcessingResult(request.PageId, request.Source, new FileReference($"output/{request.PageId}.png"));
             }
             finally
