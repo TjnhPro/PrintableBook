@@ -17,13 +17,13 @@ public sealed class ValidatedBookOutputPublisherTests : IAsyncLifetime
         var image = await CreatePngAsync();
         var temporaryOutput = new DirectoryReference(Path.Combine(rootPath, "workspace", "output"));
         var exported = await new MagickPrintableBookPdfExporter().ExportAsync(new PrintableBookPdfExportRequest(
-            image, [image], temporaryOutput, new PhysicalPageSize(8.5, 8.5), new PhysicalPageSize(8.5, 8.5)));
+            image, [image], temporaryOutput, new PhysicalPageSize(2, 1), new PhysicalPageSize(8.5, 8.5)));
         var publisher = new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector());
 
         var published = await publisher.PublishAsync(new BookOutputPublicationRequest(
             exported,
             new DirectoryReference(Path.Combine(rootPath, "final")),
-            new PrintableBookPdfValidation(1, 1, new PhysicalPageSize(8.5, 8.5), new PhysicalPageSize(8.5, 8.5))));
+            new PrintableBookPdfValidation(1, 1, new PhysicalPageSize(2, 1), new PhysicalPageSize(8.5, 8.5))));
 
         Assert.True(File.Exists(published.CoverPdf.Value));
         Assert.True(File.Exists(published.InteriorPdf.Value));

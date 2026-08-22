@@ -28,12 +28,19 @@ public sealed class MagickPrintableBookPdfExporterTests : IAsyncLifetime
 
         using var coverPdf = PdfReader.Open(result.CoverPdf.Value);
         using var interiorPdf = PdfReader.Open(result.InteriorPdf.Value);
+        using var coverRaster = new MagickImage(cover.Value);
+        using var interiorRaster = new MagickImage(pageOne.Value);
         Assert.Single(coverPdf.Pages);
         Assert.Equal(2, interiorPdf.Pages.Count);
+        Assert.Equal((uint)5242, coverRaster.Width);
+        Assert.Equal((uint)2626, coverRaster.Height);
+        Assert.Equal((uint)2550, interiorRaster.Width);
+        Assert.Equal((uint)2550, interiorRaster.Height);
         Assert.Equal(5242d / 300d * 72d, coverPdf.Pages[0].Width.Point, precision: 3);
         Assert.Equal(2626d / 300d * 72d, coverPdf.Pages[0].Height.Point, precision: 3);
         Assert.NotEqual(coverPdf.Pages[0].Width.Point, interiorPdf.Pages[0].Width.Point);
         Assert.Equal(612, interiorPdf.Pages[1].Width.Point, precision: 3);
+        Assert.Equal(612, interiorPdf.Pages[1].Height.Point, precision: 3);
         Assert.True(new FileInfo(result.InteriorPdf.Value).Length > 0);
         Assert.Contains("/Width 2550", await File.ReadAllTextAsync(result.InteriorPdf.Value));
     }

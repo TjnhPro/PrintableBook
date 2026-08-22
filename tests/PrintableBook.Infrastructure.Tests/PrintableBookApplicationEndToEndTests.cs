@@ -55,10 +55,10 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new BookId("sample-book"),
             bookDirectory,
             new DirectoryReference(Path.Combine(rootPath, "Final")),
-            new ImageSize(300, 300),
+            new ImageSize(600, 300),
             new ImageSize(300, 300),
             new ImageDensity(300, 300),
-            new PhysicalPageSize(1, 1),
+            new PhysicalPageSize(2, 1),
             new PhysicalPageSize(1, 1),
             2,
             new ArtworkDetectionThreshold(20),
@@ -78,7 +78,8 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         {
             Assert.Single(coverPdf.Pages);
             Assert.Equal(2, interiorPdf.Pages.Count);
-            Assert.Equal(72, coverPdf.Pages[0].Width.Point, precision: 3);
+            Assert.Equal(144, coverPdf.Pages[0].Width.Point, precision: 3);
+            Assert.Equal(72, coverPdf.Pages[0].Height.Point, precision: 3);
             Assert.Equal(72, interiorPdf.Pages[1].Height.Point, precision: 3);
         }
         var workspace = await workspaceFactory.CreateAsync(new BookId("sample-book"), bookDirectory);
@@ -152,10 +153,10 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         new BookId(bookId),
         bookDirectory,
         new DirectoryReference(Path.Combine(rootPath, "Final")),
-        new ImageSize(300, 300),
+        new ImageSize(600, 300),
         new ImageSize(300, 300),
         new ImageDensity(300, 300),
-        new PhysicalPageSize(1, 1),
+        new PhysicalPageSize(2, 1),
         new PhysicalPageSize(1, 1),
         2,
         new ArtworkDetectionThreshold(20),
@@ -169,14 +170,14 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var interiorDirectory = Path.Combine(bookDirectory.Value, "Interior");
         Directory.CreateDirectory(coverDirectory);
         Directory.CreateDirectory(interiorDirectory);
-        await WriteImageAsync(Path.Combine(coverDirectory, "cover.png"), 10, 10, 289, 289);
+        await WriteImageAsync(Path.Combine(coverDirectory, "cover.png"), 10, 10, 589, 289, 600, 300);
         await WriteImageAsync(Path.Combine(interiorDirectory, "page-01.png"), 40, 20, 259, 279);
         await WriteImageAsync(Path.Combine(interiorDirectory, "page-02.png"), 20, 40, 279, 259);
     }
 
-    private static Task WriteImageAsync(string path, int minX, int minY, int maxX, int maxY)
+    private static Task WriteImageAsync(string path, int minX, int minY, int maxX, int maxY, uint width = 300, uint height = 300)
     {
-        using var image = new MagickImage(MagickColors.White, 300, 300);
+        using var image = new MagickImage(MagickColors.White, width, height);
         image.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
         image.GetPixels().SetPixel(minX, minY, [0, 0, 0]);
         image.GetPixels().SetPixel(maxX, maxY, [0, 0, 0]);
