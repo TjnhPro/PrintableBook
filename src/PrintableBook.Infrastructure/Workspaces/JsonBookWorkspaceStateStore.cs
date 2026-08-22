@@ -11,6 +11,8 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
         WriteIndented = true
     };
 
+    private static readonly JsonSerializerOptions LogJsonOptions = new(JsonSerializerDefaults.Web);
+
     public async ValueTask<BookProcessingState?> LoadAsync(BookWorkspace workspace, CancellationToken cancellationToken = default)
     {
         var stateFile = StateFile(workspace);
@@ -35,7 +37,7 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
         ArgumentNullException.ThrowIfNull(entry);
         var logFile = Path.Combine(workspace.WorkingDirectory.Value, "logs", "processing.jsonl");
         Directory.CreateDirectory(Path.GetDirectoryName(logFile)!);
-        File.AppendAllText(logFile, JsonSerializer.Serialize(entry, JsonOptions) + Environment.NewLine);
+        File.AppendAllText(logFile, JsonSerializer.Serialize(entry, LogJsonOptions) + Environment.NewLine);
         return ValueTask.CompletedTask;
     }
 

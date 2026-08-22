@@ -38,6 +38,25 @@ public sealed class PhysicalBookWorkspaceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AppendLogAsync_writes_jsonl_that_LoadLogsAsync_can_round_trip()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "Book-Logs"));
+        var fileSystem = new PhysicalFileSystem();
+        var workspace = await new PhysicalBookWorkspaceFactory(fileSystem).CreateAsync(new BookId("book-logs"), bookDirectory);
+        var store = new JsonBookWorkspaceStateStore(fileSystem);
+        var entry = new BookProcessingLogEntry(
+            DateTimeOffset.Parse("2026-08-22T10:00:00Z"),
+            "step.completed",
+            "publish");
+
+        await store.AppendLogAsync(workspace, entry);
+
+        var restored = await store.LoadLogsAsync(workspace);
+
+        Assert.Equal([entry], restored);
+    }
+
+    [Fact]
     public async Task Shuffle_store_round_trips_the_generated_page_order_without_renaming_sources()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "Book-Two"));
