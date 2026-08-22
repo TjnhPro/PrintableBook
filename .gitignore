@@ -28,9 +28,15 @@ WebView2/
 *.temp
 artifacts/
 
+# Repository-owned test image fixtures are an explicit exception.
+!tests/**/*.png
+!tests/**/*.jpg
+!tests/**/*.jpeg
+
 # Tooling workspaces
 .worktrees/
 .superpowers/
+.plan/
 
 # OS files
 .DS_Store

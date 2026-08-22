@@ -20,6 +20,11 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+
       - name: Restore
         run: dotnet restore PrintableBook.sln
 
@@ -28,3 +33,9 @@ jobs:
 
       - name: Run Core tests
         run: dotnet test tests/PrintableBook.Core.Tests/PrintableBook.Core.Tests.csproj --configuration Release --no-build
+
+      - name: Run Desktop bridge tests
+        run: dotnet test tests/PrintableBook.Desktop.Tests/PrintableBook.Desktop.Tests.csproj --configuration Release --no-build
+
+      - name: Run frontend bridge tests
+        run: node --test tests/PrintableBook.Desktop.Bridge.Tests/app-bridge.test.mjs

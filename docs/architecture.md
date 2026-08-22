@@ -48,4 +48,4 @@ For the Phase 0 bridge proof, the only accepted command is `app.ping`; the host 
 
 ## Quality baseline
 
-Nullable reference types and implicit usings are enabled. Shared build settings treat compiler warnings as errors. The Core test project is isolated from Desktop and verifies that its referenced assembly graph excludes Windows and WebView2 dependencies. GitHub Actions restores, builds, and executes Core tests in Phase 0.
+Nullable reference types and implicit usings are enabled. Shared build settings treat compiler warnings as errors. The Core test project is isolated from Desktop and verifies that Core's direct assembly references exclude Windows, WPF, and WebView2 assemblies. GitHub Actions restores, builds, and executes Core tests in Phase 0.

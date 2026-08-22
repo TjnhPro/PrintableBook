@@ -9,6 +9,7 @@ namespace PrintableBook.Desktop;
 public partial class MainWindow : Window
 {
     private const int BridgeVersion = 1;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public MainWindow(IPrintableBookApplication application)
     {
@@ -30,14 +31,14 @@ public partial class MainWindow : Window
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         var response = TryHandleMessage(e.TryGetWebMessageAsString());
-        Browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(response));
+        Browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(response, JsonOptions));
     }
 
     private static BridgeResponse TryHandleMessage(string json)
     {
         try
         {
-            var request = JsonSerializer.Deserialize<BridgeRequest>(json);
+            var request = JsonSerializer.Deserialize<BridgeRequest>(json, JsonOptions);
             if (request is null || request.Version != BridgeVersion || string.IsNullOrWhiteSpace(request.Id))
             {
                 return BridgeResponse.InvalidRequest();

@@ -10,4 +10,4 @@ This repository is being delivered in gated phases. Only the current phase may b
 6. Phase 5 — Production hardening and KDP validation.
 7. Phase 6 — Controlled release.
 
-The detailed working plan is maintained at `.plan/todo.md` during implementation.
+Detailed phase checklists are maintained in the local planning workspace and are intentionally not committed with the application source.
