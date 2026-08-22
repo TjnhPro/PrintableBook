@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IFinalInteriorPageProcessor, MagickFinalInteriorPageProcessor>();
         services.AddSingleton<ICoverValidator, MagickCoverValidator>();
         services.AddSingleton<IInteriorPagePipeline, DiskBackedInteriorPagePipeline>();
+        services.AddSingleton<IOrderedBookAssembler, OrderedBookAssembler>();
         services.AddSingleton<IBookSourceScanner, BookSourceScanner>();
         services.AddSingleton<IBookWorkspaceFactory, PhysicalBookWorkspaceFactory>();
         services.AddSingleton<IBookWorkspaceStateStore, JsonBookWorkspaceStateStore>();
