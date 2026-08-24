@@ -8,6 +8,7 @@ using PrintableBook.Core.Application.Results;
 using PrintableBook.Core.Application.Services;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
+using System.Reflection;
 
 namespace PrintableBook.Core.Tests.Application;
 
@@ -103,6 +104,43 @@ public sealed class ProcessSessionServiceTests
     }
 
     [Fact]
+    public async Task CancelAsync_does_not_fail_when_worker_reaches_terminal_cleanup_concurrently()
+    {
+        var application = new RecordingPrintableBookApplication(observesCancellation: false);
+        var service = new ProcessSessionService(
+            new StaticSnapshotService(CreateSnapshot()),
+            application,
+            new NullBrandFrameResolver());
+        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
+        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        DisposeOwnedCancellation(service);
+
+        var cancelling = await service.CancelAsync();
+
+        Assert.True(cancelling.IsCancelling);
+        application.Release.TrySetResult();
+        await WaitUntilAsync(async () => !(await service.GetAsync()).IsActive);
+    }
+
+    [Fact]
+    public async Task StopAndWaitAsync_does_not_fail_when_worker_finishes_during_cancellation_request()
+    {
+        var application = new RecordingPrintableBookApplication(observesCancellation: false);
+        var service = new ProcessSessionService(
+            new StaticSnapshotService(CreateSnapshot()),
+            application,
+            new NullBrandFrameResolver());
+        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
+        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        DisposeOwnedCancellation(service);
+        application.Release.TrySetResult();
+
+        Assert.True(await service.StopAndWaitAsync(TimeSpan.FromSeconds(2)));
+    }
+
+    [Fact]
     public async Task StartAsync_allows_a_new_session_after_terminal_cleanup()
     {
         var application = new RecordingPrintableBookApplication();
@@ -178,6 +216,13 @@ public sealed class ProcessSessionServiceTests
     }
 
     private sealed class MarkerSynchronizationContext : SynchronizationContext;
+
+    private static void DisposeOwnedCancellation(ProcessSessionService service)
+    {
+        var field = typeof(ProcessSessionService).GetField("cancellation", BindingFlags.Instance | BindingFlags.NonPublic);
+        var source = Assert.IsType<CancellationTokenSource>(field?.GetValue(service));
+        source.Dispose();
+    }
 
     private sealed class StaticSnapshotService(ApplicationSnapshot snapshot) : IApplicationSnapshotService
     {

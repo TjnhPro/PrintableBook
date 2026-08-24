@@ -116,7 +116,7 @@ public sealed class ProcessSessionService(
             current = snapshot;
         }
 
-        toCancel.Cancel();
+        RequestCancellation(toCancel);
         return ValueTask.FromResult(current);
     }
 
@@ -138,7 +138,7 @@ public sealed class ProcessSessionService(
             toCancel = cancellation;
         }
 
-        toCancel?.Cancel();
+        RequestCancellation(toCancel);
         try
         {
             await task.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
@@ -225,6 +225,23 @@ public sealed class ProcessSessionService(
                 cancellation = null;
                 executionTask = null;
             }
+        }
+    }
+
+    private static void RequestCancellation(CancellationTokenSource? source)
+    {
+        if (source is null)
+        {
+            return;
+        }
+
+        try
+        {
+            source.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Terminal cleanup won the race; there is nothing left to cancel.
         }
     }
 
