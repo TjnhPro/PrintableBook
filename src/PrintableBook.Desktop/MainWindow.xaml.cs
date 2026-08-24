@@ -81,6 +81,9 @@ public partial class MainWindow : Window
 
         try
         {
+            // Let the Closing event return after it has been cancelled before a completed
+            // coordinator result can attempt to invoke Close again.
+            await Task.Yield();
             switch (await shutdownCoordinator.RequestCloseAsync())
             {
                 case ProcessWindowCloseOutcome.KeepOpen:
