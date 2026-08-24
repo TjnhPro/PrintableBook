@@ -18,12 +18,14 @@ public sealed class ArtworkClassificationResultTests
     }
 
     [Theory]
-    [InlineData(ArtworkType.FullArt)]
-    [InlineData(ArtworkType.CropArt)]
-    public void Non_border_art_retains_no_border_line_and_border_pixel_evidence(ArtworkType type)
+    [InlineData(ArtworkType.FullArt, true)]
+    [InlineData(ArtworkType.CropArt, false)]
+    public void Non_border_art_retains_no_border_line_and_border_pixel_evidence(ArtworkType type, bool hasBorderPixel)
     {
         var borderLine = BorderLineDetectionResult.NoBorder();
-        var borderPixel = BorderPixelDetectionResult.Detected(false, true, false, false);
+        var borderPixel = hasBorderPixel
+            ? BorderPixelDetectionResult.Detected(false, true, false, false)
+            : BorderPixelDetectionResult.None();
 
         var result = new ArtworkClassificationResult(type, borderLine, borderPixel);
 
@@ -54,6 +56,36 @@ public sealed class ArtworkClassificationResultTests
                 ArtworkType.BorderArt,
                 CreateBorderLine(),
                 BorderPixelDetectionResult.Detected(true, false, false, false)));
+    }
+
+    [Fact]
+    public void FullArt_requires_positive_border_pixel_evidence()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new ArtworkClassificationResult(
+                ArtworkType.FullArt,
+                BorderLineDetectionResult.NoBorder(),
+                BorderPixelDetectionResult.None()));
+    }
+
+    [Fact]
+    public void CropArt_requires_negative_border_pixel_evidence()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new ArtworkClassificationResult(
+                ArtworkType.CropArt,
+                BorderLineDetectionResult.NoBorder(),
+                BorderPixelDetectionResult.Detected(true, false, false, false)));
+    }
+
+    [Fact]
+    public void Unknown_artwork_type_is_rejected()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new ArtworkClassificationResult(
+                (ArtworkType)99,
+                BorderLineDetectionResult.NoBorder(),
+                BorderPixelDetectionResult.None()));
     }
 
     private static BorderLineDetectionResult CreateBorderLine() =>
