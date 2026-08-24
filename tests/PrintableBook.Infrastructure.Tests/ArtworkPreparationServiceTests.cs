@@ -28,7 +28,7 @@ public sealed class ArtworkPreparationServiceTests : IAsyncLifetime
 
         Assert.Equal(new FileReference(target), result.File);
         Assert.Equal(type, result.Type);
-        Assert.Equal(frameAllowed, result.FrameAllowed);
+        Assert.Equal(frameAllowed, result.AutoFrameRecommended);
         using var output = new MagickImage(target);
         Assert.Equal((uint)2270, output.Width);
         Assert.Equal((uint)2270, output.Height);

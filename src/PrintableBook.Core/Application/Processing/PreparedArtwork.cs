@@ -8,7 +8,7 @@ namespace PrintableBook.Core.Application.Processing;
 public sealed record PreparedArtwork(
     FileReference File,
     ArtworkType Type,
-    bool FrameAllowed)
+    bool AutoFrameRecommended)
 {
     /// <summary>
     /// Reconstructs the shared-stage policy for a previously prepared, cached artwork file.

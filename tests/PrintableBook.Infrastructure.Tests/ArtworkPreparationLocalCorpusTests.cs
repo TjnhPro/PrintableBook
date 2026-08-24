@@ -84,7 +84,7 @@ public sealed class ArtworkPreparationLocalCorpusTests
                         category.Name,
                         input,
                         category.ExpectedType,
-                        category.ExpectedFrameAllowed,
+                        category.ExpectedAutoFrameRecommended,
                         classification,
                         prepared,
                         inspection,
@@ -97,7 +97,7 @@ public sealed class ArtworkPreparationLocalCorpusTests
                         category.Name,
                         input,
                         category.ExpectedType,
-                        category.ExpectedFrameAllowed,
+                        category.ExpectedAutoFrameRecommended,
                         exception.Message,
                         stopwatch.Elapsed.TotalMilliseconds));
                 }
@@ -173,7 +173,7 @@ public sealed class ArtworkPreparationLocalCorpusTests
             "Expected user images under TestResults/ArtworkPreparationCorpus/{borderart,fullart,cropart}.");
     }
 
-    private sealed record CorpusCategory(string Name, ArtworkType ExpectedType, bool ExpectedFrameAllowed);
+    private sealed record CorpusCategory(string Name, ArtworkType ExpectedType, bool ExpectedAutoFrameRecommended);
 
     private sealed record PreparedInspection(int Width, int Height, bool IsOpaque);
 
@@ -181,9 +181,9 @@ public sealed class ArtworkPreparationLocalCorpusTests
         string Category,
         string? Input,
         ArtworkType ExpectedType,
-        bool ExpectedFrameAllowed,
+        bool ExpectedAutoFrameRecommended,
         ArtworkType? ActualType,
-        bool? ActualFrameAllowed,
+        bool? ActualAutoFrameRecommended,
         int? PreparedWidth,
         int? PreparedHeight,
         bool? IsOpaque,
@@ -195,28 +195,28 @@ public sealed class ArtworkPreparationLocalCorpusTests
             string category,
             string input,
             ArtworkType expectedType,
-            bool expectedFrameAllowed,
+            bool expectedAutoFrameRecommended,
             ArtworkClassificationResult classification,
             PreparedArtwork prepared,
             PreparedInspection inspection,
             double elapsedMilliseconds)
         {
             var valid = classification.Type == expectedType &&
-                prepared.FrameAllowed == expectedFrameAllowed &&
+                prepared.AutoFrameRecommended == expectedAutoFrameRecommended &&
                 inspection.Width == PreparedArtworkSide &&
                 inspection.Height == PreparedArtworkSide &&
                 inspection.IsOpaque;
             var error = valid
                 ? null
-                : $"Expected Type={expectedType}, FrameAllowed={expectedFrameAllowed}, {PreparedArtworkSide}x{PreparedArtworkSide}, opaque=true; " +
-                  $"actual Type={classification.Type}, FrameAllowed={prepared.FrameAllowed}, {inspection.Width}x{inspection.Height}, opaque={inspection.IsOpaque}.";
+                : $"Expected Type={expectedType}, AutoFrameRecommended={expectedAutoFrameRecommended}, {PreparedArtworkSide}x{PreparedArtworkSide}, opaque=true; " +
+                  $"actual Type={classification.Type}, AutoFrameRecommended={prepared.AutoFrameRecommended}, {inspection.Width}x{inspection.Height}, opaque={inspection.IsOpaque}.";
             return new(
                 category,
                 input,
                 expectedType,
-                expectedFrameAllowed,
+                expectedAutoFrameRecommended,
                 classification.Type,
-                prepared.FrameAllowed,
+                prepared.AutoFrameRecommended,
                 inspection.Width,
                 inspection.Height,
                 inspection.IsOpaque,
@@ -229,10 +229,10 @@ public sealed class ArtworkPreparationLocalCorpusTests
             string category,
             string input,
             ArtworkType expectedType,
-            bool expectedFrameAllowed,
+            bool expectedAutoFrameRecommended,
             string error,
             double elapsedMilliseconds) =>
-            new(category, input, expectedType, expectedFrameAllowed, null, null, null, null, null, "FAIL", elapsedMilliseconds, error);
+            new(category, input, expectedType, expectedAutoFrameRecommended, null, null, null, null, null, "FAIL", elapsedMilliseconds, error);
 
         public static ArtworkPreparationCorpusResult ConfigurationFailure(
             string category,

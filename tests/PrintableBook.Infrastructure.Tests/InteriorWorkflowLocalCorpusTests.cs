@@ -97,7 +97,7 @@ public sealed class InteriorWorkflowLocalCorpusTests
                         input,
                         category.ExpectedType,
                         actualType,
-                        category.ExpectedFrameAllowed,
+                        category.ExpectedAutoFrameRecommended,
                         actualType != ArtworkType.CropArt,
                         frame is not null,
                         frameApplied,
@@ -112,7 +112,7 @@ public sealed class InteriorWorkflowLocalCorpusTests
                 catch (Exception exception)
                 {
                     stopwatch.Stop();
-                    results.Add(WorkflowCorpusResult.Failed(category.Name, input, category.ExpectedType, category.ExpectedFrameAllowed, exception.Message, stopwatch.Elapsed.TotalMilliseconds));
+                    results.Add(WorkflowCorpusResult.Failed(category.Name, input, category.ExpectedType, category.ExpectedAutoFrameRecommended, exception.Message, stopwatch.Elapsed.TotalMilliseconds));
                 }
             }
         }
@@ -200,15 +200,15 @@ public sealed class InteriorWorkflowLocalCorpusTests
         throw new DirectoryNotFoundException("Expected user images under TestResults/InteriorWorkflowCorpus/{borderart,fullart,cropart}.");
     }
 
-    private sealed record CorpusCategory(string Name, ArtworkType ExpectedType, bool ExpectedFrameAllowed);
+    private sealed record CorpusCategory(string Name, ArtworkType ExpectedType, bool ExpectedAutoFrameRecommended);
 
     private sealed record WorkflowCorpusResult(
         string Category,
         string? Input,
         ArtworkType ExpectedType,
         ArtworkType? ActualType,
-        bool ExpectedFrameAllowed,
-        bool? ActualFrameAllowed,
+        bool ExpectedAutoFrameRecommended,
+        bool? ActualAutoFrameRecommended,
         bool? FrameAvailable,
         bool? FrameApplied,
         bool? FramedDiffersFromPrepared,
@@ -226,8 +226,8 @@ public sealed class InteriorWorkflowLocalCorpusTests
             string input,
             ArtworkType expectedType,
             ArtworkType actualType,
-            bool expectedFrameAllowed,
-            bool actualFrameAllowed,
+            bool expectedAutoFrameRecommended,
+            bool actualAutoFrameRecommended,
             bool frameAvailable,
             bool frameApplied,
             bool framedDiffersFromPrepared,
@@ -239,20 +239,20 @@ public sealed class InteriorWorkflowLocalCorpusTests
             double elapsedMilliseconds)
         {
             var valid = expectedType == actualType &&
-                expectedFrameAllowed == actualFrameAllowed &&
-                frameApplied == (frameAvailable && actualFrameAllowed) &&
-                (actualFrameAllowed || !framedDiffersFromPrepared) &&
+                expectedAutoFrameRecommended == actualAutoFrameRecommended &&
+                frameApplied == (frameAvailable && actualAutoFrameRecommended) &&
+                (actualAutoFrameRecommended || !framedDiffersFromPrepared) &&
                 preparedSize == InteriorWorkflowLocalCorpusTests.PreparedSize &&
                 framedSize == InteriorWorkflowLocalCorpusTests.PreparedSize &&
                 workingSize == InteriorWorkflowLocalCorpusTests.WorkingSize &&
                 finalSize == InteriorWorkflowLocalCorpusTests.FinalSize &&
                 isOpaque;
-            var error = valid ? null : $"Expected Type={expectedType}, frameAllowed={expectedFrameAllowed}, prepared={InteriorWorkflowLocalCorpusTests.PreparedSize}, working={InteriorWorkflowLocalCorpusTests.WorkingSize}, final={InteriorWorkflowLocalCorpusTests.FinalSize}, opaque=true; actual Type={actualType}, frameAllowed={actualFrameAllowed}, frameAvailable={frameAvailable}, frameApplied={frameApplied}, framedDiffersFromPrepared={framedDiffersFromPrepared}, prepared={preparedSize}, working={workingSize}, final={finalSize}, opaque={isOpaque}.";
-            return new(category, input, expectedType, actualType, expectedFrameAllowed, actualFrameAllowed, frameAvailable, frameApplied, framedDiffersFromPrepared, preparedSize, framedSize, workingSize, finalSize, isOpaque, valid ? "PASS" : "FAIL", elapsedMilliseconds, error);
+            var error = valid ? null : $"Expected Type={expectedType}, autoFrameRecommended={expectedAutoFrameRecommended}, prepared={InteriorWorkflowLocalCorpusTests.PreparedSize}, working={InteriorWorkflowLocalCorpusTests.WorkingSize}, final={InteriorWorkflowLocalCorpusTests.FinalSize}, opaque=true; actual Type={actualType}, autoFrameRecommended={actualAutoFrameRecommended}, frameAvailable={frameAvailable}, frameApplied={frameApplied}, framedDiffersFromPrepared={framedDiffersFromPrepared}, prepared={preparedSize}, working={workingSize}, final={finalSize}, opaque={isOpaque}.";
+            return new(category, input, expectedType, actualType, expectedAutoFrameRecommended, actualAutoFrameRecommended, frameAvailable, frameApplied, framedDiffersFromPrepared, preparedSize, framedSize, workingSize, finalSize, isOpaque, valid ? "PASS" : "FAIL", elapsedMilliseconds, error);
         }
 
-        public static WorkflowCorpusResult Failed(string category, string input, ArtworkType expectedType, bool expectedFrameAllowed, string error, double elapsedMilliseconds) =>
-            new(category, input, expectedType, null, expectedFrameAllowed, null, null, null, null, null, null, null, null, null, "FAIL", elapsedMilliseconds, error);
+        public static WorkflowCorpusResult Failed(string category, string input, ArtworkType expectedType, bool expectedAutoFrameRecommended, string error, double elapsedMilliseconds) =>
+            new(category, input, expectedType, null, expectedAutoFrameRecommended, null, null, null, null, null, null, null, null, null, "FAIL", elapsedMilliseconds, error);
 
         public static WorkflowCorpusResult ConfigurationFailure(string category, ArtworkType expectedType, string error) =>
             new(category, null, expectedType, null, expectedType != ArtworkType.CropArt, null, null, null, null, null, null, null, null, null, "FAIL", null, error);

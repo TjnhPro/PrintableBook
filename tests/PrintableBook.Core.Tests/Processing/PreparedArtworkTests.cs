@@ -9,22 +9,22 @@ public sealed class PreparedArtworkTests
     [InlineData(ArtworkType.BorderArt, true)]
     [InlineData(ArtworkType.FullArt, true)]
     [InlineData(ArtworkType.CropArt, false)]
-    public void Result_carries_the_prepared_file_type_and_frame_eligibility(ArtworkType type, bool frameAllowed)
+    public void Result_carries_the_prepared_file_type_and_auto_frame_recommendation(ArtworkType type, bool autoFrameRecommended)
     {
         var file = new FileReference("prepared.png");
 
-        var result = new PreparedArtwork(file, type, frameAllowed);
+        var result = new PreparedArtwork(file, type, autoFrameRecommended);
 
         Assert.Equal(file, result.File);
         Assert.Equal(type, result.Type);
-        Assert.Equal(frameAllowed, result.FrameAllowed);
+        Assert.Equal(autoFrameRecommended, result.AutoFrameRecommended);
     }
 
     [Theory]
     [InlineData(ArtworkType.BorderArt, true)]
     [InlineData(ArtworkType.FullArt, true)]
     [InlineData(ArtworkType.CropArt, false)]
-    public void FromCached_restores_the_type_owned_frame_policy(ArtworkType type, bool frameAllowed)
+    public void FromCached_restores_the_type_owned_auto_frame_recommendation(ArtworkType type, bool autoFrameRecommended)
     {
         var file = new FileReference("prepared.png");
 
@@ -32,6 +32,6 @@ public sealed class PreparedArtworkTests
 
         Assert.Equal(file, result.File);
         Assert.Equal(type, result.Type);
-        Assert.Equal(frameAllowed, result.FrameAllowed);
+        Assert.Equal(autoFrameRecommended, result.AutoFrameRecommended);
     }
 }

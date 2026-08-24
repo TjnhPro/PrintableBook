@@ -24,7 +24,7 @@ public sealed class ArtworkPreparationService(
             throw new ArgumentException("Prepared artwork must target a PNG file.", nameof(request));
         }
 
-        var frameAllowed = request.Classification.Type switch
+        var autoFrameRecommended = request.Classification.Type switch
         {
             ArtworkType.BorderArt => await PrepareBorderArtAsync(request, cancellationToken),
             ArtworkType.FullArt => await PrepareFullArtAsync(request, cancellationToken),
@@ -43,7 +43,7 @@ public sealed class ArtworkPreparationService(
                 $"but was {output.Size.Width}x{output.Size.Height}.");
         }
 
-        return PreparedArtwork.FromCached(request.Target, request.Classification.Type) with { FrameAllowed = frameAllowed };
+        return PreparedArtwork.FromCached(request.Target, request.Classification.Type) with { AutoFrameRecommended = autoFrameRecommended };
     }
 
     private async ValueTask<bool> PrepareBorderArtAsync(ArtworkPreparationRequest request, CancellationToken cancellationToken)

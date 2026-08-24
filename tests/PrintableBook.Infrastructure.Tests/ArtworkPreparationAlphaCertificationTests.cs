@@ -26,7 +26,7 @@ public sealed class ArtworkPreparationAlphaCertificationTests : IAsyncLifetime
 
         var result = await CreateService().PrepareAsync(CreateRequest(source, target, type));
 
-        Assert.Equal(type == ArtworkType.CropArt ? false : true, result.FrameAllowed);
+        Assert.Equal(type != ArtworkType.CropArt, result.AutoFrameRecommended);
         using var output = new MagickImage(target);
         Assert.Equal(MagickFormat.Png, output.Format);
         Assert.Equal((uint)2270, output.Width);

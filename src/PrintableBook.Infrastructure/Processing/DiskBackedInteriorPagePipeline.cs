@@ -89,8 +89,8 @@ public sealed class DiskBackedInteriorPagePipeline(
             var shouldApplyFrame = request.Frame is not null &&
                 File.Exists(request.Frame.Value) &&
                 request.IsFrameEnabled &&
-                preparedArtwork.FrameAllowed;
-            if (!await IsReadableAsync(framed, request.PreparedArtworkSize, cancellationToken) || !preparedArtwork.FrameAllowed)
+                preparedArtwork.AutoFrameRecommended;
+            if (!await IsReadableAsync(framed, request.PreparedArtworkSize, cancellationToken) || !preparedArtwork.AutoFrameRecommended)
             {
                 DeleteDownstream(working, finalPage);
                 currentStep = "frame";
