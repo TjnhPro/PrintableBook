@@ -67,6 +67,12 @@ public sealed class ProcessSessionService(
     public async ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(bookIds);
+
+        lock (sync)
+        {
+            if (snapshot.IsActive || executionTask is { IsCompleted: false }) return snapshot;
+        }
+
         if (bookIds.Count == 0) throw new ArgumentException("Select at least one Book before starting processing.", nameof(bookIds));
 
         if (string.IsNullOrWhiteSpace(brandName)) throw new ArgumentException("Select one Brand before starting processing.", nameof(brandName));

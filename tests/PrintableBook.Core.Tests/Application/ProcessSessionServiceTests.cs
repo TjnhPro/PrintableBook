@@ -66,6 +66,31 @@ public sealed class ProcessSessionServiceTests
     }
 
     [Fact]
+    public async Task StartAsync_returns_active_session_before_refreshing_discovery_again()
+    {
+        var application = new RecordingPrintableBookApplication();
+        var snapshotService = new CountingSnapshotService(CreateSnapshot());
+        var service = new ProcessSessionService(
+            snapshotService,
+            application,
+            new NullBrandFrameResolver());
+
+        var first = await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
+        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var refreshesAfterFirstStart = snapshotService.RefreshCount;
+
+        var second = await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
+
+        Assert.True(second.IsActive);
+        Assert.Equal(first.CurrentBookId, second.CurrentBookId);
+        Assert.Equal(refreshesAfterFirstStart, snapshotService.RefreshCount);
+        Assert.Equal(1, application.InvocationCount);
+
+        application.Release.TrySetResult();
+        await WaitUntilAsync(async () => !(await service.GetAsync()).IsActive);
+    }
+
+    [Fact]
     public async Task CancelAsync_marks_the_session_as_cancelling_before_the_worker_unwinds()
     {
         var application = new RecordingPrintableBookApplication();
@@ -227,6 +252,17 @@ public sealed class ProcessSessionServiceTests
     private sealed class StaticSnapshotService(ApplicationSnapshot snapshot) : IApplicationSnapshotService
     {
         public ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
+    }
+
+    private sealed class CountingSnapshotService(ApplicationSnapshot snapshot) : IApplicationSnapshotService
+    {
+        public int RefreshCount { get; private set; }
+
+        public ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
+        {
+            RefreshCount++;
+            return ValueTask.FromResult(snapshot);
+        }
     }
 
     private sealed class NullBrandFrameResolver : IBrandFrameResolver
