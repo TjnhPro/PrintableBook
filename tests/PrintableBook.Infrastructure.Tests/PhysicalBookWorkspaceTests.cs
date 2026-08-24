@@ -39,6 +39,25 @@ public sealed class PhysicalBookWorkspaceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SaveAsync_persists_frame_overrides_as_canonical_strings_and_restores_them_case_insensitively()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "Book-Frame-Overrides"));
+        var fileSystem = new PhysicalFileSystem();
+        var workspace = await new PhysicalBookWorkspaceFactory(fileSystem).CreateAsync(new BookId("book-frame-overrides"), bookDirectory);
+        var store = new JsonBookWorkspaceStateStore(fileSystem);
+        var state = BookProcessingState.NotStarted(new BookId("book-frame-overrides"))
+            .SetInteriorFrameMode("interior/page-01.png", FrameMode.Enabled);
+
+        await store.SaveAsync(workspace, state);
+
+        var stateJson = await File.ReadAllTextAsync(Path.Combine(workspace.WorkingDirectory.Value, "state", "book-state.json"));
+        var restored = await store.LoadAsync(workspace);
+
+        Assert.Contains("\"interior/page-01.png\": \"enabled\"", stateJson, StringComparison.Ordinal);
+        Assert.Equal(FrameMode.Enabled, restored!.GetInteriorFrameMode("INTERIOR/PAGE-01.PNG"));
+    }
+
+    [Fact]
     public async Task AppendLogAsync_writes_jsonl_that_LoadLogsAsync_can_round_trip()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "Book-Logs"));

@@ -1,6 +1,8 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text;
 using PrintableBook.Core.Abstractions;
+using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Domain.Processing;
 
 namespace PrintableBook.Infrastructure.Workspaces;
@@ -9,7 +11,8 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        WriteIndented = true
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
     };
 
     private static readonly JsonSerializerOptions LogJsonOptions = new(JsonSerializerDefaults.Web);
@@ -23,8 +26,16 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
         }
 
         var content = await fileSystem.ReadTextAsync(stateFile, cancellationToken);
-        return JsonSerializer.Deserialize<BookProcessingState>(content, JsonOptions)
+        var state = JsonSerializer.Deserialize<BookProcessingState>(content, JsonOptions)
             ?? throw new InvalidDataException("The workspace state file is empty or invalid.");
+        return state.InteriorFrameOverrides is null
+            ? state
+            : state with
+            {
+                InteriorFrameOverrides = new Dictionary<string, FrameMode>(
+                    state.InteriorFrameOverrides,
+                    StringComparer.OrdinalIgnoreCase)
+            };
     }
 
     public ValueTask SaveAsync(BookWorkspace workspace, BookProcessingState state, CancellationToken cancellationToken = default)
