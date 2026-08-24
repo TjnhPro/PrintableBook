@@ -67,7 +67,7 @@
   const renderBooks = () => {
     const allBooks = books();
     if (!state.selectedBookId && allBooks.length) state.selectedBookId = bookId(allBooks[0]);
-    const statuses = ["All", "Ready", "Invalid", "Needs selection", "Running", "Failed"];
+    const statuses = ["All", "Ready", "Invalid", "Needs selection", "Running", "Interrupted", "Failed"];
     const statusCounts = statuses.map((name) => ({ name, count: name === "All" ? allBooks.length : allBooks.filter((book) => valueFor(summaryFor(book), "validationStatus", "") === name || workspaceStatus(summaryFor(book)) === name).length }));
     const filtered = allBooks.filter((book) => valueFor(book, "name", "").toLowerCase().includes(state.bookFilter.toLowerCase()) && (state.bookStatus === "All" || valueFor(summaryFor(book), "validationStatus", "") === state.bookStatus || workspaceStatus(summaryFor(book)) === state.bookStatus));
     const book = selectedBook();
@@ -176,7 +176,7 @@
   const refreshButton = document.getElementById("refresh-button");
   if (refreshButton) refreshButton.addEventListener("click", () => send("app.refresh"));
   if (brandSelect) brandSelect.addEventListener("change", () => { state.selectedBrand = brandSelect.value; });
-  window.setInterval(() => { if (valueFor(window.processSnapshot, "isActive", false)) send("process.get"); }, 1000);
+  window.setInterval(() => { if (valueFor(window.processSnapshot, "isActive", false) || valueFor(window.processSnapshot, "isCancelling", false)) send("process.get"); }, 1000);
   send("app.ping");
   send("app.refresh");
 })();

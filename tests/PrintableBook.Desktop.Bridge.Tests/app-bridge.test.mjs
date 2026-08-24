@@ -126,6 +126,14 @@ test("active processing is polled globally and stops after a terminal snapshot",
   assert.equal(messages.length, messageCount);
 });
 
+test("cancelling processing continues global polling even when it is no longer active", () => {
+  const { messageHandler, intervals, messages } = loadBridge("books");
+
+  messageHandler({ data: { version: 1, id: "process-1", ok: true, command: "process.snapshot", payload: { isActive: false, isCancelling: true } } });
+  intervals[0]();
+  assert.equal(messages.at(-1).command, "process.get");
+});
+
 test("process controls disable cancellation while a stop is in progress", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("process");
 
@@ -134,9 +142,21 @@ test("process controls disable cancellation while a stop is in progress", () => 
   assert.match(content.innerHTML, /button class="button-danger" disabled/);
 
   messageHandler({ data: { version: 1, id: "process-2", ok: true, command: "process.snapshot", payload: { isActive: true, isCancelling: false, currentStep: "Running" } } });
+  assert.doesNotMatch(content.innerHTML, /Start Interior Processing/);
   const cancel = { dataset: { action: "cancel-process" }, closest: () => cancel };
   contentListeners.click({ target: cancel });
   assert.equal(messages.at(-1).command, "process.cancel");
+});
+
+test("book filters render the recovered interrupted workspace status", () => {
+  const { messageHandler, content } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "book-1", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{ bookId: { value: "Book 001" }, workspaceStatus: 5, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [] }]
+  } } });
+
+  assert.match(content.innerHTML, /Interrupted/);
 });
 
 test("book detail renders frame mode truth and sends per-image overrides through the bridge", () => {
