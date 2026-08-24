@@ -40,28 +40,21 @@ public sealed class DiskBackedInteriorPagePipeline(
         {
             Directory.CreateDirectory(processedInteriorDirectory);
             Directory.CreateDirectory(pageCache);
-            var cacheStamp = CacheInputStamp.Create(request);
-            var priorStamp = await TryReadStampAsync(cacheStampFile, cancellationToken);
-            var hasMatchingStamp = priorStamp is not null && JsonSerializer.Serialize(priorStamp) == JsonSerializer.Serialize(cacheStamp);
-            if (!hasMatchingStamp)
+            var currentStamp = CacheInputStamp.Create(request);
+            var previousStamp = await TryReadCacheStampAsync(cacheStampFile, cancellationToken);
+            var invalidation = previousStamp is null
+                ? CacheInvalidationStage.Classification
+                : DetermineInvalidationStage(previousStamp, currentStamp);
+            if (invalidation is not CacheInvalidationStage.None)
             {
-                if (priorStamp is not null && JsonSerializer.Serialize(priorStamp with { FrameMode = cacheStamp.FrameMode }) == JsonSerializer.Serialize(cacheStamp))
-                {
-                    DeleteDownstream(framed, working, finalPage);
-                }
-                else
-                {
-                    Directory.Delete(pageCache, recursive: true);
-                    Directory.CreateDirectory(pageCache);
-                }
-                DeleteIfPresent(finalPage);
-                await File.WriteAllTextAsync(cacheStampFile, JsonSerializer.Serialize(cacheStamp), cancellationToken);
+                ApplyInvalidation(invalidation, classificationFile, prepared, framed, working, finalPage);
+                await File.WriteAllTextAsync(cacheStampFile, JsonSerializer.Serialize(currentStamp), cancellationToken);
             }
 
-            var classification = hasMatchingStamp
-                ? await TryReadClassificationAsync(classificationFile, cancellationToken)
-                : null;
-            if (hasMatchingStamp && classification is not null && await IsReadableAsync(finalPage, request.FinalPageSize, cancellationToken))
+            var classification = invalidation is CacheInvalidationStage.Classification
+                ? null
+                : await TryReadClassificationAsync(classificationFile, cancellationToken);
+            if (classification is not null && await IsReadableAsync(finalPage, request.FinalPageSize, cancellationToken))
             {
                 return new InteriorPageProcessingResult(request.PageId, request.Source, finalPage);
             }
@@ -169,7 +162,7 @@ public sealed class DiskBackedInteriorPagePipeline(
         }
     }
 
-    private static async ValueTask<CacheInputStamp?> TryReadStampAsync(string cacheStampFile, CancellationToken cancellationToken)
+    private static async ValueTask<CacheInputStamp?> TryReadCacheStampAsync(string cacheStampFile, CancellationToken cancellationToken)
     {
         if (!File.Exists(cacheStampFile))
         {
@@ -178,15 +171,94 @@ public sealed class DiskBackedInteriorPagePipeline(
 
         try
         {
-            return JsonSerializer.Deserialize<CacheInputStamp>(await File.ReadAllTextAsync(cacheStampFile, cancellationToken));
+            var json = await File.ReadAllTextAsync(cacheStampFile, cancellationToken);
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind is not JsonValueKind.Object ||
+                !CacheInputStamp.HasRequiredProperties(document.RootElement))
+            {
+                return null;
+            }
+
+            return JsonSerializer.Deserialize<CacheInputStamp>(json);
         }
-        catch (JsonException)
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is JsonException or IOException or NotSupportedException)
         {
             return null;
         }
-        catch (IOException)
+    }
+
+    private static CacheInvalidationStage DetermineInvalidationStage(CacheInputStamp previous, CacheInputStamp current)
+    {
+        if (!ClassificationCompatible(previous, current)) return CacheInvalidationStage.Classification;
+        if (!PreparationCompatible(previous, current)) return CacheInvalidationStage.Preparation;
+        if (!FrameCompatible(previous, current)) return CacheInvalidationStage.Frame;
+        if (!WorkingCompatible(previous, current)) return CacheInvalidationStage.Working;
+        if (!FinalCompatible(previous, current)) return CacheInvalidationStage.Final;
+        return CacheInvalidationStage.None;
+    }
+
+    private static bool ClassificationCompatible(CacheInputStamp previous, CacheInputStamp current) =>
+        string.Equals(previous.SourcePath, current.SourcePath, StringComparison.OrdinalIgnoreCase) &&
+        previous.SourceLength == current.SourceLength &&
+        previous.SourceLastWriteUtcTicks == current.SourceLastWriteUtcTicks &&
+        previous.ArtworkDetectionThreshold == current.ArtworkDetectionThreshold &&
+        string.Equals(previous.ClassificationAlgorithmVersion, current.ClassificationAlgorithmVersion, StringComparison.Ordinal);
+
+    private static bool PreparationCompatible(CacheInputStamp previous, CacheInputStamp current) =>
+        string.Equals(previous.ArtworkPreparationAlgorithmVersion, current.ArtworkPreparationAlgorithmVersion, StringComparison.Ordinal) &&
+        previous.PreparedArtworkWidth == current.PreparedArtworkWidth &&
+        previous.PreparedArtworkHeight == current.PreparedArtworkHeight &&
+        previous.TargetDensityHorizontal == current.TargetDensityHorizontal &&
+        previous.TargetDensityVertical == current.TargetDensityVertical;
+
+    private static bool FrameCompatible(CacheInputStamp previous, CacheInputStamp current) =>
+        string.Equals(previous.FramePath, current.FramePath, StringComparison.OrdinalIgnoreCase) &&
+        previous.FrameLength == current.FrameLength &&
+        previous.FrameLastWriteUtcTicks == current.FrameLastWriteUtcTicks &&
+        previous.FrameMode == current.FrameMode;
+
+    private static bool WorkingCompatible(CacheInputStamp previous, CacheInputStamp current) =>
+        previous.WorkingPageWidth == current.WorkingPageWidth &&
+        previous.WorkingPageHeight == current.WorkingPageHeight;
+
+    private static bool FinalCompatible(CacheInputStamp previous, CacheInputStamp current) =>
+        previous.FinalPageWidth == current.FinalPageWidth &&
+        previous.FinalPageHeight == current.FinalPageHeight;
+
+    private static void ApplyInvalidation(
+        CacheInvalidationStage stage,
+        string classificationFile,
+        FileReference prepared,
+        FileReference framed,
+        FileReference working,
+        FileReference finalPage)
+    {
+        switch (stage)
         {
-            return null;
+            case CacheInvalidationStage.None:
+                break;
+            case CacheInvalidationStage.Final:
+                DeleteIfPresent(finalPage);
+                break;
+            case CacheInvalidationStage.Working:
+                DeleteDownstream(working, finalPage);
+                break;
+            case CacheInvalidationStage.Frame:
+                DeleteDownstream(framed, working, finalPage);
+                break;
+            case CacheInvalidationStage.Preparation:
+                DeleteDownstream(prepared, framed, working, finalPage);
+                break;
+            case CacheInvalidationStage.Classification:
+                DeleteIfPresent(classificationFile);
+                DeleteDownstream(prepared, framed, working, finalPage);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(stage), stage, null);
         }
     }
 
@@ -231,6 +303,14 @@ public sealed class DiskBackedInteriorPagePipeline(
         }
     }
 
+    private static void DeleteIfPresent(string file)
+    {
+        if (File.Exists(file))
+        {
+            File.Delete(file);
+        }
+    }
+
     private static bool ShouldApplyFrame(bool frameAvailable, FrameMode mode, bool autoFrameRecommended) =>
         frameAvailable && (mode switch
         {
@@ -243,22 +323,61 @@ public sealed class DiskBackedInteriorPagePipeline(
     private static bool HashesMatch(FileReference first, FileReference second) =>
         File.ReadAllBytes(first.Value).AsSpan().SequenceEqual(File.ReadAllBytes(second.Value));
 
-    private sealed record CacheInputStamp(
+    private enum CacheInvalidationStage
+    {
+        None,
+        Final,
+        Working,
+        Frame,
+        Preparation,
+        Classification
+    }
+
+    public sealed record CacheInputStamp(
         string SourcePath,
         long SourceLength,
         long SourceLastWriteUtcTicks,
         byte ArtworkDetectionThreshold,
         string ClassificationAlgorithmVersion,
         string ArtworkPreparationAlgorithmVersion,
-        ImageSize PreparedArtworkSize,
-        ImageSize WorkingPageSize,
-        ImageSize FinalPageSize,
-        ImageDensity TargetDensity,
+        int PreparedArtworkWidth,
+        int PreparedArtworkHeight,
+        int WorkingPageWidth,
+        int WorkingPageHeight,
+        int FinalPageWidth,
+        int FinalPageHeight,
+        double TargetDensityHorizontal,
+        double TargetDensityVertical,
         string? FramePath,
         long FrameLength,
         long FrameLastWriteUtcTicks,
         FrameMode FrameMode)
     {
+        private static readonly string[] requiredProperties =
+        [
+            nameof(SourcePath),
+            nameof(SourceLength),
+            nameof(SourceLastWriteUtcTicks),
+            nameof(ArtworkDetectionThreshold),
+            nameof(ClassificationAlgorithmVersion),
+            nameof(ArtworkPreparationAlgorithmVersion),
+            nameof(PreparedArtworkWidth),
+            nameof(PreparedArtworkHeight),
+            nameof(WorkingPageWidth),
+            nameof(WorkingPageHeight),
+            nameof(FinalPageWidth),
+            nameof(FinalPageHeight),
+            nameof(TargetDensityHorizontal),
+            nameof(TargetDensityVertical),
+            nameof(FramePath),
+            nameof(FrameLength),
+            nameof(FrameLastWriteUtcTicks),
+            nameof(FrameMode)
+        ];
+
+        public static bool HasRequiredProperties(JsonElement stamp) =>
+            requiredProperties.All(property => stamp.TryGetProperty(property, out _));
+
         public static CacheInputStamp Create(InteriorPagePipelineRequest request)
         {
             var source = new FileInfo(request.Source.Value);
@@ -275,10 +394,14 @@ public sealed class DiskBackedInteriorPagePipeline(
                 request.ArtworkDetectionThreshold.Value,
                 global::PrintableBook.Core.Application.Processing.ClassificationAlgorithmVersion.Current,
                 global::PrintableBook.Core.Application.Processing.ArtworkPreparationAlgorithmVersion.Current,
-                request.PreparedArtworkSize,
-                request.WorkingPageSize,
-                request.FinalPageSize,
-                request.TargetDensity,
+                request.PreparedArtworkSize.Width,
+                request.PreparedArtworkSize.Height,
+                request.WorkingPageSize.Width,
+                request.WorkingPageSize.Height,
+                request.FinalPageSize.Width,
+                request.FinalPageSize.Height,
+                request.TargetDensity.Horizontal,
+                request.TargetDensity.Vertical,
                 request.Frame?.Value,
                 frame?.Exists == true ? frame.Length : 0,
                 frame?.Exists == true ? frame.LastWriteTimeUtc.Ticks : 0,
