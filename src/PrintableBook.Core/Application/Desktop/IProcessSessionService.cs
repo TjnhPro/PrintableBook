@@ -88,13 +88,18 @@ public sealed class ProcessSessionService(
     public ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        CancellationTokenSource? toCancel;
+        ProcessSessionSnapshot current;
         lock (sync)
         {
             if (!snapshot.IsActive || cancellation is null) return ValueTask.FromResult(snapshot);
             snapshot = snapshot with { IsCancelling = true, CurrentStep = "Cancelling" };
-            cancellation.Cancel();
-            return ValueTask.FromResult(snapshot);
+            toCancel = cancellation;
+            current = snapshot;
         }
+
+        toCancel.Cancel();
+        return ValueTask.FromResult(current);
     }
 
     private async Task ExecuteAsync(ApplicationSnapshot applicationSnapshot, IReadOnlyList<DiscoveredBook> books, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken)

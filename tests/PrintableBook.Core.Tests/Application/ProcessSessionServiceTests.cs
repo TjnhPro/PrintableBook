@@ -64,6 +64,26 @@ public sealed class ProcessSessionServiceTests
         Assert.False((await service.GetAsync()).IsActive);
     }
 
+    [Fact]
+    public async Task CancelAsync_marks_the_session_as_cancelling_before_the_worker_unwinds()
+    {
+        var application = new RecordingPrintableBookApplication();
+        var service = new ProcessSessionService(
+            new StaticSnapshotService(CreateSnapshot()),
+            application,
+            new NullBrandFrameResolver());
+        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
+        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var cancelling = await service.CancelAsync();
+
+        Assert.True(cancelling.IsActive);
+        Assert.True(cancelling.IsCancelling);
+        Assert.Equal("Cancelling", cancelling.CurrentStep);
+        await WaitUntilAsync(async () => !(await service.GetAsync()).IsActive);
+        Assert.Equal("Cancelled", (await service.GetAsync()).CurrentStep);
+    }
+
     private static ApplicationSnapshot CreateSnapshot()
     {
         var bookId = new BookId("book-one");
