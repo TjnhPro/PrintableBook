@@ -148,14 +148,14 @@ test("process controls disable cancellation while a stop is in progress", () => 
   assert.equal(messages.at(-1).command, "process.cancel");
 });
 
-for (const [status, detail] of [["Completed", null], ["Failed", "PDF export failed"], ["Cancelled", "Cancelled"]]) {
+for (const [status, serializedStatus, detail] of [["Completed", 4, null], ["Failed", 2, "PDF export failed"], ["Cancelled", 3, "Cancelled"]]) {
   test(`${status.toLowerCase()} terminal processing remains visible and allows a new session`, () => {
     const { messageHandler, content, intervals, messages } = loadBridge("process");
     messageHandler({ data: { version: 1, id: `process-${status}`, ok: true, command: "process.snapshot", payload: {
       isActive: false,
       isCancelling: false,
       currentStep: status === "Completed" ? null : status,
-      queue: [{ bookId: { value: "Book 001" }, status, detail }]
+      queue: [{ bookId: { value: "Book 001" }, status: serializedStatus, detail }]
     } } });
 
     assert.match(content.innerHTML, /Last Interior Processing session/);

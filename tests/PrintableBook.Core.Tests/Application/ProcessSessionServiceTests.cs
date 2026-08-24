@@ -112,6 +112,26 @@ public sealed class ProcessSessionServiceTests
     }
 
     [Fact]
+    public async Task CancelAsync_is_safe_when_requested_repeatedly()
+    {
+        var application = new RecordingPrintableBookApplication(observesCancellation: false);
+        var service = new ProcessSessionService(
+            new StaticSnapshotService(CreateSnapshot()),
+            application,
+            new NullBrandFrameResolver());
+        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
+        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var first = await service.CancelAsync();
+        var second = await service.CancelAsync();
+
+        Assert.True(first.IsCancelling);
+        Assert.True(second.IsCancelling);
+        application.Release.TrySetResult();
+        await WaitUntilAsync(async () => !(await service.GetAsync()).IsActive);
+    }
+
+    [Fact]
     public async Task StopAndWaitAsync_returns_false_for_a_non_cooperative_worker_then_can_complete_later()
     {
         var application = new RecordingPrintableBookApplication(observesCancellation: false);
