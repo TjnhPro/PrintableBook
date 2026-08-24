@@ -97,12 +97,13 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
         var corridor = CreateCorridor(side, imageWidth, imageHeight);
         cancellationToken.ThrowIfCancellationRequested();
         var rgba = ReadRgba(pixels, corridor.X, corridor.Y, corridor.Width, corridor.Height, side.ToString());
+        var profile = BuildDepthProfile(rgba, corridor, threshold, cancellationToken);
         var candidates = new List<BorderTrackSideCandidate>();
 
-        for (var seedDepth = 0; seedDepth < corridor.DepthLength; seedDepth++)
+        foreach (var seedDepth in profile.CandidateSeedDepths)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var candidate = MeasureCandidate(rgba, corridor, seedDepth, threshold, cancellationToken);
+            var candidate = MeasureCandidate(profile, corridor, seedDepth, cancellationToken);
             if (candidate.SupportRatio >= 0.10 && candidate.SupportedSegments >= 2)
             {
                 candidates.Add(candidate);
@@ -120,10 +121,9 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
     }
 
     private static BorderTrackSideCandidate MeasureCandidate(
-        byte[] rgba,
+        DepthProfile profile,
         OuterCorridor corridor,
         int seedDepth,
-        byte threshold,
         CancellationToken cancellationToken)
     {
         var segments = new List<BorderTrackSegmentEvidence>(corridor.SegmentCount);
@@ -143,9 +143,10 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
 
             for (var scanIndex = localStart; scanIndex <= localEnd; scanIndex++)
             {
-                if (TryFindInkDepth(rgba, corridor, scanIndex, seedDepth, threshold, out var observedDepth))
+                var observedDepth = profile.NearestDepth(scanIndex, seedDepth);
+                if (observedDepth is not null)
                 {
-                    observedDepths.Add(observedDepth);
+                    observedDepths.Add(observedDepth.Value);
                 }
             }
 
@@ -204,33 +205,51 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
             segments);
     }
 
-    private static bool TryFindInkDepth(
+    private static DepthProfile BuildDepthProfile(
         byte[] rgba,
         OuterCorridor corridor,
-        int scanIndex,
-        int seedDepth,
         byte threshold,
-        out int observedDepth)
+        CancellationToken cancellationToken)
     {
-        for (var distance = 0; distance <= TrackDepthTolerance; distance++)
+        var nearestDepthByScanlineAndSeed = Enumerable.Repeat(-1, corridor.ScanLength * corridor.DepthLength).ToArray();
+        var histogram = new int[corridor.DepthLength];
+        for (var scanIndex = 0; scanIndex < corridor.ScanLength; scanIndex++)
         {
-            var shallower = seedDepth - distance;
-            if (shallower >= 0 && IsInkAtDepth(rgba, corridor, scanIndex, shallower, threshold))
+            if (scanIndex % 128 == 0)
             {
-                observedDepth = shallower;
-                return true;
+                cancellationToken.ThrowIfCancellationRequested();
             }
 
-            var deeper = seedDepth + distance;
-            if (distance > 0 && deeper < corridor.DepthLength && IsInkAtDepth(rgba, corridor, scanIndex, deeper, threshold))
+            for (var inkDepth = 0; inkDepth < corridor.DepthLength; inkDepth++)
             {
-                observedDepth = deeper;
-                return true;
+                if (!IsInkAtDepth(rgba, corridor, scanIndex, inkDepth, threshold))
+                {
+                    continue;
+                }
+
+                histogram[inkDepth]++;
+                var firstSeedDepth = Math.Max(0, inkDepth - TrackDepthTolerance);
+                var lastSeedDepth = Math.Min(corridor.DepthLength - 1, inkDepth + TrackDepthTolerance);
+                for (var seedDepth = firstSeedDepth; seedDepth <= lastSeedDepth; seedDepth++)
+                {
+                    var profileIndex = (scanIndex * corridor.DepthLength) + seedDepth;
+                    var existingDepth = nearestDepthByScanlineAndSeed[profileIndex];
+                    if (existingDepth < 0 || IsCloserToSeed(inkDepth, existingDepth, seedDepth))
+                    {
+                        nearestDepthByScanlineAndSeed[profileIndex] = inkDepth;
+                    }
+                }
             }
         }
 
-        observedDepth = default;
-        return false;
+        return new DepthProfile(
+            nearestDepthByScanlineAndSeed,
+            histogram
+                .Select((count, depth) => (count, depth))
+                .Where(entry => entry.count > 0)
+                .Select(entry => entry.depth)
+                .ToArray(),
+            corridor.DepthLength);
     }
 
     private static bool IsInkAtDepth(
@@ -246,6 +265,10 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
             : ((localDepth * corridor.ScanLength) + scanIndex) * 4;
         return IsBlack(rgba, pixelIndex, threshold);
     }
+
+    private static bool IsCloserToSeed(int candidateDepth, int existingDepth, int seedDepth) =>
+        Math.Abs(candidateDepth - seedDepth) < Math.Abs(existingDepth - seedDepth) ||
+        (Math.Abs(candidateDepth - seedDepth) == Math.Abs(existingDepth - seedDepth) && candidateDepth < existingDepth);
 
     private static IReadOnlyList<BorderFrameCandidate> BuildFrameCandidates(
         BorderTrackSideMeasurement left,
@@ -477,6 +500,18 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
         public int DepthLength => IsVertical ? Width : Height;
 
         public int GlobalScanCoordinate(int localCoordinate) => GlobalScanStart + localCoordinate;
+    }
+
+    private readonly record struct DepthProfile(
+        int[] NearestDepthByScanlineAndSeed,
+        IReadOnlyList<int> CandidateSeedDepths,
+        int DepthLength)
+    {
+        public int? NearestDepth(int scanIndex, int seedDepth)
+        {
+            var depth = NearestDepthByScanlineAndSeed[(scanIndex * DepthLength) + seedDepth];
+            return depth < 0 ? null : depth;
+        }
     }
 
     private readonly record struct CornerRegion(string Name, int X, int Y, int Width, int Height, byte[] Rgba);

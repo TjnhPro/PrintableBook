@@ -4,7 +4,7 @@
 
 ## Decision rules
 
-The detector decodes the source once and reads only four 101-pixel outer corridors plus four bounded 120 x 120 corner regions. For each side it measures eight segments and keeps a candidate only when it has:
+The detector decodes the source once and reads only four 101-pixel outer corridors plus four bounded 120 x 120 corner regions. Each corridor is converted once into a reusable per-scanline depth profile and fixed depth histogram, then divided into eight segments. A candidate is kept only when it has:
 
 - at least 6 supported segments;
 - at least 55% scanline support;

@@ -382,8 +382,11 @@ public sealed class MagickBorderLineDetectorTests : IAsyncLifetime
         Assert.Contains("using var image = new MagickImage(request.Source.Value);", source, StringComparison.Ordinal);
         Assert.Contains("using var pixels = image.GetPixels();", source, StringComparison.Ordinal);
         Assert.Contains("pixels.ToByteArray(", source, StringComparison.Ordinal);
+        Assert.Contains("BuildDepthProfile", source, StringComparison.Ordinal);
+        Assert.Contains("new int[corridor.DepthLength]", source, StringComparison.Ordinal);
         Assert.Single(Regex.Matches(source, @"ToByteArray\(").Cast<Match>());
         Assert.Equal(4, Regex.Matches(source, @"var (left|right|top|bottom) = MeasureSide\(").Count);
+        Assert.DoesNotContain("for (var seedDepth = 0; seedDepth < corridor.DepthLength;", source, StringComparison.Ordinal);
         Assert.DoesNotContain("GetPixel(", source, StringComparison.Ordinal);
         Assert.DoesNotContain("GetValue(", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Task.Run", source, StringComparison.Ordinal);
