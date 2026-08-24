@@ -59,3 +59,21 @@ Without the environment variable, local-corpus tests are reported as skipped. Th
 The V2 detector evaluates a persistent four-sided outer frame rather than requiring four perfectly continuous scanlines. Its final decision requires broad, consistent side tracks in the 100-pixel outer corridors and selects the outermost coherent four-side candidate. The local report is the source of evidence for validating those semantics against product artwork; it is ignored by Git together with the input images and debug overlays. The calibrated decision rules are recorded in [BorderLine detector V2 calibration](docs/borderline-detector-v2.md).
 
 BorderPixel V1 certifies non-frame artwork separately. Place locally reviewed inputs under `TestResults/BorderPixelCorpus/fullart/` and `TestResults/BorderPixelCorpus/cropart/`; its opt-in test first verifies `BorderLine=false`, then writes `TestResults/BorderPixelCorpus/results/borderpixel-v1-report.json`. It is also ignored by Git and excluded from CI.
+
+Interior Artwork Preparation V1 certifies the complete classification-to-preparation boundary separately. Place locally reviewed inputs in the category that they are expected to classify as:
+
+```text
+TestResults/ArtworkPreparationCorpus/
+  borderart/  # expected BorderArt, prepared output permits a Brand frame
+  fullart/    # expected FullArt, prepared output permits a Brand frame
+  cropart/    # expected CropArt, prepared output does not permit a Brand frame
+```
+
+Its opt-in test runs the real BorderLine detector, BorderPixel detector, classifier, trim/crop/pad processors, and preparation service. It writes prepared PNGs to `TestResults/ArtworkPreparationCorpus/results/prepared/` and an auditable result for every input to `TestResults/ArtworkPreparationCorpus/results/artwork-preparation-v1-report.json`. A test pass requires the expected classification, the locked frame policy, a `2270×2270` output, and fully opaque pixels:
+
+```powershell
+$env:PRINTABLEBOOK_RUN_LOCAL_CORPUS = "true"
+dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ArtworkPreparationLocalCorpusTests"
+```
+
+See [Interior Artwork Preparation V1](docs/interior-artwork-preparation-v1.md) for the locked processing semantics and certification status.
