@@ -13,6 +13,11 @@
   const bookId = (book) => valueFor(valueFor(book, "id", {}), "value", valueFor(book, "name", ""));
   const summaryFor = (book) => summaries().find((summary) => valueFor(valueFor(summary, "bookId", {}), "value", "") === bookId(book));
   const displayStatus = (value) => typeof value === "number" ? ["Not started", "Running", "Failed", "Cancelled", "Completed"][value] ?? "Unknown" : value;
+  const frameModeValue = (value) => {
+    if (typeof value === "number") return ["auto", "enabled", "disabled"][value] ?? "auto";
+    const normalized = String(value ?? "auto").toLowerCase();
+    return ["auto", "enabled", "disabled"].includes(normalized) ? normalized : "auto";
+  };
   const workspaceStatus = (summary) => displayStatus(valueFor(summary, "workspaceStatus", "Not started"));
   const statusClass = (value) => value === "Ready" || value === "Completed" || value === "Present" ? "status-good" : value === "Invalid" || value === "Failed" ? "status-bad" : value === "Needs selection" || value === "Running" ? "status-warn" : "status-muted";
   const badge = (value) => { const label = displayStatus(value); return `<span class="status-badge ${statusClass(label)}">${escapeHtml(label)}</span>`; };
@@ -40,10 +45,18 @@
     const folders = valueFor(summary, "sourceFolders", []);
     const artifacts = valueFor(summary, "publishedArtifacts", []);
     const pages = valueFor(summary, "interiorPages", []);
+    const sourcePages = valueFor(summary, "interiorSourcePages", []);
     const logs = valueFor(summary, "logs", []);
     const tabButton = (id, label) => `<button class="detail-tab ${state.selectedBookTab === id ? "active" : ""}" data-action="book-tab" data-book-tab="${id}">${label}</button>`;
     let body = "";
-    if (state.selectedBookTab === "overview") body = `<div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Validation</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div>${panel("Folders", `<table class="data-table"><thead><tr><th>Folder</th><th>Status</th><th>Files</th></tr></thead><tbody>${folders.map((folder) => `<tr><td>${escapeHtml(valueFor(folder, "name", ""))}</td><td>${badge(valueFor(folder, "status", "Missing"))}</td><td>${valueFor(folder, "imageCount", 0)} image(s) / ${valueFor(folder, "fileCount", 0)} file(s)</td></tr>`).join("")}</tbody></table>`, "mt-4")}`;
+    if (state.selectedBookTab === "overview") {
+      const frameModeRows = sourcePages.map((source) => {
+        const sourceReference = valueFor(source, "sourceReference", "");
+        const mode = frameModeValue(valueFor(source, "frameMode", "auto"));
+        return `<tr><td class="detail-path">${escapeHtml(sourceReference)}</td><td><select class="control h-8" aria-label="Frame mode for ${escapeHtml(sourceReference)}" data-action="set-interior-frame-mode" data-book-id="${escapeHtml(bookId(book))}" data-source-reference="${escapeHtml(sourceReference)}"><option value="auto" ${mode === "auto" ? "selected" : ""}>Auto</option><option value="enabled" ${mode === "enabled" ? "selected" : ""}>Frame</option><option value="disabled" ${mode === "disabled" ? "selected" : ""}>No Frame</option></select></td></tr>`;
+      }).join("");
+      body = `<div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Validation</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div>${panel("Interior frame mode", sourcePages.length ? `<p class="mb-3 text-sm text-slate-500">Auto uses detected artwork type.</p><table class="data-table"><thead><tr><th>Interior source</th><th>Frame mode</th></tr></thead><tbody>${frameModeRows}</tbody></table>` : "<p class=\"empty-copy\">No discovered Interior images.</p>", "mt-4")}${panel("Folders", `<table class="data-table"><thead><tr><th>Folder</th><th>Status</th><th>Files</th></tr></thead><tbody>${folders.map((folder) => `<tr><td>${escapeHtml(valueFor(folder, "name", ""))}</td><td>${badge(valueFor(folder, "status", "Missing"))}</td><td>${valueFor(folder, "imageCount", 0)} image(s) / ${valueFor(folder, "fileCount", 0)} file(s)</td></tr>`).join("")}</tbody></table>`, "mt-4")}`;
+    }
     if (state.selectedBookTab === "validation") body = panel("Validation checks", `<ul class="check-list">${checks.length ? checks.map((check) => { const warning = valueFor(check, "isWarning", false); const success = valueFor(check, "isSuccess", false); return `<li class="${warning ? "warning" : success ? "success" : "failure"}">${warning ? "!" : success ? "✓" : "✕"}<span>${escapeHtml(valueFor(check, "message", ""))}</span></li>`; }).join("") : "<li class=\"empty-row\">No validation result yet.</li>"}</ul>`);
     if (state.selectedBookTab === "processing") body = panel("Processing", `<dl class="summary-grid"><div><span>Workspace</span>${badge(workspaceStatus(summary))}</div><div><span>Current step</span><strong>${escapeHtml(valueFor(summary, "currentStep", "Not started"))}</strong></div><div><span>Completed pages</span><strong>${pages.length} / ${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></dl>${pages.length ? `<table class="data-table mt-4"><thead><tr><th>Page</th><th>Status</th><th>Final page</th></tr></thead><tbody>${pages.map((page) => `<tr><td>${escapeHtml(valueFor(page, "pageId", ""))}</td><td>${badge(valueFor(page, "status", ""))}</td><td class="detail-path">${escapeHtml(valueFor(page, "finalPagePath", ""))}</td></tr>`).join("")}</tbody></table>` : "<p class=\"empty-copy mt-4\">No processed interior pages yet.</p>"}`);
     if (state.selectedBookTab === "outputs") body = panel("Published outputs", artifacts.length ? `<ul class="artifact-list">${artifacts.map((artifact) => `<li>${escapeHtml(artifact)}</li>`).join("")}</ul>` : "<p class=\"empty-copy\">No published output yet.</p>");
@@ -125,7 +138,10 @@
     if (action === "cancel-process") send("process.cancel");
   });
   content.addEventListener("input", (event) => { if (event.target.dataset.action === "filter-books") { state.bookFilter = event.target.value; render("books", false); } });
-  content.addEventListener("change", (event) => { if (event.target.dataset.action === "diagnostic-book") { state.selectedBookId = event.target.value; render("diagnostics", false); } });
+  content.addEventListener("change", (event) => {
+    if (event.target.dataset.action === "diagnostic-book") { state.selectedBookId = event.target.value; render("diagnostics", false); }
+    if (event.target.dataset.action === "set-interior-frame-mode") send("book.interior.frame-mode.set", { bookId: event.target.dataset.bookId, sourceReference: event.target.dataset.sourceReference, mode: event.target.value });
+  });
 
   window.chrome.webview.addEventListener("message", (event) => {
     const response = typeof event.data === "string" ? JSON.parse(event.data) : event.data;

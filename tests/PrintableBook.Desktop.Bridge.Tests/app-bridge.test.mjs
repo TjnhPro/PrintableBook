@@ -13,9 +13,10 @@ const appScriptPath = join(
   "app.js"
 );
 
-function loadBridge() {
+function loadBridge(activeRoute = null) {
   const status = { textContent: "" };
-  const content = { innerHTML: "", addEventListener: () => { } };
+  const contentListeners = {};
+  const content = { innerHTML: "", addEventListener: (eventName, handler) => { contentListeners[eventName] = handler; } };
   const brandSelect = { innerHTML: "", value: "", addEventListener: () => { } };
   const refreshButton = { addEventListener: () => { } };
   const messages = [];
@@ -35,12 +36,12 @@ function loadBridge() {
     document: {
       getElementById: (id) => ({ "bridge-status": status, "app-content": content, "brand-select": brandSelect, "refresh-button": refreshButton }[id]),
       querySelectorAll: () => [],
-      querySelector: () => null
+      querySelector: (selector) => selector === ".nav-item-active" && activeRoute ? { dataset: { route: activeRoute } } : null
     },
     window: browserWindow
   });
 
-  return { messageHandler, status, content, brandSelect, messages };
+  return { messageHandler, status, content, brandSelect, contentListeners, messages };
 }
 
 test("bridge accepts the JSON response emitted by the .NET host", () => {
@@ -106,4 +107,39 @@ test("phase 4 page markup includes the interior-only processing workflow", () =>
   assert.match(script, /mode: "interior-only"/);
   assert.match(script, /send\("process\.cancel"/);
   assert.match(script, /send\("app\.refresh"/);
+});
+
+test("book detail renders frame mode truth and sends per-image overrides through the bridge", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+  const snapshot = (frameMode) => ({
+    discovery: {
+      paths: { root: { value: "D:/PrintableBook" } },
+      brands: [],
+      books: [{ id: { value: "Book 001" }, name: "Book 001", directory: { value: "D:/PrintableBook/sources/Book 001" } }]
+    },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" },
+      workspaceStatus: "Not started",
+      validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      interiorSourcePageCount: 1,
+      interiorSourcePages: [{ sourceReference: "Book interior/page-001.png", frameMode }]
+    }]
+  });
+
+  messageHandler({ data: { version: 1, id: "book-1", ok: true, command: "app.snapshot", payload: snapshot(0) } });
+
+  assert.match(content.innerHTML, /Interior frame mode/);
+  assert.match(content.innerHTML, /Auto uses detected artwork type/);
+  assert.match(content.innerHTML, /option value="auto" selected/);
+  contentListeners.change({ target: { dataset: { action: "set-interior-frame-mode", bookId: "Book 001", sourceReference: "Book interior/page-001.png" }, value: "enabled" } });
+  assert.deepEqual(messages.at(-1), {
+    version: 1,
+    id: "request-1",
+    command: "book.interior.frame-mode.set",
+    payload: { bookId: "Book 001", sourceReference: "Book interior/page-001.png", mode: "enabled" }
+  });
+
+  messageHandler({ data: { version: 1, id: "book-2", ok: true, command: "app.snapshot", payload: snapshot(1) } });
+  assert.match(content.innerHTML, /option value="enabled" selected/);
 });

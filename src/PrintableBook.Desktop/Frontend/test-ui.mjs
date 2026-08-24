@@ -8,8 +8,11 @@ const expected = [
   "Outputs",
   "Logs",
   "book.cover.select",
-  "Cover selection",
-  "Process selected",
+  "book.interior.frame-mode.set",
+  "Frame mode",
+  "Interior frame mode",
+  "No Frame",
+  "Process Interior",
   "Diagnostics"
 ];
 
