@@ -25,6 +25,7 @@ public sealed class ProcessSessionService(
     private readonly Lock sync = new();
     private ProcessSessionSnapshot snapshot = new(false, false, null, null, null, []);
     private CancellationTokenSource? cancellation;
+    private Task? executionTask;
 
     public async ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default)
     {
@@ -67,15 +68,21 @@ public sealed class ProcessSessionService(
             throw new InvalidOperationException("Every selected Book must be validation-ready before processing.");
         }
 
+        CancellationTokenSource sessionCancellation;
+        ProcessSessionSnapshot started;
         lock (sync)
         {
-            if (snapshot.IsActive) return snapshot;
-            cancellation = new CancellationTokenSource();
+            if (snapshot.IsActive || executionTask is { IsCompleted: false }) return snapshot;
+            sessionCancellation = new CancellationTokenSource();
+            cancellation = sessionCancellation;
             snapshot = new ProcessSessionSnapshot(true, false, brandName, selected[0].Id, "Preparing", selected.Select((book, index) => new ProcessQueueEntry(book.Id, index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Preparing" : "Waiting")).ToArray(), 0, 0, applicationSnapshot.GlobalSettings.MaximumPageConcurrency);
+            started = snapshot;
+            executionTask = Task.Run(
+                () => ExecuteAsync(applicationSnapshot, selected, brandName, mode, sessionCancellation.Token),
+                CancellationToken.None);
         }
 
-        _ = ExecuteAsync(applicationSnapshot, selected, brandName, mode, cancellation.Token);
-        return await GetAsync(cancellationToken);
+        return started;
     }
 
     public ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default)
