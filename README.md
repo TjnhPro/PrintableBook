@@ -64,9 +64,9 @@ Interior Artwork Preparation V1 certifies the complete classification-to-prepara
 
 ```text
 TestResults/ArtworkPreparationCorpus/
-  borderart/  # expected BorderArt, prepared output permits a Brand frame
-  fullart/    # expected FullArt, prepared output permits a Brand frame
-  cropart/    # expected CropArt, prepared output does not permit a Brand frame
+  borderart/  # expected BorderArt, prepared output recommends a Brand frame in Auto mode
+  fullart/    # expected FullArt, prepared output recommends a Brand frame in Auto mode
+  cropart/    # expected CropArt, prepared output does not recommend a Brand frame in Auto mode
 ```
 
 Its opt-in test runs the real BorderLine detector, BorderPixel detector, classifier, trim/crop/pad processors, and preparation service. It writes prepared PNGs to `TestResults/ArtworkPreparationCorpus/results/prepared/` and an auditable result for every input to `TestResults/ArtworkPreparationCorpus/results/artwork-preparation-v1-report.json`. A test pass requires the expected classification, the locked frame policy, a `2270×2270` output, and fully opaque pixels:
@@ -76,7 +76,7 @@ $env:PRINTABLEBOOK_RUN_LOCAL_CORPUS = "true"
 dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ArtworkPreparationLocalCorpusTests"
 ```
 
-The complete shared Interior workflow has a separate local corpus. It runs the production disk-backed pipeline from original source through classification, type-specific preparation, optional prepared-stage framing, working-page centering, and final-page centering. Place only reviewed artwork in the matching category; optionally add a `2270×2270` compatible `frame.png` to verify the enabled-frame branch. `CropArt` must remain unframed even when that frame is present.
+The complete shared Interior workflow has a separate local corpus. It runs the production disk-backed pipeline from original source through classification, type-specific preparation, optional prepared-stage framing, working-page centering, and final-page centering. Place only reviewed artwork in the matching category; optionally add a `2270×2270` compatible `frame.png`. CropArt remains unframed in Auto mode; users can choose Auto, Frame, or No Frame per Interior source image.
 
 ```text
 TestResults/InteriorWorkflowCorpus/
@@ -92,11 +92,11 @@ TestResults/InteriorWorkflowCorpus/
     interior-workflow-report.json
 ```
 
-The report records expected/actual classification, the frame policy, all three geometry gates, opacity, timing, and failures. All inputs, temporary workspaces, rendered outputs, and the report remain local and ignored by Git:
+The report records expected/actual classification, automatic frame recommendation, frame mode/availability/application, all three geometry gates, opacity, timing, and failures. All inputs, temporary workspaces, rendered outputs, and the report remain local and ignored by Git:
 
 ```powershell
 $env:PRINTABLEBOOK_RUN_LOCAL_CORPUS = "true"
 dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~InteriorWorkflowLocalCorpusTests"
 ```
 
-See [Interior Artwork Preparation V1](docs/interior-artwork-preparation-v1.md) for the locked processing semantics and certification status.
+See [Interior Artwork Preparation V1](docs/interior-artwork-preparation-v1.md) and [shared Interior pipeline integration](docs/interior-shared-pipeline-integration.md) for the locked processing semantics and certification status.

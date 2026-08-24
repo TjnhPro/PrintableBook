@@ -23,10 +23,14 @@ The working page centers the 2270-square artwork at `(140, 140)`. The final page
 
 ## Brand-frame policy
 
-Frame availability, configuration, and type policy remain separate. A frame overlays only when it is available, enabled, and allowed by the prepared artwork:
+Frame availability, automatic recommendation, and user mode remain separate. `FrameMode.Auto` uses `AutoFrameRecommended`; `FrameMode.Enabled` forces a compatible available frame; `FrameMode.Disabled` suppresses it. The exact decision is:
 
-- `BorderArt` and `FullArt`: allowed.
-- `CropArt`: never allowed.
+```text
+ShouldApplyFrame = FrameAvailable &&
+  (Auto => AutoFrameRecommended, Enabled => true, Disabled => false)
+```
+
+Thus BorderArt and FullArt frame in Auto, CropArt stays unframed in Auto, CropArt can be framed with Enabled, and BorderArt/FullArt can be unframed with Disabled.
 
 An applied frame must already match the prepared artwork size. It is not silently resized. If no frame applies, `framed.png` is an exact pass-through artifact so downstream stages have a stable input.
 
@@ -43,7 +47,7 @@ Each page has these durable artifacts:
 .workspace/processed/interior/<PageId>.input-stamp.json
 ```
 
-The input stamp includes source identity, threshold, classification and preparation algorithm versions, all three image sizes, density, and frame identity/configuration. A mismatched stamp conservatively rebuilds that page's cache before producing a final page. This V1 policy intentionally over-invalidates rather than risking reuse of incompatible raster output. Corrupt metadata or unreadable/wrong-size stage files are treated as stale and regenerated. Failure or cancellation retains the workspace for a later retry.
+The input stamp includes source identity, threshold, classification and preparation algorithm versions, all three image sizes, density, frame identity, and `FrameMode`. Cache invalidation starts at the earliest changed dependency: a FrameMode-only change reuses `classification.json` and `prepared.png`, then rebuilds `framed.png`, `working-page.png`, and the final page. Corrupt or incompatible stamps, corrupt metadata, and unreadable/wrong-size stage files are treated as stale and regenerated. `classification.json` persists canonical type strings: `borderart`, `fullart`, or `cropart`. Failure or cancellation retains the workspace for a later retry.
 
 ## Local product workflow certification
 
@@ -62,4 +66,4 @@ $env:PRINTABLEBOOK_RUN_LOCAL_CORPUS = "true"
 dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~InteriorWorkflowLocalCorpusTests"
 ```
 
-Visual review remains required: BorderArt should have its source border removed before the Brand frame overlay, FullArt should retain an acceptable min-side crop, and CropArt should preserve all trimmed artwork without a Brand frame.
+Visual review remains required: BorderArt should have its source border removed before the Brand frame overlay, FullArt should retain an acceptable min-side crop, and CropArt in Auto should preserve all trimmed artwork without a Brand frame.

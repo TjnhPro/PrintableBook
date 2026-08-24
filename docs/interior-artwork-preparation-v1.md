@@ -6,13 +6,13 @@ The implementation and deterministic raster certification are complete. Product-
 
 ## Boundary
 
-`IArtworkPreparationService` consumes an existing `ArtworkClassificationResult` and returns a `PreparedArtwork`. It does not classify the image or rerun either detector. The result contains the prepared PNG file, its `ArtworkType`, and whether the type is eligible for a Brand frame.
+`IArtworkPreparationService` consumes an existing `ArtworkClassificationResult` and returns a `PreparedArtwork`. It does not classify the image or rerun either detector. The result contains the prepared PNG file, its `ArtworkType`, and its automatic Brand-frame recommendation.
 
 Every successful path produces an opaque-white, square PNG at the `PreparedArtworkSize` requested by the caller. The current product setting is `2270×2270`; low-level image processors do not embed that value.
 
 ## Locked type-specific behavior
 
-| Type | Preparation | FrameAllowed |
+| Type | Preparation | AutoFrameRecommended |
 | --- | --- | --- |
 | BorderArt | Crop strictly inside the detected inclusive `BorderBounds`, center-crop with the smaller side, then resize. The detected border pixels are excluded; the immediately internal pixels remain. | `true` |
 | FullArt | Trim with the existing artwork-detection threshold, center-crop with the smaller side, then resize. Long-axis content can be removed by the approved crop. | `true` |
@@ -20,7 +20,7 @@ Every successful path produces an opaque-white, square PNG at the `PreparedArtwo
 
 Center crop and padding use `floor(delta / 2)` for the left/top offset. Any odd extra pixel belongs to the right or bottom.
 
-All paths normalize to a square before resizing and flatten transparency onto white before returning. Brand frame compositing is a later pipeline stage and is not baked into prepared artwork.
+All paths normalize to a square before resizing and flatten transparency onto white before returning. Brand frame compositing is a later pipeline stage and is not baked into prepared artwork. `AutoFrameRecommended` is only the automatic recommendation: `FrameMode.Enabled` may apply a compatible Brand frame to any artwork type, while `FrameMode.Disabled` suppresses framing.
 
 ## Certification
 
