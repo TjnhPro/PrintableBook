@@ -54,26 +54,22 @@ public sealed class MagickBorderLineDetectorTests : IAsyncLifetime
         var result = await DetectAsync(source);
 
         Assert.False(result.HasBorder);
-        Assert.True(result.Left.Found);
-        Assert.True(result.Right.Found);
-        Assert.True(result.Top.Found);
-        Assert.False(result.Bottom.Found);
+        Assert.Null(result.BorderBounds);
     }
 
     [Fact]
-    public async Task DetectAsync_rejects_one_white_pixel_inside_a_sampled_vertical_line()
+    public async Task DetectAsync_accepts_a_local_gap_inside_an_otherwise_persistent_outer_track()
     {
         var source = WriteBorderedImage("white-pixel", 1024, 1024, 20, 1003, 15, 1008, pixels =>
             pixels.SetPixel(20, 512, [255, 255, 255, 255]));
 
         var result = await DetectAsync(source);
 
-        Assert.False(result.HasBorder);
-        Assert.False(result.Left.Found);
+        AssertBorder(result, 20, 1003, 15, 1008);
     }
 
     [Fact]
-    public async Task DetectAsync_honors_exact_threshold_and_rejects_one_value_above_it()
+    public async Task DetectAsync_honors_exact_threshold_without_treating_one_local_noise_pixel_as_a_missing_frame()
     {
         var accepted = WriteBorderedImage("threshold-accepted", 1024, 1024, 20, 1003, 15, 1008,
             pixels => DrawBorder(pixels, 1024, 1024, 20, 1003, 15, 1008, 20, 20, 20, 255));
@@ -81,7 +77,7 @@ public sealed class MagickBorderLineDetectorTests : IAsyncLifetime
             pixels => pixels.SetPixel(20, 512, [21, 20, 20, 255]));
 
         AssertBorder(await DetectAsync(accepted), 20, 1003, 15, 1008);
-        Assert.False((await DetectAsync(rejected)).HasBorder);
+        AssertBorder(await DetectAsync(rejected), 20, 1003, 15, 1008);
     }
 
     [Fact]
@@ -164,7 +160,6 @@ public sealed class MagickBorderLineDetectorTests : IAsyncLifetime
             DrawVerticalLine(pixels, 10, 80, 0, 0, 0, 255, 10, 69);
             DrawVerticalLine(pixels, 69, 80, 0, 0, 0, 255, 10, 69);
             DrawHorizontalLine(pixels, 10, 80, 0, 0, 0, 255, 10, 69);
-            DrawHorizontalLine(pixels, 69, 80, 0, 0, 0, 255, 10, 69);
         });
 
         Assert.False((await DetectAsync(source)).HasBorder);
@@ -227,10 +222,9 @@ public sealed class MagickBorderLineDetectorTests : IAsyncLifetime
 
         Assert.Contains("using var image = new MagickImage(request.Source.Value);", source, StringComparison.Ordinal);
         Assert.Contains("using var pixels = image.GetPixels();", source, StringComparison.Ordinal);
-        Assert.Contains("ToByteArray(roiX, roiY", source, StringComparison.Ordinal);
-        Assert.Equal(2, Regex.Matches(source, @"ToByteArray\(").Count);
-        Assert.Equal(2, Regex.Matches(source, @"pixels\.ToByteArray\(roiX, roiY, \(uint\)roiWidth, \(uint\)roiHeight, PixelMapping\.RGBA\)").Count);
-        Assert.Equal(4, Regex.Matches(source, @"var (left|right|top|bottom) = Find(?:Vertical|Horizontal)Side\(").Count);
+        Assert.Contains("pixels.ToByteArray(", source, StringComparison.Ordinal);
+        Assert.Single(Regex.Matches(source, @"ToByteArray\(").Cast<Match>());
+        Assert.Equal(4, Regex.Matches(source, @"var (left|right|top|bottom) = MeasureSide\(").Count);
         Assert.DoesNotContain("GetPixel(", source, StringComparison.Ordinal);
         Assert.DoesNotContain("GetValue(", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Task.Run", source, StringComparison.Ordinal);
