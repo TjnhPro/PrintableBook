@@ -103,7 +103,7 @@ public sealed class ProcessSessionService(
                 {
                     frame = await brandFrameResolver.ResolveCompatibleFrameAsync(
                         brand,
-                        new ImageSize(applicationSnapshot.GlobalSettings.FinalPageWidth, applicationSnapshot.GlobalSettings.FinalPageHeight),
+                        new ImageSize(applicationSnapshot.GlobalSettings.ArtworkMaximumSide, applicationSnapshot.GlobalSettings.ArtworkMaximumSide),
                         cancellationToken);
                 }
             }
@@ -114,6 +114,8 @@ public sealed class ProcessSessionService(
                 book.Directory,
                 new DirectoryReference(Path.Combine(applicationSnapshot.Discovery.Paths.Root.Value, "outputs")),
                 new ImageSize(settings.ArtworkMaximumSide, settings.ArtworkMaximumSide),
+                new ImageSize(settings.ArtworkMaximumSide, settings.ArtworkMaximumSide),
+                new ImageSize(settings.WorkingPageWidth, settings.WorkingPageHeight),
                 new ImageSize(settings.FinalPageWidth, settings.FinalPageHeight),
                 new ImageDensity(settings.Dpi, settings.Dpi),
                 new PhysicalPageSize(settings.InteriorPdfWidthInches, settings.InteriorPdfHeightInches),

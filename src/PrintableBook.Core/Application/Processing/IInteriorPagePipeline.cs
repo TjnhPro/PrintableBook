@@ -2,15 +2,57 @@ using PrintableBook.Core.Abstractions;
 
 namespace PrintableBook.Core.Application.Processing;
 
-public sealed record InteriorPagePipelineRequest(
-    BookWorkspace Workspace,
-    FileReference Source,
-    string PageId,
-    ArtworkDetectionThreshold ArtworkDetectionThreshold,
-    ImageSize TargetSize,
-    ImageDensity TargetDensity,
-    FileReference? Frame,
-    bool IsFrameEnabled);
+public sealed record InteriorPagePipelineRequest
+{
+    public InteriorPagePipelineRequest(
+        BookWorkspace workspace,
+        FileReference source,
+        string pageId,
+        ArtworkDetectionThreshold artworkDetectionThreshold,
+        ImageSize preparedArtworkSize,
+        ImageSize workingPageSize,
+        ImageSize finalPageSize,
+        ImageDensity targetDensity,
+        FileReference? frame,
+        bool isFrameEnabled)
+    {
+        Workspace = workspace;
+        Source = source;
+        PageId = pageId;
+        ArtworkDetectionThreshold = artworkDetectionThreshold;
+        PreparedArtworkSize = preparedArtworkSize;
+        WorkingPageSize = workingPageSize;
+        FinalPageSize = finalPageSize;
+        TargetDensity = targetDensity;
+        Frame = frame;
+        IsFrameEnabled = isFrameEnabled;
+        ValidateGeometry();
+    }
+
+    public BookWorkspace Workspace { get; init; }
+    public FileReference Source { get; init; }
+    public string PageId { get; init; }
+    public ArtworkDetectionThreshold ArtworkDetectionThreshold { get; init; }
+    public ImageSize PreparedArtworkSize { get; init; }
+    public ImageSize WorkingPageSize { get; init; }
+    public ImageSize FinalPageSize { get; init; }
+    public ImageDensity TargetDensity { get; init; }
+    public FileReference? Frame { get; init; }
+    public bool IsFrameEnabled { get; init; }
+
+    public void ValidateGeometry()
+    {
+        if (WorkingPageSize.Width < PreparedArtworkSize.Width || WorkingPageSize.Height < PreparedArtworkSize.Height)
+        {
+            throw new ArgumentException("The working page must contain the prepared artwork.", nameof(WorkingPageSize));
+        }
+
+        if (FinalPageSize.Width < WorkingPageSize.Width || FinalPageSize.Height < WorkingPageSize.Height)
+        {
+            throw new ArgumentException("The final page must contain the working page.", nameof(FinalPageSize));
+        }
+    }
+}
 
 public sealed record InteriorPageProcessingResult(string PageId, FileReference Source, FileReference FinalPage);
 

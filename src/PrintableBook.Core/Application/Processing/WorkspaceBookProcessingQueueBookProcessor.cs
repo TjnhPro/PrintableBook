@@ -64,7 +64,9 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     new FileReference(asset.Reference),
                     $"page-{index + 1:D4}",
                     command.ArtworkDetectionThreshold,
-                    command.TargetInteriorSize,
+                    command.PreparedArtworkSize,
+                    command.WorkingPageSize,
+                    command.FinalPageSize,
                     command.TargetInteriorDensity,
                     command.Frame,
                     command.IsFrameEnabled))
@@ -92,7 +94,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     : source.GetAssets(BookAssetKind.Intro).Select(asset => new FileReference(asset.Reference)).ToArray(),
                 pageResults,
                 shuffleMap!,
-                command.TargetInteriorSize), cancellationToken);
+                command.FinalPageSize), cancellationToken);
             state = await CompleteStepAsync(state, "assembly", cancellationToken);
 
             if (command.Mode == BookProcessingMode.InteriorOnly)
@@ -202,7 +204,9 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             .SequenceEqual(pageResults.Select(page => page.Source).OrderBy(page => page.Value));
 
     private static string CreateConfigurationFingerprint(PrintableBookProcessingCommand command) =>
-        string.Join("|", command.TargetInteriorSize.Width, command.TargetInteriorSize.Height,
+        string.Join("|", command.PreparedArtworkSize.Width, command.PreparedArtworkSize.Height,
+            command.WorkingPageSize.Width, command.WorkingPageSize.Height,
+            command.FinalPageSize.Width, command.FinalPageSize.Height,
             command.TargetInteriorDensity.Horizontal, command.TargetInteriorDensity.Vertical,
             command.CoverPdfPageSize.WidthInches, command.CoverPdfPageSize.HeightInches,
             command.InteriorPdfPageSize.WidthInches, command.InteriorPdfPageSize.HeightInches,

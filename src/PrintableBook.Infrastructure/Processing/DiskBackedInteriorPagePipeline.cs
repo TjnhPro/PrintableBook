@@ -40,7 +40,7 @@ public sealed class DiskBackedInteriorPagePipeline(
         try
         {
             var hasMatchingStamp = await HasMatchingStampAsync(cacheStampFile, cacheStamp, cancellationToken);
-            if (hasMatchingStamp && await IsReadableAsync(finalPage, request.TargetSize, cancellationToken))
+            if (hasMatchingStamp && await IsReadableAsync(finalPage, request.FinalPageSize, cancellationToken))
             {
                 return new InteriorPageProcessingResult(request.PageId, request.Source, finalPage);
             }
@@ -70,24 +70,24 @@ public sealed class DiskBackedInteriorPagePipeline(
                 await squareCanvasProcessor.NormalizeAsync(new SquareCanvasRequest(trimmed, canvas), cancellationToken);
             }
 
-            if (!await IsReadableAsync(resized, request.TargetSize, cancellationToken))
+            if (!await IsReadableAsync(resized, request.FinalPageSize, cancellationToken))
             {
                 DeleteDownstream(framed, finalPage);
                 await resizeProcessor.ResizeAsync(
-                    new ArtworkResizeRequest(canvas, resized, request.TargetSize.Width, request.TargetDensity), cancellationToken);
+                    new ArtworkResizeRequest(canvas, resized, request.FinalPageSize.Width, request.TargetDensity), cancellationToken);
             }
 
-            if (!await IsReadableAsync(framed, request.TargetSize, cancellationToken))
+            if (!await IsReadableAsync(framed, request.FinalPageSize, cancellationToken))
             {
                 DeleteDownstream(finalPage);
                 await frameProcessor.ApplyAsync(
                     new FrameOverlayRequest(resized, framed, request.Frame, request.IsFrameEnabled), cancellationToken);
             }
 
-            if (!await IsReadableAsync(finalPage, request.TargetSize, cancellationToken))
+            if (!await IsReadableAsync(finalPage, request.FinalPageSize, cancellationToken))
             {
                 await finalPageProcessor.ProduceAsync(
-                    new FinalInteriorPageRequest(framed, finalPage, request.TargetSize, request.TargetDensity), cancellationToken);
+                    new FinalInteriorPageRequest(framed, finalPage, request.FinalPageSize, request.TargetDensity), cancellationToken);
             }
 
             return new InteriorPageProcessingResult(request.PageId, request.Source, finalPage);
@@ -173,7 +173,7 @@ public sealed class DiskBackedInteriorPagePipeline(
         long SourceLength,
         long SourceLastWriteUtcTicks,
         byte Threshold,
-        ImageSize TargetSize,
+        ImageSize FinalPageSize,
         ImageDensity TargetDensity,
         string? FramePath,
         long FrameLength,
@@ -189,7 +189,7 @@ public sealed class DiskBackedInteriorPagePipeline(
                 source.Length,
                 source.LastWriteTimeUtc.Ticks,
                 request.ArtworkDetectionThreshold.Value,
-                request.TargetSize,
+                request.FinalPageSize,
                 request.TargetDensity,
                 request.Frame?.Value,
                 frame?.Exists == true ? frame.Length : 0,

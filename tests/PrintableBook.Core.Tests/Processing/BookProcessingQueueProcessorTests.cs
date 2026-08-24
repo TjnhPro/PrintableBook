@@ -46,6 +46,8 @@ public sealed class BookProcessingQueueProcessorTests
         new DirectoryReference("final"),
         new ImageSize(100, 100),
         new ImageSize(100, 100),
+        new ImageSize(120, 120),
+        new ImageSize(140, 150),
         new ImageDensity(300, 300),
         new PhysicalPageSize(8.5, 8.5),
         new PhysicalPageSize(8.5, 8.5),

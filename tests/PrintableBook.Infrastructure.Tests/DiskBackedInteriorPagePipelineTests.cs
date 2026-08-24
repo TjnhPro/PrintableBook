@@ -42,6 +42,8 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
             "page-01",
             new ArtworkDetectionThreshold(20),
             new ImageSize(200, 200),
+            new ImageSize(200, 200),
+            new ImageSize(200, 200),
             new ImageDensity(300, 300),
             null,
             false));
@@ -85,6 +87,8 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
             "page-01",
             new ArtworkDetectionThreshold(20),
             new ImageSize(200, 200),
+            new ImageSize(200, 200),
+            new ImageSize(200, 200),
             new ImageDensity(300, 300),
             null,
             false);
@@ -112,7 +116,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200));
 
         await pipeline.ProcessAsync(request);
-        var regenerated = await pipeline.ProcessAsync(request with { TargetSize = new ImageSize(220, 220) });
+        var regenerated = await pipeline.ProcessAsync(request with { FinalPageSize = new ImageSize(220, 220) });
 
         var info = await new MagickImageInspector().GetInfoAsync(regenerated.FinalPage);
         Assert.Equal(new ImageSize(220, 220), info.Size);
@@ -158,6 +162,8 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         new FileReference(source),
         pageId,
         new ArtworkDetectionThreshold(20),
+        targetSize,
+        targetSize,
         targetSize,
         new ImageDensity(300, 300),
         null,

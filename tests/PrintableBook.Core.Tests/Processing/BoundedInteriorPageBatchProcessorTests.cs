@@ -31,6 +31,8 @@ public sealed class BoundedInteriorPageBatchProcessorTests
         pageId,
         new ArtworkDetectionThreshold(20),
         new ImageSize(100, 100),
+        new ImageSize(120, 120),
+        new ImageSize(140, 150),
         new ImageDensity(300, 300),
         null,
         false);
