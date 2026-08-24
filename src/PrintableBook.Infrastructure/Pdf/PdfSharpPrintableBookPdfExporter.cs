@@ -31,6 +31,28 @@ public sealed class MagickPrintableBookPdfExporter : IPrintableBookPdfExporter
         return ValueTask.FromResult(new PrintableBookPdfExportResult(coverPdf, interiorPdf));
     }
 
+    public ValueTask<InteriorPdfExportResult> ExportInteriorAsync(
+        InteriorPdfExportRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (request.OrderedInteriorPages.Count == 0)
+        {
+            throw new ArgumentException("At least one interior page is required for PDF export.", nameof(request));
+        }
+
+        if (request.InteriorPageSize.WidthInches <= 0 || request.InteriorPageSize.HeightInches <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(request), "PDF page dimensions must be positive.");
+        }
+
+        Directory.CreateDirectory(request.TemporaryOutputDirectory.Value);
+        var interiorPdf = new FileReference(Path.Combine(request.TemporaryOutputDirectory.Value, "interior.pdf"));
+        WritePdf(interiorPdf, request.OrderedInteriorPages, request.InteriorPageSize, cancellationToken);
+        return ValueTask.FromResult(new InteriorPdfExportResult(interiorPdf));
+    }
+
     private static void WritePdf(
         FileReference target,
         IReadOnlyList<FileReference> pages,

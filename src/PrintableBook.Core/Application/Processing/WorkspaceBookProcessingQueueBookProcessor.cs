@@ -40,16 +40,24 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
 
             state = await CompleteStepAsync(state, "scan", cancellationToken);
             var source = scan.Source!;
-            var cover = SelectCover(source, command.SelectedCover).Reference;
-            state = await BeginStepAsync(state, "cover-validation", cancellationToken);
-            var coverValidation = await coverValidator.ValidateAsync(
-                new CoverValidationRequest(new FileReference(cover), command.MinimumCoverSize), cancellationToken);
-            if (!coverValidation.IsValid)
+            string? cover = null;
+            if (command.Mode == BookProcessingMode.InteriorOnly)
             {
-                throw new BookProcessingFailureException("cover-validation", coverValidation.Failure!);
+                await stateStore.AppendLogAsync(workspace, new BookProcessingLogEntry(DateTimeOffset.UtcNow, "cover-validation.skipped", "Interior-only processing does not require a cover."), cancellationToken);
             }
+            else
+            {
+                cover = SelectCover(source, command.SelectedCover).Reference;
+                state = await BeginStepAsync(state, "cover-validation", cancellationToken);
+                var coverValidation = await coverValidator.ValidateAsync(
+                    new CoverValidationRequest(new FileReference(cover), command.MinimumCoverSize), cancellationToken);
+                if (!coverValidation.IsValid)
+                {
+                    throw new BookProcessingFailureException("cover-validation", coverValidation.Failure!);
+                }
 
-            state = await CompleteStepAsync(state, "cover-validation", cancellationToken);
+                state = await CompleteStepAsync(state, "cover-validation", cancellationToken);
+            }
             var interiorRequests = source.GetAssets(BookAssetKind.Interior)
                 .Select((asset, index) => new InteriorPagePipelineRequest(
                     workspace,
@@ -79,15 +87,40 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             state = await BeginStepAsync(state, "assembly", cancellationToken);
             var assembly = await bookAssembler.AssembleAsync(new OrderedBookAssemblyRequest(
                 workspace,
-                source.GetAssets(BookAssetKind.Intro).Select(asset => new FileReference(asset.Reference)).ToArray(),
+                command.Mode == BookProcessingMode.InteriorOnly
+                    ? []
+                    : source.GetAssets(BookAssetKind.Intro).Select(asset => new FileReference(asset.Reference)).ToArray(),
                 pageResults,
                 shuffleMap!,
                 command.TargetInteriorSize), cancellationToken);
             state = await CompleteStepAsync(state, "assembly", cancellationToken);
 
+            if (command.Mode == BookProcessingMode.InteriorOnly)
+            {
+                state = await BeginStepAsync(state, "interior-pdf-export", cancellationToken);
+                var interiorPdf = await pdfExporter.ExportInteriorAsync(new InteriorPdfExportRequest(
+                    assembly.OrderedPages,
+                    workspace.TemporaryOutputDirectory,
+                    command.InteriorPdfPageSize), cancellationToken);
+                state = await CompleteStepAsync(state, "interior-pdf-export", cancellationToken);
+                state = await BeginStepAsync(state, "interior-publish", cancellationToken);
+                var publishedInterior = await outputPublisher.PublishInteriorAsync(new InteriorOutputPublicationRequest(
+                    interiorPdf,
+                    command.FinalOutputRoot,
+                    assembly.OrderedPages.Count,
+                    command.InteriorPdfPageSize), cancellationToken);
+                state = state.CompleteStep("interior-publish", DateTimeOffset.UtcNow);
+                await PersistStateAsync(state, "step.completed", "interior-publish", CancellationToken.None);
+                state = state
+                    .RecordPublishedArtifacts([publishedInterior.InteriorPdf.Value])
+                    .Complete(DateTimeOffset.UtcNow);
+                await PersistStateAsync(state, "book.completed", command.BookId.Value, CancellationToken.None);
+                return BookProcessingQueueBookResult.CompletedInterior(command.BookId, publishedInterior);
+            }
+
             state = await BeginStepAsync(state, "pdf-export", cancellationToken);
             var pdfOutput = await pdfExporter.ExportAsync(new PrintableBookPdfExportRequest(
-                new FileReference(cover),
+                new FileReference(cover!),
                 assembly.OrderedPages,
                 workspace.TemporaryOutputDirectory,
                 command.CoverPdfPageSize,

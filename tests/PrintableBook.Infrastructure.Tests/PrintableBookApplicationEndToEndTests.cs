@@ -134,6 +134,50 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessBooksAsync_processes_book_interior_without_a_cover_and_publishes_only_the_interior_pdf()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "InteriorOnlyBook"));
+        await CreateInteriorOnlyBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem),
+            workspaceFactory,
+            stateStore,
+            new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem),
+            new DiskBackedInteriorPagePipeline(
+                new MagickArtworkTrimProcessor(),
+                new MagickSquareCanvasProcessor(),
+                new MagickArtworkResizeProcessor(),
+                new MagickFrameProcessor(),
+                new MagickFinalInteriorPageProcessor(),
+                new MagickImageInspector()),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new MagickPrintableBookPdfExporter(),
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+        var application = new PrintableBookApplication(
+            new BookProcessingPipeline(Array.Empty<IBookProcessingStage>()),
+            new BookProcessingQueueProcessor(new ProcessingSessionGate(), processor));
+        var command = CreateCommand("interior-only-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
+
+        var result = await application.ProcessBooksAsync(new BookProcessingQueueRequest([command]));
+
+        var bookResult = Assert.Single(result.Books);
+        Assert.Equal(BookProcessingStatus.Completed, bookResult.Status);
+        Assert.Null(bookResult.PublishedOutputs);
+        Assert.NotNull(bookResult.PublishedInteriorOutput);
+        Assert.True(File.Exists(bookResult.PublishedInteriorOutput!.InteriorPdf.Value));
+        using var interiorPdf = PdfReader.Open(bookResult.PublishedInteriorOutput.InteriorPdf.Value);
+        Assert.Equal(2, interiorPdf.Pages.Count);
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        var state = await stateStore.LoadAsync(workspace);
+        Assert.Equal([bookResult.PublishedInteriorOutput.InteriorPdf.Value], state!.PublishedArtifactReferences);
+        Assert.Contains(await stateStore.LoadLogsAsync(workspace), entry => entry.Event == "cover-validation.skipped");
+    }
+
+    [Fact]
     public async Task ProcessBookAsync_persists_the_active_interior_step_while_the_page_pipeline_is_running()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "InterruptedBook"));
@@ -279,6 +323,14 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         await WriteImageAsync(Path.Combine(interiorDirectory, "page-02.png"), 20, 40, 279, 259);
     }
 
+    private async Task CreateInteriorOnlyBookFixtureAsync(DirectoryReference bookDirectory)
+    {
+        var interiorDirectory = Path.Combine(bookDirectory.Value, "Book interior");
+        Directory.CreateDirectory(interiorDirectory);
+        await WriteImageAsync(Path.Combine(interiorDirectory, "page-01.png"), 40, 20, 259, 279);
+        await WriteImageAsync(Path.Combine(interiorDirectory, "page-02.png"), 20, 40, 279, 259);
+    }
+
     private static Task WriteImageAsync(string path, int minX, int minY, int maxX, int maxY, uint width = 300, uint height = 300)
     {
         using var image = new MagickImage(MagickColors.White, width, height);
@@ -332,6 +384,11 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             cancellation.Cancel();
             return published;
         }
+
+        public ValueTask<PublishedInteriorOutput> PublishInteriorAsync(
+            InteriorOutputPublicationRequest request,
+            CancellationToken cancellationToken = default) =>
+            inner.PublishInteriorAsync(request, cancellationToken);
     }
 
     private sealed class BlockingBeforePublishOutputPublisher : IBookOutputPublisher
@@ -340,6 +397,15 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
 
         public async ValueTask<PublishedBookOutputs> PublishAsync(
             BookOutputPublicationRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            started.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("The publisher should be cancelled before publishing output.");
+        }
+
+        public async ValueTask<PublishedInteriorOutput> PublishInteriorAsync(
+            InteriorOutputPublicationRequest request,
             CancellationToken cancellationToken = default)
         {
             started.TrySetResult();

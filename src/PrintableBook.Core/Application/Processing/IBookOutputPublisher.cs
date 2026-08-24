@@ -25,9 +25,23 @@ public sealed record PublishedBookOutputs(
     FileReference CoverPdf,
     FileReference InteriorPdf);
 
+public sealed record InteriorOutputPublicationRequest(
+    InteriorPdfExportResult TemporaryOutput,
+    DirectoryReference FinalOutputRoot,
+    int ExpectedInteriorPageCount,
+    PhysicalPageSize ExpectedInteriorPageSize);
+
+public sealed record PublishedInteriorOutput(
+    DirectoryReference PublishedDirectory,
+    FileReference InteriorPdf);
+
 public interface IBookOutputPublisher
 {
     ValueTask<PublishedBookOutputs> PublishAsync(
         BookOutputPublicationRequest request,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<PublishedInteriorOutput> PublishInteriorAsync(
+        InteriorOutputPublicationRequest request,
         CancellationToken cancellationToken = default);
 }

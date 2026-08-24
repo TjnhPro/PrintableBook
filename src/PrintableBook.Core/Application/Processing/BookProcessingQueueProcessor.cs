@@ -19,7 +19,8 @@ public sealed record PrintableBookProcessingCommand(
     FileReference? Frame,
     bool IsFrameEnabled,
     int? ShuffleSeed,
-    FileReference? SelectedCover = null);
+    FileReference? SelectedCover = null,
+    BookProcessingMode Mode = BookProcessingMode.FullBook);
 
 public sealed record BookProcessingQueueRequest(IReadOnlyList<PrintableBookProcessingCommand> Books);
 
@@ -27,10 +28,14 @@ public sealed record BookProcessingQueueBookResult(
     BookId BookId,
     BookProcessingStatus Status,
     ProcessingFailure? Failure,
-    PublishedBookOutputs? PublishedOutputs)
+    PublishedBookOutputs? PublishedOutputs,
+    PublishedInteriorOutput? PublishedInteriorOutput = null)
 {
     public static BookProcessingQueueBookResult Completed(BookId bookId, PublishedBookOutputs? outputs) =>
         new(bookId, BookProcessingStatus.Completed, null, outputs);
+
+    public static BookProcessingQueueBookResult CompletedInterior(BookId bookId, PublishedInteriorOutput output) =>
+        new(bookId, BookProcessingStatus.Completed, null, null, output);
 }
 
 public sealed record BookProcessingQueueResult(bool IsAlreadyRunning, IReadOnlyList<BookProcessingQueueBookResult> Books)

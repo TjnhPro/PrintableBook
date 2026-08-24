@@ -21,9 +21,20 @@ public sealed record PrintableBookPdfExportRequest(
 
 public sealed record PrintableBookPdfExportResult(FileReference CoverPdf, FileReference InteriorPdf);
 
+public sealed record InteriorPdfExportRequest(
+    IReadOnlyList<FileReference> OrderedInteriorPages,
+    DirectoryReference TemporaryOutputDirectory,
+    PhysicalPageSize InteriorPageSize);
+
+public sealed record InteriorPdfExportResult(FileReference InteriorPdf);
+
 public interface IPrintableBookPdfExporter
 {
     ValueTask<PrintableBookPdfExportResult> ExportAsync(
         PrintableBookPdfExportRequest request,
+        CancellationToken cancellationToken = default);
+
+    ValueTask<InteriorPdfExportResult> ExportInteriorAsync(
+        InteriorPdfExportRequest request,
         CancellationToken cancellationToken = default);
 }

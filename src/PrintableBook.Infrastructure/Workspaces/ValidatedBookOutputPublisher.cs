@@ -37,6 +37,27 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
             new FileReference(Path.Combine(publishedDirectory.Value, Path.GetFileName(request.TemporaryOutput.InteriorPdf.Value))));
     }
 
+    public async ValueTask<PublishedInteriorOutput> PublishInteriorAsync(
+        InteriorOutputPublicationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var temporaryDirectoryPath = Path.GetDirectoryName(request.TemporaryOutput.InteriorPdf.Value)
+            ?? throw new ArgumentException("Temporary interior output must have a parent directory.", nameof(request));
+        await ValidateAsync(request.TemporaryOutput.InteriorPdf, request.ExpectedInteriorPageCount, request.ExpectedInteriorPageSize, cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        Directory.CreateDirectory(request.FinalOutputRoot.Value);
+        var publishedDirectory = new DirectoryReference(Path.Combine(
+            request.FinalOutputRoot.Value,
+            $"run-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}"));
+        Directory.Move(temporaryDirectoryPath, publishedDirectory.Value);
+
+        return new PublishedInteriorOutput(
+            publishedDirectory,
+            new FileReference(Path.Combine(publishedDirectory.Value, Path.GetFileName(request.TemporaryOutput.InteriorPdf.Value))));
+    }
+
     private async ValueTask ValidateAsync(
         FileReference pdf,
         int expectedPageCount,
