@@ -16,6 +16,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IArtworkClassifier, ArtworkClassifier>();
         services.AddSingleton<IApplicationSnapshotService, ApplicationSnapshotService>();
         services.AddSingleton<IBookCoverSelectionService, BookCoverSelectionService>();
+        services.AddSingleton<IInteriorFrameModeService, InteriorFrameModeService>();
         services.AddSingleton<IProcessSessionService, ProcessSessionService>();
         services.AddSingleton<IBookProcessingPipeline, BookProcessingPipeline>();
         services.AddSingleton<IBookProcessingQueueBookProcessor, WorkspaceBookProcessingQueueBookProcessor>();
