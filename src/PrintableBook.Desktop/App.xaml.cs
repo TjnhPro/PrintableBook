@@ -39,7 +39,7 @@ public partial class App : Application
             // deliberately bounded, best-effort wait. Do not display UI or cancel the OS action.
             serviceProvider?
                 .GetService<IProcessSessionService>()?
-                .StopAndWaitAsync(TimeSpan.FromSeconds(5))
+                .StopAndWaitAsync(ProcessWindowShutdownCoordinator.StopTimeout)
                 .AsTask()
                 .GetAwaiter()
                 .GetResult();

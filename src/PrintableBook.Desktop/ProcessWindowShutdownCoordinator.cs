@@ -13,7 +13,7 @@ public sealed class ProcessWindowShutdownCoordinator(
     IProcessSessionService processSessionService,
     IProcessShutdownPrompt prompt)
 {
-    internal static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(5);
+    public static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(5);
 
     public async ValueTask<ProcessWindowCloseOutcome> RequestCloseAsync(CancellationToken cancellationToken = default)
     {
