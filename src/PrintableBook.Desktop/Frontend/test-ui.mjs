@@ -13,7 +13,9 @@ const expected = [
   "Interior frame mode",
   "No Frame",
   "Process Interior",
-  "Diagnostics"
+  "Diagnostics",
+  "Interrupted",
+  "Stopping processing…"
 ];
 
 for (const value of expected) {

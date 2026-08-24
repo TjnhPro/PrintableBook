@@ -85,6 +85,12 @@ Desktop is the composition root through `AddPrintableBookCore` and `AddPrintable
 
 Frontend code remains presentation-only and contains no processing/business calculations. It renders the C# snapshot and sends the additive `book.interior.frame-mode.set` command; the workspace state remains the source of truth.
 
+## Background processing and recovery
+
+`IProcessSessionService` owns an Interior Processing session from the immediate `StartAsync` snapshot through terminal cleanup. It schedules the actual queue execution once on the thread pool, holds the cancellation source and execution task, and exposes snapshots through `process.get`. `CancelAsync` is non-blocking: it requests cancellation outside the session lock and returns `Cancelling`; `StopAndWaitAsync` is reserved for bounded application shutdown.
+
+The frontend polls an active session globally, independent of the visible route. WPF closing uses a native prompt and an asynchronous shutdown coordinator. The OS session-ending event performs a five-second best-effort cancellation without UI. On startup, `IInterruptedProcessingRecoveryService` changes only stale persisted `Running` workspace state to the appended terminal `Interrupted` status, preserving resumable metadata. See [background process session](background-process-session.md).
+
 ## Testing policy
 
 Mocks and fakes are allowed for pipeline orchestration or boundary tests. They do not prove an image/PDF implementation correct. Repository-owned integration tests must use a small, deterministic, redistributable real PNG/PDF input; open and inspect the actual output for its relevant dimensions, page count, content properties, or metadata. The `Infrastructure.Tests/TestData` directory is reserved for checked-in fixtures and is required by CI. A test may generate a compact deterministic raster input when pixel-level geometry is the behaviour under test; it remains repository-owned and must not depend on user files or network data.

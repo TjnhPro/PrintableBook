@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.ComponentModel;
 using Microsoft.Web.WebView2.Core;
 using PrintableBook.Core.Application.Services;
 using PrintableBook.Core.Application.Desktop;
@@ -13,23 +14,43 @@ public partial class MainWindow : Window
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly WebViewBridgeRouter bridgeRouter;
+    private readonly ProcessWindowShutdownCoordinator shutdownCoordinator;
+    private bool allowClose;
+    private bool closeFlowRunning;
 
-    public MainWindow(IPrintableBookApplication application, IApplicationSnapshotService snapshotService, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService)
+    private readonly IInterruptedProcessingRecoveryService interruptedRecoveryService;
+
+    public MainWindow(IPrintableBookApplication application, IApplicationSnapshotService snapshotService, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IInterruptedProcessingRecoveryService interruptedRecoveryService, ProcessWindowShutdownCoordinator shutdownCoordinator)
     {
         Application = application;
+        this.interruptedRecoveryService = interruptedRecoveryService;
+        this.shutdownCoordinator = shutdownCoordinator;
         bridgeRouter = new WebViewBridgeRouter(snapshotService, settingsStore, processSessionService, rootDiscovery, brandSettingsStore, coverSelectionService, interiorFrameModeService);
         InitializeComponent();
+        Closing += OnClosing;
     }
 
     internal IPrintableBookApplication Application { get; }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        await Browser.EnsureCoreWebView2Async();
-        Browser.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+        try
+        {
+            await interruptedRecoveryService.RecoverAsync();
+            await Browser.EnsureCoreWebView2Async();
+            Browser.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
 
-        var pagePath = Path.Combine(AppContext.BaseDirectory, "Frontend", "index.html");
-        Browser.CoreWebView2.Navigate(new Uri(pagePath).AbsoluteUri);
+            var pagePath = Path.Combine(AppContext.BaseDirectory, "Frontend", "index.html");
+            Browser.CoreWebView2.Navigate(new Uri(pagePath).AbsoluteUri);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                $"The application could not recover interrupted processing.\n\n{exception.Message}",
+                "Startup recovery failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
     }
 
     private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -49,5 +70,48 @@ public partial class MainWindow : Window
         }
 
         Browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(response, JsonOptions));
+    }
+
+    private async void OnClosing(object? sender, CancelEventArgs e)
+    {
+        if (allowClose) return;
+        e.Cancel = true;
+        if (closeFlowRunning) return;
+        closeFlowRunning = true;
+
+        try
+        {
+            // Let the Closing event return after it has been cancelled before a completed
+            // coordinator result can attempt to invoke Close again.
+            await Task.Yield();
+            switch (await shutdownCoordinator.RequestCloseAsync())
+            {
+                case ProcessWindowCloseOutcome.KeepOpen:
+                    closeFlowRunning = false;
+                    return;
+                case ProcessWindowCloseOutcome.Close:
+                    allowClose = true;
+                    Close();
+                    return;
+                case ProcessWindowCloseOutcome.ForceExit:
+                    Environment.Exit(0);
+                    return;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            closeFlowRunning = false;
+        }
+        catch (Exception exception)
+        {
+            closeFlowRunning = false;
+            MessageBox.Show(
+                $"The application could not stop processing cleanly.\n\n{exception.Message}",
+                "Shutdown failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
     }
 }

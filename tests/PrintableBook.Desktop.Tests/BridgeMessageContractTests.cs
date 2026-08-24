@@ -212,6 +212,29 @@ public sealed class BridgeMessageContractTests
         Assert.Equal(BookProcessingMode.InteriorOnly, session.LastMode);
     }
 
+    [Fact]
+    public async Task ProcessCommandsReturnTheImmediateSessionSnapshotsWithoutAWaitCommand()
+    {
+        var idle = new ProcessSessionSnapshot(false, false, null, null, null, []);
+        var running = idle with { IsActive = true, CurrentStep = "Running" };
+        var cancelling = running with { IsCancelling = true, CurrentStep = "Cancelling" };
+        var session = new StubProcessSessionService(idle)
+        {
+            StartSnapshot = running,
+            CancelSnapshot = cancelling
+        };
+        var router = new WebViewBridgeRouter(processSessionService: session);
+
+        var started = await router.HandleAsync("""{"version":1,"id":"start","command":"process.start","payload":{"bookIds":["Book One"],"mode":"interior-only"}}""");
+        var current = await router.HandleAsync("""{"version":1,"id":"get","command":"process.get"}""");
+        var cancelled = await router.HandleAsync("""{"version":1,"id":"cancel","command":"process.cancel"}""");
+
+        Assert.Same(running, started.Payload);
+        Assert.Same(running, current.Payload);
+        Assert.Same(cancelling, cancelled.Payload);
+        Assert.True(((ProcessSessionSnapshot)cancelled.Payload!).IsCancelling);
+    }
+
     private sealed class StubSnapshotService(ApplicationSnapshot snapshot) : IApplicationSnapshotService
     {
         public ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
@@ -234,16 +257,33 @@ public sealed class BridgeMessageContractTests
         }
     }
 
-    private sealed class StubProcessSessionService(ProcessSessionSnapshot snapshot) : IProcessSessionService
+    private sealed class StubProcessSessionService : IProcessSessionService
     {
+        private readonly ProcessSessionSnapshot initialSnapshot;
+        private ProcessSessionSnapshot current;
+
+        public StubProcessSessionService(ProcessSessionSnapshot snapshot)
+        {
+            initialSnapshot = snapshot;
+            current = snapshot;
+        }
+
         public BookProcessingMode? LastMode { get; private set; }
-        public ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
+        public ProcessSessionSnapshot? StartSnapshot { get; init; }
+        public ProcessSessionSnapshot? CancelSnapshot { get; init; }
+        public ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(current);
         public ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default)
         {
             LastMode = mode;
-            return ValueTask.FromResult(snapshot);
+            current = StartSnapshot ?? initialSnapshot;
+            return ValueTask.FromResult(current);
         }
-        public ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
+        public ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default)
+        {
+            current = CancelSnapshot ?? initialSnapshot;
+            return ValueTask.FromResult(current);
+        }
+        public ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
     }
 
     private sealed class StubCoverSelectionService : IBookCoverSelectionService

@@ -12,7 +12,7 @@
   const summaries = () => valueFor(window.appSnapshot, "bookSummaries", []);
   const bookId = (book) => valueFor(valueFor(book, "id", {}), "value", valueFor(book, "name", ""));
   const summaryFor = (book) => summaries().find((summary) => valueFor(valueFor(summary, "bookId", {}), "value", "") === bookId(book));
-  const displayStatus = (value) => typeof value === "number" ? ["Not started", "Running", "Failed", "Cancelled", "Completed"][value] ?? "Unknown" : value;
+  const displayStatus = (value) => typeof value === "number" ? ["Not started", "Running", "Failed", "Cancelled", "Completed", "Interrupted"][value] ?? "Unknown" : value;
   const frameModeValue = (value) => {
     if (typeof value === "number") return ["auto", "enabled", "disabled"][value] ?? "auto";
     const normalized = String(value ?? "auto").toLowerCase();
@@ -67,7 +67,7 @@
   const renderBooks = () => {
     const allBooks = books();
     if (!state.selectedBookId && allBooks.length) state.selectedBookId = bookId(allBooks[0]);
-    const statuses = ["All", "Ready", "Invalid", "Needs selection", "Running", "Failed"];
+    const statuses = ["All", "Ready", "Invalid", "Needs selection", "Running", "Interrupted", "Failed"];
     const statusCounts = statuses.map((name) => ({ name, count: name === "All" ? allBooks.length : allBooks.filter((book) => valueFor(summaryFor(book), "validationStatus", "") === name || workspaceStatus(summaryFor(book)) === name).length }));
     const filtered = allBooks.filter((book) => valueFor(book, "name", "").toLowerCase().includes(state.bookFilter.toLowerCase()) && (state.bookStatus === "All" || valueFor(summaryFor(book), "validationStatus", "") === state.bookStatus || workspaceStatus(summaryFor(book)) === state.bookStatus));
     const book = selectedBook();
@@ -77,6 +77,7 @@
   const renderProcess = (requestProcess = true) => {
     const session = window.processSnapshot;
     const active = valueFor(session, "isActive", false);
+    const cancelling = active && valueFor(session, "isCancelling", false);
     const sessionQueue = valueFor(session, "queue", []);
     const pendingQueue = [...state.selectedBookIds].map((id) => {
       const book = books().find((candidate) => bookId(candidate) === id);
@@ -87,7 +88,7 @@
     const completed = valueFor(session, "pagesCompleted", 0);
     const total = valueFor(session, "pagesTotal", 0);
     const percent = total ? Math.min(100, Math.round((completed / total) * 100)) : 0;
-    content.innerHTML = `<div class="page-header"><div><h1>Process Interior</h1><p>${active ? "Active Interior Processing session" : "Prepare a selected interior-only book queue."}</p></div>${active ? '<button class="button-danger" data-action="cancel-process">Cancel session</button>' : ""}</div><div class="process-grid">${panel(active ? "Queue" : "Selected queue", `<ul class="queue-list">${queue.length ? queue.map((entry) => `<li><span>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}</span>${badge(valueFor(entry, "status", "NotStarted"))}<small>${escapeHtml(valueFor(entry, "detail", "Waiting"))}</small></li>`).join("") : "<li class=\"empty-row\">Select Books on the Books page.</li>"}</ul>`)}${panel("Current step", `<div class="process-book"><strong>${escapeHtml(currentBook)}</strong><span>${escapeHtml(valueFor(session, "currentStep", "Waiting"))}</span></div><div class="progress-track"><span style="width:${percent}%"></span></div><p class="progress-copy">${completed} / ${total || "?"} pages · ${valueFor(session, "workerLimit", 0) || "?"} workers</p><div class="page-actions mt-4">${active ? "" : `<button class="button-primary" data-action="start-process" ${state.selectedBookIds.size ? "" : "disabled"}>Start Interior Processing</button>`}</div>`)}</div>`;
+    content.innerHTML = `<div class="page-header"><div><h1>Process Interior</h1><p>${cancelling ? "Stopping Interior Processing session…" : active ? "Active Interior Processing session" : "Prepare a selected interior-only book queue."}</p></div>${active ? cancelling ? '<button class="button-danger" disabled>Stopping processing…</button>' : '<button class="button-danger" data-action="cancel-process">Cancel session</button>' : ""}</div><div class="process-grid">${panel(active ? "Queue" : "Selected queue", `<ul class="queue-list">${queue.length ? queue.map((entry) => `<li><span>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}</span>${badge(valueFor(entry, "status", "NotStarted"))}<small>${escapeHtml(valueFor(entry, "detail", "Waiting"))}</small></li>`).join("") : "<li class=\"empty-row\">Select Books on the Books page.</li>"}</ul>`)}${panel("Current step", `<div class="process-book"><strong>${escapeHtml(currentBook)}</strong><span>${escapeHtml(valueFor(session, "currentStep", "Waiting"))}</span></div><div class="progress-track"><span style="width:${percent}%"></span></div><p class="progress-copy">${completed} / ${total || "?"} pages · ${valueFor(session, "workerLimit", 0) || "?"} workers</p><div class="page-actions mt-4">${active ? "" : `<button class="button-primary" data-action="start-process" ${state.selectedBookIds.size ? "" : "disabled"}>Start Interior Processing</button>`}</div>`)}</div>`;
     if (requestProcess) send("process.get");
   };
 
@@ -175,7 +176,7 @@
   const refreshButton = document.getElementById("refresh-button");
   if (refreshButton) refreshButton.addEventListener("click", () => send("app.refresh"));
   if (brandSelect) brandSelect.addEventListener("change", () => { state.selectedBrand = brandSelect.value; });
-  window.setInterval(() => { if (valueFor(window.processSnapshot, "isActive", false) && document.querySelector(".nav-item-active")?.dataset.route === "process") send("process.get"); }, 1000);
+  window.setInterval(() => { if (valueFor(window.processSnapshot, "isActive", false) || valueFor(window.processSnapshot, "isCancelling", false)) send("process.get"); }, 1000);
   send("app.ping");
   send("app.refresh");
 })();

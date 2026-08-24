@@ -15,6 +15,7 @@ public interface IProcessSessionService
     ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default);
     ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default);
     ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default);
+    ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default);
 }
 
 public sealed class ProcessSessionService(
@@ -25,22 +26,40 @@ public sealed class ProcessSessionService(
     private readonly Lock sync = new();
     private ProcessSessionSnapshot snapshot = new(false, false, null, null, null, []);
     private CancellationTokenSource? cancellation;
+    private Task? executionTask;
 
     public async ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         ProcessSessionSnapshot current;
         lock (sync) current = snapshot;
-        if (!current.IsActive || current.CurrentBookId is null) return current;
+        if (!current.IsActive) return current;
         var refreshed = await snapshotService.RefreshAsync(cancellationToken);
-        var summary = refreshed.BookSummaries.FirstOrDefault(item => item.BookId == current.CurrentBookId);
-        if (summary is null) return current;
         lock (sync)
         {
-            if (snapshot.IsActive && snapshot.CurrentBookId == current.CurrentBookId)
+            if (!snapshot.IsActive) return snapshot;
+            var summaries = refreshed.BookSummaries.ToDictionary(item => item.BookId);
+            var queue = snapshot.Queue.Select(entry =>
             {
-                snapshot = snapshot with { CurrentStep = summary.CurrentStep ?? snapshot.CurrentStep, PagesCompleted = summary.InteriorPages.Count, PagesTotal = summary.InteriorSourcePageCount, WorkerLimit = refreshed.GlobalSettings.MaximumPageConcurrency };
-            }
+                if (!summaries.TryGetValue(entry.BookId, out var summary) || summary.WorkspaceStatus == BookProcessingStatus.NotStarted)
+                {
+                    return entry;
+                }
+
+                return entry with { Status = summary.WorkspaceStatus, Detail = summary.CurrentStep ?? entry.Detail };
+            }).ToArray();
+            var active = refreshed.BookSummaries.FirstOrDefault(summary =>
+                summary.WorkspaceStatus == BookProcessingStatus.Running &&
+                queue.Any(entry => entry.BookId == summary.BookId));
+            snapshot = snapshot with
+            {
+                Queue = queue,
+                CurrentBookId = active?.BookId ?? snapshot.CurrentBookId,
+                CurrentStep = active?.CurrentStep ?? snapshot.CurrentStep,
+                PagesCompleted = active?.InteriorPages.Count ?? snapshot.PagesCompleted,
+                PagesTotal = active?.InteriorSourcePageCount ?? snapshot.PagesTotal,
+                WorkerLimit = refreshed.GlobalSettings.MaximumPageConcurrency
+            };
             return snapshot;
         }
     }
@@ -67,26 +86,67 @@ public sealed class ProcessSessionService(
             throw new InvalidOperationException("Every selected Book must be validation-ready before processing.");
         }
 
+        CancellationTokenSource sessionCancellation;
+        ProcessSessionSnapshot started;
         lock (sync)
         {
-            if (snapshot.IsActive) return snapshot;
-            cancellation = new CancellationTokenSource();
+            if (snapshot.IsActive || executionTask is { IsCompleted: false }) return snapshot;
+            sessionCancellation = new CancellationTokenSource();
+            cancellation = sessionCancellation;
             snapshot = new ProcessSessionSnapshot(true, false, brandName, selected[0].Id, "Preparing", selected.Select((book, index) => new ProcessQueueEntry(book.Id, index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Preparing" : "Waiting")).ToArray(), 0, 0, applicationSnapshot.GlobalSettings.MaximumPageConcurrency);
+            started = snapshot;
+            executionTask = Task.Run(
+                () => ExecuteAsync(applicationSnapshot, selected, brandName, mode, sessionCancellation.Token),
+                CancellationToken.None);
         }
 
-        _ = ExecuteAsync(applicationSnapshot, selected, brandName, mode, cancellation.Token);
-        return await GetAsync(cancellationToken);
+        return started;
     }
 
     public ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        CancellationTokenSource? toCancel;
+        ProcessSessionSnapshot current;
         lock (sync)
         {
             if (!snapshot.IsActive || cancellation is null) return ValueTask.FromResult(snapshot);
             snapshot = snapshot with { IsCancelling = true, CurrentStep = "Cancelling" };
-            cancellation.Cancel();
-            return ValueTask.FromResult(snapshot);
+            toCancel = cancellation;
+            current = snapshot;
+        }
+
+        toCancel.Cancel();
+        return ValueTask.FromResult(current);
+    }
+
+    public async ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        if (timeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
+
+        Task? task;
+        CancellationTokenSource? toCancel;
+        lock (sync)
+        {
+            task = executionTask;
+            if (task is null) return true;
+            if (snapshot.IsActive)
+            {
+                snapshot = snapshot with { IsCancelling = true, CurrentStep = "Cancelling" };
+            }
+
+            toCancel = cancellation;
+        }
+
+        toCancel?.Cancel();
+        try
+        {
+            await task.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
         }
     }
 
@@ -133,8 +193,6 @@ public sealed class ProcessSessionService(
             {
                 snapshot = new ProcessSessionSnapshot(false, false, brandName, null, null,
                     result.Books.Select(book => new ProcessQueueEntry(book.BookId, book.Status, book.Failure?.Message)).ToArray());
-                cancellation?.Dispose();
-                cancellation = null;
             }
         }
         catch (OperationCanceledException)
@@ -150,17 +208,22 @@ public sealed class ProcessSessionService(
                         ? entry with { Status = BookProcessingStatus.Cancelled, Detail = "Cancelled" }
                         : entry).ToArray()
                 };
-                cancellation?.Dispose();
-                cancellation = null;
             }
         }
         catch (Exception exception)
         {
             lock (sync)
             {
-                snapshot = snapshot with { IsActive = false, IsCancelling = false, CurrentStep = "Failed", Queue = snapshot.Queue.Select(entry => entry.Status == BookProcessingStatus.NotStarted ? entry with { Status = BookProcessingStatus.Failed, Detail = exception.Message } : entry).ToArray() };
+                snapshot = snapshot with { IsActive = false, IsCancelling = false, CurrentStep = "Failed", Queue = snapshot.Queue.Select(entry => entry.Status == BookProcessingStatus.Running ? entry with { Status = BookProcessingStatus.Failed, Detail = exception.Message } : entry).ToArray() };
+            }
+        }
+        finally
+        {
+            lock (sync)
+            {
                 cancellation?.Dispose();
                 cancellation = null;
+                executionTask = null;
             }
         }
     }

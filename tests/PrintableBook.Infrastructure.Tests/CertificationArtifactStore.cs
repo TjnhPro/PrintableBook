@@ -28,7 +28,8 @@ internal static class CertificationArtifactStore
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
         {
-            if (Directory.Exists(Path.Combine(directory.FullName, ".git"))) return directory.FullName;
+            var gitMetadata = Path.Combine(directory.FullName, ".git");
+            if (Directory.Exists(gitMetadata) || File.Exists(gitMetadata)) return directory.FullName;
         }
 
         throw new DirectoryNotFoundException("The Phase 3 artifact store requires a repository root.");
