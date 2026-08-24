@@ -26,7 +26,16 @@ node --test tests/PrintableBook.Desktop.Bridge.Tests/app-bridge.test.mjs
 
 ### Local artwork corpus
 
-The regular and CI suite runs repository-owned tests only: deterministic fixtures tracked in `tests/**/TestData/`. User-supplied artwork is a separate `LocalCorpus` scope. It stays in `TestResults/InteriorProcessing/trim/custom/`, is ignored by Git, and writes its review `report.json` and rendered files to its local `output/` folder.
+The regular and CI suite runs repository-owned tests only: deterministic fixtures tracked in `tests/**/TestData/`. User-supplied artwork is a separate `LocalCorpus` scope and is ignored by Git.
+
+The trim corpus stays in `TestResults/InteriorProcessing/trim/custom/` and writes its review `report.json` plus rendered files to its local `output/` folder. The BorderLine detector corpus uses the following layout; its results are written to `TestResults/BorderLineCorpus/results/borderline-report.json`:
+
+```text
+TestResults/BorderLineCorpus/
+  borderart/  # expected HasBorder=true
+  fullart/    # expected HasBorder=false
+  cropart/    # expected HasBorder=false
+```
 
 Run that corpus only after placing real images in the folder:
 
