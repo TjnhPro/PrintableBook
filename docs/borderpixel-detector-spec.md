@@ -1,111 +1,48 @@
-# BorderPixel detector specification
+# BorderPixel detector V1
 
-**Status:** Proposed — requires semantic approval before implementation  
-**Scope:** evidence used only after `IBorderLineDetector` returns `HasBorder=false`  
-**Out of scope:** artwork type selection, trimming, square preparation, and pipeline orchestration
+**Status:** Implemented; awaiting local product-corpus certification
+**Scope:** evidence used only after `IBorderLineDetector` returns `HasBorder=false`
 
-## Purpose
+BorderPixel answers a narrow question about the original, untrimmed source raster:
 
-`IBorderPixelDetector` distinguishes the two non-frame categories:
+> Does any visible near-black ink pixel touch an exact outermost raster edge?
 
-```text
-BorderLine=false + BorderPixel=true  -> fullart
-BorderLine=false + BorderPixel=false -> cropart
-```
+It is not a classifier and it does not trim, prepare, resize, or otherwise transform pixels. The later classifier maps `BorderLine=false + BorderPixel=true` to `fullart`, and maps no contact to `cropart`.
 
-It answers one narrow question:
-
-> Does meaningful dark artwork touch the source raster boundary?
-
-This is deliberately different from BorderLine's coherent outer-frame question. A positive BorderPixel result is not evidence of a frame and must not return an artwork type.
-
-## Proposed contract
-
-The Core contract is intentionally minimal:
-
-```csharp
-public interface IBorderPixelDetector
-{
-    ValueTask<BorderPixelDetectionResult> DetectAsync(
-        BorderPixelDetectionRequest request,
-        CancellationToken cancellationToken = default);
-}
-
-public sealed record BorderPixelDetectionRequest(
-    FileReference Source,
-    ArtworkDetectionThreshold Threshold);
-
-public sealed record BorderPixelDetectionResult(bool HasBorderPixel);
-```
-
-No side-specific or score evidence is part of the public contract until product measurements demonstrate a downstream need.
-
-## Proposed measurement rule
-
-The detector samples only a three-pixel band on each raw source edge. A qualifying pixel has:
+## Locked V1 rule
 
 ```text
-R <= request.Threshold
-G <= request.Threshold
-B <= request.Threshold
-A >= 128
+source             = original untrimmed raster
+perimeter thickness = exactly 1 pixel
+qualifying ink      = A >= 128 and each RGB channel <= ArtworkDetectionThreshold
+positive            = any qualifying pixel on any one of the four sides
+negative            = no qualifying perimeter pixel on all four sides
 ```
 
-The default threshold remains the application's current `ArtworkDetectionThreshold` value (20); robustness must not come from silently increasing it.
+One side and one pixel are sufficient. This is intentional: a fullart composition can have a thin stroke that reaches only one canvas boundary. Conversely, ink one or two pixels inside an edge is not contact and remains negative; no multi-pixel edge band is used.
 
-For each side, count qualifying pixels in its band, excluding a 10% corner zone at either end to reduce accidental corner marks. A side is contacted when it contains at least eight qualifying pixels. The proposed decision is:
+The Core result retains `LeftHit`, `RightHit`, `TopHit`, and `BottomHit` for diagnostics while deriving `HasBorderPixel` as their logical OR.
+
+## Implementation boundary
+
+`MagickBorderPixelDetector` decodes the image once, exports each exact one-pixel edge as a bounded RGBA array, scans all four sides sequentially, and returns the side evidence. It does not use `GetPixel`, a full-image export, internal parallelism, or `Task.Run`. Decode/cancellation failures propagate as errors; `false` means a valid image was inspected with no qualifying contact.
+
+## Certification workflow
+
+The repository-owned suite uses generated fixtures for the exact-edge, threshold, alpha, corner, JPEG, dimensions, cancellation, corrupt input, and access-pattern cases. Real product images are intentionally separate:
 
 ```text
-HasBorderPixel = at least two independently contacted sides
+TestResults/BorderPixelCorpus/
+  fullart/   # expected BorderPixel=true
+  cropart/   # expected BorderPixel=false
+  results/borderpixel-v1-report.json
 ```
 
-This rejects a single compression speck or a small object grazing one edge while recognizing full-page artwork that genuinely reaches the canvas. It uses raw source geometry, not trim bounds: using trim bounds would make every trimmed artwork touch an edge and erase the distinction.
+The opt-in local test first verifies `BorderLine=false`. A BorderLine-positive input is reported as `PRECONDITION_FAIL`, not treated as a BorderPixel pass. Run it after adding local corpus files:
 
-## Performance and errors
-
-- Decode the image once per invocation.
-- Read four bounded edge bands through `ToByteArray(..., PixelMapping.RGBA)`.
-- Do not use `GetPixel`, a full-raster scan, `Task.Run`, or internal parallelism.
-- Check cancellation before decode, between ROI reads, and between side scans — not per pixel.
-- Propagate unreadable/corrupt image errors. Do not convert them to `HasBorderPixel=false`.
-
-## Deterministic test matrix
-
-The implementation must include real generated raster tests for:
-
-1. two contacted sides produces `true`;
-2. one contacted side produces `false`;
-3. exactly eight versus seven qualifying pixels at the side threshold;
-4. pixels at RGB threshold 20 and just above it;
-5. alpha 127 versus 128;
-6. marks only in excluded corner zones;
-7. black pixels beyond the three-pixel edge band;
-8. portrait, landscape, and small clamped inputs;
-9. corrupt input and cancellation propagation; and
-10. one decode/bounded RGBA/no-`GetPixel`/no-parallelism source checks.
-
-## Local corpus and calibration
-
-Real user artwork remains local-only. The eventual corpus is:
-
-```text
-TestResults/InteriorClassificationCorpus/
-  fullart/   # expected BorderPixel=true after BorderLine=false
-  cropart/   # expected BorderPixel=false after BorderLine=false
-  results/
+```powershell
+$env:PRINTABLEBOOK_RUN_LOCAL_CORPUS = "true"
+dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~BorderPixelLocalCorpusTests"
 ```
 
-Before locking the proposed numbers (three-pixel band, ten-percent corner exclusion, eight hits, two sides), run the corpus and compare false positives and negatives. The report must record the threshold, contacted-side counts, expectation, actual result, and elapsed time. Never add filename, hash, or product-specific exceptions.
-
-## Approval required
-
-The proposed rule deliberately makes four policy choices that affect classification and therefore final raster output:
-
-| Decision | Proposed value |
-| --- | --- |
-| Sampling basis | Raw source raster boundary |
-| Edge band | 3 px |
-| Side contact | >= 8 qualifying pixels, outside corner zones |
-| Positive result | >= 2 contacted sides |
-
-These values must be approved before the detector, classifier, preparation strategies, or main pipeline are implemented. Once approved, this document becomes the versioned `borderpixel-v1` semantic source for cache invalidation.
+`TestResults/` and the report are ignored by Git; they must never be committed, uploaded, or made a CI dependency. Product certification is complete only when every supplied `fullart` and `cropart` file passes with no precondition failure.
