@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private readonly ProcessWindowShutdownCoordinator shutdownCoordinator;
     private bool allowClose;
     private bool closeFlowRunning;
+    private bool systemShutdown;
 
     private readonly IInterruptedProcessingRecoveryService interruptedRecoveryService;
 
@@ -31,6 +32,11 @@ public partial class MainWindow : Window
     }
 
     internal IPrintableBookApplication Application { get; }
+
+    internal void BeginSystemShutdown() => systemShutdown = true;
+
+    internal static bool ShouldHandleInteractiveClose(bool allowClose, bool systemShutdown) =>
+        !allowClose && !systemShutdown;
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -74,7 +80,7 @@ public partial class MainWindow : Window
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
-        if (allowClose) return;
+        if (!ShouldHandleInteractiveClose(allowClose, systemShutdown)) return;
         e.Cancel = true;
         if (closeFlowRunning) return;
         closeFlowRunning = true;

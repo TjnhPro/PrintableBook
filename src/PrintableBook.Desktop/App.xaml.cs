@@ -38,6 +38,10 @@ public partial class App : Application
             // Windows may terminate this process immediately after this event, so this is a
             // deliberately bounded, best-effort wait. Do not display UI or cancel the OS action.
             serviceProvider?
+                .GetService<MainWindow>()?
+                .BeginSystemShutdown();
+
+            serviceProvider?
                 .GetService<IProcessSessionService>()?
                 .StopAndWaitAsync(ProcessWindowShutdownCoordinator.StopTimeout)
                 .AsTask()
