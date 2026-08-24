@@ -58,6 +58,31 @@ public sealed class MagickArtworkResizeProcessorTests : IAsyncLifetime
             new ImageDensity(300, 300))).AsTask());
     }
 
+    [Fact]
+    public async Task ResizeAsync_flattens_transparency_onto_an_opaque_white_background()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = Path.Combine(rootPath, "transparent.png");
+        var target = Path.Combine(rootPath, "opaque.png");
+        using (var image = new MagickImage(MagickColors.Transparent, 10, 10))
+        {
+            image.GetPixels().SetPixel(5, 5, [0, 0, 0, 255]);
+            image.Write(source);
+        }
+
+        await new MagickArtworkResizeProcessor().ResizeAsync(new ArtworkResizeRequest(
+            new FileReference(source),
+            new FileReference(target),
+            20,
+            new ImageDensity(300, 300)));
+
+        using var output = new MagickImage(target);
+        var rgba = output.GetPixels().ToByteArray(PixelMapping.RGBA)
+            ?? throw new InvalidOperationException("Expected RGBA pixel data.");
+        Assert.Equal([255, 255, 255, 255], rgba.Take(4));
+        Assert.All(rgba.Where((_, index) => index % 4 == 3), alpha => Assert.Equal((byte)255, alpha));
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
 
     public Task DisposeAsync()

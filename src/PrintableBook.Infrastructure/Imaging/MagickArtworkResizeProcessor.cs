@@ -21,6 +21,8 @@ public sealed class MagickArtworkResizeProcessor : IArtworkResizeProcessor
         var targetWidth = (uint)Math.Round(image.Width * scale, MidpointRounding.AwayFromZero);
         var targetHeight = (uint)Math.Round(image.Height * scale, MidpointRounding.AwayFromZero);
         image.Resize(targetWidth, targetHeight);
+        image.BackgroundColor = MagickColors.White;
+        image.Alpha(AlphaOption.Remove);
         image.Density = new Density(
             request.TargetDensity.Horizontal,
             request.TargetDensity.Vertical,
