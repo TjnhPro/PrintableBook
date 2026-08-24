@@ -154,7 +154,7 @@ for (const [status, serializedStatus, detail] of [["Completed", 4, null], ["Fail
     messageHandler({ data: { version: 1, id: `process-${status}`, ok: true, command: "process.snapshot", payload: {
       isActive: false,
       isCancelling: false,
-      currentStep: status === "Completed" ? null : status,
+      currentStep: null,
       queue: [{ bookId: { value: "Book 001" }, status: serializedStatus, detail }]
     } } });
 
