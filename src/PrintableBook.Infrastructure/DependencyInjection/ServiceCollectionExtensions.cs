@@ -30,9 +30,16 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IImageInspector, MagickImageInspector>();
         services.AddSingleton<IBorderLineDetector, MagickBorderLineDetector>();
         services.AddSingleton<IBorderPixelDetector, MagickBorderPixelDetector>();
+        services.AddSingleton<IBorderBoundsCropProcessor, MagickBorderBoundsCropProcessor>();
         services.AddSingleton<IArtworkTrimProcessor, MagickArtworkTrimProcessor>();
+        services.AddSingleton<ISquareCropProcessor, MagickSquareCropProcessor>();
         services.AddSingleton<ISquareCanvasProcessor, MagickSquareCanvasProcessor>();
+        services.AddSingleton<ISquarePadProcessor, MagickSquarePadProcessor>();
         services.AddSingleton<IArtworkResizeProcessor, MagickArtworkResizeProcessor>();
+        services.AddSingleton<BorderArtPreparationProcessor>();
+        services.AddSingleton<FullArtPreparationProcessor>();
+        services.AddSingleton<CropArtPreparationProcessor>();
+        services.AddSingleton<IArtworkPreparationService, ArtworkPreparationService>();
         services.AddSingleton<IFrameProcessor, MagickFrameProcessor>();
         services.AddSingleton<IWorkingPageProcessor, MagickWorkingPageProcessor>();
         services.AddSingleton<IFinalInteriorPageProcessor, MagickFinalInteriorPageProcessor>();
