@@ -1,10 +1,34 @@
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
+using PrintableBook.Core.Application.Processing;
 
 namespace PrintableBook.Core.Tests.Processing;
 
 public sealed class BookProcessingStateTests
 {
+    [Fact]
+    public void Interior_frame_modes_persist_only_explicit_overrides_immutably()
+    {
+        var original = BookProcessingState.NotStarted(new BookId("book"));
+        var enabled = original.SetInteriorFrameMode("interior/page-001.png", FrameMode.Enabled);
+        var disabled = enabled.SetInteriorFrameMode("interior/page-002.png", FrameMode.Disabled);
+        var automatic = disabled.SetInteriorFrameMode("interior/page-001.png", FrameMode.Auto);
+
+        Assert.Equal(FrameMode.Auto, original.GetInteriorFrameMode("interior/page-001.png"));
+        Assert.Equal(FrameMode.Enabled, enabled.GetInteriorFrameMode("interior/page-001.png"));
+        Assert.Equal(FrameMode.Disabled, disabled.GetInteriorFrameMode("INTERIOR/PAGE-002.PNG"));
+        Assert.Equal(FrameMode.Auto, automatic.GetInteriorFrameMode("interior/page-001.png"));
+        Assert.DoesNotContain("interior/page-001.png", automatic.InteriorFrameOverrides!);
+    }
+
+    [Fact]
+    public void Interior_frame_modes_reject_blank_keys_and_unknown_modes()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book"));
+        Assert.Throws<ArgumentException>(() => state.GetInteriorFrameMode(" "));
+        Assert.Throws<ArgumentException>(() => state.SetInteriorFrameMode("", FrameMode.Auto));
+        Assert.Throws<ArgumentOutOfRangeException>(() => state.SetInteriorFrameMode("interior/page.png", (FrameMode)99));
+    }
     [Fact]
     public void BeginStep_marks_the_active_step_without_marking_it_complete()
     {

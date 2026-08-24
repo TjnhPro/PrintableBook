@@ -1,4 +1,5 @@
 using PrintableBook.Core.Domain.Books;
+using PrintableBook.Core.Application.Processing;
 
 namespace PrintableBook.Core.Domain.Processing;
 
@@ -16,7 +17,8 @@ public sealed record BookProcessingState(
     bool MayResume,
     string? ConfigurationFingerprint = null,
     IReadOnlyList<string>? PublishedArtifactReferences = null,
-    string? SelectedCoverReference = null)
+    string? SelectedCoverReference = null,
+    IReadOnlyDictionary<string, FrameMode>? InteriorFrameOverrides = null)
 {
     public static BookProcessingState NotStarted(BookId bookId) => new(
         bookId,
@@ -121,5 +123,27 @@ public sealed record BookProcessingState(
         }
 
         return this with { SelectedCoverReference = coverReference };
+    }
+
+    public FrameMode GetInteriorFrameMode(string sourceKey)
+    {
+        ValidateSourceKey(sourceKey);
+        return InteriorFrameOverrides is not null && InteriorFrameOverrides.TryGetValue(sourceKey, out var mode) ? mode : FrameMode.Auto;
+    }
+
+    public BookProcessingState SetInteriorFrameMode(string sourceKey, FrameMode mode)
+    {
+        ValidateSourceKey(sourceKey);
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported frame mode.");
+        var overrides = InteriorFrameOverrides is null
+            ? new Dictionary<string, FrameMode>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, FrameMode>(InteriorFrameOverrides, StringComparer.OrdinalIgnoreCase);
+        if (mode == FrameMode.Auto) overrides.Remove(sourceKey); else overrides[sourceKey] = mode;
+        return this with { InteriorFrameOverrides = overrides.Count == 0 ? null : overrides };
+    }
+
+    private static void ValidateSourceKey(string sourceKey)
+    {
+        if (string.IsNullOrWhiteSpace(sourceKey)) throw new ArgumentException("An interior source key is required.", nameof(sourceKey));
     }
 }
