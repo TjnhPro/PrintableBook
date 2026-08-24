@@ -25,12 +25,14 @@ public sealed class BorderLineLocalCorpusTests
     public async Task DetectAsync_reviews_every_user_supplied_borderline_corpus_image_and_writes_a_report()
     {
         var corpusDirectory = FindCorpusDirectory();
+        var expectedBorderFrames = LoadExpectedBorderFrames(corpusDirectory);
         var resultsDirectory = Path.Combine(corpusDirectory, "results");
         var debugDirectory = Path.Combine(resultsDirectory, "debug");
         Directory.CreateDirectory(resultsDirectory);
         Directory.CreateDirectory(debugDirectory);
         var detector = new MagickBorderLineDetector();
         var results = new List<BorderLineCorpusResult>();
+        var reviewedInputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var category in Categories)
         {
@@ -59,6 +61,23 @@ public sealed class BorderLineLocalCorpusTests
 
             foreach (var input in inputs)
             {
+                var relativeInput = GetCorpusRelativePath(corpusDirectory, input);
+                ImageRectangle? expectedBorderBounds = null;
+                if (category.ShouldHaveBorder)
+                {
+                    reviewedInputs.Add(relativeInput);
+                    if (!expectedBorderFrames.TryGetValue(relativeInput, out var reviewedFrame))
+                    {
+                        results.Add(BorderLineCorpusResult.ConfigurationFailure(
+                            category.Name,
+                            category.ShouldHaveBorder,
+                            $"Expected reviewed outer-frame geometry for '{relativeInput}' in '{ExpectedFramesFileName}'."));
+                        continue;
+                    }
+
+                    expectedBorderBounds = reviewedFrame.ToBorderBounds();
+                }
+
                 var stopwatch = Stopwatch.StartNew();
                 try
                 {
@@ -70,6 +89,7 @@ public sealed class BorderLineLocalCorpusTests
                         category.Name,
                         input,
                         category.ShouldHaveBorder,
+                        expectedBorderBounds,
                         measurement,
                         debugImage,
                         stopwatch.Elapsed.TotalMilliseconds));
@@ -85,6 +105,14 @@ public sealed class BorderLineLocalCorpusTests
                         stopwatch.Elapsed.TotalMilliseconds));
                 }
             }
+        }
+
+        foreach (var relativeInput in expectedBorderFrames.Keys.Except(reviewedInputs, StringComparer.OrdinalIgnoreCase))
+        {
+            results.Add(BorderLineCorpusResult.ConfigurationFailure(
+                "borderart",
+                true,
+                $"Reviewed outer-frame geometry exists for '{relativeInput}', but no matching borderart input was found."));
         }
 
         var reportPath = Path.Combine(resultsDirectory, "borderline-v2-measurement-report.json");
@@ -107,6 +135,27 @@ public sealed class BorderLineLocalCorpusTests
     private static bool IsSupportedImage(string path) =>
         new[] { ".png", ".jpg", ".jpeg" }.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
 
+    private const string ExpectedFramesFileName = "expected-outer-frames.json";
+
+    private static IReadOnlyDictionary<string, ReviewedOuterFrame> LoadExpectedBorderFrames(string corpusDirectory)
+    {
+        var path = Path.Combine(corpusDirectory, ExpectedFramesFileName);
+        if (!File.Exists(path))
+        {
+            return new Dictionary<string, ReviewedOuterFrame>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var frames = JsonSerializer.Deserialize<Dictionary<string, ReviewedOuterFrame>>(
+            File.ReadAllText(path),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        return frames is null
+            ? new Dictionary<string, ReviewedOuterFrame>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, ReviewedOuterFrame>(frames, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string GetCorpusRelativePath(string corpusDirectory, string input) =>
+        Path.GetRelativePath(corpusDirectory, input).Replace('\\', '/');
+
     private static string FindCorpusDirectory()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
@@ -128,6 +177,7 @@ public sealed class BorderLineLocalCorpusTests
         string Category,
         string? Input,
         bool ExpectedHasBorder,
+        ImageRectangle? ExpectedBorderBounds,
         bool? ActualHasBorder,
         string Status,
         BorderLineSideResult? Left,
@@ -144,6 +194,7 @@ public sealed class BorderLineLocalCorpusTests
             string category,
             string input,
             bool expectedHasBorder,
+            ImageRectangle? expectedBorderBounds,
             BorderLineMeasurement measurement,
             string? debugImage,
             double elapsedMilliseconds) =>
@@ -151,8 +202,9 @@ public sealed class BorderLineLocalCorpusTests
                 category,
                 input,
                 expectedHasBorder,
+                expectedBorderBounds,
                 measurement.Detection.HasBorder,
-                measurement.Detection.HasBorder == expectedHasBorder ? "PASS" : "FAIL",
+                MatchesExpectation(measurement.Detection, expectedHasBorder, expectedBorderBounds) ? "PASS" : "FAIL",
                 measurement.Detection.Left,
                 measurement.Detection.Right,
                 measurement.Detection.Top,
@@ -161,9 +213,7 @@ public sealed class BorderLineLocalCorpusTests
                 measurement,
                 debugImage,
                 elapsedMilliseconds,
-                measurement.Detection.HasBorder == expectedHasBorder
-                    ? null
-                    : $"Expected HasBorder={expectedHasBorder}, actual HasBorder={measurement.Detection.HasBorder}.");
+                DescribeMismatch(measurement.Detection, expectedHasBorder, expectedBorderBounds));
 
         public static BorderLineCorpusResult Failed(
             string category,
@@ -171,13 +221,41 @@ public sealed class BorderLineLocalCorpusTests
             bool expectedHasBorder,
             string error,
             double elapsedMilliseconds) =>
-            new(category, input, expectedHasBorder, null, "FAIL", null, null, null, null, null, null, null, elapsedMilliseconds, error);
+            new(category, input, expectedHasBorder, null, null, "FAIL", null, null, null, null, null, null, null, elapsedMilliseconds, error);
 
         public static BorderLineCorpusResult ConfigurationFailure(
             string category,
             bool expectedHasBorder,
             string error) =>
-            new(category, null, expectedHasBorder, null, "FAIL", null, null, null, null, null, null, null, null, error);
+            new(category, null, expectedHasBorder, null, null, "FAIL", null, null, null, null, null, null, null, null, error);
+
+        private static bool MatchesExpectation(
+            BorderLineDetectionResult detection,
+            bool expectedHasBorder,
+            ImageRectangle? expectedBorderBounds) =>
+            detection.HasBorder == expectedHasBorder &&
+            (!expectedHasBorder || detection.BorderBounds == expectedBorderBounds);
+
+        private static string? DescribeMismatch(
+            BorderLineDetectionResult detection,
+            bool expectedHasBorder,
+            ImageRectangle? expectedBorderBounds)
+        {
+            if (detection.HasBorder != expectedHasBorder)
+            {
+                return $"Expected HasBorder={expectedHasBorder}, actual HasBorder={detection.HasBorder}.";
+            }
+
+            return expectedHasBorder
+                ? $"Expected BorderBounds={expectedBorderBounds}, actual BorderBounds={detection.BorderBounds}."
+                : null;
+        }
+    }
+
+    private sealed record ReviewedOuterFrame(int Left, int Right, int Top, int Bottom)
+    {
+        public ImageRectangle ToBorderBounds() =>
+            new(new ImagePoint(Left, Top), new ImageSize(Right - Left + 1, Bottom - Top + 1));
     }
 
     private static string? WriteDebugOverlay(

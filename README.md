@@ -35,7 +35,10 @@ TestResults/BorderLineCorpus/
   borderart/  # expected HasBorder=true
   fullart/    # expected HasBorder=false
   cropart/    # expected HasBorder=false
+  expected-outer-frames.json  # local reviewed geometry for every borderart input
 ```
+
+`expected-outer-frames.json` maps each `borderart/...` relative path to its reviewed `left`, `right`, `top`, and `bottom` coordinates. A positive image without an entry, or an entry without a matching positive image, fails the local certification; this prevents a presence-only result from being accepted as a crop-target pass.
 
 Run that corpus only after placing real images in the folder:
 
