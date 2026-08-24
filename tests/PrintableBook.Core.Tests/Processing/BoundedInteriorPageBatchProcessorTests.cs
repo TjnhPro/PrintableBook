@@ -35,7 +35,7 @@ public sealed class BoundedInteriorPageBatchProcessorTests
         new ImageSize(140, 150),
         new ImageDensity(300, 300),
         null,
-        false);
+        FrameMode.Auto);
 
     private sealed class ControllablePipeline : IInteriorPagePipeline
     {

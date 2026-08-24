@@ -14,7 +14,7 @@ public sealed record InteriorPagePipelineRequest
         ImageSize finalPageSize,
         ImageDensity targetDensity,
         FileReference? frame,
-        bool isFrameEnabled)
+        FrameMode frameMode)
     {
         Workspace = workspace;
         Source = source;
@@ -25,7 +25,7 @@ public sealed record InteriorPagePipelineRequest
         FinalPageSize = finalPageSize;
         TargetDensity = targetDensity;
         Frame = frame;
-        IsFrameEnabled = isFrameEnabled;
+        FrameMode = frameMode;
         ValidateGeometry();
     }
 
@@ -38,7 +38,7 @@ public sealed record InteriorPagePipelineRequest
     public ImageSize FinalPageSize { get; init; }
     public ImageDensity TargetDensity { get; init; }
     public FileReference? Frame { get; init; }
-    public bool IsFrameEnabled { get; init; }
+    public FrameMode FrameMode { get; init; }
 
     public void ValidateGeometry()
     {

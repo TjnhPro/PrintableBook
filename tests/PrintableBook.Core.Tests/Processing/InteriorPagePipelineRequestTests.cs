@@ -14,6 +14,18 @@ public sealed class InteriorPagePipelineRequestTests
         Assert.Equal(new ImageSize(2270, 2270), request.PreparedArtworkSize);
         Assert.Equal(new ImageSize(2550, 2550), request.WorkingPageSize);
         Assert.Equal(new ImageSize(2588, 2625), request.FinalPageSize);
+        Assert.Equal(FrameMode.Auto, request.FrameMode);
+    }
+
+    [Theory]
+    [InlineData(FrameMode.Auto)]
+    [InlineData(FrameMode.Enabled)]
+    [InlineData(FrameMode.Disabled)]
+    public void Constructor_preserves_the_page_frame_mode(FrameMode mode)
+    {
+        var request = CreateRequest(new ImageSize(2270, 2270), new ImageSize(2550, 2550), new ImageSize(2588, 2625), mode);
+
+        Assert.Equal(mode, request.FrameMode);
     }
 
     [Fact]
@@ -26,7 +38,7 @@ public sealed class InteriorPagePipelineRequestTests
         Assert.Throws<ArgumentException>(() => CreateRequest(
             new ImageSize(2270, 2270), new ImageSize(2589, 2550), new ImageSize(2588, 2625)));
 
-    private static InteriorPagePipelineRequest CreateRequest(ImageSize prepared, ImageSize working, ImageSize final) => new(
+    private static InteriorPagePipelineRequest CreateRequest(ImageSize prepared, ImageSize working, ImageSize final, FrameMode mode = FrameMode.Auto) => new(
         new BookWorkspace(new BookId("book"), new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("output")),
         new FileReference("source.png"),
         "page-01",
@@ -36,5 +48,5 @@ public sealed class InteriorPagePipelineRequestTests
         final,
         new ImageDensity(300, 300),
         null,
-        false);
+        mode);
 }

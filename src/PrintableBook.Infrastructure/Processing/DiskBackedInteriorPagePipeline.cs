@@ -88,7 +88,7 @@ public sealed class DiskBackedInteriorPagePipeline(
 
             var shouldApplyFrame = request.Frame is not null &&
                 File.Exists(request.Frame.Value) &&
-                request.IsFrameEnabled &&
+                request.FrameMode != FrameMode.Disabled &&
                 preparedArtwork.AutoFrameRecommended;
             if (!await IsReadableAsync(framed, request.PreparedArtworkSize, cancellationToken) || !preparedArtwork.AutoFrameRecommended)
             {
@@ -237,7 +237,7 @@ public sealed class DiskBackedInteriorPagePipeline(
         string? FramePath,
         long FrameLength,
         long FrameLastWriteUtcTicks,
-        bool FrameEnabled)
+        FrameMode FrameMode)
     {
         public static CacheInputStamp Create(InteriorPagePipelineRequest request)
         {
@@ -262,7 +262,7 @@ public sealed class DiskBackedInteriorPagePipeline(
                 request.Frame?.Value,
                 frame?.Exists == true ? frame.Length : 0,
                 frame?.Exists == true ? frame.LastWriteTimeUtc.Ticks : 0,
-                request.IsFrameEnabled);
+                request.FrameMode);
         }
     }
 

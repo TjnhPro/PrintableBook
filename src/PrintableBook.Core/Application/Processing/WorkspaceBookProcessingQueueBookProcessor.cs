@@ -69,7 +69,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     command.FinalPageSize,
                     command.TargetInteriorDensity,
                     command.Frame,
-                    command.IsFrameEnabled))
+                    command.IsFrameEnabled ? FrameMode.Auto : FrameMode.Disabled))
                 .ToArray();
             state = await BeginStepAsync(state, "interior-pages", cancellationToken);
             await using var concurrencyController = BookPageConcurrencyController.Create(command.MaximumPageConcurrency);

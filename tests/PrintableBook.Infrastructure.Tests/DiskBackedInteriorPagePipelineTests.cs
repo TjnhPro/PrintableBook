@@ -41,7 +41,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
             new ImageSize(200, 200),
             new ImageDensity(300, 300),
             null,
-            false));
+            FrameMode.Auto));
 
         Assert.Equal("page-01", result.PageId);
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "classification.json")));
@@ -83,7 +83,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
             new ImageSize(200, 200),
             new ImageDensity(300, 300),
             null,
-            false);
+            FrameMode.Auto);
 
         await pipeline.ProcessAsync(request);
         var prepared = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "prepared.png");
@@ -208,7 +208,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200)) with
         {
             Frame = new FileReference(frame),
-            IsFrameEnabled = true
+            FrameMode = FrameMode.Enabled
         };
 
         var pipeline = CreatePipeline();
@@ -274,14 +274,14 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         await pipeline.ProcessAsync(smallerWorking);
         Assert.Equal(new ImageSize(190, 190), (await new MagickImageInspector().GetInfoAsync(new FileReference(working))).Size);
 
-        var framedRequest = request with { Frame = new FileReference(frame), IsFrameEnabled = true };
+        var framedRequest = request with { Frame = new FileReference(frame), FrameMode = FrameMode.Enabled };
         await AssertRebuildsPreparedAsync(pipeline, framedRequest, prepared, async () =>
         {
             using var image = new MagickImage(MagickColors.Red, 200, 200);
             image.Write(frame);
             await Task.CompletedTask;
         });
-        await AssertRebuildsPreparedAsync(pipeline, framedRequest with { IsFrameEnabled = false }, prepared, () => Task.CompletedTask);
+        await AssertRebuildsPreparedAsync(pipeline, framedRequest with { FrameMode = FrameMode.Disabled }, prepared, () => Task.CompletedTask);
 
         var completed = await pipeline.ProcessAsync(request);
         using (var wrongSize = new MagickImage(MagickColors.White, 10, 10)) wrongSize.Write(working);
@@ -347,7 +347,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         targetSize,
         new ImageDensity(300, 300),
         null,
-        false);
+        FrameMode.Auto);
 
     private async Task<string> CreateArtworkSourceAsync(string filename)
     {

@@ -78,7 +78,7 @@ public sealed class InteriorWorkflowLocalCorpusTests
                         FinalSize,
                         new ImageDensity(300, 300),
                         frame,
-                        frame is not null));
+                        FrameMode.Auto));
                     stopwatch.Stop();
 
                     var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");

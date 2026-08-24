@@ -41,7 +41,7 @@ public sealed class InteriorSharedPipelineCertificationTests : IAsyncLifetime
             FinalSize,
             new ImageDensity(300, 300),
             new FileReference(frame),
-            true);
+            FrameMode.Auto);
 
         var result = await CreatePipeline().ProcessAsync(request);
 
