@@ -54,7 +54,6 @@ public sealed class BookProcessingQueueProcessorTests
         1,
         new ArtworkDetectionThreshold(20),
         null,
-        false,
         1);
 
     private sealed class BlockingBookProcessor : IBookProcessingQueueBookProcessor

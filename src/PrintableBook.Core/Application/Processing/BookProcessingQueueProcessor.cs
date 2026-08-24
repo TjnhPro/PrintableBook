@@ -19,7 +19,6 @@ public sealed record PrintableBookProcessingCommand(
     int MaximumPageConcurrency,
     ArtworkDetectionThreshold ArtworkDetectionThreshold,
     FileReference? Frame,
-    bool IsFrameEnabled,
     int? ShuffleSeed,
     FileReference? SelectedCover = null,
     BookProcessingMode Mode = BookProcessingMode.FullBook);

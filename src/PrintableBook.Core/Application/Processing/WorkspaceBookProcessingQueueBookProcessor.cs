@@ -69,7 +69,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     command.FinalPageSize,
                     command.TargetInteriorDensity,
                     command.Frame,
-                    command.IsFrameEnabled ? FrameMode.Auto : FrameMode.Disabled))
+                    priorState?.GetInteriorFrameMode(InteriorSourceKey.FromBookRoot(command.BookDirectory, new FileReference(asset.Reference))) ?? FrameMode.Auto))
                 .ToArray();
             state = await BeginStepAsync(state, "interior-pages", cancellationToken);
             await using var concurrencyController = BookPageConcurrencyController.Create(command.MaximumPageConcurrency);
@@ -211,7 +211,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             command.CoverPdfPageSize.WidthInches, command.CoverPdfPageSize.HeightInches,
             command.InteriorPdfPageSize.WidthInches, command.InteriorPdfPageSize.HeightInches,
             command.MaximumPageConcurrency, command.ArtworkDetectionThreshold.Value,
-            command.Frame?.Value, command.IsFrameEnabled, command.Mode);
+            command.Frame?.Value, command.Mode);
 
     private static BookAsset SelectCover(BookSource source, FileReference? selectedCover)
     {

@@ -58,7 +58,6 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             2,
             new ArtworkDetectionThreshold(20),
             null,
-            false,
             123);
         var result = await application.ProcessBooksAsync(new BookProcessingQueueRequest([command]));
 
@@ -340,7 +339,6 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         2,
         new ArtworkDetectionThreshold(20),
         null,
-        false,
         123);
 
     private async Task CreateBookFixtureAsync(DirectoryReference bookDirectory)
