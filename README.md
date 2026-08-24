@@ -28,7 +28,7 @@ node --test tests/PrintableBook.Desktop.Bridge.Tests/app-bridge.test.mjs
 
 The regular and CI suite runs repository-owned tests only: deterministic fixtures tracked in `tests/**/TestData/` or generated deterministically by the test for compact pixel-geometry cases. Either form must be redistributable and must not depend on user artwork. User-supplied artwork is a separate `LocalCorpus` scope and is ignored by Git.
 
-The trim corpus stays in `TestResults/InteriorProcessing/trim/custom/` and writes its review `report.json` plus rendered files to its local `output/` folder. The BorderLine detector corpus uses the following layout; its results are written to `TestResults/BorderLineCorpus/results/borderline-report.json`:
+The trim corpus stays in `TestResults/InteriorProcessing/trim/custom/` and writes its review `report.json` plus rendered files to its local `output/` folder. The BorderLine detector corpus uses the following layout. Its V2 measurement report is written to `TestResults/BorderLineCorpus/results/borderline-v2-measurement-report.json`; for every positive detection it also writes a magenta frame overlay below `TestResults/BorderLineCorpus/results/debug/` so that crop-target geometry can be reviewed locally:
 
 ```text
 TestResults/BorderLineCorpus/
@@ -52,3 +52,5 @@ dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructur
 ```
 
 Without the environment variable, local-corpus tests are reported as skipped. This is deliberate: an empty clean checkout must never depend on user artwork.
+
+The V2 detector evaluates a persistent four-sided outer frame rather than requiring four perfectly continuous scanlines. Its final decision requires broad, consistent side tracks in the 100-pixel outer corridors and selects the outermost coherent four-side candidate. The local report is the source of evidence for validating those semantics against product artwork; it is ignored by Git together with the input images and debug overlays.
