@@ -13,6 +13,9 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
     private const int SearchBandSize = SearchDepth + 1;
     private const int SegmentCount = 8;
     private const double CornerExclusionRatio = 0.10;
+    private const int CornerSearchSize = 120;
+    private const int CornerLineTolerance = 8;
+    private const int MinimumCompatibleCorners = 3;
     private const int TrackDepthTolerance = 3;
     private const byte MinimumOpaqueAlpha = 128;
 
@@ -53,9 +56,19 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
         var top = MeasureSide(pixels, BorderSide.Top, imageWidth, imageHeight, request.Threshold.Value, cancellationToken);
         var bottom = MeasureSide(pixels, BorderSide.Bottom, imageWidth, imageHeight, request.Threshold.Value, cancellationToken);
 
-        var frameCandidates = BuildFrameCandidates(left, right, top, bottom, imageWidth, imageHeight);
+        var cornerRegions = ReadCornerRegions(pixels, imageWidth, imageHeight, cancellationToken);
+        var frameCandidates = BuildFrameCandidates(
+            left,
+            right,
+            top,
+            bottom,
+            cornerRegions,
+            imageWidth,
+            imageHeight,
+            request.Threshold.Value,
+            cancellationToken);
         var selected = frameCandidates
-            .Where(candidate => candidate.HasValidGeometry)
+            .Where(candidate => candidate.HasValidGeometry && candidate.HasCornerCompatibility)
             .OrderBy(candidate => candidate.OuterDepthScore)
             .FirstOrDefault();
         var detection = selected is null
@@ -70,7 +83,7 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
             top,
             bottom,
             frameCandidates,
-            MeasureCorners(selected));
+            selected?.CornerEvidence ?? NoCornerEvidence());
     }
 
     private static BorderTrackSideMeasurement MeasureSide(
@@ -83,13 +96,7 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
     {
         var corridor = CreateCorridor(side, imageWidth, imageHeight);
         cancellationToken.ThrowIfCancellationRequested();
-        var rgba = pixels.ToByteArray(
-            corridor.X,
-            corridor.Y,
-            (uint)corridor.Width,
-            (uint)corridor.Height,
-            PixelMapping.RGBA)
-            ?? throw new InvalidDataException($"Unable to read the {side} outer border corridor.");
+        var rgba = ReadRgba(pixels, corridor.X, corridor.Y, corridor.Width, corridor.Height, side.ToString());
         var candidates = new List<BorderTrackSideCandidate>();
 
         for (var seedDepth = 0; seedDepth < corridor.DepthLength; seedDepth++)
@@ -245,8 +252,11 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
         BorderTrackSideMeasurement right,
         BorderTrackSideMeasurement top,
         BorderTrackSideMeasurement bottom,
+        IReadOnlyList<CornerRegion> cornerRegions,
         int imageWidth,
-        int imageHeight)
+        int imageHeight,
+        byte threshold,
+        CancellationToken cancellationToken)
     {
         var leftCandidates = ValidCandidates(left).ToArray();
         var rightCandidates = ValidCandidates(right).ToArray();
@@ -259,15 +269,25 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
         foreach (var topCandidate in topCandidates)
         foreach (var bottomCandidate in bottomCandidates)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var validGeometry = leftCandidate.RepresentativeDepth + rightCandidate.RepresentativeDepth < imageWidth - 1 &&
                 topCandidate.RepresentativeDepth + bottomCandidate.RepresentativeDepth < imageHeight - 1;
+            var cornerEvidence = MeasureCornerEvidence(
+                cornerRegions,
+                leftCandidate.RepresentativeDepth,
+                imageWidth - 1 - rightCandidate.RepresentativeDepth,
+                topCandidate.RepresentativeDepth,
+                imageHeight - 1 - bottomCandidate.RepresentativeDepth,
+                threshold);
             frames.Add(new BorderFrameCandidate(
                 leftCandidate,
                 rightCandidate,
                 topCandidate,
                 bottomCandidate,
                 leftCandidate.RepresentativeDepth + rightCandidate.RepresentativeDepth + topCandidate.RepresentativeDepth + bottomCandidate.RepresentativeDepth,
-                validGeometry));
+                validGeometry,
+                cornerEvidence,
+                cornerEvidence.Count(evidence => evidence.HasOuterInkEvidence) >= MinimumCompatibleCorners));
         }
 
         return frames
@@ -304,30 +324,109 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
         return BorderLineDetectionResult.Detected(left, right, top, bottom, bounds);
     }
 
-    private static IReadOnlyList<BorderCornerEvidence> MeasureCorners(BorderFrameCandidate? frame)
+    private static IReadOnlyList<CornerRegion> ReadCornerRegions(
+        IPixelCollection<byte> pixels,
+        int imageWidth,
+        int imageHeight,
+        CancellationToken cancellationToken)
     {
-        if (frame is null)
-        {
-            return
-            [
-                new BorderCornerEvidence("TopLeft", false),
-                new BorderCornerEvidence("TopRight", false),
-                new BorderCornerEvidence("BottomLeft", false),
-                new BorderCornerEvidence("BottomRight", false)
-            ];
-        }
-
+        var width = Math.Min(CornerSearchSize, imageWidth);
+        var height = Math.Min(CornerSearchSize, imageHeight);
         return
         [
-            new BorderCornerEvidence("TopLeft", IsEndpointSupported(frame.Left, true) && IsEndpointSupported(frame.Top, true)),
-            new BorderCornerEvidence("TopRight", IsEndpointSupported(frame.Right, true) && IsEndpointSupported(frame.Top, false)),
-            new BorderCornerEvidence("BottomLeft", IsEndpointSupported(frame.Left, false) && IsEndpointSupported(frame.Bottom, true)),
-            new BorderCornerEvidence("BottomRight", IsEndpointSupported(frame.Right, false) && IsEndpointSupported(frame.Bottom, false))
+            ReadCornerRegion(pixels, "TopLeft", 0, 0, width, height, cancellationToken),
+            ReadCornerRegion(pixels, "TopRight", imageWidth - width, 0, width, height, cancellationToken),
+            ReadCornerRegion(pixels, "BottomLeft", 0, imageHeight - height, width, height, cancellationToken),
+            ReadCornerRegion(pixels, "BottomRight", imageWidth - width, imageHeight - height, width, height, cancellationToken)
         ];
     }
 
-    private static bool IsEndpointSupported(BorderTrackSideCandidate candidate, bool first) =>
-        candidate.Segments[first ? 0 : ^1].SupportRatio >= MinimumSegmentSupportRatio;
+    private static CornerRegion ReadCornerRegion(
+        IPixelCollection<byte> pixels,
+        string name,
+        int x,
+        int y,
+        int width,
+        int height,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return new CornerRegion(name, x, y, width, height, ReadRgba(pixels, x, y, width, height, $"{name} corner"));
+    }
+
+    private static IReadOnlyList<BorderCornerEvidence> MeasureCornerEvidence(
+        IReadOnlyList<CornerRegion> regions,
+        int left,
+        int right,
+        int top,
+        int bottom,
+        byte threshold) =>
+    [
+        MeasureCorner(regions[0], left, top, threshold),
+        MeasureCorner(regions[1], right, top, threshold),
+        MeasureCorner(regions[2], left, bottom, threshold),
+        MeasureCorner(regions[3], right, bottom, threshold)
+    ];
+
+    private static BorderCornerEvidence MeasureCorner(
+        CornerRegion region,
+        int expectedVerticalPosition,
+        int expectedHorizontalPosition,
+        byte threshold) =>
+        new(
+            region.Name,
+            HasInkNearVerticalTrack(region, expectedVerticalPosition, threshold) &&
+            HasInkNearHorizontalTrack(region, expectedHorizontalPosition, threshold));
+
+    private static bool HasInkNearVerticalTrack(CornerRegion region, int expectedPosition, byte threshold)
+    {
+        var localStart = Math.Max(0, expectedPosition - region.X - CornerLineTolerance);
+        var localEnd = Math.Min(region.Width - 1, expectedPosition - region.X + CornerLineTolerance);
+        for (var localY = 0; localY < region.Height; localY++)
+        for (var localX = localStart; localX <= localEnd; localX++)
+        {
+            if (IsBlack(region.Rgba, ((localY * region.Width) + localX) * 4, threshold))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasInkNearHorizontalTrack(CornerRegion region, int expectedPosition, byte threshold)
+    {
+        var localStart = Math.Max(0, expectedPosition - region.Y - CornerLineTolerance);
+        var localEnd = Math.Min(region.Height - 1, expectedPosition - region.Y + CornerLineTolerance);
+        for (var localY = localStart; localY <= localEnd; localY++)
+        for (var localX = 0; localX < region.Width; localX++)
+        {
+            if (IsBlack(region.Rgba, ((localY * region.Width) + localX) * 4, threshold))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static IReadOnlyList<BorderCornerEvidence> NoCornerEvidence() =>
+    [
+        new BorderCornerEvidence("TopLeft", false),
+        new BorderCornerEvidence("TopRight", false),
+        new BorderCornerEvidence("BottomLeft", false),
+        new BorderCornerEvidence("BottomRight", false)
+    ];
+
+    private static byte[] ReadRgba(
+        IPixelCollection<byte> pixels,
+        int x,
+        int y,
+        int width,
+        int height,
+        string description) =>
+        pixels.ToByteArray(x, y, (uint)width, (uint)height, PixelMapping.RGBA)
+        ?? throw new InvalidDataException($"Unable to read the {description} bounded raster region.");
 
     private static OuterCorridor CreateCorridor(BorderSide side, int imageWidth, int imageHeight)
     {
@@ -379,4 +478,6 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
 
         public int GlobalScanCoordinate(int localCoordinate) => GlobalScanStart + localCoordinate;
     }
+
+    private readonly record struct CornerRegion(string Name, int X, int Y, int Width, int Height, byte[] Rgba);
 }

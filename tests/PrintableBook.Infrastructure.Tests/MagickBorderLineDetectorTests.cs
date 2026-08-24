@@ -292,6 +292,20 @@ public sealed class MagickBorderLineDetectorTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DetectAsync_rejects_four_side_tracks_that_do_not_enter_the_corner_rois()
+    {
+        var source = WriteImage("disconnected-corner-tracks", 1024, 1024, pixels =>
+        {
+            DrawVerticalLine(pixels, 40, 1024, 0, 0, 0, 255, 150, 873);
+            DrawVerticalLine(pixels, 983, 1024, 0, 0, 0, 255, 150, 873);
+            DrawHorizontalLine(pixels, 40, 1024, 0, 0, 0, 255, 150, 873);
+            DrawHorizontalLine(pixels, 983, 1024, 0, 0, 0, 255, 150, 873);
+        });
+
+        Assert.False((await DetectAsync(source)).HasBorder);
+    }
+
+    [Fact]
     public async Task DetectAsync_rejects_objects_that_touch_only_one_or_two_outer_sides()
     {
         var source = WriteImage("edge-touching-objects", 1024, 1024, pixels =>

@@ -59,7 +59,9 @@ public sealed record BorderFrameCandidate(
     BorderTrackSideCandidate Top,
     BorderTrackSideCandidate Bottom,
     int OuterDepthScore,
-    bool HasValidGeometry);
+    bool HasValidGeometry,
+    IReadOnlyList<BorderCornerEvidence> CornerEvidence,
+    bool HasCornerCompatibility);
 
 /// <summary>
 /// Bounded evidence observed near one prospective frame corner.
