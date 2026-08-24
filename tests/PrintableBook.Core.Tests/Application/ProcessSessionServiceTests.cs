@@ -84,6 +84,23 @@ public sealed class ProcessSessionServiceTests
         Assert.Equal("Cancelled", (await service.GetAsync()).CurrentStep);
     }
 
+    [Fact]
+    public async Task StopAndWaitAsync_returns_false_for_a_non_cooperative_worker_then_can_complete_later()
+    {
+        var application = new RecordingPrintableBookApplication(observesCancellation: false);
+        var service = new ProcessSessionService(
+            new StaticSnapshotService(CreateSnapshot()),
+            application,
+            new NullBrandFrameResolver());
+        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
+        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.False(await service.StopAndWaitAsync(TimeSpan.FromMilliseconds(20)));
+
+        application.Release.TrySetResult();
+        Assert.True(await service.StopAndWaitAsync(TimeSpan.FromSeconds(2)));
+    }
+
     private static ApplicationSnapshot CreateSnapshot()
     {
         var bookId = new BookId("book-one");
@@ -116,7 +133,7 @@ public sealed class ProcessSessionServiceTests
         public ValueTask<FileReference?> ResolveCompatibleFrameAsync(DiscoveredBrand brand, ImageSize targetSize, CancellationToken cancellationToken = default) => ValueTask.FromResult<FileReference?>(null);
     }
 
-    private sealed class RecordingPrintableBookApplication : IPrintableBookApplication
+    private sealed class RecordingPrintableBookApplication(bool observesCancellation = true) : IPrintableBookApplication
     {
         public SynchronizationContext? ExecutionContext { get; private set; }
         public int InvocationCount { get; private set; }
@@ -130,7 +147,7 @@ public sealed class ProcessSessionServiceTests
             InvocationCount++;
             ExecutionContext = SynchronizationContext.Current;
             Started.TrySetResult();
-            await Release.Task.WaitAsync(cancellationToken);
+            await Release.Task.WaitAsync(observesCancellation ? cancellationToken : CancellationToken.None);
             return new BookProcessingQueueResult(false, request.Books.Select(book => BookProcessingQueueBookResult.Completed(book.BookId, null)).ToArray());
         }
     }

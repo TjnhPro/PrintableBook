@@ -15,6 +15,7 @@ public interface IProcessSessionService
     ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default);
     ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default);
     ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default);
+    ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default);
 }
 
 public sealed class ProcessSessionService(
@@ -100,6 +101,36 @@ public sealed class ProcessSessionService(
 
         toCancel.Cancel();
         return ValueTask.FromResult(current);
+    }
+
+    public async ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        if (timeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
+
+        Task? task;
+        CancellationTokenSource? toCancel;
+        lock (sync)
+        {
+            task = executionTask;
+            if (task is null) return true;
+            if (snapshot.IsActive)
+            {
+                snapshot = snapshot with { IsCancelling = true, CurrentStep = "Cancelling" };
+            }
+
+            toCancel = cancellation;
+        }
+
+        toCancel?.Cancel();
+        try
+        {
+            await task.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
     }
 
     private async Task ExecuteAsync(ApplicationSnapshot applicationSnapshot, IReadOnlyList<DiscoveredBook> books, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken)
