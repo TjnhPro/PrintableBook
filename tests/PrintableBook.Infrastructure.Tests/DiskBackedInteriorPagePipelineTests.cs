@@ -293,6 +293,212 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         Assert.Equal(new ImageSize(200, 200), (await new MagickImageInspector().GetInfoAsync(new FileReference(working))).Size);
     }
 
+    [Theory]
+    [InlineData(FrameMode.Enabled, FrameMode.Disabled)]
+    [InlineData(FrameMode.Auto, FrameMode.Enabled)]
+    [InlineData(FrameMode.Disabled, FrameMode.Auto)]
+    public async Task ProcessAsync_rebuilds_from_frame_for_each_frame_mode_transition(FrameMode initialMode, FrameMode changedMode)
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync($"frame-mode-{initialMode}-{changedMode}.png");
+        var frame = await CreateRedFrameAsync("frame.png", new ImageSize(200, 200));
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId($"frame-mode-{initialMode}-{changedMode}"), new DirectoryReference(Path.Combine(rootPath, "FrameModeBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200)) with
+        {
+            Frame = new FileReference(frame),
+            FrameMode = initialMode
+        };
+        var pipeline = CreatePipeline();
+
+        var completed = await pipeline.ProcessAsync(request);
+        var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
+        var classification = Path.Combine(cache, "classification.json");
+        var prepared = Path.Combine(cache, "prepared.png");
+        var framed = Path.Combine(cache, "framed.png");
+        var working = Path.Combine(cache, "working-page.png");
+        var classificationBefore = await File.ReadAllTextAsync(classification);
+        var retainedPreparedTime = DateTime.UtcNow.AddHours(-1);
+        var staleDownstreamTime = DateTime.UtcNow.AddHours(-2);
+        File.SetLastWriteTimeUtc(prepared, retainedPreparedTime);
+        File.SetLastWriteTimeUtc(framed, staleDownstreamTime);
+        File.SetLastWriteTimeUtc(working, staleDownstreamTime);
+        File.SetLastWriteTimeUtc(completed.FinalPage.Value, staleDownstreamTime);
+
+        await pipeline.ProcessAsync(request with { FrameMode = changedMode });
+
+        Assert.Equal(classificationBefore, await File.ReadAllTextAsync(classification));
+        Assert.Equal(retainedPreparedTime, File.GetLastWriteTimeUtc(prepared));
+        Assert.NotEqual(staleDownstreamTime, File.GetLastWriteTimeUtc(framed));
+        Assert.NotEqual(staleDownstreamTime, File.GetLastWriteTimeUtc(working));
+        Assert.NotEqual(staleDownstreamTime, File.GetLastWriteTimeUtc(completed.FinalPage.Value));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_rebuilds_from_classification_when_detection_threshold_changes()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("classification-invalidation.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("classification-invalidation"), new DirectoryReference(Path.Combine(rootPath, "ClassificationBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200));
+        var pipeline = CreatePipeline();
+        var completed = await pipeline.ProcessAsync(request);
+        var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
+        var classification = Path.Combine(cache, "classification.json");
+        var prepared = Path.Combine(cache, "prepared.png");
+        var framed = Path.Combine(cache, "framed.png");
+        var working = Path.Combine(cache, "working-page.png");
+        var staleTime = DateTime.UtcNow.AddHours(-1);
+        File.SetLastWriteTimeUtc(classification, staleTime);
+        File.SetLastWriteTimeUtc(prepared, staleTime);
+        File.SetLastWriteTimeUtc(framed, staleTime);
+        File.SetLastWriteTimeUtc(working, staleTime);
+        File.SetLastWriteTimeUtc(completed.FinalPage.Value, staleTime);
+
+        await pipeline.ProcessAsync(request with { ArtworkDetectionThreshold = new ArtworkDetectionThreshold(21) });
+
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(classification));
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(prepared));
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(framed));
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(working));
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(completed.FinalPage.Value));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_rebuilds_from_preparation_when_prepared_size_changes()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("preparation-invalidation.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("preparation-invalidation"), new DirectoryReference(Path.Combine(rootPath, "PreparationBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200));
+        var pipeline = CreatePipeline();
+        var completed = await pipeline.ProcessAsync(request);
+        var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
+        var classification = Path.Combine(cache, "classification.json");
+        var prepared = Path.Combine(cache, "prepared.png");
+        var framed = Path.Combine(cache, "framed.png");
+        var working = Path.Combine(cache, "working-page.png");
+        var classificationBefore = await File.ReadAllTextAsync(classification);
+        var staleTime = DateTime.UtcNow.AddHours(-1);
+        File.SetLastWriteTimeUtc(prepared, staleTime);
+        File.SetLastWriteTimeUtc(framed, staleTime);
+        File.SetLastWriteTimeUtc(working, staleTime);
+        File.SetLastWriteTimeUtc(completed.FinalPage.Value, staleTime);
+
+        await pipeline.ProcessAsync(request with { PreparedArtworkSize = new ImageSize(180, 180) });
+
+        Assert.Equal(classificationBefore, await File.ReadAllTextAsync(classification));
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(prepared));
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(framed));
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(working));
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(completed.FinalPage.Value));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_rebuilds_from_working_when_working_size_changes()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("working-invalidation.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("working-invalidation"), new DirectoryReference(Path.Combine(rootPath, "WorkingBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200));
+        var pipeline = CreatePipeline();
+        var completed = await pipeline.ProcessAsync(request);
+        var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
+        var classification = Path.Combine(cache, "classification.json");
+        var prepared = Path.Combine(cache, "prepared.png");
+        var framed = Path.Combine(cache, "framed.png");
+        var working = Path.Combine(cache, "working-page.png");
+        var classificationBefore = await File.ReadAllTextAsync(classification);
+        var retainedPreparedTime = DateTime.UtcNow.AddHours(-1);
+        var retainedFramedTime = DateTime.UtcNow.AddHours(-2);
+        var staleTime = DateTime.UtcNow.AddHours(-3);
+        File.SetLastWriteTimeUtc(prepared, retainedPreparedTime);
+        File.SetLastWriteTimeUtc(framed, retainedFramedTime);
+        File.SetLastWriteTimeUtc(working, staleTime);
+        File.SetLastWriteTimeUtc(completed.FinalPage.Value, staleTime);
+
+        await pipeline.ProcessAsync(request with { WorkingPageSize = new ImageSize(220, 220), FinalPageSize = new ImageSize(220, 220) });
+
+        Assert.Equal(classificationBefore, await File.ReadAllTextAsync(classification));
+        Assert.Equal(retainedPreparedTime, File.GetLastWriteTimeUtc(prepared));
+        Assert.Equal(retainedFramedTime, File.GetLastWriteTimeUtc(framed));
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(working));
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(completed.FinalPage.Value));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_rebuilds_only_final_when_final_size_changes()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("final-invalidation.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("final-invalidation"), new DirectoryReference(Path.Combine(rootPath, "FinalBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200));
+        var pipeline = CreatePipeline();
+        var completed = await pipeline.ProcessAsync(request);
+        var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
+        var classification = Path.Combine(cache, "classification.json");
+        var prepared = Path.Combine(cache, "prepared.png");
+        var framed = Path.Combine(cache, "framed.png");
+        var working = Path.Combine(cache, "working-page.png");
+        var classificationBefore = await File.ReadAllTextAsync(classification);
+        var retainedPreparedTime = DateTime.UtcNow.AddHours(-1);
+        var retainedFramedTime = DateTime.UtcNow.AddHours(-2);
+        var retainedWorkingTime = DateTime.UtcNow.AddHours(-3);
+        var staleFinalTime = DateTime.UtcNow.AddHours(-4);
+        File.SetLastWriteTimeUtc(prepared, retainedPreparedTime);
+        File.SetLastWriteTimeUtc(framed, retainedFramedTime);
+        File.SetLastWriteTimeUtc(working, retainedWorkingTime);
+        File.SetLastWriteTimeUtc(completed.FinalPage.Value, staleFinalTime);
+
+        await pipeline.ProcessAsync(request with { FinalPageSize = new ImageSize(220, 220) });
+
+        Assert.Equal(classificationBefore, await File.ReadAllTextAsync(classification));
+        Assert.Equal(retainedPreparedTime, File.GetLastWriteTimeUtc(prepared));
+        Assert.Equal(retainedFramedTime, File.GetLastWriteTimeUtc(framed));
+        Assert.Equal(retainedWorkingTime, File.GetLastWriteTimeUtc(working));
+        Assert.NotEqual(staleFinalTime, File.GetLastWriteTimeUtc(completed.FinalPage.Value));
+    }
+
+    [Theory]
+    [InlineData("{ malformed")]
+    [InlineData(null)]
+    public async Task ProcessAsync_rebuilds_from_classification_when_stamp_is_unusable(string? invalidStamp)
+    {
+        Directory.CreateDirectory(rootPath);
+        var stampKind = invalidStamp is null ? "missing" : "corrupt";
+        var source = await CreateArtworkSourceAsync($"stamp-{stampKind}.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId($"stamp-{stampKind}"), new DirectoryReference(Path.Combine(rootPath, "StampBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200));
+        var pipeline = CreatePipeline();
+        var completed = await pipeline.ProcessAsync(request);
+        var classification = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "classification.json");
+        var prepared = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "prepared.png");
+        var stamp = Path.Combine(workspace.ProcessedDirectory.Value, "interior", "page-01.input-stamp.json");
+        var staleTime = DateTime.UtcNow.AddHours(-1);
+        File.SetLastWriteTimeUtc(classification, staleTime);
+        File.SetLastWriteTimeUtc(prepared, staleTime);
+        File.SetLastWriteTimeUtc(completed.FinalPage.Value, staleTime);
+        if (invalidStamp is null)
+        {
+            File.Delete(stamp);
+        }
+        else
+        {
+            await File.WriteAllTextAsync(stamp, invalidStamp);
+        }
+
+        var retried = await pipeline.ProcessAsync(request);
+
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(classification));
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(prepared));
+        Assert.True(File.Exists(retried.FinalPage.Value));
+    }
+
     private static async Task AssertRebuildsPreparedAsync(
         DiskBackedInteriorPagePipeline pipeline,
         InteriorPagePipelineRequest request,
@@ -364,6 +570,18 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
 
         await Task.CompletedTask;
         return source;
+    }
+
+    private async Task<string> CreateRedFrameAsync(string filename, ImageSize size)
+    {
+        var path = Path.Combine(rootPath, filename);
+        using (var image = new MagickImage(MagickColors.Red, (uint)size.Width, (uint)size.Height))
+        {
+            image.Write(path);
+        }
+
+        await Task.CompletedTask;
+        return path;
     }
 
     public Task InitializeAsync() => Task.CompletedTask;
