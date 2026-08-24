@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using ImageMagick;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Infrastructure.Imaging;
@@ -25,7 +26,9 @@ public sealed class BorderLineLocalCorpusTests
     {
         var corpusDirectory = FindCorpusDirectory();
         var resultsDirectory = Path.Combine(corpusDirectory, "results");
+        var debugDirectory = Path.Combine(resultsDirectory, "debug");
         Directory.CreateDirectory(resultsDirectory);
+        Directory.CreateDirectory(debugDirectory);
         var detector = new MagickBorderLineDetector();
         var results = new List<BorderLineCorpusResult>();
 
@@ -59,14 +62,16 @@ public sealed class BorderLineLocalCorpusTests
                 var stopwatch = Stopwatch.StartNew();
                 try
                 {
-                    var detected = await detector.DetectAsync(new BorderLineDetectionRequest(
+                    var measurement = await detector.MeasureAsync(new BorderLineDetectionRequest(
                         new FileReference(input), new ArtworkDetectionThreshold(20)));
+                    var debugImage = WriteDebugOverlay(category.Name, input, debugDirectory, measurement.Detection);
                     stopwatch.Stop();
                     results.Add(BorderLineCorpusResult.Completed(
                         category.Name,
                         input,
                         category.ShouldHaveBorder,
-                        detected,
+                        measurement,
+                        debugImage,
                         stopwatch.Elapsed.TotalMilliseconds));
                 }
                 catch (Exception exception)
@@ -82,11 +87,12 @@ public sealed class BorderLineLocalCorpusTests
             }
         }
 
-        var reportPath = Path.Combine(resultsDirectory, "borderline-report.json");
+        var reportPath = Path.Combine(resultsDirectory, "borderline-v2-measurement-report.json");
         await File.WriteAllTextAsync(reportPath, JsonSerializer.Serialize(new
         {
             generatedUtc = DateTimeOffset.UtcNow,
             threshold = 20,
+            detectorVersion = "V2-segmented-outer-frame",
             corpusDirectory,
             total = results.Count,
             passed = results.Count(result => result.Status == "PASS"),
@@ -129,6 +135,8 @@ public sealed class BorderLineLocalCorpusTests
         BorderLineSideResult? Top,
         BorderLineSideResult? Bottom,
         ImageRectangle? BorderBounds,
+        BorderLineMeasurement? Measurement,
+        string? DebugImage,
         double? ElapsedMilliseconds,
         string? Error)
     {
@@ -136,23 +144,26 @@ public sealed class BorderLineLocalCorpusTests
             string category,
             string input,
             bool expectedHasBorder,
-            BorderLineDetectionResult detected,
+            BorderLineMeasurement measurement,
+            string? debugImage,
             double elapsedMilliseconds) =>
             new(
                 category,
                 input,
                 expectedHasBorder,
-                detected.HasBorder,
-                detected.HasBorder == expectedHasBorder ? "PASS" : "FAIL",
-                detected.Left,
-                detected.Right,
-                detected.Top,
-                detected.Bottom,
-                detected.BorderBounds,
+                measurement.Detection.HasBorder,
+                measurement.Detection.HasBorder == expectedHasBorder ? "PASS" : "FAIL",
+                measurement.Detection.Left,
+                measurement.Detection.Right,
+                measurement.Detection.Top,
+                measurement.Detection.Bottom,
+                measurement.Detection.BorderBounds,
+                measurement,
+                debugImage,
                 elapsedMilliseconds,
-                detected.HasBorder == expectedHasBorder
+                measurement.Detection.HasBorder == expectedHasBorder
                     ? null
-                    : $"Expected HasBorder={expectedHasBorder}, actual HasBorder={detected.HasBorder}.");
+                    : $"Expected HasBorder={expectedHasBorder}, actual HasBorder={measurement.Detection.HasBorder}.");
 
         public static BorderLineCorpusResult Failed(
             string category,
@@ -160,12 +171,48 @@ public sealed class BorderLineLocalCorpusTests
             bool expectedHasBorder,
             string error,
             double elapsedMilliseconds) =>
-            new(category, input, expectedHasBorder, null, "FAIL", null, null, null, null, null, elapsedMilliseconds, error);
+            new(category, input, expectedHasBorder, null, "FAIL", null, null, null, null, null, null, null, elapsedMilliseconds, error);
 
         public static BorderLineCorpusResult ConfigurationFailure(
             string category,
             bool expectedHasBorder,
             string error) =>
-            new(category, null, expectedHasBorder, null, "FAIL", null, null, null, null, null, null, error);
+            new(category, null, expectedHasBorder, null, "FAIL", null, null, null, null, null, null, null, null, error);
+    }
+
+    private static string? WriteDebugOverlay(
+        string category,
+        string input,
+        string debugDirectory,
+        BorderLineDetectionResult detection)
+    {
+        if (!detection.HasBorder || detection.BorderBounds is null)
+        {
+            return null;
+        }
+
+        var id = Path.GetFileNameWithoutExtension(input);
+        var output = Path.Combine(debugDirectory, $"{category}-{id}.detected.png");
+        using var image = new MagickImage(input);
+        var pixels = image.GetPixels();
+        var bounds = detection.BorderBounds.Value;
+        var left = bounds.Origin.X;
+        var right = left + bounds.Size.Width - 1;
+        var top = bounds.Origin.Y;
+        var bottom = top + bounds.Size.Height - 1;
+        for (var x = left; x <= right; x++)
+        {
+            pixels.SetPixel(x, top, [255, 0, 255, 255]);
+            pixels.SetPixel(x, bottom, [255, 0, 255, 255]);
+        }
+
+        for (var y = top; y <= bottom; y++)
+        {
+            pixels.SetPixel(left, y, [255, 0, 255, 255]);
+            pixels.SetPixel(right, y, [255, 0, 255, 255]);
+        }
+
+        image.Write(output);
+        return output;
     }
 }
