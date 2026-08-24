@@ -123,7 +123,6 @@ public sealed class ProcessSessionService(
                 settings.MaximumPageConcurrency,
                 new ArtworkDetectionThreshold(settings.ArtworkDetectionThreshold),
                 frame,
-                frame is not null,
                 null,
                 string.IsNullOrWhiteSpace(summaries[book.Id.Value].SelectedCoverReference) ? null : new FileReference(summaries[book.Id.Value].SelectedCoverReference!),
                 mode)).ToArray());
