@@ -62,6 +62,23 @@ public sealed class MagickFrameProcessorTests : IAsyncLifetime
         Assert.Equal((byte)0, output.GetPixels().GetPixel(5, 5)[0]);
     }
 
+    [Fact]
+    public async Task ApplyAsync_rejects_an_enabled_frame_with_incompatible_geometry()
+    {
+        Directory.CreateDirectory(rootPath);
+        var page = Path.Combine(rootPath, "page.png");
+        var frame = Path.Combine(rootPath, "wrong-size-frame.png");
+        var target = Path.Combine(rootPath, "must-not-exist.png");
+        using (var image = new MagickImage(MagickColors.White, 20, 20)) image.Write(page);
+        using (var image = new MagickImage(MagickColors.Transparent, 21, 20)) image.Write(frame);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => new MagickFrameProcessor().ApplyAsync(new FrameOverlayRequest(
+            new FileReference(page), new FileReference(target), new FileReference(frame), Enabled: true)).AsTask());
+
+        Assert.False(File.Exists(target));
+    }
+
+
     public Task InitializeAsync() => Task.CompletedTask;
 
     public Task DisposeAsync()
