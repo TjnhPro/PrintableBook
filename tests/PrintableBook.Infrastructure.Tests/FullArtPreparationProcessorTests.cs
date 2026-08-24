@@ -67,6 +67,7 @@ public sealed class FullArtPreparationProcessorTests : IAsyncLifetime
             pixels.SetPixel(20, 20, [0, 0, 0]);
             pixels.SetPixel(79, 59, [0, 0, 0]);
             pixels.SetPixel(21, 39, [200, 0, 0]);
+            Fill(pixels, 35, 30, 5, 5, [0, 0, 200]);
             Fill(pixels, 45, 35, 10, 10, [0, 200, 0]);
             image.Write(source);
         }
@@ -75,6 +76,7 @@ public sealed class FullArtPreparationProcessorTests : IAsyncLifetime
 
         using var output = new MagickImage(target);
         AssertRgb(output, 1134, 1134, 0, 200, 0);
+        AssertRgb(output, 426, 710, 0, 0, 200);
         AssertRgb(output, 284, 1134, 255, 255, 255);
     }
 
