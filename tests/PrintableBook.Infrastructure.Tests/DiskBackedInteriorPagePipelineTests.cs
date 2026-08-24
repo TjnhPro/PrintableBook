@@ -197,7 +197,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ProcessAsync_never_applies_an_available_enabled_frame_to_cropart()
+    public async Task ProcessAsync_applies_an_available_enabled_frame_to_cropart()
     {
         Directory.CreateDirectory(rootPath);
         var source = await CreateArtworkSourceAsync("cropart-source.png");
@@ -223,7 +223,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
             Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "classification.json")));
         Assert.Equal((int)ArtworkType.CropArt, classification.RootElement.GetProperty("Type").GetInt32());
         using var framed = new MagickImage(framedPath);
-        Assert.Equal((byte)0, framed.GetPixels().GetPixel(0, 0)[0]);
+        Assert.Equal((byte)255, framed.GetPixels().GetPixel(0, 0)[0]);
     }
 
     [Fact]

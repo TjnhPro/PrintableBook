@@ -86,11 +86,12 @@ public sealed class DiskBackedInteriorPagePipeline(
                 preparedArtwork = PreparedArtwork.FromCached(prepared, classification.Type);
             }
 
-            var shouldApplyFrame = request.Frame is not null &&
-                File.Exists(request.Frame.Value) &&
-                request.FrameMode != FrameMode.Disabled &&
-                preparedArtwork.AutoFrameRecommended;
-            if (!await IsReadableAsync(framed, request.PreparedArtworkSize, cancellationToken) || !preparedArtwork.AutoFrameRecommended)
+            var shouldApplyFrame = ShouldApplyFrame(
+                request.Frame is not null && File.Exists(request.Frame.Value),
+                request.FrameMode,
+                preparedArtwork.AutoFrameRecommended);
+            if (!await IsReadableAsync(framed, request.PreparedArtworkSize, cancellationToken) ||
+                (!shouldApplyFrame && !HashesMatch(prepared, framed)))
             {
                 DeleteDownstream(working, finalPage);
                 currentStep = "frame";
@@ -222,6 +223,18 @@ public sealed class DiskBackedInteriorPagePipeline(
             File.Delete(file.Value);
         }
     }
+
+    private static bool ShouldApplyFrame(bool frameAvailable, FrameMode mode, bool autoFrameRecommended) =>
+        frameAvailable && (mode switch
+        {
+            FrameMode.Auto => autoFrameRecommended,
+            FrameMode.Enabled => true,
+            FrameMode.Disabled => false,
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported frame mode.")
+        });
+
+    private static bool HashesMatch(FileReference first, FileReference second) =>
+        File.ReadAllBytes(first.Value).AsSpan().SequenceEqual(File.ReadAllBytes(second.Value));
 
     private sealed record CacheInputStamp(
         string SourcePath,
