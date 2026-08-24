@@ -67,11 +67,12 @@ public sealed class DiskBackedInteriorPagePipeline(
                 await WriteClassificationAsync(classificationFile, classification, cancellationToken);
             }
 
+            PreparedArtwork preparedArtwork;
             if (!await IsReadableAsync(prepared, request.PreparedArtworkSize, cancellationToken))
             {
                 DeleteDownstream(framed, working, finalPage);
                 currentStep = "preparation";
-                await artworkPreparationService.PrepareAsync(new ArtworkPreparationRequest(
+                preparedArtwork = await artworkPreparationService.PrepareAsync(new ArtworkPreparationRequest(
                     request.Source,
                     prepared,
                     classification,
@@ -80,12 +81,16 @@ public sealed class DiskBackedInteriorPagePipeline(
                     request.TargetDensity), cancellationToken);
                 await EnsureSizeAsync(prepared, request.PreparedArtworkSize, "Prepared artwork", cancellationToken);
             }
+            else
+            {
+                preparedArtwork = PreparedArtwork.FromCached(prepared, classification.Type);
+            }
 
             var shouldApplyFrame = request.Frame is not null &&
                 File.Exists(request.Frame.Value) &&
                 request.IsFrameEnabled &&
-                classification.Type != ArtworkType.CropArt;
-            if (!await IsReadableAsync(framed, request.PreparedArtworkSize, cancellationToken) || classification.Type == ArtworkType.CropArt)
+                preparedArtwork.FrameAllowed;
+            if (!await IsReadableAsync(framed, request.PreparedArtworkSize, cancellationToken) || !preparedArtwork.FrameAllowed)
             {
                 DeleteDownstream(working, finalPage);
                 currentStep = "frame";
@@ -196,7 +201,7 @@ public sealed class DiskBackedInteriorPagePipeline(
         {
             throw;
         }
-        catch (Exception exception) when (exception is JsonException or ArgumentException or InvalidOperationException)
+        catch (Exception exception) when (exception is JsonException or IOException or ArgumentException or InvalidOperationException)
         {
             return null;
         }

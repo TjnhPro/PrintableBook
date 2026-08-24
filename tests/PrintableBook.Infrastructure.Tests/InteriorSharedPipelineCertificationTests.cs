@@ -58,15 +58,28 @@ public sealed class InteriorSharedPipelineCertificationTests : IAsyncLifetime
         var preparedHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(preparedPath)));
         var framedHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(framedPath)));
         using var framed = new MagickImage(framedPath);
+        using var prepared = new MagickImage(preparedPath);
         using var working = new MagickImage(Path.Combine(cache, "working-page.png"));
         using var final = new MagickImage(result.FinalPage.Value);
         if (frameApplied)
         {
             Assert.NotEqual(preparedHash, framedHash);
+            Assert.Equal((byte)255, framed.GetPixels().GetPixel(0, 0)[0]);
+            Assert.Equal(prepared.GetPixels().GetPixel(1135, 1135)[0], framed.GetPixels().GetPixel(1135, 1135)[0]);
         }
         else
         {
             Assert.Equal(preparedHash, framedHash);
+        }
+
+        if (expectedType == ArtworkType.BorderArt)
+        {
+            Assert.Equal((byte)255, prepared.GetPixels().GetPixel(0, 0)[0]);
+        }
+
+        if (expectedType == ArtworkType.FullArt)
+        {
+            AssertContainsBlue(prepared, 70, 70, 140, 140);
         }
 
         Assert.Equal((byte)255, working.GetPixels().GetPixel(139, 140)[0]);
@@ -106,6 +119,7 @@ public sealed class InteriorSharedPipelineCertificationTests : IAsyncLifetime
             case ArtworkType.FullArt:
                 Fill(pixels, 0, 80, 1, 60, [0, 0, 0]);
                 Fill(pixels, 80, 50, 100, 120, [0, 0, 0]);
+                Fill(pixels, 35, 55, 5, 5, [0, 0, 255]);
                 break;
             case ArtworkType.CropArt:
                 Fill(pixels, 90, 40, 50, 140, [0, 0, 0]);
@@ -163,6 +177,24 @@ public sealed class InteriorSharedPipelineCertificationTests : IAsyncLifetime
                 pixels.SetPixel(currentX, currentY, color);
             }
         }
+    }
+
+    private static void AssertContainsBlue(MagickImage image, int left, int top, int right, int bottom)
+    {
+        var pixels = image.GetPixels();
+        for (var y = top; y <= bottom; y++)
+        {
+            for (var x = left; x <= right; x++)
+            {
+                var pixel = pixels.GetPixel(x, y);
+                if (pixel[0] == 0 && pixel[1] == 0 && pixel[2] == byte.MaxValue)
+                {
+                    return;
+                }
+            }
+        }
+
+        throw new Xunit.Sdk.XunitException("Expected the FullArt trim/crop marker in the prepared output.");
     }
 
     public Task InitializeAsync() => Task.CompletedTask;

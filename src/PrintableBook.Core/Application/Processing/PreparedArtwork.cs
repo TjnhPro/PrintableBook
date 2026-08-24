@@ -8,4 +8,13 @@ namespace PrintableBook.Core.Application.Processing;
 public sealed record PreparedArtwork(
     FileReference File,
     ArtworkType Type,
-    bool FrameAllowed);
+    bool FrameAllowed)
+{
+    /// <summary>
+    /// Reconstructs the shared-stage policy for a previously prepared, cached artwork file.
+    /// </summary>
+    public static PreparedArtwork FromCached(FileReference file, ArtworkType type) => new(
+        file,
+        type,
+        type is ArtworkType.BorderArt or ArtworkType.FullArt);
+}

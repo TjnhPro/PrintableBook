@@ -18,12 +18,15 @@ public sealed class MagickFrameProcessorTests : IAsyncLifetime
         var target = Path.Combine(rootPath, "framed.png");
         using (var image = new MagickImage(MagickColors.White, 100, 100))
         {
+            image.GetPixels().SetPixel(1, 1, [0, 0, 0]);
             image.GetPixels().SetPixel(50, 50, [0, 0, 0]);
             image.Write(page);
         }
         using (var image = new MagickImage(MagickColors.Transparent, 100, 100))
         {
             image.GetPixels().SetPixel(0, 0, [255, 0, 0, 255]);
+            using var whiteFrameArea = new MagickImage(MagickColors.White, 1, 1);
+            image.Composite(whiteFrameArea, 1, 1, CompositeOperator.Over);
             image.Write(frame);
         }
 
@@ -37,6 +40,8 @@ public sealed class MagickFrameProcessorTests : IAsyncLifetime
         Assert.Equal(new ImageSize(100, 100), info.Size);
         using var output = new MagickImage(target);
         Assert.Equal((byte)255, output.GetPixels().GetPixel(0, 0)[0]);
+        Assert.Equal((byte)255, output.GetPixels().GetPixel(1, 1)[0]);
+        Assert.Equal((byte)255, output.GetPixels().GetPixel(1, 1)[1]);
         Assert.Equal((byte)0, output.GetPixels().GetPixel(50, 50)[0]);
     }
 
