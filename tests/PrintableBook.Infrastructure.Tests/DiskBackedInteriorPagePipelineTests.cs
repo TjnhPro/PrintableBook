@@ -130,11 +130,28 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         var pipeline = CreatePipeline();
         var completed = await pipeline.ProcessAsync(CreateRequest(workspace, goodSource, "page-01", new ImageSize(200, 200)));
 
-        await Assert.ThrowsAsync<InteriorPageProcessingException>(() => pipeline.ProcessAsync(
+        var failure = await Assert.ThrowsAsync<InteriorPageProcessingException>(() => pipeline.ProcessAsync(
             CreateRequest(workspace, failedSource, "page-02", new ImageSize(200, 200))).AsTask());
 
+        Assert.Equal("preparation", failure.Step);
         Assert.True(File.Exists(completed.FinalPage.Value));
         Assert.True(Directory.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-02")));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_propagates_cancellation_without_removing_the_page_workspace()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("cancelled-source.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("cancelled-book"), new DirectoryReference(Path.Combine(rootPath, "CancelledBook")));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => CreatePipeline().ProcessAsync(
+            CreateRequest(workspace, source, "page-01", new ImageSize(200, 200)), cancellation.Token).AsTask());
+
+        Assert.True(Directory.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01")));
     }
 
     [Fact]
