@@ -42,6 +42,8 @@ public sealed class MagickArtworkTrimProcessor : IArtworkTrimProcessor
         var maximumX = -1;
         var maximumY = -1;
         var pixels = image.GetPixels();
+        var rgba = pixels.ToByteArray(PixelMapping.RGBA)
+            ?? throw new InvalidDataException("Unable to read source raster pixels.");
 
         for (var y = 0; y < (int)image.Height; y++)
         {
@@ -49,8 +51,8 @@ public sealed class MagickArtworkTrimProcessor : IArtworkTrimProcessor
 
             for (var x = 0; x < (int)image.Width; x++)
             {
-                var pixel = pixels.GetPixel(x, y);
-                if (!IsNearBlack(pixel, threshold.Value))
+                var offset = checked(((y * (int)image.Width) + x) * 4);
+                if (!IsNearBlack(rgba, offset, threshold.Value))
                 {
                     continue;
                 }
@@ -69,6 +71,9 @@ public sealed class MagickArtworkTrimProcessor : IArtworkTrimProcessor
                 new ImageSize(maximumX - minimumX + 1, maximumY - minimumY + 1));
     }
 
-    private static bool IsNearBlack(IPixel<byte> pixel, byte threshold) =>
-        pixel[0] <= threshold && pixel[1] <= threshold && pixel[2] <= threshold;
+    private static bool IsNearBlack(byte[] rgba, int offset, byte threshold) =>
+        rgba[offset + 3] >= 128 &&
+        rgba[offset] <= threshold &&
+        rgba[offset + 1] <= threshold &&
+        rgba[offset + 2] <= threshold;
 }

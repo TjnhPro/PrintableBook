@@ -53,6 +53,36 @@ public sealed class MagickArtworkTrimProcessorTests : IAsyncLifetime
         Assert.False(File.Exists(target));
     }
 
+    [Fact]
+    public async Task TrimAsync_ignores_fully_transparent_pixels_when_finding_artwork_bounds()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = Path.Combine(rootPath, "transparent.png");
+        var target = Path.Combine(rootPath, "trimmed.png");
+        using (var image = new MagickImage(MagickColors.White, 20, 20))
+        {
+            image.Alpha(AlphaOption.On);
+            for (var y = 0; y < 20; y++)
+            {
+                for (var x = 0; x < 20; x++)
+                {
+                    image.GetPixels().SetPixel(x, y, [255, 255, 255, 0]);
+                }
+            }
+            image.GetPixels().SetPixel(5, 5, [0, 0, 0, 255]);
+            image.GetPixels().SetPixel(14, 14, [0, 0, 0, 255]);
+            image.Write(source);
+        }
+
+        var result = await new MagickArtworkTrimProcessor().TrimAsync(new ArtworkTrimRequest(
+            new FileReference(source),
+            new FileReference(target),
+            new ArtworkDetectionThreshold(20)));
+
+        Assert.True(result.HasArtwork);
+        Assert.Equal(new ImageRectangle(new ImagePoint(5, 5), new ImageSize(10, 10)), result.ArtworkBounds);
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
 
     public Task DisposeAsync()
