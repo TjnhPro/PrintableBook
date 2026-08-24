@@ -131,6 +131,61 @@ public sealed class BridgeMessageContractTests
         Assert.Equal(("Book One", "cover-a.png"), selection.LastSelection);
     }
 
+    [Theory]
+    [InlineData("auto", FrameMode.Auto)]
+    [InlineData("enabled", FrameMode.Enabled)]
+    [InlineData("disabled", FrameMode.Disabled)]
+    public async Task InteriorFrameModeSelectionUsesTheCSharpOwner(string mode, FrameMode expectedMode)
+    {
+        var selection = new StubInteriorFrameModeService();
+        var snapshot = CreateSnapshot();
+        var router = new WebViewBridgeRouter(
+            new StubSnapshotService(snapshot),
+            interiorFrameModeService: selection);
+
+        var response = await router.HandleAsync($"{{\"version\":1,\"id\":\"request-frame-mode\",\"command\":\"book.interior.frame-mode.set\",\"payload\":{{\"bookId\":\"Book One\",\"sourceReference\":\"Book interior/page-001.png\",\"mode\":\"{mode}\"}}}}");
+
+        Assert.True(response.Ok);
+        Assert.Equal("app.snapshot", response.Command);
+        Assert.Same(snapshot, response.Payload);
+        Assert.Equal(("Book One", "Book interior/page-001.png", expectedMode), selection.LastSelection);
+    }
+
+    [Theory]
+    [InlineData("unknown")]
+    [InlineData("")]
+    public async Task InteriorFrameModeSelectionRejectsInvalidModes(string mode)
+    {
+        var response = await new WebViewBridgeRouter(new StubSnapshotService(CreateSnapshot()), interiorFrameModeService: new StubInteriorFrameModeService())
+            .HandleAsync($"{{\"version\":1,\"id\":\"request-invalid-frame-mode\",\"command\":\"book.interior.frame-mode.set\",\"payload\":{{\"bookId\":\"Book One\",\"sourceReference\":\"Book interior/page-001.png\",\"mode\":\"{mode}\"}}}}");
+
+        Assert.False(response.Ok);
+        Assert.Equal("invalid_interior_frame_mode", response.Error);
+    }
+
+    [Fact]
+    public async Task InteriorFrameModeSelectionRejectsMissingSourceReference()
+    {
+        var response = await new WebViewBridgeRouter(new StubSnapshotService(CreateSnapshot()), interiorFrameModeService: new StubInteriorFrameModeService())
+            .HandleAsync("""{"version":1,"id":"request-missing-source","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","mode":"auto"}}""");
+
+        Assert.False(response.Ok);
+        Assert.Equal("invalid_interior_frame_mode", response.Error);
+    }
+
+    [Fact]
+    public async Task InteriorFrameModeSelectionMapsUnexpectedServiceFailure()
+    {
+        var router = new WebViewBridgeRouter(
+            new StubSnapshotService(CreateSnapshot()),
+            interiorFrameModeService: new ThrowingInteriorFrameModeService());
+
+        var response = await router.HandleAsync("""{"version":1,"id":"request-frame-failure","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png","mode":"auto"}}""");
+
+        Assert.False(response.Ok);
+        Assert.Equal("book_interior_frame-mode_set_failed: The workspace state is unavailable.", response.Error);
+    }
+
     [Fact]
     public async Task ProcessStatusIsProvidedByTheCSharpSessionOwner()
     {
@@ -200,4 +255,27 @@ public sealed class BridgeMessageContractTests
             return ValueTask.CompletedTask;
         }
     }
+
+    private sealed class StubInteriorFrameModeService : IInteriorFrameModeService
+    {
+        public (string BookId, string SourceReference, FrameMode Mode)? LastSelection { get; private set; }
+
+        public ValueTask SetAsync(string bookId, string sourceReference, FrameMode mode, CancellationToken cancellationToken = default)
+        {
+            LastSelection = (bookId, sourceReference, mode);
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class ThrowingInteriorFrameModeService : IInteriorFrameModeService
+    {
+        public ValueTask SetAsync(string bookId, string sourceReference, FrameMode mode, CancellationToken cancellationToken = default) =>
+            ValueTask.FromException(new InvalidDataException("The workspace state is unavailable."));
+    }
+
+    private static ApplicationSnapshot CreateSnapshot() => new(
+        new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [], []),
+        GlobalSettings.Default,
+        [],
+        DateTimeOffset.UnixEpoch);
 }

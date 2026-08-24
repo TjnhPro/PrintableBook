@@ -14,7 +14,8 @@ internal sealed class WebViewBridgeRouter(
     IProcessSessionService? processSessionService = null,
     IApplicationRootDiscovery? rootDiscovery = null,
     IBrandSettingsStore? brandSettingsStore = null,
-    IBookCoverSelectionService? coverSelectionService = null)
+    IBookCoverSelectionService? coverSelectionService = null,
+    IInteriorFrameModeService? interiorFrameModeService = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -68,6 +69,27 @@ internal sealed class WebViewBridgeRouter(
                 catch (ArgumentException)
                 {
                     return new BridgeResponse(Version, request.Id, false, null, "invalid_cover_selection");
+                }
+            }
+
+            if (request.Command == "book.interior.frame-mode.set")
+            {
+                if (snapshotService is null || interiorFrameModeService is null || request.Payload is not { } frameModePayload ||
+                    !frameModePayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
+                    !frameModePayload.TryGetProperty("sourceReference", out var sourceElement) || string.IsNullOrWhiteSpace(sourceElement.GetString()) ||
+                    !frameModePayload.TryGetProperty("mode", out var modeElement) || !TryParseFrameMode(modeElement, out var mode))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_interior_frame_mode");
+                }
+
+                try
+                {
+                    await interiorFrameModeService.SetAsync(bookIdElement.GetString()!, sourceElement.GetString()!, mode, cancellationToken);
+                    return BridgeResponse.Succeeded(request.Id, "app.snapshot", await snapshotService.RefreshAsync(cancellationToken));
+                }
+                catch (ArgumentException)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_interior_frame_mode");
                 }
             }
 
@@ -165,7 +187,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "book.validate" or "book.cover.select" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 
@@ -186,6 +208,20 @@ internal sealed class WebViewBridgeRouter(
         {
             return false;
         }
+    }
+
+    private static bool TryParseFrameMode(JsonElement value, out FrameMode mode)
+    {
+        mode = value.ValueKind is JsonValueKind.String
+            ? value.GetString() switch
+            {
+                "auto" => FrameMode.Auto,
+                "enabled" => FrameMode.Enabled,
+                "disabled" => FrameMode.Disabled,
+                _ => default
+            }
+            : default;
+        return value.ValueKind is JsonValueKind.String && value.GetString() is "auto" or "enabled" or "disabled";
     }
 
     private static async ValueTask<ProcessSessionSnapshot> StartProcessAsync(BridgeRequest request, IProcessSessionService sessionService, CancellationToken cancellationToken)
