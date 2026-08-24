@@ -5,7 +5,7 @@ Interior Processing is owned by `IProcessSessionService`, not by the WPF UI or W
 ```text
 WebView process.start
   -> IProcessSessionService.StartAsync
-  -> immutable queue snapshot + linked session cancellation source
+  -> immutable queue snapshot + session cancellation source
   -> Task.Run(ExecuteAsync)
   -> IPrintableBookApplication.ProcessBooksAsync
   -> terminal session snapshot + cancellation cleanup
