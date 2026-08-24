@@ -80,6 +80,7 @@ public sealed class ProcessSessionServiceTests
         Assert.True(cancelling.IsActive);
         Assert.True(cancelling.IsCancelling);
         Assert.Equal("Cancelling", cancelling.CurrentStep);
+        Assert.True(application.LastCancellationToken.IsCancellationRequested);
         await WaitUntilAsync(async () => !(await service.GetAsync()).IsActive);
         Assert.Equal("Cancelled", (await service.GetAsync()).CurrentStep);
     }
@@ -191,6 +192,7 @@ public sealed class ProcessSessionServiceTests
     private sealed class RecordingPrintableBookApplication(bool observesCancellation = true) : IPrintableBookApplication
     {
         public SynchronizationContext? ExecutionContext { get; private set; }
+        public CancellationToken LastCancellationToken { get; private set; }
         public int InvocationCount { get; private set; }
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -201,6 +203,7 @@ public sealed class ProcessSessionServiceTests
         {
             InvocationCount++;
             ExecutionContext = SynchronizationContext.Current;
+            LastCancellationToken = cancellationToken;
             Started.TrySetResult();
             await Release.Task.WaitAsync(observesCancellation ? cancellationToken : CancellationToken.None);
             return new BookProcessingQueueResult(false, request.Books.Select(book => BookProcessingQueueBookResult.Completed(book.BookId, null)).ToArray());
