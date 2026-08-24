@@ -47,7 +47,7 @@ public sealed class InteriorSharedPipelineCertificationTests : IAsyncLifetime
 
         var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
         using var classification = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(cache, "classification.json")));
-        Assert.Equal((int)expectedType, classification.RootElement.GetProperty("Type").GetInt32());
+        Assert.Equal(expectedType.ToString().ToLowerInvariant(), classification.RootElement.GetProperty("Type").GetString());
         await AssertSizeAsync(Path.Combine(cache, "prepared.png"), PreparedSize);
         await AssertSizeAsync(Path.Combine(cache, "framed.png"), PreparedSize);
         await AssertSizeAsync(Path.Combine(cache, "working-page.png"), WorkingSize);

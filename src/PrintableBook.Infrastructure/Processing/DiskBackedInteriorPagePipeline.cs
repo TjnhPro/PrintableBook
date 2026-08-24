@@ -417,13 +417,13 @@ public sealed class DiskBackedInteriorPagePipeline(
 
     private sealed record ClassificationCacheEntry(
         string Version,
-        ArtworkType Type,
+        string Type,
         BorderLineCacheEntry BorderLine,
         BorderPixelCacheEntry? BorderPixel)
     {
         public static ClassificationCacheEntry From(ArtworkClassificationResult result) => new(
             ClassificationAlgorithmVersion.Current,
-            result.Type,
+            ToCanonicalType(result.Type),
             BorderLineCacheEntry.From(result.BorderLine),
             result.BorderPixel is null ? null : BorderPixelCacheEntry.From(result.BorderPixel));
 
@@ -434,8 +434,24 @@ public sealed class DiskBackedInteriorPagePipeline(
                 throw new InvalidOperationException("Cached classification uses an incompatible algorithm version.");
             }
 
-            return new ArtworkClassificationResult(Type, BorderLine.ToResult(), BorderPixel?.ToResult());
+            return new ArtworkClassificationResult(FromCanonicalType(Type), BorderLine.ToResult(), BorderPixel?.ToResult());
         }
+
+        private static string ToCanonicalType(ArtworkType type) => type switch
+        {
+            ArtworkType.BorderArt => "borderart",
+            ArtworkType.FullArt => "fullart",
+            ArtworkType.CropArt => "cropart",
+            _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unsupported artwork type.")
+        };
+
+        private static ArtworkType FromCanonicalType(string type) => type switch
+        {
+            "borderart" => ArtworkType.BorderArt,
+            "fullart" => ArtworkType.FullArt,
+            "cropart" => ArtworkType.CropArt,
+            _ => throw new InvalidOperationException("Cached classification has an unknown artwork type.")
+        };
     }
 
     private sealed record BorderLineCacheEntry(bool HasBorder, int? Left, int? Right, int? Top, int? Bottom)

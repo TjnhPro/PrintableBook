@@ -175,6 +175,36 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         Assert.Equal(ClassificationAlgorithmVersion.Current, document.RootElement.GetProperty("Version").GetString());
     }
 
+    [Theory]
+    [InlineData("unknown")]
+    [InlineData(2)]
+    public async Task ProcessAsync_reclassifies_when_cached_classification_type_is_not_canonical(object staleType)
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("stale-type-source.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("stale-type-book"), new DirectoryReference(Path.Combine(rootPath, "StaleTypeBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200));
+        var pipeline = CreatePipeline();
+
+        var completed = await pipeline.ProcessAsync(request);
+        var classification = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "classification.json");
+        using var original = JsonDocument.Parse(await File.ReadAllTextAsync(classification));
+        await File.WriteAllTextAsync(classification, JsonSerializer.Serialize(new
+        {
+            Version = original.RootElement.GetProperty("Version").GetString(),
+            Type = staleType,
+            BorderLine = original.RootElement.GetProperty("BorderLine"),
+            BorderPixel = original.RootElement.GetProperty("BorderPixel")
+        }));
+        File.Delete(completed.FinalPage.Value);
+
+        await pipeline.ProcessAsync(request);
+
+        using var regenerated = JsonDocument.Parse(await File.ReadAllTextAsync(classification));
+        Assert.Equal("cropart", regenerated.RootElement.GetProperty("Type").GetString());
+    }
+
     [Fact]
     public async Task ProcessAsync_regenerates_a_corrupt_prepared_artwork_and_downstream_pages()
     {
@@ -221,7 +251,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
 
         var classification = JsonDocument.Parse(await File.ReadAllTextAsync(
             Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "classification.json")));
-        Assert.Equal((int)ArtworkType.CropArt, classification.RootElement.GetProperty("Type").GetInt32());
+        Assert.Equal("cropart", classification.RootElement.GetProperty("Type").GetString());
         using var framed = new MagickImage(framedPath);
         Assert.Equal((byte)255, framed.GetPixels().GetPixel(0, 0)[0]);
     }
