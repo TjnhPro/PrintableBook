@@ -176,8 +176,6 @@ public sealed class ProcessSessionService(
             {
                 snapshot = new ProcessSessionSnapshot(false, false, brandName, null, null,
                     result.Books.Select(book => new ProcessQueueEntry(book.BookId, book.Status, book.Failure?.Message)).ToArray());
-                cancellation?.Dispose();
-                cancellation = null;
             }
         }
         catch (OperationCanceledException)
@@ -193,17 +191,22 @@ public sealed class ProcessSessionService(
                         ? entry with { Status = BookProcessingStatus.Cancelled, Detail = "Cancelled" }
                         : entry).ToArray()
                 };
-                cancellation?.Dispose();
-                cancellation = null;
             }
         }
         catch (Exception exception)
         {
             lock (sync)
             {
-                snapshot = snapshot with { IsActive = false, IsCancelling = false, CurrentStep = "Failed", Queue = snapshot.Queue.Select(entry => entry.Status == BookProcessingStatus.NotStarted ? entry with { Status = BookProcessingStatus.Failed, Detail = exception.Message } : entry).ToArray() };
+                snapshot = snapshot with { IsActive = false, IsCancelling = false, CurrentStep = "Failed", Queue = snapshot.Queue.Select(entry => entry.Status == BookProcessingStatus.Running ? entry with { Status = BookProcessingStatus.Failed, Detail = exception.Message } : entry).ToArray() };
+            }
+        }
+        finally
+        {
+            lock (sync)
+            {
                 cancellation?.Dispose();
                 cancellation = null;
+                executionTask = null;
             }
         }
     }

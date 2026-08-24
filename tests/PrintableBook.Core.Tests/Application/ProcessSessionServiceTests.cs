@@ -101,6 +101,25 @@ public sealed class ProcessSessionServiceTests
         Assert.True(await service.StopAndWaitAsync(TimeSpan.FromSeconds(2)));
     }
 
+    [Fact]
+    public async Task StartAsync_allows_a_new_session_after_terminal_cleanup()
+    {
+        var application = new RecordingPrintableBookApplication();
+        var service = new ProcessSessionService(
+            new StaticSnapshotService(CreateSnapshot()),
+            application,
+            new NullBrandFrameResolver());
+        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
+        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        application.Release.TrySetResult();
+        await WaitUntilAsync(async () => !(await service.GetAsync()).IsActive);
+
+        var restarted = await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
+
+        Assert.True(restarted.IsActive);
+        await WaitUntilAsync(() => ValueTask.FromResult(application.InvocationCount == 2));
+    }
+
     private static ApplicationSnapshot CreateSnapshot()
     {
         var bookId = new BookId("book-one");
