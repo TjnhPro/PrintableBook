@@ -1,6 +1,7 @@
 using System.Text.Json;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
+using PrintableBook.Core.Application.Processing;
 
 namespace PrintableBook.Desktop.Bridge;
 
@@ -206,6 +207,14 @@ internal sealed class WebViewBridgeRouter(
         var brandName = payload.TryGetProperty("brandName", out var brandElement) && brandElement.ValueKind == JsonValueKind.String
             ? brandElement.GetString()
             : null;
-        return await sessionService.StartAsync(bookIds, brandName, cancellationToken);
+        var mode = payload.TryGetProperty("mode", out var modeElement) && modeElement.ValueKind == JsonValueKind.String
+            ? modeElement.GetString() switch
+            {
+                "interior-only" => BookProcessingMode.InteriorOnly,
+                "full-book" => BookProcessingMode.FullBook,
+                _ => throw new ArgumentException("The requested processing mode is not supported.")
+            }
+            : throw new ArgumentException("A process start request requires a processing mode.");
+        return await sessionService.StartAsync(bookIds, brandName, mode, cancellationToken);
     }
 }

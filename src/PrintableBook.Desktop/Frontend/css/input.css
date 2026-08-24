@@ -61,6 +61,7 @@
   .check-list { @apply mt-3 grid gap-2 text-sm; }
   .check-list li { @apply flex gap-2; }
   .check-list .success { @apply text-emerald-700; }
+  .check-list .warning { @apply text-amber-700; }
   .check-list .failure { @apply text-rose-700; }
   .check-list span { @apply text-slate-700; }
   .panel-note { @apply mt-2 text-sm text-slate-500; }

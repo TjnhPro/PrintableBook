@@ -102,6 +102,7 @@ test("phase 4 page markup includes durable process, output, diagnostics, and bri
   assert.match(script, /command: "brand\.settings\.save"/);
   assert.match(script, /command: "book\.validate"/);
   assert.match(script, /command: "process\.start"/);
+  assert.match(script, /mode: "interior-only"/);
   assert.match(script, /command: "process\.cancel"/);
   assert.match(script, /command: "app\.refresh"/);
 });

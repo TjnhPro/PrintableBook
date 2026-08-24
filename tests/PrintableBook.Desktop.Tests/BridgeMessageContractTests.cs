@@ -2,6 +2,7 @@ using PrintableBook.Desktop.Bridge;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
+using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 
@@ -143,6 +144,19 @@ public sealed class BridgeMessageContractTests
         Assert.Same(session, response.Payload);
     }
 
+    [Fact]
+    public async Task ProcessStartRoutesTheExplicitInteriorOnlyModeToTheSessionOwner()
+    {
+        var id = new BookId("Book One");
+        var session = new StubProcessSessionService(new ProcessSessionSnapshot(false, false, "Amazon", id, null, []));
+
+        var response = await new WebViewBridgeRouter(processSessionService: session)
+            .HandleAsync("""{"version":1,"id":"request-interior-only","command":"process.start","payload":{"bookIds":["Book One"],"brandName":"Amazon","mode":"interior-only"}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal(BookProcessingMode.InteriorOnly, session.LastMode);
+    }
+
     private sealed class StubSnapshotService(ApplicationSnapshot snapshot) : IApplicationSnapshotService
     {
         public ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
@@ -167,8 +181,13 @@ public sealed class BridgeMessageContractTests
 
     private sealed class StubProcessSessionService(ProcessSessionSnapshot snapshot) : IProcessSessionService
     {
+        public BookProcessingMode? LastMode { get; private set; }
         public ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
-        public ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
+        public ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default)
+        {
+            LastMode = mode;
+            return ValueTask.FromResult(snapshot);
+        }
         public ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
     }
 

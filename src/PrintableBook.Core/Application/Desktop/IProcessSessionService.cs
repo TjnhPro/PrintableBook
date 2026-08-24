@@ -13,7 +13,7 @@ public sealed record ProcessSessionSnapshot(bool IsActive, bool IsCancelling, st
 public interface IProcessSessionService
 {
     ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default);
-    ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, CancellationToken cancellationToken = default);
+    ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default);
     ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default);
 }
 
@@ -45,7 +45,7 @@ public sealed class ProcessSessionService(
         }
     }
 
-    public async ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, CancellationToken cancellationToken = default)
+    public async ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(bookIds);
         if (bookIds.Count == 0) throw new ArgumentException("Select at least one Book before starting processing.", nameof(bookIds));
@@ -74,7 +74,7 @@ public sealed class ProcessSessionService(
             snapshot = new ProcessSessionSnapshot(true, false, brandName, selected[0].Id, "Preparing", selected.Select((book, index) => new ProcessQueueEntry(book.Id, index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Preparing" : "Waiting")).ToArray(), 0, 0, applicationSnapshot.GlobalSettings.MaximumPageConcurrency);
         }
 
-        _ = ExecuteAsync(applicationSnapshot, selected, brandName, cancellation.Token);
+        _ = ExecuteAsync(applicationSnapshot, selected, brandName, mode, cancellation.Token);
         return await GetAsync(cancellationToken);
     }
 
@@ -90,7 +90,7 @@ public sealed class ProcessSessionService(
         }
     }
 
-    private async Task ExecuteAsync(ApplicationSnapshot applicationSnapshot, IReadOnlyList<DiscoveredBook> books, string? brandName, CancellationToken cancellationToken)
+    private async Task ExecuteAsync(ApplicationSnapshot applicationSnapshot, IReadOnlyList<DiscoveredBook> books, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken)
     {
         try
         {
@@ -121,7 +121,8 @@ public sealed class ProcessSessionService(
                 frame,
                 frame is not null,
                 null,
-                string.IsNullOrWhiteSpace(summaries[book.Id.Value].SelectedCoverReference) ? null : new FileReference(summaries[book.Id.Value].SelectedCoverReference!))).ToArray());
+                string.IsNullOrWhiteSpace(summaries[book.Id.Value].SelectedCoverReference) ? null : new FileReference(summaries[book.Id.Value].SelectedCoverReference!),
+                mode)).ToArray());
 
             lock (sync) snapshot = snapshot with { CurrentStep = "Processing" };
             var result = await application.ProcessBooksAsync(request, cancellationToken);
