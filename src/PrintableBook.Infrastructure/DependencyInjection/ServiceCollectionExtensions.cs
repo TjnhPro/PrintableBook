@@ -24,6 +24,7 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         services.AddSingleton<IFileSystem, PhysicalFileSystem>();
         services.AddSingleton<IApplicationRootDiscovery, PhysicalApplicationRootDiscovery>();
+        services.AddSingleton<IBrandFrameResolver, PhysicalBrandFrameResolver>();
         services.AddSingleton<IGlobalSettingsStore, JsonGlobalSettingsStore>();
         services.AddSingleton<IBrandSettingsStore, JsonBrandSettingsStore>();
         services.AddSingleton<IImageInspector, MagickImageInspector>();

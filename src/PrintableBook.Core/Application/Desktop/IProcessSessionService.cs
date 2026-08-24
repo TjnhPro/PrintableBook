@@ -20,8 +20,7 @@ public interface IProcessSessionService
 public sealed class ProcessSessionService(
     IApplicationSnapshotService snapshotService,
     IPrintableBookApplication application,
-    IFileSystem fileSystem,
-    IImageInspector imageInspector) : IProcessSessionService
+    IBrandFrameResolver brandFrameResolver) : IProcessSessionService
 {
     private readonly Lock sync = new();
     private ProcessSessionSnapshot snapshot = new(false, false, null, null, null, []);
@@ -102,12 +101,10 @@ public sealed class ProcessSessionService(
                 var brand = applicationSnapshot.Discovery.Brands.FirstOrDefault(item => string.Equals(item.Name, brandName, StringComparison.Ordinal));
                 if (brand is not null)
                 {
-                    var candidate = new FileReference(Path.Combine(brand.Directory.Value, "frame.png"));
-                    if (await fileSystem.FileExistsAsync(candidate, cancellationToken) &&
-                        await IsCompatibleFrameAsync(candidate, applicationSnapshot.GlobalSettings, cancellationToken))
-                    {
-                        frame = candidate;
-                    }
+                    frame = await brandFrameResolver.ResolveCompatibleFrameAsync(
+                        brand,
+                        new ImageSize(applicationSnapshot.GlobalSettings.FinalPageWidth, applicationSnapshot.GlobalSettings.FinalPageHeight),
+                        cancellationToken);
                 }
             }
 
@@ -167,19 +164,4 @@ public sealed class ProcessSessionService(
         }
     }
 
-    private async ValueTask<bool> IsCompatibleFrameAsync(FileReference candidate, GlobalSettings settings, CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await imageInspector.GetSizeAsync(candidate, cancellationToken) == new ImageSize(settings.FinalPageWidth, settings.FinalPageHeight);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch
-        {
-            return false;
-        }
-    }
 }
