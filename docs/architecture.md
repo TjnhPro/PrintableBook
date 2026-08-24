@@ -61,7 +61,7 @@ Frontend code remains presentation-only and contains no processing/business calc
 
 ## Testing policy
 
-Mocks and fakes are allowed for pipeline orchestration or boundary tests. They do not prove an image/PDF implementation correct. Repository-owned integration tests must use a small, deterministic, redistributable real PNG/PDF input; open and inspect the actual output for its relevant dimensions, page count, content properties, or metadata. The `Infrastructure.Tests/TestData` directory is reserved for those fixtures and is required by CI.
+Mocks and fakes are allowed for pipeline orchestration or boundary tests. They do not prove an image/PDF implementation correct. Repository-owned integration tests must use a small, deterministic, redistributable real PNG/PDF input; open and inspect the actual output for its relevant dimensions, page count, content properties, or metadata. The `Infrastructure.Tests/TestData` directory is reserved for checked-in fixtures and is required by CI. A test may generate a compact deterministic raster input when pixel-level geometry is the behaviour under test; it remains repository-owned and must not depend on user files or network data.
 
 User-supplied image corpora are a separate `TestScope=LocalCorpus`. They live under ignored `TestResults/` paths, require explicit local opt-in, and must be excluded from CI. A clean checkout can only run repository-owned tests.
 
