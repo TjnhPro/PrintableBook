@@ -13,6 +13,7 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddSingleton<IProcessingSessionGate, ProcessingSessionGate>();
+        services.AddSingleton<IArtworkClassifier, ArtworkClassifier>();
         services.AddSingleton<IApplicationSnapshotService, ApplicationSnapshotService>();
         services.AddSingleton<IBookCoverSelectionService, BookCoverSelectionService>();
         services.AddSingleton<IProcessSessionService, ProcessSessionService>();
