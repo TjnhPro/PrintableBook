@@ -6,7 +6,7 @@ using PrintableBook.Core.Domain.Processing;
 
 namespace PrintableBook.Core.Application.Desktop;
 
-public sealed record BookValidationCheck(string Code, string Message, bool IsSuccess);
+public sealed record BookValidationCheck(string Code, string Message, bool IsSuccess, bool IsWarning = false);
 public sealed record InteriorPageSummary(string PageId, string Status, string FinalPagePath);
 public sealed record BookFolderSummary(string Name, string Status, int FileCount, int ImageCount);
 public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null);
@@ -47,20 +47,29 @@ public sealed class ApplicationSnapshotService(
             var checks = new List<BookValidationCheck>();
             if (scan.IsSuccess)
             {
-                checks.Add(new BookValidationCheck("book.source_ready", "Cover and Interior source images were discovered.", true));
+                checks.Add(new BookValidationCheck("book.interior_ready", "Interior source images were discovered.", true));
             }
             else
             {
                 checks.Add(new BookValidationCheck(scan.Failure!.Code, scan.Failure.Message, false));
             }
-            if (coverCandidates.Length > 1)
+            if (coverCandidates.Length == 0)
             {
                 checks.Add(new BookValidationCheck(
-                    "book.cover_selection_required",
-                    hasSelectedCover ? "A cover candidate was selected." : "Select one cover candidate before processing.",
-                    hasSelectedCover));
+                    "book.cover_skipped",
+                    "Cover is unavailable and will be skipped for Interior-only processing.",
+                    true,
+                    true));
             }
-            var isReady = scan.IsSuccess && hasSelectedCover;
+            else if (coverCandidates.Length > 1)
+            {
+                checks.Add(new BookValidationCheck(
+                    "book.cover_selection_optional",
+                    hasSelectedCover ? "A cover candidate was selected." : "Cover selection is not required for Interior-only processing.",
+                    true,
+                    true));
+            }
+            var isReady = scan.IsSuccess;
             summaries.Add(new BookDesktopSummary(
                 book.Id,
                 isReady ? "Ready" : scan.IsSuccess ? "Needs selection" : "Invalid",

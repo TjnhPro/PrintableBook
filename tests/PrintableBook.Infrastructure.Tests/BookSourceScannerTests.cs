@@ -69,14 +69,15 @@ public sealed class BookSourceScannerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ScanAsync_returns_a_structured_failure_when_cover_is_missing()
+    public async Task ScanAsync_accepts_an_interior_only_book_when_cover_is_missing()
     {
         await CreateFileAsync("Interior", "page-01.png");
 
         var result = await CreateScanner().ScanAsync(new BookId("book-one"), new DirectoryReference(rootPath));
 
-        Assert.False(result.IsSuccess);
-        Assert.Equal("book.cover_missing", result.Failure!.Code);
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Source!.GetAssets(BookAssetKind.Cover));
+        Assert.Single(result.Source.GetAssets(BookAssetKind.Interior));
     }
 
     [Fact]

@@ -41,11 +41,6 @@ public sealed class BookSourceScanner(IFileSystem fileSystem) : IBookSourceScann
         }
 
         var source = new BookSource(assets.OrderBy(asset => asset.Reference, StringComparer.OrdinalIgnoreCase));
-        if (source.GetAssets(BookAssetKind.Cover).Count == 0)
-        {
-            return BookSourceScanResult.Failed(new ProcessingFailure("book.cover_missing", "The book does not contain a readable cover image."), source);
-        }
-
         if (source.GetAssets(BookAssetKind.Interior).Count == 0)
         {
             return BookSourceScanResult.Failed(new ProcessingFailure("book.interior_empty", "The book does not contain any readable interior images."), source);

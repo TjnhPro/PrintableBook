@@ -25,14 +25,24 @@ public sealed class ApplicationSnapshotServiceTests
     }
 
     [Fact]
-    public async Task RefreshAsync_requires_an_explicit_cover_selection_when_multiple_candidates_exist()
+    public async Task RefreshAsync_allows_multiple_cover_candidates_for_interior_only_processing()
     {
         var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new MultipleCoverScanner(), new StubStateStore(), new StubFileSystem()).RefreshAsync();
 
         var summary = Assert.Single(snapshot.BookSummaries);
-        Assert.Equal("Needs selection", summary.ValidationStatus);
+        Assert.Equal("Ready", summary.ValidationStatus);
         Assert.Equal(["cover-a.png", "cover-b.png"], summary.CoverCandidates);
-        Assert.Contains(summary.ValidationChecks, check => check.Code == "book.cover_selection_required" && !check.IsSuccess);
+        Assert.Contains(summary.ValidationChecks, check => check.Code == "book.cover_selection_optional" && check.IsSuccess && check.IsWarning);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_marks_an_interior_only_book_ready_and_reports_missing_cover_as_a_warning()
+    {
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new InteriorOnlyScanner(), new StubStateStore(), new StubFileSystem()).RefreshAsync();
+
+        var summary = Assert.Single(snapshot.BookSummaries);
+        Assert.Equal("Ready", summary.ValidationStatus);
+        Assert.Contains(summary.ValidationChecks, check => check.Code == "book.cover_skipped" && check.IsSuccess && check.IsWarning);
     }
 
     private sealed class StubDiscovery : IApplicationRootDiscovery
@@ -79,6 +89,13 @@ public sealed class ApplicationSnapshotServiceTests
             ValueTask.FromResult(BookSourceScanResult.Succeeded(new BookSource([
                 new BookAsset("cover-a.png", BookAssetKind.Cover),
                 new BookAsset("cover-b.png", BookAssetKind.Cover),
+                new BookAsset("page-1.jpg", BookAssetKind.Interior)])));
+    }
+
+    private sealed class InteriorOnlyScanner : IBookSourceScanner
+    {
+        public ValueTask<BookSourceScanResult> ScanAsync(BookId bookId, DirectoryReference bookDirectory, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(BookSourceScanResult.Succeeded(new BookSource([
                 new BookAsset("page-1.jpg", BookAssetKind.Interior)])));
     }
 
