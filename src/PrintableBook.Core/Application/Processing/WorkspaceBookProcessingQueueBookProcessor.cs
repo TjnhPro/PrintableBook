@@ -207,7 +207,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             command.CoverPdfPageSize.WidthInches, command.CoverPdfPageSize.HeightInches,
             command.InteriorPdfPageSize.WidthInches, command.InteriorPdfPageSize.HeightInches,
             command.MaximumPageConcurrency, command.ArtworkDetectionThreshold.Value,
-            command.Frame?.Value, command.IsFrameEnabled);
+            command.Frame?.Value, command.IsFrameEnabled, command.Mode);
 
     private static BookAsset SelectCover(BookSource source, FileReference? selectedCover)
     {

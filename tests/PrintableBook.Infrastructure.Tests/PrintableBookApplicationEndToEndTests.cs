@@ -178,6 +178,48 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessBooksAsync_rejects_a_coverless_book_in_full_book_mode()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "CoverlessFullBook"));
+        await CreateInteriorOnlyBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem),
+            workspaceFactory,
+            stateStore,
+            new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem),
+            new DiskBackedInteriorPagePipeline(
+                new MagickArtworkTrimProcessor(),
+                new MagickSquareCanvasProcessor(),
+                new MagickArtworkResizeProcessor(),
+                new MagickFrameProcessor(),
+                new MagickFinalInteriorPageProcessor(),
+                new MagickImageInspector()),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new MagickPrintableBookPdfExporter(),
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+        var application = new PrintableBookApplication(
+            new BookProcessingPipeline(Array.Empty<IBookProcessingStage>()),
+            new BookProcessingQueueProcessor(new ProcessingSessionGate(), processor));
+        var command = CreateCommand("coverless-full-book", bookDirectory);
+
+        var result = await application.ProcessBooksAsync(new BookProcessingQueueRequest([command]));
+
+        var bookResult = Assert.Single(result.Books);
+        Assert.Equal(BookProcessingStatus.Failed, bookResult.Status);
+        Assert.Equal("book.cover_selection_required", bookResult.Failure!.Code);
+        Assert.Null(bookResult.PublishedOutputs);
+        Assert.Null(bookResult.PublishedInteriorOutput);
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        var state = await stateStore.LoadAsync(workspace);
+        Assert.Equal(BookProcessingStatus.Failed, state!.Status);
+        Assert.Contains(BookProcessingMode.FullBook.ToString(), state.ConfigurationFingerprint);
+    }
+
+    [Fact]
     public async Task ProcessBookAsync_persists_the_active_interior_step_while_the_page_pipeline_is_running()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "InterruptedBook"));
