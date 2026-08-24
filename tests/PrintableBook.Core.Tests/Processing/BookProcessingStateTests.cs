@@ -90,6 +90,22 @@ public sealed class BookProcessingStateTests
     }
 
     [Fact]
+    public void Interruption_preserves_workspace_progress_for_recovery()
+    {
+        var running = BookProcessingState.NotStarted(new BookId("book-one"))
+            .Start(DateTimeOffset.Parse("2026-08-22T10:00:00Z"))
+            .CompleteStep("trim", DateTimeOffset.Parse("2026-08-22T10:01:00Z"))
+            .BeginStep("resize", DateTimeOffset.Parse("2026-08-22T10:02:00Z"));
+
+        var interrupted = running.Interrupt(DateTimeOffset.Parse("2026-08-22T10:03:00Z"));
+
+        Assert.Equal(BookProcessingStatus.Interrupted, interrupted.Status);
+        Assert.True(interrupted.MayResume);
+        Assert.Equal("resize", interrupted.CurrentStep);
+        Assert.Equal("trim", interrupted.LastCompletedStep);
+    }
+
+    [Fact]
     public void Completion_is_not_resumable()
     {
         var completed = BookProcessingState.NotStarted(new BookId("book-one"))

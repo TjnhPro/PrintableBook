@@ -101,6 +101,13 @@ public sealed record BookProcessingState(
         MayResume = true
     };
 
+    public BookProcessingState Interrupt(DateTimeOffset timestamp) => this with
+    {
+        Status = BookProcessingStatus.Interrupted,
+        UpdatedAt = timestamp,
+        MayResume = true
+    };
+
     public BookProcessingState Complete(DateTimeOffset timestamp) => this with
     {
         Status = BookProcessingStatus.Completed,

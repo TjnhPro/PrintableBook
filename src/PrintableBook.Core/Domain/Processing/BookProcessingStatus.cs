@@ -6,5 +6,6 @@ public enum BookProcessingStatus
     Running,
     Failed,
     Cancelled,
-    Completed
+    Completed,
+    Interrupted
 }
