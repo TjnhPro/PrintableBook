@@ -83,7 +83,7 @@ public sealed class InteriorWorkflowLocalCorpusTests
 
                     var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
                     using var classification = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(cache, "classification.json")));
-                    var actualType = (ArtworkType)classification.RootElement.GetProperty("Type").GetInt32();
+                    var actualType = ReadCanonicalArtworkType(classification.RootElement.GetProperty("Type").GetString());
                     var outputPaths = CopyArtifacts(categoryDirectory, resultsDirectory, category.Name, input, cache, result.FinalPage.Value);
                     var prepared = await inspector.GetInfoAsync(new FileReference(outputPaths.Prepared));
                     var framed = await inspector.GetInfoAsync(new FileReference(outputPaths.Framed));
@@ -91,14 +91,17 @@ public sealed class InteriorWorkflowLocalCorpusTests
                     var final = await inspector.GetInfoAsync(new FileReference(outputPaths.Final));
                     var opaque = IsOpaque(outputPaths.Prepared);
                     var framedDiffersFromPrepared = !HashesMatch(outputPaths.Prepared, outputPaths.Framed);
-                    var frameApplied = frame is not null && actualType != ArtworkType.CropArt && framedDiffersFromPrepared;
+                    var actualAutoFrameRecommended = actualType != ArtworkType.CropArt;
+                    var frameMode = FrameMode.Auto;
+                    var frameApplied = frame is not null && frameMode == FrameMode.Auto && actualAutoFrameRecommended && framedDiffersFromPrepared;
                     results.Add(WorkflowCorpusResult.Completed(
                         category.Name,
                         input,
                         category.ExpectedType,
                         actualType,
                         category.ExpectedAutoFrameRecommended,
-                        actualType != ArtworkType.CropArt,
+                        actualAutoFrameRecommended,
+                        frameMode,
                         frame is not null,
                         frameApplied,
                         framedDiffersFromPrepared,
@@ -130,7 +133,27 @@ public sealed class InteriorWorkflowLocalCorpusTests
             total = results.Count,
             passed = results.Count(item => item.Status == "PASS"),
             failed = results.Count(item => item.Status != "PASS"),
-            results
+            results = results.Select(result => new
+            {
+                category = result.Category,
+                input = result.Input,
+                expectedType = ToCanonicalArtworkType(result.ExpectedType),
+                actualType = result.ActualType is { } actualType ? ToCanonicalArtworkType(actualType) : null,
+                expectedAutoFrameRecommended = result.ExpectedAutoFrameRecommended,
+                autoFrameRecommended = result.ActualAutoFrameRecommended,
+                frameMode = result.FrameMode?.ToString().ToLowerInvariant(),
+                frameAvailable = result.FrameAvailable,
+                frameApplied = result.FrameApplied,
+                framedDiffersFromPrepared = result.FramedDiffersFromPrepared,
+                preparedSize = result.PreparedSize,
+                framedSize = result.FramedSize,
+                workingSize = result.WorkingSize,
+                finalSize = result.FinalSize,
+                isOpaque = result.IsOpaque,
+                status = result.Status,
+                elapsedMilliseconds = result.ElapsedMilliseconds,
+                error = result.Error
+            })
         }, new JsonSerializerOptions { WriteIndented = true }));
 
         Assert.NotEmpty(results);
@@ -183,6 +206,22 @@ public sealed class InteriorWorkflowLocalCorpusTests
     private static bool HashesMatch(string first, string second) =>
         SHA256.HashData(File.ReadAllBytes(first)).SequenceEqual(SHA256.HashData(File.ReadAllBytes(second)));
 
+    private static ArtworkType ReadCanonicalArtworkType(string? type) => type switch
+    {
+        "borderart" => ArtworkType.BorderArt,
+        "fullart" => ArtworkType.FullArt,
+        "cropart" => ArtworkType.CropArt,
+        _ => throw new InvalidDataException("The classification cache did not contain a canonical artwork type.")
+    };
+
+    private static string ToCanonicalArtworkType(ArtworkType type) => type switch
+    {
+        ArtworkType.BorderArt => "borderart",
+        ArtworkType.FullArt => "fullart",
+        ArtworkType.CropArt => "cropart",
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unsupported artwork type.")
+    };
+
     private static FileReference? FindOptionalFrame(string corpus) =>
         File.Exists(Path.Combine(corpus, "frame.png")) ? new FileReference(Path.Combine(corpus, "frame.png")) : null;
 
@@ -209,6 +248,7 @@ public sealed class InteriorWorkflowLocalCorpusTests
         ArtworkType? ActualType,
         bool ExpectedAutoFrameRecommended,
         bool? ActualAutoFrameRecommended,
+        FrameMode? FrameMode,
         bool? FrameAvailable,
         bool? FrameApplied,
         bool? FramedDiffersFromPrepared,
@@ -228,6 +268,7 @@ public sealed class InteriorWorkflowLocalCorpusTests
             ArtworkType actualType,
             bool expectedAutoFrameRecommended,
             bool actualAutoFrameRecommended,
+            FrameMode frameMode,
             bool frameAvailable,
             bool frameApplied,
             bool framedDiffersFromPrepared,
@@ -240,7 +281,7 @@ public sealed class InteriorWorkflowLocalCorpusTests
         {
             var valid = expectedType == actualType &&
                 expectedAutoFrameRecommended == actualAutoFrameRecommended &&
-                frameApplied == (frameAvailable && actualAutoFrameRecommended) &&
+                frameApplied == (frameAvailable && frameMode == global::PrintableBook.Core.Application.Processing.FrameMode.Auto && actualAutoFrameRecommended) &&
                 (actualAutoFrameRecommended || !framedDiffersFromPrepared) &&
                 preparedSize == InteriorWorkflowLocalCorpusTests.PreparedSize &&
                 framedSize == InteriorWorkflowLocalCorpusTests.PreparedSize &&
@@ -248,13 +289,13 @@ public sealed class InteriorWorkflowLocalCorpusTests
                 finalSize == InteriorWorkflowLocalCorpusTests.FinalSize &&
                 isOpaque;
             var error = valid ? null : $"Expected Type={expectedType}, autoFrameRecommended={expectedAutoFrameRecommended}, prepared={InteriorWorkflowLocalCorpusTests.PreparedSize}, working={InteriorWorkflowLocalCorpusTests.WorkingSize}, final={InteriorWorkflowLocalCorpusTests.FinalSize}, opaque=true; actual Type={actualType}, autoFrameRecommended={actualAutoFrameRecommended}, frameAvailable={frameAvailable}, frameApplied={frameApplied}, framedDiffersFromPrepared={framedDiffersFromPrepared}, prepared={preparedSize}, working={workingSize}, final={finalSize}, opaque={isOpaque}.";
-            return new(category, input, expectedType, actualType, expectedAutoFrameRecommended, actualAutoFrameRecommended, frameAvailable, frameApplied, framedDiffersFromPrepared, preparedSize, framedSize, workingSize, finalSize, isOpaque, valid ? "PASS" : "FAIL", elapsedMilliseconds, error);
+            return new(category, input, expectedType, actualType, expectedAutoFrameRecommended, actualAutoFrameRecommended, frameMode, frameAvailable, frameApplied, framedDiffersFromPrepared, preparedSize, framedSize, workingSize, finalSize, isOpaque, valid ? "PASS" : "FAIL", elapsedMilliseconds, error);
         }
 
         public static WorkflowCorpusResult Failed(string category, string input, ArtworkType expectedType, bool expectedAutoFrameRecommended, string error, double elapsedMilliseconds) =>
-            new(category, input, expectedType, null, expectedAutoFrameRecommended, null, null, null, null, null, null, null, null, null, "FAIL", elapsedMilliseconds, error);
+            new(category, input, expectedType, null, expectedAutoFrameRecommended, null, null, null, null, null, null, null, null, null, null, "FAIL", elapsedMilliseconds, error);
 
         public static WorkflowCorpusResult ConfigurationFailure(string category, ArtworkType expectedType, string error) =>
-            new(category, null, expectedType, null, expectedType != ArtworkType.CropArt, null, null, null, null, null, null, null, null, null, "FAIL", null, error);
+            new(category, null, expectedType, null, expectedType != ArtworkType.CropArt, null, null, null, null, null, null, null, null, null, null, "FAIL", null, error);
     }
 }

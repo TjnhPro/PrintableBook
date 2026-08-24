@@ -19,16 +19,19 @@ public sealed class InteriorSharedPipelineCertificationTests : IAsyncLifetime
     private readonly string rootPath = Path.Combine(Path.GetTempPath(), $"PrintableBook.SharedPipelineCertification.{Guid.NewGuid():N}");
 
     [Theory]
-    [InlineData(ArtworkType.BorderArt, true)]
-    [InlineData(ArtworkType.FullArt, true)]
-    [InlineData(ArtworkType.CropArt, false)]
-    public async Task ProcessAsync_certifies_the_real_classified_shared_workflow(ArtworkType expectedType, bool frameApplied)
+    [InlineData(ArtworkType.BorderArt, FrameMode.Auto, true, true)]
+    [InlineData(ArtworkType.BorderArt, FrameMode.Disabled, true, false)]
+    [InlineData(ArtworkType.FullArt, FrameMode.Auto, true, true)]
+    [InlineData(ArtworkType.CropArt, FrameMode.Auto, true, false)]
+    [InlineData(ArtworkType.CropArt, FrameMode.Enabled, true, true)]
+    [InlineData(ArtworkType.CropArt, FrameMode.Enabled, false, false)]
+    public async Task ProcessAsync_certifies_the_real_classified_shared_workflow(ArtworkType expectedType, FrameMode frameMode, bool frameAvailable, bool frameApplied)
     {
         Directory.CreateDirectory(rootPath);
         var source = Path.Combine(rootPath, $"{expectedType}.source.png");
         var frame = Path.Combine(rootPath, "frame.png");
         WriteSource(source, expectedType);
-        WriteFrame(frame);
+        if (frameAvailable) WriteFrame(frame);
         var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
             new BookId($"{expectedType}-book"), new DirectoryReference(Path.Combine(rootPath, expectedType.ToString())));
         var request = new InteriorPagePipelineRequest(
@@ -40,8 +43,8 @@ public sealed class InteriorSharedPipelineCertificationTests : IAsyncLifetime
             WorkingSize,
             FinalSize,
             new ImageDensity(300, 300),
-            new FileReference(frame),
-            FrameMode.Auto);
+            frameAvailable ? new FileReference(frame) : null,
+            frameMode);
 
         var result = await CreatePipeline().ProcessAsync(request);
 
