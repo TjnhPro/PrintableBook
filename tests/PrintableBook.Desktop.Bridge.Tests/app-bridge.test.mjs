@@ -20,6 +20,7 @@ function loadBridge(activeRoute = null) {
   const brandSelect = { innerHTML: "", value: "", addEventListener: () => { } };
   const refreshButton = { addEventListener: () => { } };
   const messages = [];
+  const intervals = [];
   let messageHandler;
   const browserWindow = {
     chrome: {
@@ -28,7 +29,7 @@ function loadBridge(activeRoute = null) {
         postMessage: (message) => { messages.push(JSON.parse(message)); }
       }
     },
-    setInterval: () => 0
+    setInterval: (callback) => { intervals.push(callback); return intervals.length; }
   };
 
   vm.runInNewContext(readFileSync(appScriptPath, "utf8"), {
@@ -41,7 +42,7 @@ function loadBridge(activeRoute = null) {
     window: browserWindow
   });
 
-  return { messageHandler, status, content, brandSelect, contentListeners, messages };
+  return { messageHandler, status, content, brandSelect, contentListeners, intervals, messages };
 }
 
 test("bridge accepts the JSON response emitted by the .NET host", () => {
@@ -107,6 +108,35 @@ test("phase 4 page markup includes the interior-only processing workflow", () =>
   assert.match(script, /mode: "interior-only"/);
   assert.match(script, /send\("process\.cancel"/);
   assert.match(script, /send\("app\.refresh"/);
+  assert.match(script, /"Interrupted"/);
+});
+
+test("active processing is polled globally and stops after a terminal snapshot", () => {
+  const { messageHandler, content, intervals, messages } = loadBridge("books");
+
+  assert.equal(intervals.length, 1);
+  messageHandler({ data: { version: 1, id: "process-1", ok: true, command: "process.snapshot", payload: { isActive: true, isCancelling: false } } });
+  assert.equal(content.innerHTML, "");
+  intervals[0]();
+  assert.equal(messages.at(-1).command, "process.get");
+
+  messageHandler({ data: { version: 1, id: "process-2", ok: true, command: "process.snapshot", payload: { isActive: false, isCancelling: false, currentStep: "Completed" } } });
+  const messageCount = messages.length;
+  intervals[0]();
+  assert.equal(messages.length, messageCount);
+});
+
+test("process controls disable cancellation while a stop is in progress", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("process");
+
+  messageHandler({ data: { version: 1, id: "process-1", ok: true, command: "process.snapshot", payload: { isActive: true, isCancelling: true, currentStep: "Cancelling" } } });
+  assert.match(content.innerHTML, /Stopping processing…/);
+  assert.match(content.innerHTML, /button class="button-danger" disabled/);
+
+  messageHandler({ data: { version: 1, id: "process-2", ok: true, command: "process.snapshot", payload: { isActive: true, isCancelling: false, currentStep: "Running" } } });
+  const cancel = { dataset: { action: "cancel-process" }, closest: () => cancel };
+  contentListeners.click({ target: cancel });
+  assert.equal(messages.at(-1).command, "process.cancel");
 });
 
 test("book detail renders frame mode truth and sends per-image overrides through the bridge", () => {
