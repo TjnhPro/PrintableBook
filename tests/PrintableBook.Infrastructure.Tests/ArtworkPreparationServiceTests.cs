@@ -92,6 +92,38 @@ public sealed class ArtworkPreparationServiceTests : IAsyncLifetime
             CreateService().PrepareAsync(request, cancellation.Token).AsTask());
     }
 
+    [Theory]
+    [InlineData(ArtworkType.BorderArt)]
+    [InlineData(ArtworkType.FullArt)]
+    [InlineData(ArtworkType.CropArt)]
+    public async Task PrepareAsync_propagates_missing_source_without_publishing_output(ArtworkType type)
+    {
+        Directory.CreateDirectory(rootPath);
+        var target = Path.Combine(rootPath, $"{type}.missing-source.prepared.png");
+
+        await Assert.ThrowsAnyAsync<MagickException>(() => CreateService().PrepareAsync(
+            CreateRequest(Path.Combine(rootPath, "missing.png"), target, type)).AsTask());
+
+        Assert.False(File.Exists(target));
+    }
+
+    [Theory]
+    [InlineData(ArtworkType.BorderArt)]
+    [InlineData(ArtworkType.FullArt)]
+    [InlineData(ArtworkType.CropArt)]
+    public async Task PrepareAsync_propagates_corrupt_source_without_publishing_output(ArtworkType type)
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = Path.Combine(rootPath, $"{type}.corrupt.png");
+        var target = Path.Combine(rootPath, $"{type}.corrupt.prepared.png");
+        await File.WriteAllTextAsync(source, "not a PNG");
+
+        await Assert.ThrowsAnyAsync<MagickException>(() => CreateService().PrepareAsync(
+            CreateRequest(source, target, type)).AsTask());
+
+        Assert.False(File.Exists(target));
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
 
     public Task DisposeAsync()

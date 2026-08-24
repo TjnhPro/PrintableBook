@@ -55,6 +55,29 @@ public sealed class FullArtPreparationProcessorTests : IAsyncLifetime
             CreateRequest(source, Path.Combine(rootPath, "white.prepared.png"))).AsTask());
     }
 
+    [Fact]
+    public async Task PrepareAsync_removes_white_margin_before_center_cropping()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = Path.Combine(rootPath, "white-margin.png");
+        var target = Path.Combine(rootPath, "white-margin.prepared.png");
+        using (var image = new MagickImage(MagickColors.White, 100, 80))
+        {
+            var pixels = image.GetPixels();
+            pixels.SetPixel(20, 20, [0, 0, 0]);
+            pixels.SetPixel(79, 59, [0, 0, 0]);
+            pixels.SetPixel(21, 39, [200, 0, 0]);
+            Fill(pixels, 45, 35, 10, 10, [0, 200, 0]);
+            image.Write(source);
+        }
+
+        await CreateProcessor().PrepareAsync(CreateRequest(source, target));
+
+        using var output = new MagickImage(target);
+        AssertRgb(output, 1134, 1134, 0, 200, 0);
+        AssertRgb(output, 284, 1134, 255, 255, 255);
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
 
     public Task DisposeAsync()
