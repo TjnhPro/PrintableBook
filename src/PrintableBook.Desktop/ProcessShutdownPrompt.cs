@@ -2,25 +2,25 @@ using System.Windows;
 
 namespace PrintableBook.Desktop;
 
-internal enum ActiveProcessCloseDecision
+public enum ActiveProcessCloseDecision
 {
     StopAndExit,
     ContinueUsingApp
 }
 
-internal enum ProcessStopTimeoutDecision
+public enum ProcessStopTimeoutDecision
 {
     ForceExit,
     KeepWaiting
 }
 
-internal interface IProcessShutdownPrompt
+public interface IProcessShutdownPrompt
 {
     ActiveProcessCloseDecision ConfirmActiveProcessClose();
     ProcessStopTimeoutDecision ConfirmStopTimeout();
 }
 
-internal sealed class ProcessShutdownPrompt : IProcessShutdownPrompt
+public sealed class ProcessShutdownPrompt : IProcessShutdownPrompt
 {
     public ActiveProcessCloseDecision ConfirmActiveProcessClose() =>
         MessageBox.Show(

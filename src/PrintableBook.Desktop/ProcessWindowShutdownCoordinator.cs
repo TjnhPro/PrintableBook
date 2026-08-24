@@ -2,14 +2,14 @@ using PrintableBook.Core.Application.Desktop;
 
 namespace PrintableBook.Desktop;
 
-internal enum ProcessWindowCloseOutcome
+public enum ProcessWindowCloseOutcome
 {
     KeepOpen,
     Close,
     ForceExit
 }
 
-internal sealed class ProcessWindowShutdownCoordinator(
+public sealed class ProcessWindowShutdownCoordinator(
     IProcessSessionService processSessionService,
     IProcessShutdownPrompt prompt)
 {
