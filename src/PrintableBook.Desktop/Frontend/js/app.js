@@ -77,18 +77,21 @@
   const renderProcess = (requestProcess = true) => {
     const session = window.processSnapshot;
     const active = valueFor(session, "isActive", false);
-    const cancelling = active && valueFor(session, "isCancelling", false);
+    const cancelling = valueFor(session, "isCancelling", false);
     const sessionQueue = valueFor(session, "queue", []);
+    const hasSession = active || cancelling || sessionQueue.length > 0;
+    const terminal = hasSession && !active && !cancelling;
     const pendingQueue = [...state.selectedBookIds].map((id) => {
       const book = books().find((candidate) => bookId(candidate) === id);
       return { bookId: { value: id }, status: "Ready", detail: valueFor(book, "name", id) };
     });
-    const queue = active ? sessionQueue : pendingQueue;
-    const currentBook = valueFor(valueFor(session, "currentBookId", {}), "value", "No active Book");
+    const queue = hasSession ? sessionQueue : pendingQueue;
+    const currentBook = valueFor(valueFor(session, "currentBookId", {}), "value", terminal ? "Last session" : "No active Book");
+    const currentStep = valueFor(session, "currentStep", terminal ? "Completed" : "Waiting") || (terminal ? "Completed" : "Waiting");
     const completed = valueFor(session, "pagesCompleted", 0);
     const total = valueFor(session, "pagesTotal", 0);
     const percent = total ? Math.min(100, Math.round((completed / total) * 100)) : 0;
-    content.innerHTML = `<div class="page-header"><div><h1>Process Interior</h1><p>${cancelling ? "Stopping Interior Processing session…" : active ? "Active Interior Processing session" : "Prepare a selected interior-only book queue."}</p></div>${active ? cancelling ? '<button class="button-danger" disabled>Stopping processing…</button>' : '<button class="button-danger" data-action="cancel-process">Cancel session</button>' : ""}</div><div class="process-grid">${panel(active ? "Queue" : "Selected queue", `<ul class="queue-list">${queue.length ? queue.map((entry) => `<li><span>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}</span>${badge(valueFor(entry, "status", "NotStarted"))}<small>${escapeHtml(valueFor(entry, "detail", "Waiting"))}</small></li>`).join("") : "<li class=\"empty-row\">Select Books on the Books page.</li>"}</ul>`)}${panel("Current step", `<div class="process-book"><strong>${escapeHtml(currentBook)}</strong><span>${escapeHtml(valueFor(session, "currentStep", "Waiting"))}</span></div><div class="progress-track"><span style="width:${percent}%"></span></div><p class="progress-copy">${completed} / ${total || "?"} pages · ${valueFor(session, "workerLimit", 0) || "?"} workers</p><div class="page-actions mt-4">${active ? "" : `<button class="button-primary" data-action="start-process" ${state.selectedBookIds.size ? "" : "disabled"}>Start Interior Processing</button>`}</div>`)}</div>`;
+    content.innerHTML = `<div class="page-header"><div><h1>Process Interior</h1><p>${cancelling ? "Stopping Interior Processing session…" : active ? "Active Interior Processing session" : terminal ? "Last Interior Processing session" : "Prepare a selected interior-only book queue."}</p></div>${active ? cancelling ? '<button class="button-danger" disabled>Stopping processing…</button>' : '<button class="button-danger" data-action="cancel-process">Cancel session</button>' : ""}</div><div class="process-grid">${panel(hasSession ? (terminal ? "Last session" : "Queue") : "Selected queue", `<ul class="queue-list">${queue.length ? queue.map((entry) => `<li><span>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}</span>${badge(valueFor(entry, "status", "NotStarted"))}<small>${escapeHtml(valueFor(entry, "detail", "Waiting"))}</small></li>`).join("") : "<li class=\"empty-row\">Select Books on the Books page.</li>"}</ul>`)}${panel("Current step", `<div class="process-book"><strong>${escapeHtml(currentBook)}</strong><span>${escapeHtml(currentStep)}</span></div><div class="progress-track"><span style="width:${percent}%"></span></div><p class="progress-copy">${completed} / ${total || "?"} pages · ${valueFor(session, "workerLimit", 0) || "?"} workers</p><div class="page-actions mt-4">${active || cancelling ? "" : `<button class="button-primary" data-action="start-process" ${state.selectedBookIds.size ? "" : "disabled"}>${terminal ? "Start New Interior Processing" : "Start Interior Processing"}</button>`}</div>`)}</div>`;
     if (requestProcess) send("process.get");
   };
 

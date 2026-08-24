@@ -15,7 +15,10 @@ const expected = [
   "Process Interior",
   "Diagnostics",
   "Interrupted",
-  "Stopping processing…"
+  "Stopping processing…",
+  "Last Interior Processing session",
+  "Last session",
+  "Start New Interior Processing"
 ];
 
 for (const value of expected) {

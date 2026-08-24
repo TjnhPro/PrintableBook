@@ -148,6 +148,41 @@ test("process controls disable cancellation while a stop is in progress", () => 
   assert.equal(messages.at(-1).command, "process.cancel");
 });
 
+for (const [status, detail] of [["Completed", null], ["Failed", "PDF export failed"], ["Cancelled", "Cancelled"]]) {
+  test(`${status.toLowerCase()} terminal processing remains visible and allows a new session`, () => {
+    const { messageHandler, content, intervals, messages } = loadBridge("process");
+    messageHandler({ data: { version: 1, id: `process-${status}`, ok: true, command: "process.snapshot", payload: {
+      isActive: false,
+      isCancelling: false,
+      currentStep: status === "Completed" ? null : status,
+      queue: [{ bookId: { value: "Book 001" }, status, detail }]
+    } } });
+
+    assert.match(content.innerHTML, /Last Interior Processing session/);
+    assert.match(content.innerHTML, /Last session/);
+    assert.match(content.innerHTML, new RegExp(status));
+    assert.doesNotMatch(content.innerHTML, /Selected queue/);
+    assert.match(content.innerHTML, /Start New Interior Processing/);
+    const messageCount = messages.length;
+    intervals[0]();
+    assert.equal(messages.length, messageCount);
+  });
+}
+
+test("a new active snapshot replaces the terminal process session display", () => {
+  const { messageHandler, content } = loadBridge("process");
+  messageHandler({ data: { version: 1, id: "process-completed", ok: true, command: "process.snapshot", payload: {
+    isActive: false, isCancelling: false, queue: [{ bookId: { value: "Book 001" }, status: "Completed", detail: null }]
+  } } });
+  messageHandler({ data: { version: 1, id: "process-running", ok: true, command: "process.snapshot", payload: {
+    isActive: true, isCancelling: false, currentStep: "Processing", queue: [{ bookId: { value: "Book 002" }, status: "Running", detail: "Processing" }]
+  } } });
+
+  assert.match(content.innerHTML, /Active Interior Processing session/);
+  assert.match(content.innerHTML, /Book 002/);
+  assert.doesNotMatch(content.innerHTML, /Last session/);
+});
+
 test("book filters render the recovered interrupted workspace status", () => {
   const { messageHandler, content } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-1", ok: true, command: "app.snapshot", payload: {
