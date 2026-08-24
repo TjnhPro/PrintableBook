@@ -57,3 +57,5 @@ dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructur
 Without the environment variable, local-corpus tests are reported as skipped. This is deliberate: an empty clean checkout must never depend on user artwork.
 
 The V2 detector evaluates a persistent four-sided outer frame rather than requiring four perfectly continuous scanlines. Its final decision requires broad, consistent side tracks in the 100-pixel outer corridors and selects the outermost coherent four-side candidate. The local report is the source of evidence for validating those semantics against product artwork; it is ignored by Git together with the input images and debug overlays. The calibrated decision rules are recorded in [BorderLine detector V2 calibration](docs/borderline-detector-v2.md).
+
+BorderPixel V1 certifies non-frame artwork separately. Place locally reviewed inputs under `TestResults/BorderPixelCorpus/fullart/` and `TestResults/BorderPixelCorpus/cropart/`; its opt-in test first verifies `BorderLine=false`, then writes `TestResults/BorderPixelCorpus/results/borderpixel-v1-report.json`. It is also ignored by Git and excluded from CI.
