@@ -33,16 +33,33 @@ public sealed class ProcessSessionService(
         cancellationToken.ThrowIfCancellationRequested();
         ProcessSessionSnapshot current;
         lock (sync) current = snapshot;
-        if (!current.IsActive || current.CurrentBookId is null) return current;
+        if (!current.IsActive) return current;
         var refreshed = await snapshotService.RefreshAsync(cancellationToken);
-        var summary = refreshed.BookSummaries.FirstOrDefault(item => item.BookId == current.CurrentBookId);
-        if (summary is null) return current;
         lock (sync)
         {
-            if (snapshot.IsActive && snapshot.CurrentBookId == current.CurrentBookId)
+            if (!snapshot.IsActive) return snapshot;
+            var summaries = refreshed.BookSummaries.ToDictionary(item => item.BookId);
+            var queue = snapshot.Queue.Select(entry =>
             {
-                snapshot = snapshot with { CurrentStep = summary.CurrentStep ?? snapshot.CurrentStep, PagesCompleted = summary.InteriorPages.Count, PagesTotal = summary.InteriorSourcePageCount, WorkerLimit = refreshed.GlobalSettings.MaximumPageConcurrency };
-            }
+                if (!summaries.TryGetValue(entry.BookId, out var summary) || summary.WorkspaceStatus == BookProcessingStatus.NotStarted)
+                {
+                    return entry;
+                }
+
+                return entry with { Status = summary.WorkspaceStatus, Detail = summary.CurrentStep ?? entry.Detail };
+            }).ToArray();
+            var active = refreshed.BookSummaries.FirstOrDefault(summary =>
+                summary.WorkspaceStatus == BookProcessingStatus.Running &&
+                queue.Any(entry => entry.BookId == summary.BookId));
+            snapshot = snapshot with
+            {
+                Queue = queue,
+                CurrentBookId = active?.BookId ?? snapshot.CurrentBookId,
+                CurrentStep = active?.CurrentStep ?? snapshot.CurrentStep,
+                PagesCompleted = active?.InteriorPages.Count ?? snapshot.PagesCompleted,
+                PagesTotal = active?.InteriorSourcePageCount ?? snapshot.PagesTotal,
+                WorkerLimit = refreshed.GlobalSettings.MaximumPageConcurrency
+            };
             return snapshot;
         }
     }

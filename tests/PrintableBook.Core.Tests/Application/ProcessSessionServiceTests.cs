@@ -120,23 +120,59 @@ public sealed class ProcessSessionServiceTests
         await WaitUntilAsync(() => ValueTask.FromResult(application.InvocationCount == 2));
     }
 
-    private static ApplicationSnapshot CreateSnapshot()
+    [Fact]
+    public async Task GetAsync_refreshes_the_current_book_and_queue_for_a_multi_book_session()
     {
-        var bookId = new BookId("book-one");
+        var application = new RecordingPrintableBookApplication();
+        var service = new ProcessSessionService(
+            new StaticSnapshotService(CreateSnapshot(
+                ("book-one", BookProcessingStatus.Completed, "Completed"),
+                ("book-two", BookProcessingStatus.Running, "Interior processing"))),
+            application,
+            new NullBrandFrameResolver());
+        await service.StartAsync(["book-one", "book-two"], "Brand", BookProcessingMode.InteriorOnly);
+        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var refreshed = await service.GetAsync();
+
+        Assert.Equal(new BookId("book-two"), refreshed.CurrentBookId);
+        Assert.Equal("Interior processing", refreshed.CurrentStep);
+        Assert.Equal(BookProcessingStatus.Completed, refreshed.Queue.Single(entry => entry.BookId == new BookId("book-one")).Status);
+        Assert.Equal(BookProcessingStatus.Running, refreshed.Queue.Single(entry => entry.BookId == new BookId("book-two")).Status);
+        application.Release.TrySetResult();
+    }
+
+    private static ApplicationSnapshot CreateSnapshot(params (string Id, BookProcessingStatus Status, string? CurrentStep)[] states)
+    {
+        if (states.Length == 0) states = [("book-one", BookProcessingStatus.NotStarted, null)];
         var root = new DirectoryReference("C:\\test-root");
-        var workspace = new BookWorkspace(
-            bookId,
-            new DirectoryReference("C:\\test-root\\book-one\\.workspace"),
-            new DirectoryReference("C:\\test-root\\book-one\\.workspace\\processed"),
-            new DirectoryReference("C:\\test-root\\book-one\\.workspace\\output-temp"));
-        var book = new DiscoveredBook("Book One", bookId, new DirectoryReference("C:\\test-root\\book-one"), workspace);
+        var books = states.Select(state =>
+        {
+            var bookId = new BookId(state.Id);
+            var workspace = new BookWorkspace(
+                bookId,
+                new DirectoryReference($"C:\\test-root\\{state.Id}\\.workspace"),
+                new DirectoryReference($"C:\\test-root\\{state.Id}\\.workspace\\processed"),
+                new DirectoryReference($"C:\\test-root\\{state.Id}\\.workspace\\output-temp"));
+            return new DiscoveredBook(state.Id, bookId, new DirectoryReference($"C:\\test-root\\{state.Id}"), workspace);
+        }).ToArray();
         return new ApplicationSnapshot(
             new ApplicationDiscovery(
                 new ApplicationPaths(root, new DirectoryReference("C:\\test-root\\brands"), new DirectoryReference("C:\\test-root\\sources"), new FileReference("C:\\test-root\\settings.json")),
                 [new DiscoveredBrand("Brand", new DirectoryReference("C:\\test-root\\brands\\Brand"))],
-                [book]),
+                books),
             GlobalSettings.Default,
-            [new BookDesktopSummary(bookId, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1)],
+            states.Select(state => new BookDesktopSummary(
+                new BookId(state.Id),
+                "Ready",
+                [],
+                state.Status,
+                state.CurrentStep,
+                null,
+                [],
+                state.Status == BookProcessingStatus.Running ? [new InteriorPageSummary("page-01", "Processing", "final.png")] : [],
+                [],
+                1)).ToArray(),
             DateTimeOffset.UtcNow);
     }
 
