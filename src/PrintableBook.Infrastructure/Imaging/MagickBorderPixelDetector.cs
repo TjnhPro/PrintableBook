@@ -22,12 +22,26 @@ public sealed class MagickBorderPixelDetector : IBorderPixelDetector
         var width = checked((int)image.Width);
         var height = checked((int)image.Height);
 
-        var leftHit = HasInk(ReadRgba(pixels, 0, 0, 1, height, "left"), request.Threshold.Value, cancellationToken);
-        var rightHit = HasInk(ReadRgba(pixels, width - 1, 0, 1, height, "right"), request.Threshold.Value, cancellationToken);
-        var topHit = HasInk(ReadRgba(pixels, 0, 0, width, 1, "top"), request.Threshold.Value, cancellationToken);
-        var bottomHit = HasInk(ReadRgba(pixels, 0, height - 1, width, 1, "bottom"), request.Threshold.Value, cancellationToken);
+        var leftHit = ReadAndScanSide(pixels, 0, 0, 1, height, "left", request.Threshold.Value, cancellationToken);
+        var rightHit = ReadAndScanSide(pixels, width - 1, 0, 1, height, "right", request.Threshold.Value, cancellationToken);
+        var topHit = ReadAndScanSide(pixels, 0, 0, width, 1, "top", request.Threshold.Value, cancellationToken);
+        var bottomHit = ReadAndScanSide(pixels, 0, height - 1, width, 1, "bottom", request.Threshold.Value, cancellationToken);
 
         return ValueTask.FromResult(BorderPixelDetectionResult.Detected(leftHit, rightHit, topHit, bottomHit));
+    }
+
+    private static bool ReadAndScanSide(
+        IPixelCollection<byte> pixels,
+        int x,
+        int y,
+        int width,
+        int height,
+        string side,
+        byte threshold,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return HasInk(ReadRgba(pixels, x, y, width, height, side), threshold, cancellationToken);
     }
 
     private static byte[] ReadRgba(
