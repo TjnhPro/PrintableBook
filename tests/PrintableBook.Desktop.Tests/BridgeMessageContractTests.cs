@@ -244,6 +244,7 @@ public sealed class BridgeMessageContractTests
             return ValueTask.FromResult(snapshot);
         }
         public ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
+        public ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
     }
 
     private sealed class StubCoverSelectionService : IBookCoverSelectionService
