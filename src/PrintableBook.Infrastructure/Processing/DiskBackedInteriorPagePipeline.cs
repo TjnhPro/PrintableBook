@@ -41,11 +41,19 @@ public sealed class DiskBackedInteriorPagePipeline(
             Directory.CreateDirectory(processedInteriorDirectory);
             Directory.CreateDirectory(pageCache);
             var cacheStamp = CacheInputStamp.Create(request);
-            var hasMatchingStamp = await HasMatchingStampAsync(cacheStampFile, cacheStamp, cancellationToken);
+            var priorStamp = await TryReadStampAsync(cacheStampFile, cancellationToken);
+            var hasMatchingStamp = priorStamp is not null && JsonSerializer.Serialize(priorStamp) == JsonSerializer.Serialize(cacheStamp);
             if (!hasMatchingStamp)
             {
-                Directory.Delete(pageCache, recursive: true);
-                Directory.CreateDirectory(pageCache);
+                if (priorStamp is not null && JsonSerializer.Serialize(priorStamp with { FrameMode = cacheStamp.FrameMode }) == JsonSerializer.Serialize(cacheStamp))
+                {
+                    DeleteDownstream(framed, working, finalPage);
+                }
+                else
+                {
+                    Directory.Delete(pageCache, recursive: true);
+                    Directory.CreateDirectory(pageCache);
+                }
                 DeleteIfPresent(finalPage);
                 await File.WriteAllTextAsync(cacheStampFile, JsonSerializer.Serialize(cacheStamp), cancellationToken);
             }
@@ -161,25 +169,24 @@ public sealed class DiskBackedInteriorPagePipeline(
         }
     }
 
-    private static async ValueTask<bool> HasMatchingStampAsync(string cacheStampFile, CacheInputStamp expected, CancellationToken cancellationToken)
+    private static async ValueTask<CacheInputStamp?> TryReadStampAsync(string cacheStampFile, CancellationToken cancellationToken)
     {
         if (!File.Exists(cacheStampFile))
         {
-            return false;
+            return null;
         }
 
         try
         {
-            var json = await File.ReadAllTextAsync(cacheStampFile, cancellationToken);
-            return string.Equals(json, JsonSerializer.Serialize(expected), StringComparison.Ordinal);
+            return JsonSerializer.Deserialize<CacheInputStamp>(await File.ReadAllTextAsync(cacheStampFile, cancellationToken));
         }
         catch (JsonException)
         {
-            return false;
+            return null;
         }
         catch (IOException)
         {
-            return false;
+            return null;
         }
     }
 

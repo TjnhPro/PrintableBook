@@ -281,7 +281,10 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
             image.Write(frame);
             await Task.CompletedTask;
         });
-        await AssertRebuildsPreparedAsync(pipeline, framedRequest with { FrameMode = FrameMode.Disabled }, prepared, () => Task.CompletedTask);
+        var retainedPreparedTime = DateTime.UtcNow.AddHours(-1);
+        File.SetLastWriteTimeUtc(prepared, retainedPreparedTime);
+        await pipeline.ProcessAsync(framedRequest with { FrameMode = FrameMode.Disabled });
+        Assert.Equal(retainedPreparedTime, File.GetLastWriteTimeUtc(prepared));
 
         var completed = await pipeline.ProcessAsync(request);
         using (var wrongSize = new MagickImage(MagickColors.White, 10, 10)) wrongSize.Write(working);
