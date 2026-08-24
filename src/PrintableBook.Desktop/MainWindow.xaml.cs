@@ -14,9 +14,12 @@ public partial class MainWindow : Window
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly WebViewBridgeRouter bridgeRouter;
 
-    public MainWindow(IPrintableBookApplication application, IApplicationSnapshotService snapshotService, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService)
+    private readonly IInterruptedProcessingRecoveryService interruptedRecoveryService;
+
+    public MainWindow(IPrintableBookApplication application, IApplicationSnapshotService snapshotService, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IInterruptedProcessingRecoveryService interruptedRecoveryService)
     {
         Application = application;
+        this.interruptedRecoveryService = interruptedRecoveryService;
         bridgeRouter = new WebViewBridgeRouter(snapshotService, settingsStore, processSessionService, rootDiscovery, brandSettingsStore, coverSelectionService, interiorFrameModeService);
         InitializeComponent();
     }
@@ -25,11 +28,23 @@ public partial class MainWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        await Browser.EnsureCoreWebView2Async();
-        Browser.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+        try
+        {
+            await interruptedRecoveryService.RecoverAsync();
+            await Browser.EnsureCoreWebView2Async();
+            Browser.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
 
-        var pagePath = Path.Combine(AppContext.BaseDirectory, "Frontend", "index.html");
-        Browser.CoreWebView2.Navigate(new Uri(pagePath).AbsoluteUri);
+            var pagePath = Path.Combine(AppContext.BaseDirectory, "Frontend", "index.html");
+            Browser.CoreWebView2.Navigate(new Uri(pagePath).AbsoluteUri);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                $"The application could not recover interrupted processing.\n\n{exception.Message}",
+                "Startup recovery failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
     }
 
     private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
