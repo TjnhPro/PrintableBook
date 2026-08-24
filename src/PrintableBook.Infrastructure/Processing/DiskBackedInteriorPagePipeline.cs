@@ -15,6 +15,8 @@ public sealed class DiskBackedInteriorPagePipeline(
     IFinalInteriorPageProcessor finalPageProcessor,
     IImageInspector imageInspector) : IInteriorPagePipeline
 {
+    private const string CacheStampSchemaVersion = "interior-page-cache-v1";
+
     public async ValueTask<InteriorPageProcessingResult> ProcessAsync(
         InteriorPagePipelineRequest request,
         CancellationToken cancellationToken = default)
@@ -179,7 +181,8 @@ public sealed class DiskBackedInteriorPagePipeline(
                 return null;
             }
 
-            return JsonSerializer.Deserialize<CacheInputStamp>(json);
+            var stamp = JsonSerializer.Deserialize<CacheInputStamp>(json);
+            return stamp is { SchemaVersion: CacheStampSchemaVersion } ? stamp : null;
         }
         catch (OperationCanceledException)
         {
@@ -333,7 +336,7 @@ public sealed class DiskBackedInteriorPagePipeline(
         Classification
     }
 
-    public sealed record CacheInputStamp(
+    private sealed record CacheInputStamp(
         string SourcePath,
         long SourceLength,
         long SourceLastWriteUtcTicks,
@@ -351,7 +354,8 @@ public sealed class DiskBackedInteriorPagePipeline(
         string? FramePath,
         long FrameLength,
         long FrameLastWriteUtcTicks,
-        FrameMode FrameMode)
+        FrameMode FrameMode,
+        string SchemaVersion)
     {
         private static readonly string[] requiredProperties =
         [
@@ -372,7 +376,8 @@ public sealed class DiskBackedInteriorPagePipeline(
             nameof(FramePath),
             nameof(FrameLength),
             nameof(FrameLastWriteUtcTicks),
-            nameof(FrameMode)
+            nameof(FrameMode),
+            nameof(SchemaVersion)
         ];
 
         public static bool HasRequiredProperties(JsonElement stamp) =>
@@ -405,7 +410,8 @@ public sealed class DiskBackedInteriorPagePipeline(
                 request.Frame?.Value,
                 frame?.Exists == true ? frame.Length : 0,
                 frame?.Exists == true ? frame.LastWriteTimeUtc.Ticks : 0,
-                request.FrameMode);
+                request.FrameMode,
+                CacheStampSchemaVersion);
         }
     }
 

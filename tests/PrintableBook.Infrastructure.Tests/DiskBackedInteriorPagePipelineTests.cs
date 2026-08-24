@@ -465,6 +465,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
 
     [Theory]
     [InlineData("{ malformed")]
+    [InlineData("incompatible-schema")]
     [InlineData(null)]
     public async Task ProcessAsync_rebuilds_from_classification_when_stamp_is_unusable(string? invalidStamp)
     {
@@ -477,15 +478,25 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         var pipeline = CreatePipeline();
         var completed = await pipeline.ProcessAsync(request);
         var classification = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "classification.json");
-        var prepared = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "prepared.png");
+        var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
+        var prepared = Path.Combine(cache, "prepared.png");
+        var framed = Path.Combine(cache, "framed.png");
+        var working = Path.Combine(cache, "working-page.png");
         var stamp = Path.Combine(workspace.ProcessedDirectory.Value, "interior", "page-01.input-stamp.json");
         var staleTime = DateTime.UtcNow.AddHours(-1);
         File.SetLastWriteTimeUtc(classification, staleTime);
         File.SetLastWriteTimeUtc(prepared, staleTime);
+        File.SetLastWriteTimeUtc(framed, staleTime);
+        File.SetLastWriteTimeUtc(working, staleTime);
         File.SetLastWriteTimeUtc(completed.FinalPage.Value, staleTime);
         if (invalidStamp is null)
         {
             File.Delete(stamp);
+        }
+        else if (string.Equals(invalidStamp, "incompatible-schema", StringComparison.Ordinal))
+        {
+            var contents = await File.ReadAllTextAsync(stamp);
+            await File.WriteAllTextAsync(stamp, contents.Replace("interior-page-cache-v1", "incompatible-schema", StringComparison.Ordinal));
         }
         else
         {
@@ -496,7 +507,11 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
 
         Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(classification));
         Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(prepared));
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(framed));
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(working));
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(retried.FinalPage.Value));
         Assert.True(File.Exists(retried.FinalPage.Value));
+        Assert.Equal(new ImageSize(200, 200), (await new MagickImageInspector().GetInfoAsync(retried.FinalPage)).Size);
     }
 
     private static async Task AssertRebuildsPreparedAsync(
