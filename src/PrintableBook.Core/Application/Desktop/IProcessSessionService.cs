@@ -20,7 +20,8 @@ public interface IProcessSessionService
 public sealed class ProcessSessionService(
     IApplicationSnapshotService snapshotService,
     IPrintableBookApplication application,
-    IFileSystem fileSystem) : IProcessSessionService
+    IFileSystem fileSystem,
+    IImageInspector imageInspector) : IProcessSessionService
 {
     private readonly Lock sync = new();
     private ProcessSessionSnapshot snapshot = new(false, false, null, null, null, []);
@@ -102,7 +103,11 @@ public sealed class ProcessSessionService(
                 if (brand is not null)
                 {
                     var candidate = new FileReference(Path.Combine(brand.Directory.Value, "frame.png"));
-                    if (await fileSystem.FileExistsAsync(candidate, cancellationToken)) frame = candidate;
+                    if (await fileSystem.FileExistsAsync(candidate, cancellationToken) &&
+                        await IsCompatibleFrameAsync(candidate, applicationSnapshot.GlobalSettings, cancellationToken))
+                    {
+                        frame = candidate;
+                    }
                 }
             }
 
@@ -159,6 +164,22 @@ public sealed class ProcessSessionService(
                 cancellation?.Dispose();
                 cancellation = null;
             }
+        }
+    }
+
+    private async ValueTask<bool> IsCompatibleFrameAsync(FileReference candidate, GlobalSettings settings, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await imageInspector.GetSizeAsync(candidate, cancellationToken) == new ImageSize(settings.FinalPageWidth, settings.FinalPageHeight);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return false;
         }
     }
 }

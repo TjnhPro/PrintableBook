@@ -63,13 +63,18 @@
 
   const renderProcess = (requestProcess = true) => {
     const session = window.processSnapshot;
-    const queue = valueFor(session, "queue", []);
     const active = valueFor(session, "isActive", false);
+    const sessionQueue = valueFor(session, "queue", []);
+    const pendingQueue = [...state.selectedBookIds].map((id) => {
+      const book = books().find((candidate) => bookId(candidate) === id);
+      return { bookId: { value: id }, status: "Ready", detail: valueFor(book, "name", id) };
+    });
+    const queue = active ? sessionQueue : pendingQueue;
     const currentBook = valueFor(valueFor(session, "currentBookId", {}), "value", "No active Book");
     const completed = valueFor(session, "pagesCompleted", 0);
     const total = valueFor(session, "pagesTotal", 0);
     const percent = total ? Math.min(100, Math.round((completed / total) * 100)) : 0;
-    content.innerHTML = `<div class="page-header"><div><h1>Process Interior</h1><p>${active ? "Active Interior Processing session" : "Prepare a selected interior-only book queue."}</p></div>${active ? '<button class="button-danger" data-action="cancel-process">Cancel session</button>' : ""}</div><div class="process-grid">${panel("Queue", `<ul class="queue-list">${queue.length ? queue.map((entry) => `<li><span>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}</span>${badge(valueFor(entry, "status", "NotStarted"))}<small>${escapeHtml(valueFor(entry, "detail", "Waiting"))}</small></li>`).join("") : "<li class=\"empty-row\">Select Books on the Books page.</li>"}</ul>`)}${panel("Current step", `<div class="process-book"><strong>${escapeHtml(currentBook)}</strong><span>${escapeHtml(valueFor(session, "currentStep", "Waiting"))}</span></div><div class="progress-track"><span style="width:${percent}%"></span></div><p class="progress-copy">${completed} / ${total || "?"} pages · ${valueFor(session, "workerLimit", 0) || "?"} workers</p><div class="page-actions mt-4">${active ? "" : `<button class="button-primary" data-action="start-process" ${state.selectedBookIds.size ? "" : "disabled"}>Start Interior Processing</button>`}</div>`)}</div>`;
+    content.innerHTML = `<div class="page-header"><div><h1>Process Interior</h1><p>${active ? "Active Interior Processing session" : "Prepare a selected interior-only book queue."}</p></div>${active ? '<button class="button-danger" data-action="cancel-process">Cancel session</button>' : ""}</div><div class="process-grid">${panel(active ? "Queue" : "Selected queue", `<ul class="queue-list">${queue.length ? queue.map((entry) => `<li><span>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}</span>${badge(valueFor(entry, "status", "NotStarted"))}<small>${escapeHtml(valueFor(entry, "detail", "Waiting"))}</small></li>`).join("") : "<li class=\"empty-row\">Select Books on the Books page.</li>"}</ul>`)}${panel("Current step", `<div class="process-book"><strong>${escapeHtml(currentBook)}</strong><span>${escapeHtml(valueFor(session, "currentStep", "Waiting"))}</span></div><div class="progress-track"><span style="width:${percent}%"></span></div><p class="progress-copy">${completed} / ${total || "?"} pages · ${valueFor(session, "workerLimit", 0) || "?"} workers</p><div class="page-actions mt-4">${active ? "" : `<button class="button-primary" data-action="start-process" ${state.selectedBookIds.size ? "" : "disabled"}>Start Interior Processing</button>`}</div>`)}</div>`;
     if (requestProcess) send("process.get");
   };
 
@@ -126,7 +131,9 @@
     const response = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
     const ok = valueFor(response, "ok", false);
     const command = valueFor(response, "command", "");
-    if (ok && command === "app.snapshot") {
+    if (ok && command === "app.pong") {
+      status.textContent = "Connected";
+    } else if (ok && command === "app.snapshot") {
       window.appSnapshot = valueFor(response, "payload", {});
       const allBrands = valueFor(discovery(), "brands", []);
       if (!state.selectedBrand && allBrands.length) state.selectedBrand = valueFor(allBrands[0], "name", "");
