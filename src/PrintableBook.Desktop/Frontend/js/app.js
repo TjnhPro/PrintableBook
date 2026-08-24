@@ -88,13 +88,11 @@
     const queue = hasSession ? sessionQueue : pendingQueue;
     const currentBook = valueFor(valueFor(session, "currentBookId", {}), "value", terminal ? "Last session" : "No active Book");
     const terminalStatuses = sessionQueue.map((entry) => displayStatus(valueFor(entry, "status", "Not started")));
-    const derivedTerminalStep = terminalStatuses.length && terminalStatuses.every((status) => status === "Completed")
-      ? "Completed"
-      : terminalStatuses.length && terminalStatuses.every((status) => status === "Failed")
-        ? "Failed"
-        : terminalStatuses.length && terminalStatuses.every((status) => status === "Cancelled")
-          ? "Cancelled"
-          : "Completed";
+    const derivedTerminalStep = terminalStatuses.includes("Failed")
+      ? "Failed"
+      : terminalStatuses.includes("Cancelled")
+        ? "Cancelled"
+        : "Completed";
     const currentStep = valueFor(session, "currentStep", null) || (terminal ? derivedTerminalStep : "Waiting");
     const completed = valueFor(session, "pagesCompleted", 0);
     const total = valueFor(session, "pagesTotal", 0);

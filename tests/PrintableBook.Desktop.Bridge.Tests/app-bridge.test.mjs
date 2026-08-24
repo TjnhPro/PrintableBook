@@ -183,6 +183,22 @@ test("a new active snapshot replaces the terminal process session display", () =
   assert.doesNotMatch(content.innerHTML, /Last session/);
 });
 
+test("a mixed terminal queue retains the most severe terminal step", () => {
+  const { messageHandler, content } = loadBridge("process");
+  messageHandler({ data: { version: 1, id: "process-mixed", ok: true, command: "process.snapshot", payload: {
+    isActive: false,
+    isCancelling: false,
+    currentStep: null,
+    queue: [
+      { bookId: { value: "Book completed" }, status: 4, detail: null },
+      { bookId: { value: "Book failed" }, status: 2, detail: "PDF export failed" }
+    ]
+  } } });
+
+  assert.match(content.innerHTML, /Book failed/);
+  assert.match(content.innerHTML, /<strong>Last session<\/strong><span>Failed<\/span>/);
+});
+
 test("book filters render the recovered interrupted workspace status", () => {
   const { messageHandler, content } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-1", ok: true, command: "app.snapshot", payload: {
