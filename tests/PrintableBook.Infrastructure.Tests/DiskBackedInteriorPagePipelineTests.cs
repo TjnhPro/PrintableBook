@@ -51,6 +51,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         var stamp = await File.ReadAllTextAsync(Path.Combine(workspace.ProcessedDirectory.Value, "interior", "page-01.input-stamp.json"));
         Assert.Contains(ArtworkPreparationAlgorithmVersion.Current, stamp, StringComparison.Ordinal);
         Assert.Contains(ClassificationAlgorithmVersion.Current, stamp, StringComparison.Ordinal);
+        Assert.Contains("\"FrameMode\":\"auto\"", stamp, StringComparison.Ordinal);
         Assert.StartsWith(Path.Combine(workspace.WorkingDirectory.Value, "processed", "interior"), result.FinalPage.Value, StringComparison.OrdinalIgnoreCase);
         var finalInfo = await new MagickImageInspector().GetInfoAsync(result.FinalPage);
         Assert.Equal(new ImageSize(200, 200), finalInfo.Size);

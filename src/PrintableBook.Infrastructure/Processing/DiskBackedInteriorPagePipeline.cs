@@ -354,7 +354,7 @@ public sealed class DiskBackedInteriorPagePipeline(
         string? FramePath,
         long FrameLength,
         long FrameLastWriteUtcTicks,
-        FrameMode FrameMode,
+        string FrameMode,
         string SchemaVersion)
     {
         private static readonly string[] requiredProperties =
@@ -410,9 +410,17 @@ public sealed class DiskBackedInteriorPagePipeline(
                 request.Frame?.Value,
                 frame?.Exists == true ? frame.Length : 0,
                 frame?.Exists == true ? frame.LastWriteTimeUtc.Ticks : 0,
-                request.FrameMode,
+                ToCanonicalFrameMode(request.FrameMode),
                 CacheStampSchemaVersion);
         }
+
+        private static string ToCanonicalFrameMode(FrameMode mode) => mode switch
+        {
+            global::PrintableBook.Core.Application.Processing.FrameMode.Auto => "auto",
+            global::PrintableBook.Core.Application.Processing.FrameMode.Enabled => "enabled",
+            global::PrintableBook.Core.Application.Processing.FrameMode.Disabled => "disabled",
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported frame mode.")
+        };
     }
 
     private sealed record ClassificationCacheEntry(
