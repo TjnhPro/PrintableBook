@@ -44,4 +44,11 @@ $env:PRINTABLEBOOK_RUN_LOCAL_CORPUS = "true"
 dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "TestScope=LocalCorpus"
 ```
 
+To run only the BorderLine detector corpus (without requiring another local corpus), use:
+
+```powershell
+$env:PRINTABLEBOOK_RUN_LOCAL_CORPUS = "true"
+dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~BorderLineLocalCorpusTests"
+```
+
 Without the environment variable, local-corpus tests are reported as skipped. This is deliberate: an empty clean checkout must never depend on user artwork.
