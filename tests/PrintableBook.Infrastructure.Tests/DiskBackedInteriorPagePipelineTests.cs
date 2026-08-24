@@ -28,13 +28,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         var fileSystem = new PhysicalFileSystem();
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "Book"));
         var workspace = await new PhysicalBookWorkspaceFactory(fileSystem).CreateAsync(new BookId("book-one"), bookDirectory);
-        var pipeline = new DiskBackedInteriorPagePipeline(
-            new MagickArtworkTrimProcessor(),
-            new MagickSquareCanvasProcessor(),
-            new MagickArtworkResizeProcessor(),
-            new MagickFrameProcessor(),
-            new MagickFinalInteriorPageProcessor(),
-            new MagickImageInspector());
+        var pipeline = CreatePipeline();
 
         var result = await pipeline.ProcessAsync(new InteriorPagePipelineRequest(
             workspace,
@@ -49,10 +43,10 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
             false));
 
         Assert.Equal("page-01", result.PageId);
-        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "trim.png")));
-        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "canvas.png")));
-        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "resize.png")));
-        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "frame.png")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "classification.json")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "prepared.png")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "framed.png")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "working-page.png")));
         Assert.StartsWith(Path.Combine(workspace.WorkingDirectory.Value, "processed", "interior"), result.FinalPage.Value, StringComparison.OrdinalIgnoreCase);
         var finalInfo = await new MagickImageInspector().GetInfoAsync(result.FinalPage);
         Assert.Equal(new ImageSize(200, 200), finalInfo.Size);
@@ -74,13 +68,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         var fileSystem = new PhysicalFileSystem();
         var workspace = await new PhysicalBookWorkspaceFactory(fileSystem).CreateAsync(
             new BookId("resume-book"), new DirectoryReference(Path.Combine(rootPath, "ResumeBook")));
-        var pipeline = new DiskBackedInteriorPagePipeline(
-            new MagickArtworkTrimProcessor(),
-            new MagickSquareCanvasProcessor(),
-            new MagickArtworkResizeProcessor(),
-            new MagickFrameProcessor(),
-            new MagickFinalInteriorPageProcessor(),
-            new MagickImageInspector());
+        var pipeline = CreatePipeline();
         var request = new InteriorPagePipelineRequest(
             workspace,
             new FileReference(source),
@@ -94,14 +82,14 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
             false);
 
         await pipeline.ProcessAsync(request);
-        var trim = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "trim.png");
+        var prepared = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "prepared.png");
         var retainedTimestamp = DateTime.UtcNow.AddHours(-1);
-        File.SetLastWriteTimeUtc(trim, retainedTimestamp);
-        File.Delete(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "resize.png"));
+        File.SetLastWriteTimeUtc(prepared, retainedTimestamp);
+        File.Delete(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "working-page.png"));
 
         var retried = await pipeline.ProcessAsync(request);
 
-        Assert.Equal(retainedTimestamp, File.GetLastWriteTimeUtc(trim));
+        Assert.Equal(retainedTimestamp, File.GetLastWriteTimeUtc(prepared));
         Assert.True(File.Exists(retried.FinalPage.Value));
     }
 
@@ -146,11 +134,26 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
     }
 
     private DiskBackedInteriorPagePipeline CreatePipeline() => new(
-        new MagickArtworkTrimProcessor(),
-        new MagickSquareCanvasProcessor(),
-        new MagickArtworkResizeProcessor(),
+        new ArtworkClassifier(new MagickBorderLineDetector(), new MagickBorderPixelDetector()),
+        CreatePreparationService(),
         new MagickFrameProcessor(),
+        new MagickWorkingPageProcessor(),
         new MagickFinalInteriorPageProcessor(),
+        new MagickImageInspector());
+
+    private static ArtworkPreparationService CreatePreparationService() => new(
+        new BorderArtPreparationProcessor(
+            new MagickBorderBoundsCropProcessor(),
+            new MagickSquareCropProcessor(),
+            new MagickArtworkResizeProcessor()),
+        new FullArtPreparationProcessor(
+            new MagickArtworkTrimProcessor(),
+            new MagickSquareCropProcessor(),
+            new MagickArtworkResizeProcessor()),
+        new CropArtPreparationProcessor(
+            new MagickArtworkTrimProcessor(),
+            new MagickSquarePadProcessor(),
+            new MagickArtworkResizeProcessor()),
         new MagickImageInspector());
 
     private static InteriorPagePipelineRequest CreateRequest(

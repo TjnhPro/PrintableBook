@@ -29,13 +29,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var fileSystem = new PhysicalFileSystem();
         var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
         var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
-        var pagePipeline = new DiskBackedInteriorPagePipeline(
-            new MagickArtworkTrimProcessor(),
-            new MagickSquareCanvasProcessor(),
-            new MagickArtworkResizeProcessor(),
-            new MagickFrameProcessor(),
-            new MagickFinalInteriorPageProcessor(),
-            new MagickImageInspector());
+        var pagePipeline = CreatePagePipeline();
         var queueBookProcessor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem),
             workspaceFactory,
@@ -93,7 +87,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "state", "interior-shuffle.json")));
         var processedPage = Path.Combine(workspace.WorkingDirectory.Value, "processed", "interior", "page-0001.png");
         Assert.True(File.Exists(processedPage));
-        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-0001", "trim.png")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-0001", "prepared.png")));
         var finalPageInfo = await new MagickImageInspector().GetInfoAsync(new FileReference(
             processedPage));
         Assert.Equal(new ImageSize(300, 300), finalPageInfo.Size);
@@ -108,7 +102,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.NotEqual(bookResult.PublishedOutputs.InteriorPdf.Value, reshuffledBook.PublishedOutputs!.InteriorPdf.Value);
         Assert.Equal(processedPageHash, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(processedPage))));
         Assert.Equal(processedPageTimestamp, File.GetLastWriteTimeUtc(processedPage));
-        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-0001", "trim.png")));
+        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-0001", "prepared.png")));
 
         var rebuiltPdf = await application.ProcessBooksAsync(new BookProcessingQueueRequest([
             command with { ShuffleSeed = 456, InteriorPdfPageSize = new PhysicalPageSize(1.25, 1.25) }
@@ -149,13 +143,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             stateStore,
             new MagickCoverValidator(),
             new JsonInteriorShuffleStore(fileSystem),
-            new DiskBackedInteriorPagePipeline(
-                new MagickArtworkTrimProcessor(),
-                new MagickSquareCanvasProcessor(),
-                new MagickArtworkResizeProcessor(),
-                new MagickFrameProcessor(),
-                new MagickFinalInteriorPageProcessor(),
-                new MagickImageInspector()),
+            CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new MagickPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
@@ -193,13 +181,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             stateStore,
             new MagickCoverValidator(),
             new JsonInteriorShuffleStore(fileSystem),
-            new DiskBackedInteriorPagePipeline(
-                new MagickArtworkTrimProcessor(),
-                new MagickSquareCanvasProcessor(),
-                new MagickArtworkResizeProcessor(),
-                new MagickFrameProcessor(),
-                new MagickFinalInteriorPageProcessor(),
-                new MagickImageInspector()),
+            CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new MagickPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
@@ -229,13 +211,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var fileSystem = new PhysicalFileSystem();
         var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
         var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
-        var blockingPipeline = new BlockingInteriorPagePipeline(new DiskBackedInteriorPagePipeline(
-            new MagickArtworkTrimProcessor(),
-            new MagickSquareCanvasProcessor(),
-            new MagickArtworkResizeProcessor(),
-            new MagickFrameProcessor(),
-            new MagickFinalInteriorPageProcessor(),
-            new MagickImageInspector()));
+        var blockingPipeline = new BlockingInteriorPagePipeline(CreatePagePipeline());
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem),
             workspaceFactory,
@@ -276,13 +252,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             stateStore,
             new MagickCoverValidator(),
             new JsonInteriorShuffleStore(fileSystem),
-            new DiskBackedInteriorPagePipeline(
-                new MagickArtworkTrimProcessor(),
-                new MagickSquareCanvasProcessor(),
-                new MagickArtworkResizeProcessor(),
-                new MagickFrameProcessor(),
-                new MagickFinalInteriorPageProcessor(),
-                new MagickImageInspector()),
+            CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new MagickPrintableBookPdfExporter(),
             new CancellingAfterPublishOutputPublisher(
@@ -317,13 +287,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             stateStore,
             new MagickCoverValidator(),
             new JsonInteriorShuffleStore(fileSystem),
-            new DiskBackedInteriorPagePipeline(
-                new MagickArtworkTrimProcessor(),
-                new MagickSquareCanvasProcessor(),
-                new MagickArtworkResizeProcessor(),
-                new MagickFrameProcessor(),
-                new MagickFinalInteriorPageProcessor(),
-                new MagickImageInspector()),
+            CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new MagickPrintableBookPdfExporter(),
             blockingPublisher);
@@ -340,6 +304,27 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
         Assert.Equal(BookProcessingStatus.Cancelled, (await stateStore.LoadAsync(workspace))!.Status);
     }
+
+    private static DiskBackedInteriorPagePipeline CreatePagePipeline() => new(
+        new ArtworkClassifier(new MagickBorderLineDetector(), new MagickBorderPixelDetector()),
+        new ArtworkPreparationService(
+            new BorderArtPreparationProcessor(
+                new MagickBorderBoundsCropProcessor(),
+                new MagickSquareCropProcessor(),
+                new MagickArtworkResizeProcessor()),
+            new FullArtPreparationProcessor(
+                new MagickArtworkTrimProcessor(),
+                new MagickSquareCropProcessor(),
+                new MagickArtworkResizeProcessor()),
+            new CropArtPreparationProcessor(
+                new MagickArtworkTrimProcessor(),
+                new MagickSquarePadProcessor(),
+                new MagickArtworkResizeProcessor()),
+            new MagickImageInspector()),
+        new MagickFrameProcessor(),
+        new MagickWorkingPageProcessor(),
+        new MagickFinalInteriorPageProcessor(),
+        new MagickImageInspector());
 
     private PrintableBookProcessingCommand CreateCommand(string bookId, DirectoryReference bookDirectory) => new(
         new BookId(bookId),
