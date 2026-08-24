@@ -76,4 +76,27 @@ $env:PRINTABLEBOOK_RUN_LOCAL_CORPUS = "true"
 dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~ArtworkPreparationLocalCorpusTests"
 ```
 
+The complete shared Interior workflow has a separate local corpus. It runs the production disk-backed pipeline from original source through classification, type-specific preparation, optional prepared-stage framing, working-page centering, and final-page centering. Place only reviewed artwork in the matching category; optionally add a `2270×2270` compatible `frame.png` to verify the enabled-frame branch. `CropArt` must remain unframed even when that frame is present.
+
+```text
+TestResults/InteriorWorkflowCorpus/
+  borderart/
+  fullart/
+  cropart/
+  frame.png                  # optional, prepared-stage Brand frame
+  results/
+    prepared/
+    framed/
+    working/
+    final/
+    interior-workflow-report.json
+```
+
+The report records expected/actual classification, the frame policy, all three geometry gates, opacity, timing, and failures. All inputs, temporary workspaces, rendered outputs, and the report remain local and ignored by Git:
+
+```powershell
+$env:PRINTABLEBOOK_RUN_LOCAL_CORPUS = "true"
+dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~InteriorWorkflowLocalCorpusTests"
+```
+
 See [Interior Artwork Preparation V1](docs/interior-artwork-preparation-v1.md) for the locked processing semantics and certification status.
