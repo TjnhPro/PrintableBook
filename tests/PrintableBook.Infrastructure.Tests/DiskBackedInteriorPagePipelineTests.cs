@@ -497,6 +497,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
     [Theory]
     [InlineData("{ malformed")]
     [InlineData("incompatible-schema")]
+    [InlineData("numeric-frame-mode")]
     [InlineData(null)]
     public async Task ProcessAsync_rebuilds_from_classification_when_stamp_is_unusable(string? invalidStamp)
     {
@@ -528,6 +529,11 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         {
             var contents = await File.ReadAllTextAsync(stamp);
             await File.WriteAllTextAsync(stamp, contents.Replace("interior-page-cache-v1", "incompatible-schema", StringComparison.Ordinal));
+        }
+        else if (string.Equals(invalidStamp, "numeric-frame-mode", StringComparison.Ordinal))
+        {
+            var contents = await File.ReadAllTextAsync(stamp);
+            await File.WriteAllTextAsync(stamp, contents.Replace("\"FrameMode\":\"auto\"", "\"FrameMode\":0", StringComparison.Ordinal));
         }
         else
         {
