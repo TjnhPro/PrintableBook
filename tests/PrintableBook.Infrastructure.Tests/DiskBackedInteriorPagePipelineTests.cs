@@ -1,4 +1,5 @@
 using ImageMagick;
+using System.Text.Json;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Domain.Books;
@@ -47,6 +48,9 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "prepared.png")));
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "framed.png")));
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "working-page.png")));
+        var stamp = await File.ReadAllTextAsync(Path.Combine(workspace.ProcessedDirectory.Value, "interior", "page-01.input-stamp.json"));
+        Assert.Contains(ArtworkPreparationAlgorithmVersion.Current, stamp, StringComparison.Ordinal);
+        Assert.Contains(ClassificationAlgorithmVersion.Current, stamp, StringComparison.Ordinal);
         Assert.StartsWith(Path.Combine(workspace.WorkingDirectory.Value, "processed", "interior"), result.FinalPage.Value, StringComparison.OrdinalIgnoreCase);
         var finalInfo = await new MagickImageInspector().GetInfoAsync(result.FinalPage);
         Assert.Equal(new ImageSize(200, 200), finalInfo.Size);
@@ -131,6 +135,72 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
 
         Assert.True(File.Exists(completed.FinalPage.Value));
         Assert.True(Directory.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-02")));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_reclassifies_when_cached_classification_metadata_is_corrupt()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("metadata-source.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("metadata-book"), new DirectoryReference(Path.Combine(rootPath, "MetadataBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200));
+        var pipeline = CreatePipeline();
+
+        var completed = await pipeline.ProcessAsync(request);
+        var classification = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "classification.json");
+        await File.WriteAllTextAsync(classification, "{ not valid json");
+        File.Delete(completed.FinalPage.Value);
+
+        await pipeline.ProcessAsync(request);
+
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(classification));
+        Assert.Equal(ClassificationAlgorithmVersion.Current, document.RootElement.GetProperty("Version").GetString());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_regenerates_a_corrupt_prepared_artwork_and_downstream_pages()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("prepared-source.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("prepared-book"), new DirectoryReference(Path.Combine(rootPath, "PreparedBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200));
+        var pipeline = CreatePipeline();
+
+        var completed = await pipeline.ProcessAsync(request);
+        var prepared = new FileReference(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "prepared.png"));
+        await File.WriteAllTextAsync(prepared.Value, "not a PNG");
+        File.Delete(completed.FinalPage.Value);
+
+        await pipeline.ProcessAsync(request);
+
+        Assert.Equal(new ImageSize(200, 200), (await new MagickImageInspector().GetInfoAsync(prepared)).Size);
+        Assert.True(File.Exists(completed.FinalPage.Value));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_never_applies_an_available_enabled_frame_to_cropart()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("cropart-source.png");
+        var frame = Path.Combine(rootPath, "red-frame.png");
+        using (var image = new MagickImage(MagickColors.Red, 200, 200)) image.Write(frame);
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("cropart-book"), new DirectoryReference(Path.Combine(rootPath, "CropArtBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200)) with
+        {
+            Frame = new FileReference(frame),
+            IsFrameEnabled = true
+        };
+
+        await CreatePipeline().ProcessAsync(request);
+
+        var classification = JsonDocument.Parse(await File.ReadAllTextAsync(
+            Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "classification.json")));
+        Assert.Equal((int)ArtworkType.CropArt, classification.RootElement.GetProperty("Type").GetInt32());
+        using var framed = new MagickImage(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "framed.png"));
+        Assert.Equal((byte)0, framed.GetPixels().GetPixel(0, 0)[0]);
     }
 
     private DiskBackedInteriorPagePipeline CreatePipeline() => new(
