@@ -1,4 +1,5 @@
 using ImageMagick;
+using System.Text.RegularExpressions;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Infrastructure.Imaging;
@@ -130,15 +131,21 @@ public sealed class MagickBorderLineDetectorTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DetectAsync_rejects_partial_top_and_bottom_edge_segments()
+    public async Task DetectAsync_rejects_a_vertical_edge_line_that_is_not_continuous_through_the_center_sample()
     {
-        var source = WriteImage("partial-edges", 1024, 1024, pixels =>
+        var source = WriteImage("partial-vertical-edge", 1024, 1024, pixels =>
         {
-            DrawHorizontalLine(pixels, 15, 1024, 0, 0, 0, 255, 0, 200);
-            DrawHorizontalLine(pixels, 1008, 1024, 0, 0, 0, 255, 0, 200);
+            DrawVerticalLine(pixels, 20, 1024, 0, 0, 0, 255, 0, 200);
+            DrawVerticalLine(pixels, 20, 1024, 0, 0, 0, 255, 824, 1023);
+            DrawVerticalLine(pixels, 1003, 1024, 0, 0, 0, 255);
+            DrawHorizontalLine(pixels, 15, 1024, 0, 0, 0, 255);
+            DrawHorizontalLine(pixels, 1008, 1024, 0, 0, 0, 255);
         });
 
-        Assert.False((await DetectAsync(source)).HasBorder);
+        var result = await DetectAsync(source);
+
+        Assert.False(result.HasBorder);
+        Assert.False(result.Left.Found);
     }
 
     [Fact]
@@ -221,6 +228,9 @@ public sealed class MagickBorderLineDetectorTests : IAsyncLifetime
         Assert.Contains("using var image = new MagickImage(request.Source.Value);", source, StringComparison.Ordinal);
         Assert.Contains("using var pixels = image.GetPixels();", source, StringComparison.Ordinal);
         Assert.Contains("ToByteArray(roiX, roiY", source, StringComparison.Ordinal);
+        Assert.Equal(2, Regex.Matches(source, @"ToByteArray\(").Count);
+        Assert.Equal(2, Regex.Matches(source, @"pixels\.ToByteArray\(roiX, roiY, \(uint\)roiWidth, \(uint\)roiHeight, PixelMapping\.RGBA\)").Count);
+        Assert.Equal(4, Regex.Matches(source, @"var (left|right|top|bottom) = Find(?:Vertical|Horizontal)Side\(").Count);
         Assert.DoesNotContain("GetPixel(", source, StringComparison.Ordinal);
         Assert.DoesNotContain("GetValue(", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Task.Run", source, StringComparison.Ordinal);

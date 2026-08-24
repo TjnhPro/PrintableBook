@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Processing;
@@ -55,23 +56,28 @@ public sealed class BorderLineLocalCorpusTests
 
             foreach (var input in inputs)
             {
+                var stopwatch = Stopwatch.StartNew();
                 try
                 {
                     var detected = await detector.DetectAsync(new BorderLineDetectionRequest(
                         new FileReference(input), new ArtworkDetectionThreshold(20)));
+                    stopwatch.Stop();
                     results.Add(BorderLineCorpusResult.Completed(
                         category.Name,
                         input,
                         category.ShouldHaveBorder,
-                        detected));
+                        detected,
+                        stopwatch.Elapsed.TotalMilliseconds));
                 }
                 catch (Exception exception)
                 {
+                    stopwatch.Stop();
                     results.Add(BorderLineCorpusResult.Failed(
                         category.Name,
                         input,
                         category.ShouldHaveBorder,
-                        exception.Message));
+                        exception.Message,
+                        stopwatch.Elapsed.TotalMilliseconds));
                 }
             }
         }
@@ -123,13 +129,15 @@ public sealed class BorderLineLocalCorpusTests
         BorderLineSideResult? Top,
         BorderLineSideResult? Bottom,
         ImageRectangle? BorderBounds,
+        double? ElapsedMilliseconds,
         string? Error)
     {
         public static BorderLineCorpusResult Completed(
             string category,
             string input,
             bool expectedHasBorder,
-            BorderLineDetectionResult detected) =>
+            BorderLineDetectionResult detected,
+            double elapsedMilliseconds) =>
             new(
                 category,
                 input,
@@ -141,6 +149,7 @@ public sealed class BorderLineLocalCorpusTests
                 detected.Top,
                 detected.Bottom,
                 detected.BorderBounds,
+                elapsedMilliseconds,
                 detected.HasBorder == expectedHasBorder
                     ? null
                     : $"Expected HasBorder={expectedHasBorder}, actual HasBorder={detected.HasBorder}.");
@@ -149,13 +158,14 @@ public sealed class BorderLineLocalCorpusTests
             string category,
             string input,
             bool expectedHasBorder,
-            string error) =>
-            new(category, input, expectedHasBorder, null, "FAIL", null, null, null, null, null, error);
+            string error,
+            double elapsedMilliseconds) =>
+            new(category, input, expectedHasBorder, null, "FAIL", null, null, null, null, null, elapsedMilliseconds, error);
 
         public static BorderLineCorpusResult ConfigurationFailure(
             string category,
             bool expectedHasBorder,
             string error) =>
-            new(category, null, expectedHasBorder, null, "FAIL", null, null, null, null, null, error);
+            new(category, null, expectedHasBorder, null, "FAIL", null, null, null, null, null, null, error);
     }
 }
