@@ -194,6 +194,151 @@ public sealed class MagickBorderLineDetectorTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DetectAsync_accepts_multiple_interrupted_outer_border_segments()
+    {
+        var source = WriteBorderedImage("multiple-gaps", 1024, 1024, 40, 983, 40, 983, pixels =>
+        {
+            EraseVerticalRange(pixels, 40, 180, 235);
+            EraseVerticalRange(pixels, 40, 540, 595);
+            EraseVerticalRange(pixels, 983, 340, 400);
+            EraseHorizontalRange(pixels, 40, 420, 475);
+            EraseHorizontalRange(pixels, 983, 650, 705);
+        });
+
+        AssertBorder(await DetectAsync(source), 40, 983, 40, 983);
+    }
+
+    [Fact]
+    public async Task DetectAsync_accepts_a_rounded_frame_when_only_the_non_corner_track_is_visible()
+    {
+        var source = WriteImage("rounded-frame", 1024, 1024, pixels =>
+        {
+            DrawVerticalLine(pixels, 40, 1024, 0, 0, 0, 255, 102, 921);
+            DrawVerticalLine(pixels, 983, 1024, 0, 0, 0, 255, 102, 921);
+            DrawHorizontalLine(pixels, 40, 1024, 0, 0, 0, 255, 102, 921);
+            DrawHorizontalLine(pixels, 983, 1024, 0, 0, 0, 255, 102, 921);
+        });
+
+        AssertBorder(await DetectAsync(source), 40, 983, 40, 983);
+    }
+
+    [Fact]
+    public async Task DetectAsync_accepts_gradually_moving_outer_side_tracks()
+    {
+        var source = WriteImage("moving-tracks", 1024, 1024, pixels =>
+        {
+            for (var coordinate = 0; coordinate < 1024; coordinate++)
+            {
+                var offset = (coordinate / 128) - 4;
+                pixels.SetPixel(40 + offset, coordinate, [0, 0, 0, 255]);
+                pixels.SetPixel(983 - offset, coordinate, [0, 0, 0, 255]);
+                pixels.SetPixel(coordinate, 40 + offset, [0, 0, 0, 255]);
+                pixels.SetPixel(coordinate, 983 - offset, [0, 0, 0, 255]);
+            }
+        });
+
+        var result = await DetectAsync(source);
+
+        Assert.True(result.HasBorder);
+        Assert.InRange(result.Left.Position!.Value, 36, 44);
+        Assert.InRange(result.Right.Position!.Value, 979, 987);
+        Assert.InRange(result.Top.Position!.Value, 36, 44);
+        Assert.InRange(result.Bottom.Position!.Value, 979, 987);
+    }
+
+    [Fact]
+    public async Task DetectAsync_selects_a_gapped_outer_frame_over_a_stronger_inner_rectangle()
+    {
+        var source = WriteImage("gapped-outer-stronger-inner", 1024, 1024, pixels =>
+        {
+            DrawBorder(pixels, 1024, 1024, 40, 983, 40, 983, 0, 0, 0, 255);
+            EraseVerticalRange(pixels, 40, 240, 300);
+            EraseVerticalRange(pixels, 983, 700, 760);
+            EraseHorizontalRange(pixels, 40, 510, 570);
+            EraseHorizontalRange(pixels, 983, 350, 410);
+            DrawThickBorder(pixels, 1024, 1024, 80, 943, 80, 943, 3);
+        });
+
+        AssertBorder(await DetectAsync(source), 40, 983, 40, 983);
+    }
+
+    [Fact]
+    public async Task DetectAsync_selects_outer_frame_over_bookshelf_and_window_like_lines()
+    {
+        var source = WriteImage("outer-with-interior-structures", 1024, 1024, pixels =>
+        {
+            DrawBorder(pixels, 1024, 1024, 30, 993, 30, 993, 0, 0, 0, 255);
+            DrawVerticalLine(pixels, 72, 1024, 0, 0, 0, 255, 110, 913);
+            DrawHorizontalLine(pixels, 72, 1024, 0, 0, 0, 255, 110, 913);
+            DrawVerticalLine(pixels, 120, 1024, 0, 0, 0, 255, 280, 760);
+            DrawHorizontalLine(pixels, 120, 1024, 0, 0, 0, 255, 280, 760);
+        });
+
+        AssertBorder(await DetectAsync(source), 30, 993, 30, 993);
+    }
+
+    [Fact]
+    public async Task DetectAsync_rejects_unrelated_internal_lines_inside_the_outer_corridor()
+    {
+        var source = WriteImage("unrelated-corridor-lines", 1024, 1024, pixels =>
+        {
+            DrawAlternatingSegments(pixels, vertical: true, firstDepth: 20, secondDepth: 80, length: 1024, fromFarEdge: false);
+            DrawAlternatingSegments(pixels, vertical: true, firstDepth: 20, secondDepth: 80, length: 1024, fromFarEdge: true);
+            DrawAlternatingSegments(pixels, vertical: false, firstDepth: 20, secondDepth: 80, length: 1024, fromFarEdge: false);
+            DrawAlternatingSegments(pixels, vertical: false, firstDepth: 20, secondDepth: 80, length: 1024, fromFarEdge: true);
+        });
+
+        Assert.False((await DetectAsync(source)).HasBorder);
+    }
+
+    [Fact]
+    public async Task DetectAsync_rejects_objects_that_touch_only_one_or_two_outer_sides()
+    {
+        var source = WriteImage("edge-touching-objects", 1024, 1024, pixels =>
+        {
+            DrawVerticalLine(pixels, 20, 1024, 0, 0, 0, 255, 120, 903);
+            DrawHorizontalLine(pixels, 20, 1024, 0, 0, 0, 255, 120, 903);
+            DrawVerticalLine(pixels, 70, 1024, 0, 0, 0, 255, 300, 723);
+            DrawHorizontalLine(pixels, 70, 1024, 0, 0, 0, 255, 300, 723);
+        });
+
+        Assert.False((await DetectAsync(source)).HasBorder);
+    }
+
+    [Fact]
+    public async Task DetectAsync_accepts_outer_tracks_with_local_gray_noise_and_artwork_occlusion()
+    {
+        var source = WriteBorderedImage("noise-and-occlusion", 1024, 1024, 35, 988, 35, 988, pixels =>
+        {
+            EraseVerticalRange(pixels, 35, 450, 500);
+            EraseHorizontalRange(pixels, 988, 600, 650);
+            for (var index = 150; index < 875; index += 37)
+            {
+                pixels.SetPixel(36, index, [21, 21, 21, 255]);
+                pixels.SetPixel(index, 36, [21, 21, 21, 255]);
+            }
+        });
+
+        AssertBorder(await DetectAsync(source), 35, 988, 35, 988);
+    }
+
+    [Fact]
+    public async Task MeasureAsync_returns_segment_and_corner_evidence_for_the_selected_outer_frame()
+    {
+        var source = WriteBorderedImage("measurement-evidence", 1024, 1024, 40, 983, 40, 983);
+
+        var measurement = await new MagickBorderLineDetector().MeasureAsync(
+            new BorderLineDetectionRequest(new FileReference(source), new ArtworkDetectionThreshold(20)));
+
+        AssertBorder(measurement.Detection, 40, 983, 40, 983);
+        Assert.All(
+            new[] { measurement.Left, measurement.Right, measurement.Top, measurement.Bottom },
+            side => Assert.Contains(side.Candidates, candidate => candidate.SupportedSegments == 8));
+        Assert.Equal(4, measurement.CornerEvidence.Count);
+        Assert.All(measurement.CornerEvidence, corner => Assert.True(corner.HasOuterInkEvidence));
+    }
+
+    [Fact]
     public async Task DetectAsync_honors_cancellation_before_image_decode()
     {
         var source = WriteBorderedImage("cancelled", 400, 400, 10, 389, 10, 389);
@@ -311,6 +456,54 @@ public sealed class MagickBorderLineDetectorTests : IAsyncLifetime
         for (var x = startX; x <= (endX ?? width - 1); x++)
         {
             pixels.SetPixel(x, y, [red, green, blue, alpha]);
+        }
+    }
+
+    private static void EraseVerticalRange(IPixelCollection<byte> pixels, int x, int startY, int endY) =>
+        DrawVerticalLine(pixels, x, endY + 1, 255, 255, 255, 255, startY, endY);
+
+    private static void EraseHorizontalRange(IPixelCollection<byte> pixels, int y, int startX, int endX) =>
+        DrawHorizontalLine(pixels, y, endX + 1, 255, 255, 255, 255, startX, endX);
+
+    private static void DrawThickBorder(
+        IPixelCollection<byte> pixels,
+        int width,
+        int height,
+        int left,
+        int right,
+        int top,
+        int bottom,
+        int thickness)
+    {
+        for (var offset = 0; offset < thickness; offset++)
+        {
+            DrawBorder(pixels, width, height, left + offset, right - offset, top + offset, bottom - offset, 0, 0, 0, 255);
+        }
+    }
+
+    private static void DrawAlternatingSegments(
+        IPixelCollection<byte> pixels,
+        bool vertical,
+        int firstDepth,
+        int secondDepth,
+        int length,
+        bool fromFarEdge)
+    {
+        const int segments = 8;
+        for (var segment = 0; segment < segments; segment++)
+        {
+            var start = segment * length / segments;
+            var end = ((segment + 1) * length / segments) - 1;
+            var depth = segment % 2 == 0 ? firstDepth : secondDepth;
+            var coordinate = fromFarEdge ? length - 1 - depth : depth;
+            if (vertical)
+            {
+                DrawVerticalLine(pixels, coordinate, length, 0, 0, 0, 255, start, end);
+            }
+            else
+            {
+                DrawHorizontalLine(pixels, coordinate, length, 0, 0, 0, 255, start, end);
+            }
         }
     }
 
