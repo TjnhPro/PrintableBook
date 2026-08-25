@@ -2,6 +2,7 @@ using PrintableBook.Desktop.Bridge;
 using PrintableBook.Desktop.Loading;
 using PrintableBook.Core.Application.Diagnostics;
 using PrintableBook.Desktop.Diagnostics;
+using PrintableBook.Desktop.Preview;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
@@ -224,7 +225,7 @@ public sealed class BridgeMessageContractTests
     {
         var preview = new BookAssetPreview("Book One", "Book interior/page-001.png", 120, 120, "data:image/png;base64,preview");
         var service = new StubAssetPreviewService(preview);
-        var response = await new WebViewBridgeRouter(assetPreviewService: service)
+        var response = await new WebViewBridgeRouter(bookAssetPreviewCoordinator: CreatePreviewCoordinator(service))
             .HandleAsync("""{"version":1,"id":"preview","command":"book.asset.preview.get","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png"}}""");
 
         Assert.True(response.Ok);
@@ -236,7 +237,7 @@ public sealed class BridgeMessageContractTests
     [Fact]
     public async Task AssetPreviewRejectsMissingOrUnknownAssets()
     {
-        var response = await new WebViewBridgeRouter(assetPreviewService: new StubAssetPreviewService(null))
+        var response = await new WebViewBridgeRouter(bookAssetPreviewCoordinator: CreatePreviewCoordinator(new StubAssetPreviewService(null)))
             .HandleAsync("""{"version":1,"id":"preview-missing","command":"book.asset.preview.get","payload":{"bookId":"Book One","sourceReference":"outside.png"}}""");
 
         Assert.False(response.Ok);
@@ -333,6 +334,9 @@ public sealed class BridgeMessageContractTests
 
     private static ApplicationLoadCoordinator CreateCoordinator(IApplicationSnapshotService snapshots) =>
         new(snapshots, new NoopRecoveryService());
+
+    private static BookAssetPreviewCoordinator CreatePreviewCoordinator(IBookAssetPreviewService previews) =>
+        new(previews, new NoOpOperationDiagnostics());
 
     private sealed class NoopRecoveryService : IInterruptedProcessingRecoveryService
     {

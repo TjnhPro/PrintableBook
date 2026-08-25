@@ -5,6 +5,7 @@ using PrintableBook.Core.Application.Processing;
 using PrintableBook.Desktop.Loading;
 using PrintableBook.Core.Application.Diagnostics;
 using PrintableBook.Desktop.Diagnostics;
+using PrintableBook.Desktop.Preview;
 
 namespace PrintableBook.Desktop.Bridge;
 
@@ -19,7 +20,7 @@ internal sealed class WebViewBridgeRouter(
     IBrandSettingsStore? brandSettingsStore = null,
     IBookCoverSelectionService? coverSelectionService = null,
     IInteriorFrameModeService? interiorFrameModeService = null,
-    IBookAssetPreviewService? assetPreviewService = null,
+    BookAssetPreviewCoordinator? bookAssetPreviewCoordinator = null,
     ILocalOutputActionService? outputActionService = null,
     IOperationDiagnostics? diagnostics = null,
     UiDiagnosticsService? uiDiagnosticsService = null)
@@ -112,14 +113,14 @@ internal sealed class WebViewBridgeRouter(
 
             if (request.Command == "book.asset.preview.get")
             {
-                if (assetPreviewService is null || request.Payload is not { } previewPayload ||
+                if (bookAssetPreviewCoordinator is null || request.Payload is not { } previewPayload ||
                     !previewPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
                     !previewPayload.TryGetProperty("sourceReference", out var sourceElement) || string.IsNullOrWhiteSpace(sourceElement.GetString()))
                 {
                     return new BridgeResponse(Version, request.Id, false, null, "invalid_asset_preview_request");
                 }
 
-                var preview = await assetPreviewService.GetAsync(bookIdElement.GetString()!, sourceElement.GetString()!, cancellationToken);
+                var preview = await bookAssetPreviewCoordinator.GetAsync(bookIdElement.GetString()!, sourceElement.GetString()!, cancellationToken);
                 return preview is null
                     ? new BridgeResponse(Version, request.Id, false, null, "asset_preview_not_found")
                     : BridgeResponse.Succeeded(request.Id, "book.asset.preview", preview);
