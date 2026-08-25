@@ -22,7 +22,8 @@ internal sealed class BackgroundTaskEntry
     public object? Result { get; set; }
     public required CancellationTokenSource Cancellation { get; init; }
     public object CancellationSync { get; } = new();
-    public Task CancellationSignalTask { get; set; } = Task.CompletedTask;
+    public int CancellationSignalStarted;
+    public Task? CancellationSignalTask { get; set; }
     public Task? ExecutionTask { get; set; }
     public TaskCompletionSource Terminal { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public long Sequence { get; init; }

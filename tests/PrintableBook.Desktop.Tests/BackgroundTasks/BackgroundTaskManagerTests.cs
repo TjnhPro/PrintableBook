@@ -267,6 +267,170 @@ public sealed class BackgroundTaskManagerTests
     }
 
     [Fact]
+    public async Task Dispose_returns_before_a_running_cancellation_callback_is_released()
+    {
+        var worker = new BlockingCancellationWorker();
+        var manager = CreateManager(
+            worker,
+            new BlockingWorker(BackgroundTaskKind.ProcessingSession),
+            new BlockingWorker(BackgroundTaskKind.AssetPreview));
+        var marker = new MarkerSynchronizationContext();
+        using var disposeReturned = new ManualResetEventSlim();
+        Exception? disposeFailure = null;
+        var disposeThread = new Thread(() =>
+        {
+            try
+            {
+                SynchronizationContext.SetSynchronizationContext(marker);
+                manager.Dispose();
+            }
+            catch (Exception exception)
+            {
+                disposeFailure = exception;
+            }
+            finally
+            {
+                disposeReturned.Set();
+            }
+        });
+
+        try
+        {
+            var task = await manager.StartAsync(BackgroundTaskKind.LibraryRefresh, "library", "library", new TaskRequest("library"));
+            await worker.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            disposeThread.Start();
+            await worker.CallbackEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.True(disposeReturned.Wait(TimeSpan.FromSeconds(2)));
+            Assert.Null(disposeFailure);
+            Assert.NotSame(marker, worker.CallbackContext);
+
+            worker.ReleaseCallback.TrySetResult();
+
+            Assert.True(await manager.WaitAsync(task.TaskId, TimeSpan.FromSeconds(2)));
+            Assert.Equal(BackgroundTaskState.Cancelled, (await manager.GetAsync(task.TaskId))!.State);
+        }
+        finally
+        {
+            worker.ReleaseCallback.TrySetResult();
+            if (disposeThread.IsAlive) disposeThread.Join(TimeSpan.FromSeconds(2));
+            manager.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Dispose_cancels_queued_tasks_and_they_never_execute()
+    {
+        var library = new BlockingWorker(BackgroundTaskKind.LibraryRefresh);
+        var processing = new BlockingWorker(BackgroundTaskKind.ProcessingSession);
+        var preview = new BlockingWorker(BackgroundTaskKind.AssetPreview);
+        var manager = CreateManager(library, processing, preview);
+
+        try
+        {
+            await manager.StartAsync(BackgroundTaskKind.LibraryRefresh, "first", "first", new TaskRequest("first"));
+            await library.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            var previewOne = await manager.StartAsync(BackgroundTaskKind.AssetPreview, "preview-one", "preview-one", new TaskRequest("preview-one"));
+            var previewTwo = await manager.StartAsync(BackgroundTaskKind.AssetPreview, "preview-two", "preview-two", new TaskRequest("preview-two"));
+            var queued = await manager.StartAsync(BackgroundTaskKind.AssetPreview, "preview-three", "preview-three", new TaskRequest("preview-three"));
+            await preview.StartedTwo.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            manager.Dispose();
+
+            var queuedAfterDispose = await manager.GetAsync(queued.TaskId);
+            Assert.NotNull(queuedAfterDispose);
+            Assert.Equal(BackgroundTaskState.Cancelled, queuedAfterDispose!.State);
+            Assert.True(await manager.WaitAsync(queued.TaskId, TimeSpan.FromSeconds(2)));
+
+            preview.Release.TrySetResult();
+            Assert.True(await manager.WaitAsync(previewOne.TaskId, TimeSpan.FromSeconds(2)));
+            Assert.True(await manager.WaitAsync(previewTwo.TaskId, TimeSpan.FromSeconds(2)));
+            Assert.DoesNotContain("preview-three", preview.StartedRequests);
+        }
+        finally
+        {
+            library.Release.TrySetResult();
+            preview.Release.TrySetResult();
+            manager.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Dispose_is_idempotent_and_does_not_restart_cancellation()
+    {
+        var worker = new BlockingCancellationWorker();
+        var manager = CreateManager(
+            worker,
+            new BlockingWorker(BackgroundTaskKind.ProcessingSession),
+            new BlockingWorker(BackgroundTaskKind.AssetPreview));
+
+        try
+        {
+            var task = await manager.StartAsync(BackgroundTaskKind.LibraryRefresh, "library", "library", new TaskRequest("library"));
+            await worker.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            manager.Dispose();
+            manager.Dispose();
+
+            await worker.CallbackEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            worker.ReleaseCallback.TrySetResult();
+
+            Assert.True(await manager.WaitAsync(task.TaskId, TimeSpan.FromSeconds(2)));
+            Assert.Equal(BackgroundTaskState.Cancelled, (await manager.GetAsync(task.TaskId))!.State);
+            Assert.Equal(1, worker.CallbackCount);
+        }
+        finally
+        {
+            worker.ReleaseCallback.TrySetResult();
+            manager.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Dispose_does_not_complete_while_dispatch_is_between_queue_and_start()
+    {
+        var diagnostics = new BlockingStartDiagnostics("preview-three");
+        var preview = new BlockingWorker(BackgroundTaskKind.AssetPreview);
+        var manager = CreateManager(
+            diagnostics,
+            new BlockingWorker(BackgroundTaskKind.LibraryRefresh),
+            new BlockingWorker(BackgroundTaskKind.ProcessingSession),
+            preview);
+        using var disposeReturned = new ManualResetEventSlim();
+        var disposeThread = new Thread(() =>
+        {
+            manager.Dispose();
+            disposeReturned.Set();
+        });
+
+        try
+        {
+            await manager.StartAsync(BackgroundTaskKind.AssetPreview, "preview-one", "preview-one", new TaskRequest("preview-one"));
+            await manager.StartAsync(BackgroundTaskKind.AssetPreview, "preview-two", "preview-two", new TaskRequest("preview-two"));
+            await manager.StartAsync(BackgroundTaskKind.AssetPreview, "preview-three", "preview-three", new TaskRequest("preview-three"));
+            await preview.StartedTwo.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            preview.Release.TrySetResult();
+            await diagnostics.StartRecorded.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            disposeThread.Start();
+            Assert.False(disposeReturned.Wait(TimeSpan.FromSeconds(2)));
+
+            diagnostics.ReleaseStart.TrySetResult();
+            Assert.True(disposeReturned.Wait(TimeSpan.FromSeconds(2)));
+        }
+        finally
+        {
+            diagnostics.ReleaseStart.TrySetResult();
+            preview.Release.TrySetResult();
+            if (disposeThread.IsAlive) disposeThread.Join(TimeSpan.FromSeconds(2));
+            manager.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task Terminal_history_is_bounded_while_retaining_the_latest_library_and_processing_tasks()
     {
         using var manager = CreateManager(
@@ -348,16 +512,19 @@ public sealed class BackgroundTaskManagerTests
 
     private sealed class BlockingCancellationWorker : BackgroundTaskWorker<TaskRequest, string>
     {
+        private int callbackCount;
         public override BackgroundTaskKind Kind => BackgroundTaskKind.LibraryRefresh;
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource CallbackEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ReleaseCallback { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public SynchronizationContext? CallbackContext { get; private set; }
+        public int CallbackCount => Volatile.Read(ref callbackCount);
 
         protected override async ValueTask<string> ExecuteTypedAsync(TaskRequest request, IBackgroundTaskContext context, CancellationToken cancellationToken)
         {
             using var registration = cancellationToken.Register(() =>
             {
+                Interlocked.Increment(ref callbackCount);
                 CallbackContext = SynchronizationContext.Current;
                 CallbackEntered.TrySetResult();
                 ReleaseCallback.Task.GetAwaiter().GetResult();
@@ -390,6 +557,23 @@ public sealed class BackgroundTaskManagerTests
     }
 
     private sealed class MarkerSynchronizationContext : SynchronizationContext;
+
+    private sealed class BlockingStartDiagnostics(string subject) : IOperationDiagnostics
+    {
+        public TaskCompletionSource StartRecorded { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseStart { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public IDisposable Begin(string operation, string? subject = null) => new Scope();
+
+        public void Record(string operation, string? recordedSubject = null, string? detail = null)
+        {
+            if (operation != "task.started" || recordedSubject != subject) return;
+            StartRecorded.TrySetResult();
+            ReleaseStart.Task.GetAwaiter().GetResult();
+        }
+
+        private sealed class Scope : IDisposable { public void Dispose() { } }
+    }
 
     private sealed class NullDiagnostics : IOperationDiagnostics
     {

@@ -173,28 +173,58 @@ public sealed class BackgroundTaskManager(
 
     public void Dispose()
     {
-        (CancellationTokenSource Source, object Sync)[] sources;
+        List<BackgroundTaskEntry> cancellationEntries = [];
+        List<BackgroundTaskEntry> queuedEntries = [];
         lock (sync)
         {
             if (disposed) return;
             disposed = true;
-            sources = registry.Values.Where(entry => !IsTerminal(entry.State)).Select(entry => (entry.Cancellation, entry.CancellationSync)).ToArray();
-        }
-        foreach (var source in sources)
-        {
-            lock (source.Sync)
+
+            var activeEntries = registry.Values.Where(entry => !IsTerminal(entry.State)).ToArray();
+            foreach (var entry in activeEntries)
             {
-                try { source.Source.Cancel(); }
+                switch (entry.State)
+                {
+                    case BackgroundTaskState.Queued:
+                        entry.State = BackgroundTaskState.Cancelled;
+                        entry.FinishedAt = DateTimeOffset.UtcNow;
+                        entry.Terminal.TrySetResult();
+                        AddTerminalLocked(entry);
+                        queuedEntries.Add(entry);
+                        break;
+                    case BackgroundTaskState.Running:
+                        entry.State = BackgroundTaskState.Cancelling;
+                        cancellationEntries.Add(entry);
+                        break;
+                    case BackgroundTaskState.Cancelling:
+                        cancellationEntries.Add(entry);
+                        break;
+                }
+            }
+        }
+
+        foreach (var entry in queuedEntries)
+        {
+            lock (entry.CancellationSync)
+            {
+                try { entry.Cancellation.Dispose(); }
                 catch (ObjectDisposedException) { }
             }
+            diagnostics.Record("task.cancelled", entry.Subject, entry.Kind.ToString());
+        }
+
+        foreach (var entry in cancellationEntries)
+        {
+            diagnostics.Record("task.cancelling", entry.Subject, entry.Kind.ToString());
+            BeginCancellationSignal(entry);
         }
     }
 
     private void TryDispatch(BackgroundTaskLaneKind laneKind)
     {
-        List<BackgroundTaskEntry> dispatch = [];
         lock (sync)
         {
+            if (disposed) return;
             var lane = lanes[laneKind];
             while (lane.ActiveCount < lane.MaximumConcurrency && lane.Queue.TryDequeue(out var taskId))
             {
@@ -202,10 +232,9 @@ public sealed class BackgroundTaskManager(
                 entry.State = BackgroundTaskState.Running;
                 entry.StartedAt = DateTimeOffset.UtcNow;
                 lane.ActiveCount++;
-                dispatch.Add(entry);
+                StartExecution(entry);
             }
         }
-        foreach (var entry in dispatch) StartExecution(entry);
     }
 
     private void StartExecution(BackgroundTaskEntry entry)
@@ -216,29 +245,28 @@ public sealed class BackgroundTaskManager(
 
     private void BeginCancellationSignal(BackgroundTaskEntry entry)
     {
-        lock (entry.CancellationSync)
-        {
-            if (!entry.CancellationSignalTask.IsCompleted) return;
+        if (Interlocked.CompareExchange(ref entry.CancellationSignalStarted, 1, 0) != 0) return;
 
-            entry.CancellationSignalTask = Task.Run(
-                () =>
+        var signal = Task.Run(
+            () =>
+            {
+                lock (entry.CancellationSync)
                 {
-                    lock (entry.CancellationSync)
+                    try
                     {
-                        try
-                        {
-                            entry.Cancellation.Cancel();
-                        }
-                        catch (ObjectDisposedException)
-                        {
-                            // The worker completed before the scheduled cancellation signal acquired this lock.
-                        }
+                        entry.Cancellation.Cancel();
                     }
-                },
-                CancellationToken.None);
-        }
+                    catch (ObjectDisposedException)
+                    {
+                        // The worker completed before the scheduled cancellation signal acquired this lock.
+                    }
+                }
+            },
+            CancellationToken.None);
 
-        _ = entry.CancellationSignalTask.ContinueWith(
+        entry.CancellationSignalTask = signal;
+
+        _ = signal.ContinueWith(
             static completed => _ = completed.Exception,
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
