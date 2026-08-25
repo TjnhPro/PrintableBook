@@ -48,6 +48,18 @@ public sealed class BridgeMessageContractTests
         Assert.Equal("unsupported_command", response.Error);
     }
 
+    [Theory]
+    [InlineData("book.asset" + ".preview.get")]
+    [InlineData("book.asset" + ".preview.result")]
+    public void Removed_preview_commands_are_unsupported(string command)
+    {
+        var response = new WebViewBridgeRouter().Handle($"{{\"version\":1,\"id\":\"removed-preview\",\"command\":\"{command}\"}}");
+
+        Assert.False(response.Ok);
+        Assert.Equal("removed-preview", response.Id);
+        Assert.Equal("unsupported_command", response.Error);
+    }
+
     [Fact]
     public void BlankCommandIsRejectedAsAnInvalidRequest()
     {
