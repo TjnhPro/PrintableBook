@@ -424,9 +424,12 @@ test("Diagnostics route requests and renders sanitized responsiveness events", (
     discovery: { brands: [], books: [] }, globalSettings: {}, bookSummaries: []
   } } });
   routeButtons.find((button) => button.dataset.route === "diagnostics").listeners.click();
-  assert.equal(messages.at(-1).command, "diagnostics.get");
+  assert.deepEqual(messages.slice(-2).map((message) => message.command), ["diagnostics.get", "task.list"]);
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "diagnostics.snapshot", payload: [{ timestamp: "2026-08-25T00:00:00Z", severity: "Slow", kind: "dispatcher.stall", operation: "dispatcher", durationMilliseconds: 300, subject: null, activeOperations: ["book.scan (Book 001)"] }] } });
   assert.match(content.innerHTML, /UI responsiveness/);
   assert.match(content.innerHTML, /Slow/);
   assert.match(content.innerHTML, /Active during stall/);
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.tasks", payload: [{ kind: "AssetPreview", state: "Running", subject: "Book 001/page.png", step: "preview.generate" }] } });
+  assert.match(content.innerHTML, /Background workers/);
+  assert.match(content.innerHTML, /AssetPreview/);
 });
