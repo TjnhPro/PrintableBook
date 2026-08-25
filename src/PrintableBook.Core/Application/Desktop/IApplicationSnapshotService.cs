@@ -137,19 +137,27 @@ public sealed class ApplicationSnapshotService(
                 assetSummaries,
                 fullBookChecks,
                 await DescribeOutputsAsync(state.PublishedArtifactReferences ?? [], cancellationToken),
-                FindRepresentativeCoverReference(book, scan.Source)));
+                FindRepresentativeCoverReference(book, scan.Source, state.SelectedCoverReference)));
         }
 
         return new ApplicationSnapshot(discoverySnapshot, settings, summaries, DateTimeOffset.UtcNow);
     }
 
-    private static string? FindRepresentativeCoverReference(DiscoveredBook book, BookSource? source) =>
-        source?.GetAssets(BookAssetKind.Cover)
-            .OrderBy(asset => asset.Reference, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault(asset => Path.GetRelativePath(book.Directory.Value, asset.Reference)
-                .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
-                .StartsWith($"Book cover{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+    private static string? FindRepresentativeCoverReference(DiscoveredBook book, BookSource? source, string? selectedCoverReference)
+    {
+        var covers = source?.GetAssets(BookAssetKind.Cover) ?? [];
+        return covers
+            .OrderByDescending(asset => string.Equals(asset.Reference, selectedCoverReference, StringComparison.OrdinalIgnoreCase))
+            .ThenBy(asset => IsBookCoverAsset(book, asset) ? 0 : 1)
+            .ThenBy(asset => asset.Reference, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault()
             ?.Reference;
+    }
+
+    private static bool IsBookCoverAsset(DiscoveredBook book, BookAsset asset) =>
+        Path.GetRelativePath(book.Directory.Value, asset.Reference)
+            .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+            .StartsWith($"Book cover{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
 
     private async ValueTask<IReadOnlyList<BookAssetSummary>> DescribeAssetsAsync(DiscoveredBook book, BookSource? source, BookProcessingState state, CancellationToken cancellationToken)
     {

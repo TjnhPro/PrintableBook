@@ -63,6 +63,22 @@ public sealed class ApplicationSnapshotServiceTests
         Assert.EndsWith(Path.Combine("Book cover", "cover.png"), Assert.Single(snapshot.BookSummaries).RepresentativeCoverReference, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task RefreshAsync_uses_an_available_cover_folder_asset_when_book_cover_is_not_present()
+    {
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new CoverFolderScanner(), new StubStateStore(), new StubFileSystem()).RefreshAsync();
+
+        Assert.EndsWith(Path.Combine("Cover", "cover.png"), Assert.Single(snapshot.BookSummaries).RepresentativeCoverReference, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_prefers_the_cover_explicitly_selected_by_the_user_for_the_representative_preview()
+    {
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new MultipleCoverScanner(), new StubStateStore("cover-b.png"), new StubFileSystem()).RefreshAsync();
+
+        Assert.Equal("cover-b.png", Assert.Single(snapshot.BookSummaries).RepresentativeCoverReference);
+    }
+
     private sealed class StubDiscovery : IApplicationRootDiscovery
     {
         public int CallCount { get; private set; }
@@ -125,9 +141,20 @@ public sealed class ApplicationSnapshotServiceTests
                 new BookAsset(Path.Combine(bookDirectory.Value, "Book interior", "page-1.png"), BookAssetKind.Interior)])));
     }
 
-    private sealed class StubStateStore : IBookWorkspaceStateStore
+    private sealed class CoverFolderScanner : IBookSourceScanner
     {
-        public ValueTask<BookProcessingState?> LoadAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) => ValueTask.FromResult<BookProcessingState?>(null);
+        public ValueTask<BookSourceScanResult> ScanAsync(BookId bookId, DirectoryReference bookDirectory, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(BookSourceScanResult.Succeeded(new BookSource([
+                new BookAsset(Path.Combine(bookDirectory.Value, "Cover", "cover.png"), BookAssetKind.Cover),
+                new BookAsset(Path.Combine(bookDirectory.Value, "Interior", "page-1.png"), BookAssetKind.Interior)])));
+    }
+
+    private sealed class StubStateStore(string? selectedCoverReference = null) : IBookWorkspaceStateStore
+    {
+        public ValueTask<BookProcessingState?> LoadAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<BookProcessingState?>(selectedCoverReference is null
+                ? null
+                : BookProcessingState.NotStarted(workspace.BookId).SelectCover(selectedCoverReference));
         public ValueTask SaveAsync(BookWorkspace workspace, BookProcessingState state, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask AppendLogAsync(BookWorkspace workspace, BookProcessingLogEntry entry, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask<IReadOnlyList<BookProcessingLogEntry>> LoadLogsAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<BookProcessingLogEntry>>([]);
