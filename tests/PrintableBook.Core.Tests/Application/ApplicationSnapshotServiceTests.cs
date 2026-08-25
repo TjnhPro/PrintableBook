@@ -65,6 +65,24 @@ public sealed class ApplicationSnapshotServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_exposes_a_canonical_file_url_for_each_local_asset()
+    {
+        var sourceReference = Path.Combine("sources", "Book A", "Book interior", "Bộ sách #1 %", "page 001.png");
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(),
+            new StubSettingsStore(),
+            new DirectReferenceScanner(sourceReference),
+            new StubStateStore(),
+            new StubFileSystem()).RefreshAsync();
+
+        var asset = Assert.Single(Assert.Single(snapshot.BookSummaries).Assets!);
+
+        Assert.Equal(sourceReference, asset.SourceReference);
+        Assert.Equal(new Uri(Path.GetFullPath(sourceReference)).AbsoluteUri, asset.LocalImageUrl);
+        Assert.StartsWith("file:", asset.LocalImageUrl, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task RefreshAsync_uses_an_available_cover_folder_asset_when_book_cover_is_not_present()
     {
         var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new CoverFolderScanner(), new StubStateStore(), new StubFileSystem()).RefreshAsync();
@@ -141,6 +159,13 @@ public sealed class ApplicationSnapshotServiceTests
             ValueTask.FromResult(BookSourceScanResult.Succeeded(new BookSource([
                 new BookAsset("cover.png", BookAssetKind.Cover),
                 new BookAsset("page-1.png", BookAssetKind.Interior)])));
+    }
+
+    private sealed class DirectReferenceScanner(string sourceReference) : IBookSourceScanner
+    {
+        public ValueTask<BookSourceScanResult> ScanAsync(BookId bookId, DirectoryReference bookDirectory, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(BookSourceScanResult.Succeeded(new BookSource([
+                new BookAsset(sourceReference, BookAssetKind.Interior)])));
     }
 
     private sealed class MultipleCoverScanner : IBookSourceScanner

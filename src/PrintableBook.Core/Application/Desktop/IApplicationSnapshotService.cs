@@ -12,7 +12,7 @@ public sealed record BookValidationCheck(string Code, string Message, bool IsSuc
 public sealed record InteriorPageSummary(string PageId, string Status, string FinalPagePath);
 public sealed record InteriorSourcePageSummary(string SourceReference, FrameMode FrameMode);
 public sealed record BookFolderSummary(string Name, string Status, int FileCount, int ImageCount);
-public sealed record BookAssetSummary(string SourceReference, string RelativePath, string FileName, string Folder, string Kind, int? Width, int? Height, FrameMode FrameMode, bool PreviewAvailable);
+public sealed record BookAssetSummary(string SourceReference, string RelativePath, string FileName, string Folder, string Kind, int? Width, int? Height, FrameMode FrameMode, bool PreviewAvailable, string LocalImageUrl);
 public sealed record BookAssetPreview(string BookId, string SourceReference, int Width, int Height, string DataUrl);
 public sealed record BookOutputSummary(string ArtifactReference, string FileName, long FileSizeBytes, int? PageCount, double? WidthInches, double? HeightInches, string VerificationStatus, DateTimeOffset? GeneratedAt);
 public interface ILocalOutputActionService
@@ -207,10 +207,14 @@ public sealed class ApplicationSnapshotService(
                 info?.Size.Width,
                 info?.Size.Height,
                 state.GetInteriorFrameMode(InteriorSourceKey.FromBookRoot(book.Directory, file)),
-                info is not null));
+                info is not null,
+                ToLocalImageUrl(asset.Reference)));
         }
         return summaries;
     }
+
+    private static string ToLocalImageUrl(string sourceReference) =>
+        new Uri(Path.GetFullPath(sourceReference)).AbsoluteUri;
 
     private async ValueTask<IReadOnlyList<BookOutputSummary>> DescribeOutputsAsync(BookId bookId, IReadOnlyList<string> artifacts, CancellationToken cancellationToken)
     {
