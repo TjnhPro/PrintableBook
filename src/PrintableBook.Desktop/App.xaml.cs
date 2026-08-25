@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.DependencyInjection;
 using PrintableBook.Infrastructure.DependencyInjection;
+using PrintableBook.Desktop.Loading;
 using System.Windows;
 
 namespace PrintableBook.Desktop;
@@ -20,6 +21,7 @@ public partial class App : Application
         services.AddSingleton<ILocalOutputActionService, LocalOutputActionService>();
         services.AddSingleton<IProcessShutdownPrompt, ProcessShutdownPrompt>();
         services.AddSingleton<ProcessWindowShutdownCoordinator>();
+        services.AddSingleton<ApplicationLoadCoordinator>();
         services.AddSingleton<MainWindow>();
 
         serviceProvider = services.BuildServiceProvider();
