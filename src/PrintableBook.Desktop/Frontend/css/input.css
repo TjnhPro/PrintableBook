@@ -74,6 +74,8 @@
   .check-list .failure { @apply text-rose-700; }
   .check-list span { @apply text-slate-700; }
   .panel-note { @apply mt-2 text-sm text-slate-500; }
+  .refresh-failure { @apply mb-4 flex items-center gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800; }
+  .refresh-failure button { @apply ml-auto shrink-0; }
   .candidate-list { @apply mt-3 divide-y divide-slate-100; }
   .candidate-list li { @apply flex items-center justify-between gap-4 py-2 text-sm text-slate-600; }
   .artifact-list { @apply mt-3 grid gap-2 break-all text-sm text-slate-600; }

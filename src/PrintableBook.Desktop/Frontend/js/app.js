@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF outputs", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", assetPreviews: new Map(), queuedPreviewKeys: new Set(), previewQueue: [], activePreviewKeys: [], activePreviewRequests: 0, selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0 };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", assetPreviews: new Map(), queuedPreviewKeys: new Set(), previewQueue: [], activePreviewKeys: [], activePreviewRequests: 0, selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", pendingCommands: new Map() };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -37,7 +37,12 @@
   };
   const statusClass = (value) => value === "Ready" || value === "Completed" || value === "Present" ? "status-good" : value === "Invalid" || value === "Failed" ? "status-bad" : value === "Needs selection" || value === "Running" ? "status-warn" : "status-muted";
   const badge = (value) => { const label = displayStatus(value); return `<span class="status-badge ${statusClass(label)}">${escapeHtml(label)}</span>`; };
-  const send = (command, payload) => window.chrome.webview.postMessage(JSON.stringify({ version: 1, id: crypto.randomUUID(), command, ...(payload ? { payload } : {}) }));
+  const send = (command, payload) => {
+    const id = crypto.randomUUID();
+    state.pendingCommands.set(id, command);
+    window.chrome.webview.postMessage(JSON.stringify({ version: 1, id, command, ...(payload ? { payload } : {}) }));
+    return id;
+  };
   const previewKey = (bookId, sourceReference) => `${bookId}\u0000${sourceReference}`;
   const requestAssetPreview = (bookId, sourceReference) => send("book.asset.preview.get", { bookId, sourceReference });
   const pumpPreviewQueue = () => {
@@ -66,6 +71,18 @@
   };
   const fileSize = (bytes) => bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : bytes >= 1024 ? `${Math.round(bytes / 1024)} KB` : `${bytes || 0} B`;
   const panel = (title, body, extra = "") => `<section class="panel ${extra}"><h2 class="panel-title">${title}</h2>${body}</section>`;
+  const currentRoute = () => document.querySelector(".nav-item-active")?.dataset.route ?? "books";
+  const applicationIsLoading = () => state.applicationLoadState === "loading" || state.applicationLoadState === "refreshing";
+  const refreshAction = (label = "Refresh") => `<button class="button-secondary" data-action="refresh" ${applicationIsLoading() ? "disabled" : ""}>${state.applicationLoadState === "refreshing" ? "Refreshing…" : label}</button>`;
+  const renderLoadFailure = () => `<section class="panel" role="alert"><h2 class="panel-title">Unable to load library</h2><p class="panel-note">${escapeHtml(state.applicationLoadError || "Application refresh failed.")}</p><div class="page-actions mt-4"><button class="button-primary" data-action="refresh">Retry</button></div></section>`;
+  const renderRefreshFailure = () => `<section class="refresh-failure" role="alert"><span>Refresh failed</span><span>${escapeHtml(state.applicationLoadError || "Application refresh failed.")}</span><button class="button-secondary" data-action="refresh">Retry</button></section>`;
+  const beginApplicationRefresh = () => {
+    if (applicationIsLoading()) return;
+    state.applicationLoadState = window.appSnapshot ? "refreshing" : "loading";
+    state.applicationLoadError = "";
+    render(currentRoute(), false);
+    send("app.refresh");
+  };
   const selectedBook = () => books().find((book) => bookId(book) === state.selectedBookId);
   const assetsFor = (summary) => valueFor(summary, "assets", []);
   const previewFor = (bookId, sourceReference) => state.assetPreviews.get(previewKey(bookId, sourceReference));
@@ -117,7 +134,7 @@
   const renderConfiguration = () => {
     const settings = valueFor(window.appSnapshot, "globalSettings", {});
     const setting = (name, fallback) => valueFor(settings, name, fallback);
-    content.innerHTML = `<div class="page-header"><div><h1>Configuration</h1><p>Manage global application settings.</p></div><div class="page-actions"><button class="button-secondary" data-action="refresh">Load</button><button class="button-primary" data-action="save-settings">Save</button></div></div><div class="detail-stack">${panel("Application", `<div class="form-grid two"><label class="field"><span>Maximum concurrency</span><input class="control" data-setting="maximumPageConcurrency" type="number" min="1" max="12" value="${setting("maximumPageConcurrency", 4)}"></label><label class="field"><span>Artwork dark threshold</span><input class="control" data-setting="artworkDetectionThreshold" type="number" min="0" max="255" value="${setting("artworkDetectionThreshold", 20)}"></label></div>`)}${panel("Interior processing", `<div class="form-grid three"><label class="field"><span>Max artwork side</span><input class="control" data-setting="artworkMaximumSide" type="number" min="1" value="${setting("artworkMaximumSide", 2270)}"></label><label class="field"><span>Working width</span><input class="control" data-setting="workingPageWidth" type="number" min="1" value="${setting("workingPageWidth", 2550)}"></label><label class="field"><span>Working height</span><input class="control" data-setting="workingPageHeight" type="number" min="1" value="${setting("workingPageHeight", 2550)}"></label><label class="field"><span>Final width</span><input class="control" data-setting="finalPageWidth" type="number" min="1" value="${setting("finalPageWidth", 2588)}"></label><label class="field"><span>Final height</span><input class="control" data-setting="finalPageHeight" type="number" min="1" value="${setting("finalPageHeight", 2625)}"></label><label class="field"><span>DPI</span><input class="control" data-setting="dpi" type="number" min="1" value="${setting("dpi", 300)}"></label></div>`)}${panel("PDF output", `<div class="form-grid two"><label class="field"><span>Interior physical width (inch)</span><input class="control" data-setting="interiorPdfWidthInches" type="number" min="0.1" step="0.1" value="${setting("interiorPdfWidthInches", 8.5)}"></label><label class="field"><span>Interior physical height (inch)</span><input class="control" data-setting="interiorPdfHeightInches" type="number" min="0.1" step="0.1" value="${setting("interiorPdfHeightInches", 8.5)}"></label></div>`)}</div>`;
+    content.innerHTML = `<div class="page-header"><div><h1>Configuration</h1><p>Manage global application settings.</p></div><div class="page-actions">${refreshAction("Load")}<button class="button-primary" data-action="save-settings">Save</button></div></div><div class="detail-stack">${panel("Application", `<div class="form-grid two"><label class="field"><span>Maximum concurrency</span><input class="control" data-setting="maximumPageConcurrency" type="number" min="1" max="12" value="${setting("maximumPageConcurrency", 4)}"></label><label class="field"><span>Artwork dark threshold</span><input class="control" data-setting="artworkDetectionThreshold" type="number" min="0" max="255" value="${setting("artworkDetectionThreshold", 20)}"></label></div>`)}${panel("Interior processing", `<div class="form-grid three"><label class="field"><span>Max artwork side</span><input class="control" data-setting="artworkMaximumSide" type="number" min="1" value="${setting("artworkMaximumSide", 2270)}"></label><label class="field"><span>Working width</span><input class="control" data-setting="workingPageWidth" type="number" min="1" value="${setting("workingPageWidth", 2550)}"></label><label class="field"><span>Working height</span><input class="control" data-setting="workingPageHeight" type="number" min="1" value="${setting("workingPageHeight", 2550)}"></label><label class="field"><span>Final width</span><input class="control" data-setting="finalPageWidth" type="number" min="1" value="${setting("finalPageWidth", 2588)}"></label><label class="field"><span>Final height</span><input class="control" data-setting="finalPageHeight" type="number" min="1" value="${setting("finalPageHeight", 2625)}"></label><label class="field"><span>DPI</span><input class="control" data-setting="dpi" type="number" min="1" value="${setting("dpi", 300)}"></label></div>`)}${panel("PDF output", `<div class="form-grid two"><label class="field"><span>Interior physical width (inch)</span><input class="control" data-setting="interiorPdfWidthInches" type="number" min="0.1" step="0.1" value="${setting("interiorPdfWidthInches", 8.5)}"></label><label class="field"><span>Interior physical height (inch)</span><input class="control" data-setting="interiorPdfHeightInches" type="number" min="0.1" step="0.1" value="${setting("interiorPdfHeightInches", 8.5)}"></label></div>`)}</div>`;
   };
 
   const renderBrands = () => {
@@ -249,7 +266,7 @@
     };
     const start = filtered.length ? (state.bookPage - 1) * pageSize + 1 : 0;
     const end = Math.min(state.bookPage * pageSize, filtered.length);
-    content.innerHTML = `<div class="page-header"><div><h1>Books</h1><p>Filter local Books, validate only what needs review, and send selected Books to Interior Processing.</p></div><div class="page-actions"><button class="button-secondary" data-action="refresh">Refresh</button><button class="button-secondary" data-action="validate-all">Validate all</button><button class="button-primary" data-action="go-process">Process Interior</button></div></div><section class="book-toolbar"><label class="field"><span>Search books</span><input class="control" data-action="filter-books" value="${escapeHtml(state.bookFilter)}" placeholder="Book name"></label><label class="field"><span>Sort</span><select class="control" data-action="book-sort"><option value="activity" ${state.bookSort === "activity" ? "selected" : ""}>Last activity</option><option value="name" ${state.bookSort === "name" ? "selected" : ""}>Book name</option></select></label><div class="asset-view-toggle" aria-label="Book view"><button class="${state.bookView === "grid" ? "active" : ""}" data-action="book-view" data-book-view="grid" aria-pressed="${state.bookView === "grid"}">Grid</button><button class="${state.bookView === "list" ? "active" : ""}" data-action="book-view" data-book-view="list" aria-pressed="${state.bookView === "list"}">Compact list</button></div></section><div class="status-filters" role="group" aria-label="Book status filters">${statusCounts.map(({ name, count }) => `<button class="${state.bookStatus === name ? "active" : ""}" data-action="book-status" data-book-status="${name}" aria-pressed="${state.bookStatus === name}">${name}<strong>${count}</strong></button>`).join("")}</div><section class="book-secondary-filters"><label class="field"><span>Frame mode</span><select class="control" data-action="book-frame-filter">${["Any", "Auto", "Frame", "No frame", "Needs review"].map((name) => `<option value="${name}" ${state.bookFrameFilter === name ? "selected" : ""}>${name}</option>`).join("")}</select></label><button class="button-secondary" data-action="clear-book-filters">Clear filters</button><span class="book-filter-result" role="status" aria-atomic="true">${filtered.length} Books match the active filters.</span></section><section class="${state.bookView === "grid" ? "book-grid" : "book-compact-list"}">${pageItems.length ? pageItems.map(card).join("") : `<div class="book-grid-empty"><strong>No Books match this view.</strong><span>Clear a filter or refresh the local source folders.</span></div>`}</section><footer class="book-pagination" data-book-total-pages="${totalPages}"><span>${start}–${end} of ${filtered.length}</span><div><button class="button-secondary" data-action="book-page" data-book-page="first" ${state.bookPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="book-page" data-book-page="previous" ${state.bookPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.bookPage} of ${totalPages}</span><button class="button-secondary" data-action="book-page" data-book-page="next" ${state.bookPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="book-page" data-book-page="last" ${state.bookPage === totalPages ? "disabled" : ""}>Last</button></div><button class="button-primary" data-action="go-process" ${state.selectedBookIds.size ? "" : "disabled"}>Process ${state.selectedBookIds.size} selected</button></footer>`;
+    content.innerHTML = `<div class="page-header"><div><h1>Books</h1><p>Filter local Books, validate only what needs review, and send selected Books to Interior Processing.</p></div><div class="page-actions">${refreshAction()}<button class="button-secondary" data-action="validate-all">Validate all</button><button class="button-primary" data-action="go-process">Process Interior</button></div></div><section class="book-toolbar"><label class="field"><span>Search books</span><input class="control" data-action="filter-books" value="${escapeHtml(state.bookFilter)}" placeholder="Book name"></label><label class="field"><span>Sort</span><select class="control" data-action="book-sort"><option value="activity" ${state.bookSort === "activity" ? "selected" : ""}>Last activity</option><option value="name" ${state.bookSort === "name" ? "selected" : ""}>Book name</option></select></label><div class="asset-view-toggle" aria-label="Book view"><button class="${state.bookView === "grid" ? "active" : ""}" data-action="book-view" data-book-view="grid" aria-pressed="${state.bookView === "grid"}">Grid</button><button class="${state.bookView === "list" ? "active" : ""}" data-action="book-view" data-book-view="list" aria-pressed="${state.bookView === "list"}">Compact list</button></div></section><div class="status-filters" role="group" aria-label="Book status filters">${statusCounts.map(({ name, count }) => `<button class="${state.bookStatus === name ? "active" : ""}" data-action="book-status" data-book-status="${name}" aria-pressed="${state.bookStatus === name}">${name}<strong>${count}</strong></button>`).join("")}</div><section class="book-secondary-filters"><label class="field"><span>Frame mode</span><select class="control" data-action="book-frame-filter">${["Any", "Auto", "Frame", "No frame", "Needs review"].map((name) => `<option value="${name}" ${state.bookFrameFilter === name ? "selected" : ""}>${name}</option>`).join("")}</select></label><button class="button-secondary" data-action="clear-book-filters">Clear filters</button><span class="book-filter-result" role="status" aria-atomic="true">${filtered.length} Books match the active filters.</span></section><section class="${state.bookView === "grid" ? "book-grid" : "book-compact-list"}">${pageItems.length ? pageItems.map(card).join("") : `<div class="book-grid-empty"><strong>No Books match this view.</strong><span>Clear a filter or refresh the local source folders.</span></div>`}</section><footer class="book-pagination" data-book-total-pages="${totalPages}"><span>${start}–${end} of ${filtered.length}</span><div><button class="button-secondary" data-action="book-page" data-book-page="first" ${state.bookPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="book-page" data-book-page="previous" ${state.bookPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.bookPage} of ${totalPages}</span><button class="button-secondary" data-action="book-page" data-book-page="next" ${state.bookPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="book-page" data-book-page="last" ${state.bookPage === totalPages ? "disabled" : ""}>Last</button></div><button class="button-primary" data-action="go-process" ${state.selectedBookIds.size ? "" : "disabled"}>Process ${state.selectedBookIds.size} selected</button></footer>`;
     const selected = selectedBook();
     if (selected) content.insertAdjacentHTML("beforeend", renderBookDrawer(selected, summaryFor(selected)));
     if (state.drawerFocusTitle) {
@@ -322,12 +339,19 @@
     document.querySelectorAll("[data-route]").forEach((button) => button.classList.toggle("nav-item-active", button.dataset.route === route));
     const subtitle = document.getElementById("page-subtitle");
     if (subtitle) subtitle.textContent = `${routeNames[route] ?? "Application"} workspace`;
+    if (!window.appSnapshot) {
+      content.innerHTML = state.applicationLoadState === "failed"
+        ? renderLoadFailure()
+        : panel("Loading library…", "<p class=\"panel-note\">Discovering Books, workspace state and local outputs.</p>");
+      return;
+    }
     if (route === "configuration") renderConfiguration();
     if (route === "brands") renderBrands();
     if (route === "books") renderBooks();
     if (route === "process") renderProcess(requestProcess);
     if (route === "outputs") renderOutputs();
     if (route === "diagnostics") renderDiagnostics();
+    if (state.applicationLoadState === "failed") content.insertAdjacentHTML("afterbegin", renderRefreshFailure());
   };
 
   document.querySelectorAll("[data-route]").forEach((button) => button.addEventListener("click", () => render(button.dataset.route)));
@@ -342,7 +366,7 @@
     const target = event.target.closest("[data-action]");
     if (!target) return;
     const action = target.dataset.action;
-    if (action === "refresh" || action === "validate-all") send("app.refresh");
+    if (action === "refresh" || action === "validate-all") beginApplicationRefresh();
     if (action === "save-settings") { const payload = {}; document.querySelectorAll("[data-setting]").forEach((input) => { payload[input.dataset.setting] = Number(input.value); }); send("settings.save", payload); }
     if (action === "select-brand") { state.selectedBrand = target.dataset.brandName; if (brandSelect) brandSelect.value = state.selectedBrand; render("brands"); }
     if (action === "load-brand-settings") send("brand.settings.get", { brandName: state.selectedBrand });
@@ -382,12 +406,16 @@
 
   window.chrome.webview.addEventListener("message", (event) => {
     const response = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+    const requestCommand = state.pendingCommands.get(valueFor(response, "id", "")) ?? "";
+    state.pendingCommands.delete(valueFor(response, "id", ""));
     const ok = valueFor(response, "ok", false);
     const command = valueFor(response, "command", "");
     if (ok && command === "app.pong") {
       status.textContent = "Connected";
     } else if (ok && command === "app.snapshot") {
       window.appSnapshot = valueFor(response, "payload", {});
+      state.applicationLoadState = "ready";
+      state.applicationLoadError = "";
       const allBrands = valueFor(discovery(), "brands", []);
       if (!state.selectedBrand && allBrands.length) state.selectedBrand = valueFor(allBrands[0], "name", "");
       if (brandSelect) brandSelect.innerHTML = allBrands.length ? allBrands.map((brand) => `<option>${escapeHtml(valueFor(brand, "name", ""))}</option>`).join("") : "<option>No brands</option>";
@@ -431,17 +459,25 @@
         state.activePreviewRequests -= 1;
         pumpPreviewQueue();
       }
-      status.textContent = `Bridge error: ${valueFor(response, "error", "unexpected response")}`;
+      const error = valueFor(response, "error", "unexpected response");
+      if (requestCommand === "app.refresh") {
+        state.applicationLoadState = "failed";
+        state.applicationLoadError = error;
+        render(currentRoute(), false);
+      }
+      status.textContent = `Bridge error: ${error}`;
     }
   });
 
   const refreshButton = document.getElementById("refresh-button");
-  if (refreshButton) refreshButton.addEventListener("click", () => send("app.refresh"));
+  if (refreshButton) refreshButton.addEventListener("click", beginApplicationRefresh);
   const globalProcessStatus = document.getElementById("global-process-status");
   if (globalProcessStatus) globalProcessStatus.addEventListener("click", () => render("process"));
   updateGlobalProcessStatus();
   if (brandSelect) brandSelect.addEventListener("change", () => { state.selectedBrand = brandSelect.value; });
   window.setInterval(() => { if (valueFor(window.processSnapshot, "isActive", false) || valueFor(window.processSnapshot, "isCancelling", false)) send("process.get"); }, 1000);
   send("app.ping");
+  state.applicationLoadState = "loading";
+  render("books", false);
   send("app.refresh");
 })();

@@ -28,6 +28,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   const intervals = [];
   let messageHandler;
   const browserWindow = {
+    appSnapshot: activeRoute === "process" ? { discovery: { brands: [], books: [] }, bookSummaries: [] } : undefined,
     innerWidth: 1600,
     innerHeight: 900,
     chrome: {
@@ -106,6 +107,60 @@ test("snapshot rendering opens the Book Library and keeps discovery and brand da
   assert.doesNotMatch(content.innerHTML, /Paths \(Read Only\)/);
 });
 
+test("startup shows a loading library view while the first application refresh is pending", () => {
+  const { content, messages } = loadBridge();
+
+  assert.deepEqual(messages.map((message) => message.command), ["app.ping", "app.refresh"]);
+  assert.match(content.innerHTML, /Loading library…/);
+  assert.match(content.innerHTML, /Discovering Books, workspace state and local outputs/);
+});
+
+test("manual refresh keeps the existing Books visible and does not enqueue a duplicate frontend refresh", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge();
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] }, globalSettings: {}, bookSummaries: []
+  } } });
+
+  const refresh = { dataset: { action: "refresh" }, closest: () => refresh };
+  contentListeners.click({ target: refresh });
+  assert.match(content.innerHTML, /Book 001/);
+  assert.match(content.innerHTML, /disabled>Refreshing…/);
+  const messageCount = messages.length;
+
+  contentListeners.click({ target: refresh });
+  assert.equal(messages.length, messageCount);
+});
+
+test("a refresh failure preserves the existing snapshot and offers a retry", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge();
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] }, globalSettings: {}, bookSummaries: []
+  } } });
+
+  const refresh = { dataset: { action: "refresh" }, closest: () => refresh };
+  contentListeners.click({ target: refresh });
+  messageHandler({ data: { version: 1, id: "request-1", ok: false, error: "app_refresh_failed: source folder is unavailable" } });
+
+  assert.match(content.innerHTML, /Book 001/);
+  assert.match(content.innerHTML, /Refresh failed/);
+  assert.match(content.innerHTML, /Retry/);
+  const messageCount = messages.length;
+  contentListeners.click({ target: refresh });
+  assert.equal(messages.length, messageCount + 1);
+  assert.equal(messages.at(-1).command, "app.refresh");
+});
+
+test("an initial refresh failure shows a retryable load failure panel", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge();
+  messageHandler({ data: { version: 1, id: "request-1", ok: false, error: "app_refresh_failed: root is unavailable" } });
+
+  assert.match(content.innerHTML, /Unable to load library/);
+  assert.match(content.innerHTML, /root is unavailable/);
+  const retry = { dataset: { action: "refresh" }, closest: () => retry };
+  contentListeners.click({ target: retry });
+  assert.equal(messages.at(-1).command, "app.refresh");
+});
+
 test("phase 4 page markup includes the interior-only processing workflow", () => {
   const script = readFileSync(appScriptPath, "utf8");
 
@@ -127,7 +182,7 @@ test("active processing is polled globally and stops after a terminal snapshot",
 
   assert.equal(intervals.length, 1);
   messageHandler({ data: { version: 1, id: "process-1", ok: true, command: "process.snapshot", payload: { isActive: true, isCancelling: false } } });
-  assert.equal(content.innerHTML, "");
+  assert.match(content.innerHTML, /Loading library/);
   intervals[0]();
   assert.equal(messages.at(-1).command, "process.get");
 
