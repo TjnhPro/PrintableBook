@@ -1,6 +1,8 @@
 :root {
-  --pb-webview-width: 1600px;
-  --pb-webview-height: 900px;
+  /* The WPF host enforces this as its minimum window size. It is a design
+     baseline, not a maximum size for the WebView when the window is maximized. */
+  --pb-design-width: 1600px;
+  --pb-design-height: 900px;
   --pb-sidebar-width: 210px;
   --pb-header-height: 64px;
   --pb-book-card-preview: 4 / 3;
@@ -12,11 +14,11 @@
 .pb-app-canvas {
   display: grid;
   grid-template-columns: var(--pb-sidebar-width) minmax(0, 1fr);
-  width: min(100vw, var(--pb-webview-width));
-  height: min(100dvh, var(--pb-webview-height));
+  width: 100%;
+  height: 100dvh;
   min-width: 0;
   min-height: 0;
-  margin: 0 auto;
+  margin: 0;
   overflow: hidden;
 }
 .pb-sidebar, .pb-main, .pb-content { min-width: 0; min-height: 0; }
@@ -24,9 +26,9 @@
 .pb-main { display: grid; grid-template-rows: var(--pb-header-height) minmax(0, 1fr); overflow: hidden; }
 .pb-content {
   width: 100%;
-  max-width: var(--pb-webview-width);
-  margin: 0 auto;
-  padding: 32px;
+  max-width: none;
+  margin: 0;
+  padding: clamp(24px, 2vw, 40px);
   overflow: auto;
   overflow-x: hidden;
   scroll-padding-top: 16px;

@@ -3,7 +3,7 @@ namespace PrintableBook.Desktop.Tests;
 public sealed class BookWorkspaceLayoutContractTests
 {
     [Fact]
-    public void WebViewShellUsesABoundedCanvasInsteadOfAForcedMinimumPageWidth()
+    public void WebViewShellFillsTheAvailableViewportWithoutAForcedMinimumPageWidth()
     {
         var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
         var markup = File.ReadAllText(Path.Combine(frontend, "index.html"));
@@ -11,8 +11,12 @@ public sealed class BookWorkspaceLayoutContractTests
 
         Assert.DoesNotContain("min-w-[1600px]", markup, StringComparison.Ordinal);
         Assert.Contains("pb-app-canvas", markup, StringComparison.Ordinal);
-        Assert.Contains("--pb-webview-width: 1600px", layout, StringComparison.Ordinal);
-        Assert.Contains("--pb-webview-height: 900px", layout, StringComparison.Ordinal);
+        Assert.Contains("--pb-design-width: 1600px", layout, StringComparison.Ordinal);
+        Assert.Contains("--pb-design-height: 900px", layout, StringComparison.Ordinal);
+        Assert.Contains("width: 100%", layout, StringComparison.Ordinal);
+        Assert.Contains("height: 100dvh", layout, StringComparison.Ordinal);
+        Assert.DoesNotContain("width: min(100vw, var(--pb-webview-width))", layout, StringComparison.Ordinal);
+        Assert.DoesNotContain("height: min(100dvh, var(--pb-webview-height))", layout, StringComparison.Ordinal);
         Assert.Contains("overflow-x: hidden", layout, StringComparison.Ordinal);
     }
 
