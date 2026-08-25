@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF outputs", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", assetPreviews: new Map(), queuedPreviewKeys: new Set(), previewQueue: [], activePreviewKeys: [], activePreviewRequests: 0, selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, pendingCommands: new Map() };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", assetPreviews: new Map(), queuedPreviewKeys: new Set(), previewQueue: [], activePreviewKeys: [], activePreviewRequests: 0, pendingPreviewByRequestId: new Map(), previewTasks: new Map(), previewTaskResultsRequested: new Set(), previewPollTimer: null, selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, pendingCommands: new Map() };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -45,12 +45,53 @@
   };
   const previewKey = (bookId, sourceReference) => `${bookId}\u0000${sourceReference}`;
   const requestAssetPreview = (bookId, sourceReference) => send("book.asset.preview.get", { bookId, sourceReference });
+  const releaseAssetPreview = (key) => {
+    if (!key) return;
+    state.queuedPreviewKeys.delete(key);
+    const activeIndex = state.activePreviewKeys.indexOf(key);
+    if (activeIndex >= 0) {
+      state.activePreviewKeys.splice(activeIndex, 1);
+      state.activePreviewRequests = Math.max(0, state.activePreviewRequests - 1);
+    }
+    for (const [taskId, taskKey] of state.previewTasks) if (taskKey === key) {
+      state.previewTasks.delete(taskId);
+      state.previewTaskResultsRequested.delete(taskId);
+    }
+    pumpPreviewQueue();
+  };
+  const pollPreviewTasks = () => {
+    if (!state.previewTasks.size) return;
+    for (const taskId of state.previewTasks.keys()) send("task.get", { taskId });
+  };
+  const observeAssetPreviewTask = (task, responseId) => {
+    const taskId = valueFor(task, "taskId", "");
+    if (!taskId) return;
+    const key = state.pendingPreviewByRequestId.get(responseId) ?? state.previewTasks.get(taskId);
+    state.pendingPreviewByRequestId.delete(responseId);
+    if (!key) return;
+    state.previewTasks.set(taskId, key);
+    const taskState = valueFor(task, "state", "Queued");
+    if (["Queued", "Running", "Cancelling"].includes(taskState)) {
+      if (state.previewPollTimer === null) state.previewPollTimer = window.setInterval(pollPreviewTasks, 250);
+      return;
+    }
+    if (taskState === "Completed" && !state.previewTaskResultsRequested.has(taskId)) {
+      state.previewTaskResultsRequested.add(taskId);
+      send("book.asset.preview.result", { taskId });
+      return;
+    }
+    releaseAssetPreview(key);
+    if (!state.previewTasks.size && state.previewPollTimer !== null && window.clearInterval) {
+      window.clearInterval(state.previewPollTimer);
+      state.previewPollTimer = null;
+    }
+  };
   const pumpPreviewQueue = () => {
     while (state.activePreviewRequests < 4 && state.previewQueue.length) {
       const request = state.previewQueue.shift();
       state.activePreviewRequests += 1;
       state.activePreviewKeys.push(request.key);
-      requestAssetPreview(request.bookId, request.sourceReference);
+      state.pendingPreviewByRequestId.set(requestAssetPreview(request.bookId, request.sourceReference), request.key);
     }
   };
   const queueAssetPreview = (bookId, sourceReference) => {
@@ -443,14 +484,17 @@
 
   window.chrome.webview.addEventListener("message", (event) => {
     const response = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-    const requestCommand = state.pendingCommands.get(valueFor(response, "id", "")) ?? "";
-    state.pendingCommands.delete(valueFor(response, "id", ""));
+    const responseId = valueFor(response, "id", "");
+    const requestCommand = state.pendingCommands.get(responseId) ?? "";
+    state.pendingCommands.delete(responseId);
     const ok = valueFor(response, "ok", false);
     const command = valueFor(response, "command", "");
     if (ok && command === "app.pong") {
       status.textContent = "Connected";
     } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "LibraryRefresh") {
       observeLibraryRefresh(valueFor(response, "payload", {}));
+    } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "AssetPreview") {
+      observeAssetPreviewTask(valueFor(response, "payload", {}), responseId);
     } else if (ok && command === "app.snapshot") {
       window.appSnapshot = valueFor(response, "payload", {});
       state.applicationLoadState = "ready";
@@ -482,10 +526,7 @@
       const matched = previewKey(valueFor(preview, "bookId", ""), reference);
       if (matched) {
         state.assetPreviews.set(matched, preview);
-        state.queuedPreviewKeys.delete(matched);
-        state.activePreviewKeys = state.activePreviewKeys.filter((key) => key !== matched);
-        state.activePreviewRequests = Math.max(0, state.activePreviewRequests - 1);
-        pumpPreviewQueue();
+        releaseAssetPreview(matched);
       }
       const isViewingInteriorAssets = document.querySelector(".nav-item-active")?.dataset.route === "books" && state.bookDrawerOpen && state.selectedBookTab === "assets";
       if (isViewingInteriorAssets) updateVisibleAssetPreview(preview);
@@ -498,12 +539,9 @@
       if (currentRoute() === "diagnostics") render("diagnostics", false);
       status.textContent = "Diagnostics refreshed";
     } else {
-      if (state.activePreviewRequests && String(valueFor(response, "error", "")).includes("preview")) {
-        const failed = state.activePreviewKeys.shift();
-        if (failed) state.queuedPreviewKeys.delete(failed);
-        state.activePreviewRequests -= 1;
-        pumpPreviewQueue();
-      }
+      const previewKeyForFailure = state.pendingPreviewByRequestId.get(responseId);
+      state.pendingPreviewByRequestId.delete(responseId);
+      if (previewKeyForFailure) releaseAssetPreview(previewKeyForFailure);
       const error = valueFor(response, "error", "unexpected response");
       if (requestCommand === "app.refresh") {
         state.applicationLoadState = "failed";

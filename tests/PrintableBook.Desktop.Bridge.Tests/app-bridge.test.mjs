@@ -48,6 +48,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
       }
     },
     setInterval: (callback) => { intervals.push(callback); return intervals.length; },
+    clearInterval: () => { },
     requestAnimationFrame: (callback) => { callback(); return 1; }
   };
 
@@ -357,6 +358,28 @@ test("asset workspace queues allowlisted previews for visible Interior assets", 
     command: "book.asset.preview.get",
     payload: { bookId: "Book 001", sourceReference: "Book interior/page-001.png" }
   });
+});
+
+test("asset preview worker completion fetches its result exactly once", () => {
+  const visibleTile = { dataset: { previewBookId: "Book 001", sourceReference: "Book interior/page-001.png" }, getBoundingClientRect: () => ({ top: 0, left: 0, right: 1, bottom: 1 }) };
+  const { messageHandler, contentListeners, intervals, messages } = loadBridge("books", [visibleTile]);
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] }, globalSettings: {},
+    bookSummaries: [{ bookId: { value: "Book 001" }, assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", previewAvailable: true }], validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [] }]
+  } } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
+  contentListeners.click({ target: openBook });
+  contentListeners.click({ target: assetsTab });
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { taskId: "preview-1", kind: "AssetPreview", state: "Running" } } });
+  intervals.at(-1)();
+  assert.equal(messages.at(-1).command, "task.get");
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { taskId: "preview-1", kind: "AssetPreview", state: "Completed" } } });
+  assert.equal(messages.at(-1).command, "book.asset.preview.result");
+  const resultCount = messages.filter((message) => message.command === "book.asset.preview.result").length;
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { taskId: "preview-1", kind: "AssetPreview", state: "Completed" } } });
+  assert.equal(messages.filter((message) => message.command === "book.asset.preview.result").length, resultCount);
 });
 
 test("validation limits Book detail to Interior preflight while cover work is deferred", () => {
