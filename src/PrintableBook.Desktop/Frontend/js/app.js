@@ -159,6 +159,13 @@
   };
   const selectedBook = () => books().find((book) => bookId(book) === state.selectedBookId);
   const assetsFor = (summary) => valueFor(summary, "assets", []);
+  const assetForReference = (summary, sourceReference) => assetsFor(summary).find((asset) => valueFor(asset, "sourceReference", "") === sourceReference);
+  const localImageMarkup = (asset, alt, fallback = "Preview unavailable") => {
+    const url = valueFor(asset, "localImageUrl", "");
+    return url
+      ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async" data-local-image data-image-fallback="${escapeHtml(fallback)}">`
+      : `<span class="book-preview-fallback" aria-label="${escapeHtml(fallback)}">${escapeHtml(fallback)}</span>`;
+  };
   const previewFor = (bookId, sourceReference) => state.assetPreviews.get(previewKey(bookId, sourceReference));
   const assetDimensions = (asset) => {
     const width = valueFor(asset, "width", null);
@@ -235,21 +242,17 @@
       const matchingAssets = assets.filter((asset) => `${valueFor(asset, "fileName", "")} ${valueFor(asset, "relativePath", "")} ${valueFor(asset, "kind", "")}`.toLowerCase().includes(state.assetFilter.toLowerCase()));
       if (!matchingAssets.some((asset) => valueFor(asset, "sourceReference", "") === state.selectedAssetReference)) state.selectedAssetReference = valueFor(matchingAssets[0], "sourceReference", "");
       const selectedAsset = matchingAssets.find((asset) => valueFor(asset, "sourceReference", "") === state.selectedAssetReference) ?? null;
-      const preview = selectedAsset ? previewFor(bookId(book), valueFor(selectedAsset, "sourceReference", "")) : null;
-      const previewUrl = valueFor(preview, "dataUrl", "");
       const assetRow = (asset) => {
         const reference = valueFor(asset, "sourceReference", "");
         const selected = reference === state.selectedAssetReference;
-        const thumbnail = valueFor(previewFor(bookId(book), reference), "dataUrl", "");
-        return `<button type="button" class="asset-row ${selected ? "selected" : ""}" data-action="select-asset" data-source-reference="${escapeHtml(reference)}" aria-pressed="${selected}"><span class="asset-thumb">${thumbnail ? `<img src="${escapeHtml(thumbnail)}" alt="" loading="lazy">` : "<span aria-hidden=\"true\">Preview</span>"}</span><span class="asset-row-copy"><strong>${escapeHtml(valueFor(asset, "fileName", "Unnamed asset"))}</strong><small>${escapeHtml(valueFor(asset, "relativePath", ""))}</small></span><span>${badge(valueFor(asset, "kind", "Asset"))}</span></button>`;
+        return `<button type="button" class="asset-row ${selected ? "selected" : ""}" data-action="select-asset" data-source-reference="${escapeHtml(reference)}" aria-pressed="${selected}"><span class="asset-thumb">${localImageMarkup(asset, "")}</span><span class="asset-row-copy"><strong>${escapeHtml(valueFor(asset, "fileName", "Unnamed asset"))}</strong><small>${escapeHtml(valueFor(asset, "relativePath", ""))}</small></span><span>${badge(valueFor(asset, "kind", "Asset"))}</span></button>`;
       };
       const gridCard = (asset) => {
         const reference = valueFor(asset, "sourceReference", "");
         const selected = reference === state.selectedAssetReference;
-        const thumbnail = valueFor(previewFor(bookId(book), reference), "dataUrl", "");
-        return `<button type="button" class="asset-card ${selected ? "selected" : ""}" data-action="select-asset" data-source-reference="${escapeHtml(reference)}" aria-pressed="${selected}"><span class="asset-card-preview">${thumbnail ? `<img src="${escapeHtml(thumbnail)}" alt="" loading="lazy">` : "<span aria-hidden=\"true\">Preview unavailable</span>"}</span><strong>${escapeHtml(valueFor(asset, "fileName", "Unnamed asset"))}</strong><small>${escapeHtml(assetDimensions(asset))} · ${escapeHtml(valueFor(asset, "kind", "Asset"))}</small></button>`;
+        return `<button type="button" class="asset-card ${selected ? "selected" : ""}" data-action="select-asset" data-source-reference="${escapeHtml(reference)}" aria-pressed="${selected}"><span class="asset-card-preview">${localImageMarkup(asset, "")}</span><strong>${escapeHtml(valueFor(asset, "fileName", "Unnamed asset"))}</strong><small>${escapeHtml(assetDimensions(asset))} · ${escapeHtml(valueFor(asset, "kind", "Asset"))}</small></button>`;
       };
-      const inspector = selectedAsset ? `<section class="asset-inspector" aria-label="Selected asset inspector"><div class="asset-inspector-preview">${previewUrl ? `<img src="${escapeHtml(previewUrl)}" alt="Preview of ${escapeHtml(valueFor(selectedAsset, "fileName", "selected asset"))}">` : "<span>Preview has not been loaded.</span>"}</div><h3>${escapeHtml(valueFor(selectedAsset, "fileName", "Selected asset"))}</h3><dl><div><dt>Folder</dt><dd>${escapeHtml(valueFor(selectedAsset, "folder", "Unknown"))}</dd></div><div><dt>Dimensions</dt><dd>${escapeHtml(assetDimensions(selectedAsset))}</dd></div><div><dt>Frame mode</dt><dd>${escapeHtml(frameModeValue(valueFor(selectedAsset, "frameMode", "auto")))}</dd></div><div><dt>Path</dt><dd>${escapeHtml(valueFor(selectedAsset, "relativePath", ""))}</dd></div></dl><button class="button-secondary w-full mt-4" data-action="request-asset-preview" data-source-reference="${escapeHtml(valueFor(selectedAsset, "sourceReference", ""))}">${previewUrl ? "Refresh preview" : "Load preview"}</button></section>` : `<section class="asset-inspector"><p class="empty-copy">Select an asset to inspect its local metadata.</p></section>`;
+      const inspector = selectedAsset ? `<section class="asset-inspector" aria-label="Selected asset inspector"><div class="asset-inspector-preview">${localImageMarkup(selectedAsset, `Preview of ${valueFor(selectedAsset, "fileName", "selected asset")}`)}</div><h3>${escapeHtml(valueFor(selectedAsset, "fileName", "Selected asset"))}</h3><dl><div><dt>Folder</dt><dd>${escapeHtml(valueFor(selectedAsset, "folder", "Unknown"))}</dd></div><div><dt>Dimensions</dt><dd>${escapeHtml(assetDimensions(selectedAsset))}</dd></div><div><dt>Frame mode</dt><dd>${escapeHtml(frameModeValue(valueFor(selectedAsset, "frameMode", "auto")))}</dd></div><div><dt>Path</dt><dd>${escapeHtml(valueFor(selectedAsset, "relativePath", ""))}</dd></div></dl></section>` : `<section class="asset-inspector"><p class="empty-copy">Select an asset to inspect its local metadata.</p></section>`;
       body = `<section class="asset-workspace"><aside class="asset-source-panel"><h3>Source folders</h3><p>Assets stay local. Previews are requested only when selected.</p><div class="asset-folder-count"><span>Interior</span><strong>${assets.filter((asset) => valueFor(asset, "kind", "") === "Interior").length}</strong></div><div class="asset-folder-count"><span>Cover candidates</span><strong>${assets.filter((asset) => valueFor(asset, "kind", "") === "Cover").length}</strong></div></aside><section class="asset-browser"><div class="asset-browser-toolbar"><div><h3 class="panel-title">Asset Workspace</h3><p class="panel-note">Review local files before processing.</p></div><div class="asset-view-toggle" aria-label="Asset view"><button class="${state.assetView === "list" ? "active" : ""}" data-action="asset-view" data-asset-view="list" aria-pressed="${state.assetView === "list"}">List</button><button class="${state.assetView === "grid" ? "active" : ""}" data-action="asset-view" data-asset-view="grid" aria-pressed="${state.assetView === "grid"}">Grid</button></div></div><label class="field mt-4"><span>Search assets</span><input class="control" data-action="filter-assets" value="${escapeHtml(state.assetFilter)}" placeholder="File name or path"></label><p class="asset-result-count">${matchingAssets.length} of ${assets.length} local assets</p><div class="${state.assetView === "grid" ? "asset-grid" : "asset-list"}">${matchingAssets.length ? matchingAssets.map(state.assetView === "grid" ? gridCard : assetRow).join("") : "<p class=\"empty-copy\">No assets match this search.</p>"}</div></section>${inspector}</section>`;
     }
     if (state.selectedBookTab === "validation") {
@@ -283,10 +286,9 @@
     const matching = allAssets.filter((asset) => `${valueFor(asset, "fileName", "")} ${valueFor(asset, "relativePath", "")}`.toLowerCase().includes(state.assetFilter.toLowerCase()) && (state.assetFolder === "All folders" || folderFor(asset) === state.assetFolder));
     const matchingFolderNames = folderNames.filter((name) => matching.some((asset) => folderFor(asset) === name));
     const tile = (asset) => {
-      const reference = valueFor(asset, "sourceReference", "");
-      const previewUrl = valueFor(previewFor(bookId(book), reference), "dataUrl", "");
       const mode = frameModeValue(valueFor(asset, "frameMode", "auto"));
-      return `<article class="folder-asset-item" data-preview-book-id="${escapeHtml(bookId(book))}" data-source-reference="${escapeHtml(reference)}"><div class="folder-asset-tile"><span class="folder-asset-preview">${previewUrl ? `<img src="${escapeHtml(previewUrl)}" alt="Preview of ${escapeHtml(valueFor(asset, "fileName", "asset"))}" loading="lazy">` : `<span aria-hidden="true">Loading preview</span>`}</span><strong title="${escapeHtml(valueFor(asset, "fileName", "Unnamed asset"))}">${escapeHtml(valueFor(asset, "fileName", "Unnamed asset"))}</strong><small>${escapeHtml(assetDimensions(asset))}</small><div class="asset-frame-review"><label><span>Frame mode</span><select class="control h-8" data-action="set-interior-frame-mode" data-book-id="${escapeHtml(bookId(book))}" data-source-reference="${escapeHtml(reference)}"><option value="auto" ${mode === "auto" ? "selected" : ""}>Auto</option><option value="enabled" ${mode === "enabled" ? "selected" : ""}>Frame</option><option value="disabled" ${mode === "disabled" ? "selected" : ""}>No frame</option></select></label></div></div></article>`;
+      const reference = valueFor(asset, "sourceReference", "");
+      return `<article class="folder-asset-item" data-source-reference="${escapeHtml(reference)}"><div class="folder-asset-tile"><span class="folder-asset-preview">${localImageMarkup(asset, `Preview of ${valueFor(asset, "fileName", "asset")}`, "Image unavailable")}</span><strong title="${escapeHtml(valueFor(asset, "fileName", "Unnamed asset"))}">${escapeHtml(valueFor(asset, "fileName", "Unnamed asset"))}</strong><small>${escapeHtml(assetDimensions(asset))}</small><div class="asset-frame-review"><label><span>Frame mode</span><select class="control h-8" data-action="set-interior-frame-mode" data-book-id="${escapeHtml(bookId(book))}" data-source-reference="${escapeHtml(reference)}"><option value="auto" ${mode === "auto" ? "selected" : ""}>Auto</option><option value="enabled" ${mode === "enabled" ? "selected" : ""}>Frame</option><option value="disabled" ${mode === "disabled" ? "selected" : ""}>No frame</option></select></label></div></div></article>`;
     };
     const group = (name) => {
       const items = matching.filter((asset) => folderFor(asset) === name);
@@ -297,9 +299,8 @@
 
   const renderBookDrawer = (book, summary) => {
     if (!state.bookDrawerOpen || !book || !summary) return "";
-    const coverReference = valueFor(summary, "representativeCoverReference", "");
-    const previewUrl = valueFor(previewFor(bookId(book), coverReference), "dataUrl", "");
-    return `<div class="book-drawer-layer"><section class="book-drawer" role="dialog" aria-labelledby="book-drawer-title"><header class="book-drawer-header"><span class="book-drawer-preview">${previewUrl ? `<img src="${escapeHtml(previewUrl)}" alt="Cover for ${escapeHtml(valueFor(book, "name", ""))}">` : `<span class="book-preview-fallback">Preview unavailable</span>`}</span><div><p class="eyebrow">Book detail</p><h2 id="book-drawer-title" tabindex="-1">${escapeHtml(valueFor(book, "name", ""))}</h2><div>${badge(productionStatus(summary))} ${badge(bookFrameState(summary))}</div></div><button class="button-secondary" data-action="close-book-drawer" aria-label="Close Book detail">Close</button></header><div class="book-drawer-body">${renderBookTabs(book, summary)}</div></section></div>`;
+    const cover = assetForReference(summary, valueFor(summary, "representativeCoverReference", ""));
+    return `<div class="book-drawer-layer"><section class="book-drawer" role="dialog" aria-labelledby="book-drawer-title"><header class="book-drawer-header"><span class="book-drawer-preview">${localImageMarkup(cover, `Cover for ${valueFor(book, "name", "")}`)}</span><div><p class="eyebrow">Book detail</p><h2 id="book-drawer-title" tabindex="-1">${escapeHtml(valueFor(book, "name", ""))}</h2><div>${badge(productionStatus(summary))} ${badge(bookFrameState(summary))}</div></div><button class="button-secondary" data-action="close-book-drawer" aria-label="Close Book detail">Close</button></header><div class="book-drawer-body">${renderBookTabs(book, summary)}</div></section></div>`;
   };
 
   const renderBooks = () => {
@@ -330,12 +331,8 @@
     const card = (item) => {
       const itemSummary = summaryFor(item);
       const id = bookId(item);
-      const coverReference = valueFor(itemSummary, "representativeCoverReference", "");
-      const preview = previewFor(id, coverReference);
-      const cover = valueFor(preview, "dataUrl", "");
-      const thumbnail = cover
-        ? `<img src="${escapeHtml(cover)}" alt="Cover for ${escapeHtml(valueFor(item, "name", ""))}" loading="lazy">`
-        : `<span class="book-preview-fallback" aria-label="Preview unavailable">Preview unavailable</span>`;
+      const cover = assetForReference(itemSummary, valueFor(itemSummary, "representativeCoverReference", ""));
+      const thumbnail = localImageMarkup(cover, `Cover for ${valueFor(item, "name", "")}`);
       return `<article class="book-card ${id === state.selectedBookId ? "selected" : ""}"><button type="button" class="book-card-main" data-action="select-book" data-book-id="${escapeHtml(id)}" aria-label="Open ${escapeHtml(valueFor(item, "name", ""))}"><span class="book-card-preview">${thumbnail}</span><span class="book-card-copy"><strong title="${escapeHtml(valueFor(item, "name", ""))}">${escapeHtml(valueFor(item, "name", ""))}</strong><small>${valueFor(itemSummary, "interiorSourcePageCount", 0)} Interior pages</small><span>${badge(productionStatus(itemSummary))} ${badge(bookFrameState(itemSummary))}</span></span></button><footer><label><input type="checkbox" aria-label="Queue ${escapeHtml(valueFor(item, "name", ""))}" data-action="queue-book" data-book-id="${escapeHtml(id)}" ${state.selectedBookIds.has(id) ? "checked" : ""}> Queue</label><button class="button-secondary book-card-action" data-action="select-book" data-book-id="${escapeHtml(id)}">${productionStatus(itemSummary) === "Ready" ? "Review files" : productionStatus(itemSummary) === "Processing" ? "View process" : "Preflight"}</button></footer></article>`;
     };
     const start = filtered.length ? (state.bookPage - 1) * pageSize + 1 : 0;
@@ -351,8 +348,6 @@
       state.restoreBookFocus = false;
       document.querySelector(`[data-action="select-book"][data-book-id="${CSS.escape(state.selectedBookId)}"]`)?.focus();
     }
-    queueVisibleAssetPreviews();
-    pageItems.forEach((item) => queueAssetPreview(bookId(item), valueFor(summaryFor(item), "representativeCoverReference", "")));
     if (state.assetSearchFocused) {
       const search = document.querySelector("[data-action=\"filter-assets\"]");
       if (search) {
@@ -482,6 +477,15 @@
     if (event.target.dataset.action === "book-frame-filter") { state.bookFrameFilter = event.target.value; state.bookPage = 1; render("books", false); }
     if (event.target.dataset.action === "book-sort") { state.bookSort = event.target.value; state.bookPage = 1; render("books", false); }
   });
+  content.addEventListener("error", (event) => {
+    const image = event.target;
+    if (!image?.matches?.("img[data-local-image]")) return;
+    const fallback = document.createElement("span");
+    fallback.className = "book-preview-fallback";
+    fallback.setAttribute("aria-label", image.dataset.imageFallback || "Image unavailable");
+    fallback.textContent = image.dataset.imageFallback || "Image unavailable";
+    image.replaceWith(fallback);
+  }, true);
   content.addEventListener("scroll", () => queueVisibleAssetPreviews(), true);
 
   window.chrome.webview.addEventListener("message", (event) => {
