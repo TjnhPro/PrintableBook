@@ -129,7 +129,7 @@ test("Books display the total local folder size with the Interior page count", (
     bookSummaries: [{ bookId: { value: "Book 001" }, interiorSourcePageCount: 22, folderSizeBytes: 1610612736, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [] }]
   } } });
 
-  assert.match(content.innerHTML, /22 Interior pages · 1\.5 GB/);
+  assert.match(content.innerHTML, /22 \/ 22 Interior active · 1\.5 GB/);
   assert.match(readFileSync(appScriptPath, "utf8"), /Math\.round\(value \/ 1024\)/);
 });
 
@@ -410,7 +410,9 @@ test("book detail renders frame mode truth and sends per-image overrides through
       workspaceStatus: "Not started",
       validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
       interiorSourcePageCount: 1,
-      assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode }]
+      activeInteriorSourcePageCount: 0,
+      hasBackground: true,
+      assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode, isActive: false }]
     }]
   });
 
@@ -422,8 +424,26 @@ test("book detail renders frame mode truth and sends per-image overrides through
   contentListeners.click({ target: assetsTab });
 
   assert.match(content.innerHTML, /Interior assets/);
-  assert.match(content.innerHTML, /Choose its frame mode directly on the image/);
+  assert.match(content.innerHTML, /Use Brand background/);
+  assert.match(content.innerHTML, /0 \/ 1 Interior active/);
+  assert.match(content.innerHTML, /set-interior-active/);
+  assert.match(content.innerHTML, /is-inactive/);
+  assert.match(content.innerHTML, /Choose exactly which pages will be processed/);
   assert.match(content.innerHTML, /option value="auto" selected/);
+  contentListeners.change({ target: { dataset: { action: "set-book-background", bookId: "Book 001" }, checked: false } });
+  assert.deepEqual(messages.at(-1), {
+    version: 1,
+    id: "request-1",
+    command: "book.background.set",
+    payload: { bookId: "Book 001", enabled: false }
+  });
+  contentListeners.change({ target: { dataset: { action: "set-interior-active", bookId: "Book 001", sourceReference: "Book interior/page-001.png" }, checked: true } });
+  assert.deepEqual(messages.at(-1), {
+    version: 1,
+    id: "request-1",
+    command: "book.interior.active.set",
+    payload: { bookId: "Book 001", sourceReference: "Book interior/page-001.png", active: true }
+  });
   contentListeners.change({ target: { dataset: { action: "set-interior-frame-mode", bookId: "Book 001", sourceReference: "Book interior/page-001.png" }, value: "enabled" } });
   assert.deepEqual(messages.at(-1), {
     version: 1,
