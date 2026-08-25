@@ -1,7 +1,6 @@
-using PrintableBook.Core.Abstractions;
-using PrintableBook.Core.Application.Discovery;
+using PrintableBook.Core.Application.BackgroundTasks;
+using PrintableBook.Core.Application.BackgroundTasks.Workers;
 using PrintableBook.Core.Application.Processing;
-using PrintableBook.Core.Application.Services;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 
@@ -18,258 +17,80 @@ public interface IProcessSessionService
     ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default);
 }
 
-public sealed class ProcessSessionService(
-    IApplicationSnapshotService snapshotService,
-    IPrintableBookApplication application,
-    IBrandFrameResolver brandFrameResolver) : IProcessSessionService
+public sealed class ProcessSessionService(IBackgroundTaskManager taskManager) : IProcessSessionService
 {
-    private readonly Lock sync = new();
-    private readonly Lock cancellationSync = new();
-    private ProcessSessionSnapshot snapshot = new(false, false, null, null, null, []);
-    private CancellationTokenSource? cancellation;
-    private Task? executionTask;
+    private static readonly ProcessSessionSnapshot Idle = new(false, false, null, null, null, []);
 
     public async ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        ProcessSessionSnapshot current;
-        lock (sync) current = snapshot;
-        if (!current.IsActive) return current;
-        var refreshed = await snapshotService.RefreshAsync(cancellationToken);
-        lock (sync)
-        {
-            if (!snapshot.IsActive) return snapshot;
-            var summaries = refreshed.BookSummaries.ToDictionary(item => item.BookId);
-            var queue = snapshot.Queue.Select(entry =>
-            {
-                if (!summaries.TryGetValue(entry.BookId, out var summary) || summary.WorkspaceStatus == BookProcessingStatus.NotStarted)
-                {
-                    return entry;
-                }
-
-                return entry with { Status = summary.WorkspaceStatus, Detail = summary.CurrentStep ?? entry.Detail };
-            }).ToArray();
-            var active = refreshed.BookSummaries.FirstOrDefault(summary =>
-                summary.WorkspaceStatus == BookProcessingStatus.Running &&
-                queue.Any(entry => entry.BookId == summary.BookId));
-            snapshot = snapshot with
-            {
-                Queue = queue,
-                CurrentBookId = active?.BookId ?? snapshot.CurrentBookId,
-                CurrentStep = active?.CurrentStep ?? snapshot.CurrentStep,
-                PagesCompleted = active?.InteriorPages.Count ?? snapshot.PagesCompleted,
-                PagesTotal = active?.InteriorSourcePageCount ?? snapshot.PagesTotal,
-                WorkerLimit = refreshed.GlobalSettings.MaximumPageConcurrency
-            };
-            return snapshot;
-        }
+        var task = await FindLatestAsync(cancellationToken);
+        if (task is null) return Idle;
+        if (!taskManager.TryGetView(task.TaskId, out ProcessSessionSnapshot? view) || view is null) return Overlay(Idle, task);
+        return Overlay(view, task);
     }
 
     public async ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(bookIds);
-
-        lock (sync)
-        {
-            if (snapshot.IsActive || executionTask is { IsCompleted: false }) return snapshot;
-        }
-
         if (bookIds.Count == 0) throw new ArgumentException("Select at least one Book before starting processing.", nameof(bookIds));
-
+        if (bookIds.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("Book identifiers cannot be blank.", nameof(bookIds));
+        if (bookIds.Distinct(StringComparer.Ordinal).Count() != bookIds.Count) throw new ArgumentException("Book identifiers must be distinct.", nameof(bookIds));
         if (string.IsNullOrWhiteSpace(brandName)) throw new ArgumentException("Select one Brand before starting processing.", nameof(brandName));
-        var applicationSnapshot = await snapshotService.RefreshAsync(cancellationToken);
-        if (!applicationSnapshot.Discovery.Brands.Any(brand => string.Equals(brand.Name, brandName, StringComparison.Ordinal)))
-        {
-            throw new ArgumentException("The selected Brand no longer exists.", nameof(brandName));
-        }
-        var selected = applicationSnapshot.Discovery.Books
-            .Where(book => bookIds.Contains(book.Id.Value, StringComparer.Ordinal))
-            .ToArray();
-        if (selected.Length != bookIds.Count) throw new ArgumentException("One or more selected Books no longer exist.", nameof(bookIds));
 
-        var summaries = applicationSnapshot.BookSummaries.ToDictionary(summary => summary.BookId.Value, StringComparer.Ordinal);
-        if (selected.Any(book => !string.Equals(summaries[book.Id.Value].ValidationStatus, "Ready", StringComparison.Ordinal)))
-        {
-            throw new InvalidOperationException("Every selected Book must be validation-ready before processing.");
-        }
-
-        CancellationTokenSource sessionCancellation;
-        ProcessSessionSnapshot started;
-        lock (sync)
-        {
-            if (snapshot.IsActive || executionTask is { IsCompleted: false }) return snapshot;
-            sessionCancellation = new CancellationTokenSource();
-            cancellation = sessionCancellation;
-            snapshot = new ProcessSessionSnapshot(true, false, brandName, selected[0].Id, "Preparing", selected.Select((book, index) => new ProcessQueueEntry(book.Id, index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Preparing" : "Waiting")).ToArray(), 0, 0, applicationSnapshot.GlobalSettings.MaximumPageConcurrency, DateTimeOffset.UtcNow);
-            started = snapshot;
-            executionTask = Task.Run(
-                () => ExecuteAsync(applicationSnapshot, selected, brandName, mode, sessionCancellation.Token),
-                CancellationToken.None);
-        }
-
-        return started;
+        var startedAt = DateTimeOffset.UtcNow;
+        var ids = bookIds.ToArray();
+        var initial = new ProcessSessionSnapshot(true, false, brandName, new BookId(ids[0]), "Queued", ids.Select((id, index) => new ProcessQueueEntry(new BookId(id), index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Queued" : "Waiting")).ToArray(), 0, 0, 0, startedAt);
+        var task = await taskManager.StartAsync(
+            BackgroundTaskKind.ProcessingSession,
+            "processing",
+            ids[0],
+            new ProcessingSessionWorkerRequest(ids, brandName, mode, startedAt),
+            initial,
+            cancellationToken);
+        return taskManager.TryGetView(task.TaskId, out ProcessSessionSnapshot? view) && view is not null ? Overlay(view, task) : Overlay(initial, task);
     }
 
-    public ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default)
+    public async ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        CancellationTokenSource? toCancel;
-        ProcessSessionSnapshot current;
-        lock (sync)
-        {
-            if (!snapshot.IsActive || cancellation is null) return ValueTask.FromResult(snapshot);
-            snapshot = snapshot with { IsCancelling = true, CurrentStep = "Cancelling" };
-            toCancel = cancellation;
-            current = snapshot;
-        }
-
-        RequestCancellation(toCancel);
-        return ValueTask.FromResult(current);
+        var task = await FindActiveAsync(cancellationToken);
+        if (task is null) return await GetAsync(cancellationToken);
+        await taskManager.CancelAsync(task.TaskId, cancellationToken);
+        return await GetAsync(cancellationToken);
     }
 
     public async ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
     {
         if (timeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
-
-        Task? task;
-        CancellationTokenSource? toCancel;
-        lock (sync)
-        {
-            task = executionTask;
-            if (task is null) return true;
-            if (snapshot.IsActive)
-            {
-                snapshot = snapshot with { IsCancelling = true, CurrentStep = "Cancelling" };
-            }
-
-            toCancel = cancellation;
-        }
-
-        RequestCancellation(toCancel);
-        try
-        {
-            await task.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
-            return true;
-        }
-        catch (TimeoutException)
-        {
-            return false;
-        }
+        var task = await FindActiveAsync(cancellationToken);
+        if (task is null) return true;
+        await taskManager.CancelAsync(task.TaskId, cancellationToken);
+        return await taskManager.WaitAsync(task.TaskId, timeout, cancellationToken);
     }
 
-    private async Task ExecuteAsync(ApplicationSnapshot applicationSnapshot, IReadOnlyList<DiscoveredBook> books, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken)
+    private async ValueTask<BackgroundTaskSnapshot?> FindLatestAsync(CancellationToken cancellationToken)
     {
-        try
-        {
-            var summaries = applicationSnapshot.BookSummaries.ToDictionary(summary => summary.BookId.Value, StringComparer.Ordinal);
-            FileReference? frame = null;
-            if (!string.IsNullOrWhiteSpace(brandName))
-            {
-                var brand = applicationSnapshot.Discovery.Brands.FirstOrDefault(item => string.Equals(item.Name, brandName, StringComparison.Ordinal));
-                if (brand is not null)
-                {
-                    frame = await brandFrameResolver.ResolveCompatibleFrameAsync(
-                        brand,
-                        new ImageSize(applicationSnapshot.GlobalSettings.ArtworkMaximumSide, applicationSnapshot.GlobalSettings.ArtworkMaximumSide),
-                        cancellationToken);
-                }
-            }
-
-            var settings = applicationSnapshot.GlobalSettings;
-            var request = new BookProcessingQueueRequest(books.Select(book => new PrintableBookProcessingCommand(
-                book.Id,
-                book.Directory,
-                new DirectoryReference(Path.Combine(applicationSnapshot.Discovery.Paths.Root.Value, "outputs")),
-                new ImageSize(settings.ArtworkMaximumSide, settings.ArtworkMaximumSide),
-                new ImageSize(settings.ArtworkMaximumSide, settings.ArtworkMaximumSide),
-                new ImageSize(settings.WorkingPageWidth, settings.WorkingPageHeight),
-                new ImageSize(settings.FinalPageWidth, settings.FinalPageHeight),
-                new ImageDensity(settings.Dpi, settings.Dpi),
-                new PhysicalPageSize(settings.InteriorPdfWidthInches, settings.InteriorPdfHeightInches),
-                new PhysicalPageSize(settings.InteriorPdfWidthInches, settings.InteriorPdfHeightInches),
-                settings.MaximumPageConcurrency,
-                new ArtworkDetectionThreshold(settings.ArtworkDetectionThreshold),
-                frame,
-                null,
-                string.IsNullOrWhiteSpace(summaries[book.Id.Value].SelectedCoverReference) ? null : new FileReference(summaries[book.Id.Value].SelectedCoverReference!),
-                mode)).ToArray());
-
-            lock (sync) snapshot = snapshot with { CurrentStep = "Processing" };
-            var result = await application.ProcessBooksAsync(request, cancellationToken: cancellationToken);
-            lock (sync)
-            {
-                snapshot = new ProcessSessionSnapshot(false, false, brandName, null, null,
-                    result.Books.Select(book => new ProcessQueueEntry(book.BookId, book.Status, book.Failure?.Message)).ToArray(),
-                    snapshot.PagesCompleted, snapshot.PagesTotal, snapshot.WorkerLimit, snapshot.StartedAt);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            lock (sync)
-            {
-                snapshot = snapshot with
-                {
-                    IsActive = false,
-                    IsCancelling = false,
-                    CurrentStep = "Cancelled",
-                    Queue = snapshot.Queue.Select(entry => entry.Status == BookProcessingStatus.Running
-                        ? entry with { Status = BookProcessingStatus.Cancelled, Detail = "Cancelled" }
-                        : entry).ToArray()
-                };
-            }
-        }
-        catch (Exception exception)
-        {
-            lock (sync)
-            {
-                snapshot = snapshot with { IsActive = false, IsCancelling = false, CurrentStep = "Failed", Queue = snapshot.Queue.Select(entry => entry.Status == BookProcessingStatus.Running ? entry with { Status = BookProcessingStatus.Failed, Detail = exception.Message } : entry).ToArray() };
-            }
-        }
-        finally
-        {
-            CancellationTokenSource? toDispose;
-            lock (sync)
-            {
-                toDispose = cancellation;
-                cancellation = null;
-                executionTask = null;
-            }
-
-            DisposeCancellation(toDispose);
-        }
+        var tasks = await taskManager.ListAsync(BackgroundTaskKind.ProcessingSession, cancellationToken);
+        return tasks.FirstOrDefault(task => task.State is BackgroundTaskState.Queued or BackgroundTaskState.Running or BackgroundTaskState.Cancelling) ?? tasks.FirstOrDefault();
     }
 
-    private void RequestCancellation(CancellationTokenSource? source)
+    private async ValueTask<BackgroundTaskSnapshot?> FindActiveAsync(CancellationToken cancellationToken)
     {
-        if (source is null)
-        {
-            return;
-        }
-
-        lock (cancellationSync)
-        {
-            try
-            {
-                source.Cancel();
-            }
-            catch (ObjectDisposedException)
-            {
-                // Terminal cleanup won the race; there is nothing left to cancel.
-            }
-        }
+        var tasks = await taskManager.ListAsync(BackgroundTaskKind.ProcessingSession, cancellationToken);
+        return tasks.FirstOrDefault(task => task.State is BackgroundTaskState.Queued or BackgroundTaskState.Running or BackgroundTaskState.Cancelling);
     }
 
-    private void DisposeCancellation(CancellationTokenSource? source)
+    private static ProcessSessionSnapshot Overlay(ProcessSessionSnapshot view, BackgroundTaskSnapshot task) => task.State switch
     {
-        if (source is null)
-        {
-            return;
-        }
+        BackgroundTaskState.Queued or BackgroundTaskState.Running => view with { IsActive = true, IsCancelling = false },
+        BackgroundTaskState.Cancelling => view with { IsActive = true, IsCancelling = true, CurrentStep = "Cancelling" },
+        BackgroundTaskState.Cancelled => view with { IsActive = false, IsCancelling = false, CurrentStep = view.CurrentStep is "Cancelled" ? view.CurrentStep : "Cancelled", Queue = RewriteRunning(view.Queue, BookProcessingStatus.Cancelled, "Cancelled") },
+        BackgroundTaskState.Failed => view with { IsActive = false, IsCancelling = false, CurrentStep = "Failed", Queue = RewriteRunning(view.Queue, BookProcessingStatus.Failed, task.ErrorMessage ?? "Processing failed.") },
+        BackgroundTaskState.Completed => view with { IsActive = false, IsCancelling = false },
+        _ => view
+    };
 
-        lock (cancellationSync)
-        {
-            source.Dispose();
-        }
-    }
-
+    private static IReadOnlyList<ProcessQueueEntry> RewriteRunning(IReadOnlyList<ProcessQueueEntry> queue, BookProcessingStatus status, string detail) =>
+        queue.Select(entry => entry.Status == BookProcessingStatus.Running ? entry with { Status = status, Detail = detail } : entry).ToArray();
 }

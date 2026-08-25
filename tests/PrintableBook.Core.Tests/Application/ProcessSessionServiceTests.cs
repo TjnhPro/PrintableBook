@@ -1,374 +1,95 @@
-using PrintableBook.Core.Abstractions;
-using PrintableBook.Core.Application.Commands;
+using PrintableBook.Core.Application.BackgroundTasks;
+using PrintableBook.Core.Application.BackgroundTasks.Workers;
 using PrintableBook.Core.Application.Desktop;
-using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
-using PrintableBook.Core.Application.Progress;
-using PrintableBook.Core.Application.Results;
-using PrintableBook.Core.Application.Services;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
-using System.Reflection;
 
 namespace PrintableBook.Core.Tests.Application;
 
 public sealed class ProcessSessionServiceTests
 {
     [Fact]
-    public async Task StartAsync_runs_processing_outside_the_caller_synchronization_context()
+    public async Task StartAsync_submits_one_immediate_processing_task_without_loading_a_snapshot()
     {
-        var prior = SynchronizationContext.Current;
-        var marker = new MarkerSynchronizationContext();
-        var application = new RecordingPrintableBookApplication();
+        var manager = new Manager();
+        var service = new ProcessSessionService(manager);
 
-        try
-        {
-            SynchronizationContext.SetSynchronizationContext(marker);
-            var service = new ProcessSessionService(
-                new StaticSnapshotService(CreateSnapshot()),
-                application,
-                new NullBrandFrameResolver());
+        var started = await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
+        var duplicate = await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
 
-            var started = await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
-            await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
-
-            Assert.True(started.IsActive);
-            Assert.NotNull(started.StartedAt);
-            Assert.NotSame(marker, application.ExecutionContext);
-        }
-        finally
-        {
-            application.Release.TrySetResult();
-            SynchronizationContext.SetSynchronizationContext(prior);
-        }
+        Assert.Equal(1, manager.Starts);
+        Assert.True(started.IsActive);
+        Assert.Equal("Queued", started.CurrentStep);
+        Assert.Equal(started.CurrentBookId, duplicate.CurrentBookId);
+        Assert.IsType<ProcessingSessionWorkerRequest>(manager.Request);
     }
 
     [Fact]
-    public async Task StartAsync_returns_the_existing_active_session_without_starting_a_second_worker()
+    public async Task GetAsync_is_a_ram_only_view_and_overlays_cancelling_state()
     {
-        var application = new RecordingPrintableBookApplication();
-        var service = new ProcessSessionService(
-            new StaticSnapshotService(CreateSnapshot()),
-            application,
-            new NullBrandFrameResolver());
+        var manager = new Manager { State = BackgroundTaskState.Cancelling };
+        manager.SetView(new ProcessSessionSnapshot(true, false, "Brand", new BookId("book-one"), "Processing", [new ProcessQueueEntry(new BookId("book-one"), BookProcessingStatus.Running, "Processing")]));
+        var service = new ProcessSessionService(manager);
 
-        var first = await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
-        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        var second = await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
+        var view = await service.GetAsync();
 
-        Assert.True(first.IsActive);
-        Assert.True(second.IsActive);
-        Assert.Equal(first.CurrentBookId, second.CurrentBookId);
-        Assert.Equal(1, application.InvocationCount);
-
-        application.Release.TrySetResult();
-        await WaitUntilAsync(async () => !(await service.GetAsync()).IsActive);
-        Assert.False((await service.GetAsync()).IsActive);
+        Assert.True(view.IsActive);
+        Assert.True(view.IsCancelling);
+        Assert.Equal("Cancelling", view.CurrentStep);
+        Assert.Equal(1, manager.Lists);
     }
 
     [Fact]
-    public async Task StartAsync_returns_active_session_before_refreshing_discovery_again()
+    public async Task Cancel_and_stop_delegate_to_the_manager()
     {
-        var application = new RecordingPrintableBookApplication();
-        var snapshotService = new CountingSnapshotService(CreateSnapshot());
-        var service = new ProcessSessionService(
-            snapshotService,
-            application,
-            new NullBrandFrameResolver());
-
-        var first = await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
-        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        var refreshesAfterFirstStart = snapshotService.RefreshCount;
-
-        var second = await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
-
-        Assert.True(second.IsActive);
-        Assert.Equal(first.CurrentBookId, second.CurrentBookId);
-        Assert.Equal(refreshesAfterFirstStart, snapshotService.RefreshCount);
-        Assert.Equal(1, application.InvocationCount);
-
-        application.Release.TrySetResult();
-        await WaitUntilAsync(async () => !(await service.GetAsync()).IsActive);
-    }
-
-    [Fact]
-    public async Task CancelAsync_marks_the_session_as_cancelling_before_the_worker_unwinds()
-    {
-        var application = new RecordingPrintableBookApplication();
-        var service = new ProcessSessionService(
-            new StaticSnapshotService(CreateSnapshot()),
-            application,
-            new NullBrandFrameResolver());
-        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
-        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var manager = new Manager { State = BackgroundTaskState.Running, WaitResult = false };
+        manager.SetView(new ProcessSessionSnapshot(true, false, "Brand", new BookId("book-one"), "Processing", [new ProcessQueueEntry(new BookId("book-one"), BookProcessingStatus.Running, "Processing")]));
+        var service = new ProcessSessionService(manager);
 
         var cancelling = await service.CancelAsync();
-
-        Assert.True(cancelling.IsActive);
-        Assert.True(cancelling.IsCancelling);
-        Assert.Equal("Cancelling", cancelling.CurrentStep);
-        Assert.True(application.LastCancellationToken.IsCancellationRequested);
-        await WaitUntilAsync(async () => !(await service.GetAsync()).IsActive);
-        Assert.Equal("Cancelled", (await service.GetAsync()).CurrentStep);
-    }
-
-    [Fact]
-    public async Task CancelAsync_is_safe_when_requested_repeatedly()
-    {
-        var application = new RecordingPrintableBookApplication(observesCancellation: false);
-        var service = new ProcessSessionService(
-            new StaticSnapshotService(CreateSnapshot()),
-            application,
-            new NullBrandFrameResolver());
-        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
-        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
-
-        var first = await service.CancelAsync();
-        var second = await service.CancelAsync();
-
-        Assert.True(first.IsCancelling);
-        Assert.True(second.IsCancelling);
-        application.Release.TrySetResult();
-        await WaitUntilAsync(async () => !(await service.GetAsync()).IsActive);
-    }
-
-    [Fact]
-    public async Task StopAndWaitAsync_returns_false_for_a_non_cooperative_worker_then_can_complete_later()
-    {
-        var application = new RecordingPrintableBookApplication(observesCancellation: false);
-        var service = new ProcessSessionService(
-            new StaticSnapshotService(CreateSnapshot()),
-            application,
-            new NullBrandFrameResolver());
-        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
-        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
-
-        Assert.False(await service.StopAndWaitAsync(TimeSpan.FromMilliseconds(20)));
-
-        application.Release.TrySetResult();
-        Assert.True(await service.StopAndWaitAsync(TimeSpan.FromSeconds(2)));
-    }
-
-    [Fact]
-    public async Task CancelAsync_does_not_fail_when_worker_reaches_terminal_cleanup_concurrently()
-    {
-        var application = new RecordingPrintableBookApplication(observesCancellation: false);
-        var service = new ProcessSessionService(
-            new StaticSnapshotService(CreateSnapshot()),
-            application,
-            new NullBrandFrameResolver());
-        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
-        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
-
-        DisposeOwnedCancellation(service);
-
-        var cancelling = await service.CancelAsync();
+        var stopped = await service.StopAndWaitAsync(TimeSpan.FromMilliseconds(1));
 
         Assert.True(cancelling.IsCancelling);
-        application.Release.TrySetResult();
-        await WaitUntilAsync(async () => !(await service.GetAsync()).IsActive);
+        Assert.False(stopped);
+        Assert.True(manager.Cancels >= 2);
+        Assert.Equal(1, manager.Waits);
     }
 
     [Fact]
-    public async Task StopAndWaitAsync_does_not_fail_when_worker_finishes_during_cancellation_request()
+    public async Task StartAsync_rejects_invalid_book_request()
     {
-        var application = new RecordingPrintableBookApplication(observesCancellation: false);
-        var service = new ProcessSessionService(
-            new StaticSnapshotService(CreateSnapshot()),
-            application,
-            new NullBrandFrameResolver());
-        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
-        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
-
-        DisposeOwnedCancellation(service);
-        application.Release.TrySetResult();
-
-        Assert.True(await service.StopAndWaitAsync(TimeSpan.FromSeconds(2)));
-    }
-
-    [Fact]
-    public async Task Terminal_cleanup_waits_for_an_in_progress_cancellation_callback_before_disposing_its_source()
-    {
-        var application = new RecordingPrintableBookApplication(observesCancellation: false);
-        var service = new ProcessSessionService(
-            new StaticSnapshotService(CreateSnapshot()),
-            application,
-            new NullBrandFrameResolver());
-        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
-        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
-
-        var source = OwnedCancellation(service);
-        var callbackEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var releaseCallback = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var registration = source.Token.Register(() =>
+        var service = new ProcessSessionService(new Manager());
+        foreach (var ids in new[] { Array.Empty<string>(), new[] { "" }, new[] { "book", "book" } })
         {
-            callbackEntered.TrySetResult();
-            releaseCallback.Task.GetAwaiter().GetResult();
-        });
-
-        var cancellation = Task.Run(async () => await service.CancelAsync());
-        await callbackEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        application.Release.TrySetResult();
-        await WaitUntilAsync(() => ValueTask.FromResult(OwnedCancellationOrNull(service) is null));
-
-        Assert.True(source.Token.CanBeCanceled);
-        Assert.False(cancellation.IsCompleted);
-
-        releaseCallback.TrySetResult();
-        await cancellation.WaitAsync(TimeSpan.FromSeconds(2));
-        await WaitUntilAsync(() => ValueTask.FromResult(IsDisposed(source)));
-    }
-
-    [Fact]
-    public async Task StartAsync_allows_a_new_session_after_terminal_cleanup()
-    {
-        var application = new RecordingPrintableBookApplication();
-        var service = new ProcessSessionService(
-            new StaticSnapshotService(CreateSnapshot()),
-            application,
-            new NullBrandFrameResolver());
-        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
-        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        application.Release.TrySetResult();
-        await WaitUntilAsync(async () => !(await service.GetAsync()).IsActive);
-
-        var restarted = await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
-
-        Assert.True(restarted.IsActive);
-        await WaitUntilAsync(() => ValueTask.FromResult(application.InvocationCount == 2));
-    }
-
-    [Fact]
-    public async Task GetAsync_refreshes_the_current_book_and_queue_for_a_multi_book_session()
-    {
-        var application = new RecordingPrintableBookApplication();
-        var service = new ProcessSessionService(
-            new StaticSnapshotService(CreateSnapshot(
-                ("book-one", BookProcessingStatus.Completed, "Completed"),
-                ("book-two", BookProcessingStatus.Running, "Interior processing"))),
-            application,
-            new NullBrandFrameResolver());
-        await service.StartAsync(["book-one", "book-two"], "Brand", BookProcessingMode.InteriorOnly);
-        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
-
-        var refreshed = await service.GetAsync();
-
-        Assert.Equal(new BookId("book-two"), refreshed.CurrentBookId);
-        Assert.Equal("Interior processing", refreshed.CurrentStep);
-        Assert.Equal(BookProcessingStatus.Completed, refreshed.Queue.Single(entry => entry.BookId == new BookId("book-one")).Status);
-        Assert.Equal(BookProcessingStatus.Running, refreshed.Queue.Single(entry => entry.BookId == new BookId("book-two")).Status);
-        application.Release.TrySetResult();
-    }
-
-    private static ApplicationSnapshot CreateSnapshot(params (string Id, BookProcessingStatus Status, string? CurrentStep)[] states)
-    {
-        if (states.Length == 0) states = [("book-one", BookProcessingStatus.NotStarted, null)];
-        var root = new DirectoryReference("C:\\test-root");
-        var books = states.Select(state =>
-        {
-            var bookId = new BookId(state.Id);
-            var workspace = new BookWorkspace(
-                bookId,
-                new DirectoryReference($"C:\\test-root\\{state.Id}\\.workspace"),
-                new DirectoryReference($"C:\\test-root\\{state.Id}\\.workspace\\processed"),
-                new DirectoryReference($"C:\\test-root\\{state.Id}\\.workspace\\output-temp"));
-            return new DiscoveredBook(state.Id, bookId, new DirectoryReference($"C:\\test-root\\{state.Id}"), workspace);
-        }).ToArray();
-        return new ApplicationSnapshot(
-            new ApplicationDiscovery(
-                new ApplicationPaths(root, new DirectoryReference("C:\\test-root\\brands"), new DirectoryReference("C:\\test-root\\sources"), new FileReference("C:\\test-root\\settings.json")),
-                [new DiscoveredBrand("Brand", new DirectoryReference("C:\\test-root\\brands\\Brand"))],
-                books),
-            GlobalSettings.Default,
-            states.Select(state => new BookDesktopSummary(
-                new BookId(state.Id),
-                "Ready",
-                [],
-                state.Status,
-                state.CurrentStep,
-                null,
-                [],
-                state.Status == BookProcessingStatus.Running ? [new InteriorPageSummary("page-01", "Processing", "final.png")] : [],
-                [],
-                1)).ToArray(),
-            DateTimeOffset.UtcNow);
-    }
-
-    private sealed class MarkerSynchronizationContext : SynchronizationContext;
-
-    private static void DisposeOwnedCancellation(ProcessSessionService service)
-    {
-        OwnedCancellation(service).Dispose();
-    }
-
-    private static CancellationTokenSource OwnedCancellation(ProcessSessionService service) =>
-        Assert.IsType<CancellationTokenSource>(OwnedCancellationOrNull(service));
-
-    private static CancellationTokenSource? OwnedCancellationOrNull(ProcessSessionService service) =>
-        typeof(ProcessSessionService).GetField("cancellation", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(service) as CancellationTokenSource;
-
-    private static bool IsDisposed(CancellationTokenSource source)
-    {
-        try
-        {
-            _ = source.Token;
-            return false;
-        }
-        catch (ObjectDisposedException)
-        {
-            return true;
+            await Assert.ThrowsAsync<ArgumentException>(() => service.StartAsync(ids, "Brand", BookProcessingMode.InteriorOnly).AsTask());
         }
     }
 
-    private sealed class StaticSnapshotService(ApplicationSnapshot snapshot) : IApplicationSnapshotService
+    private sealed class Manager : IBackgroundTaskManager
     {
-        public ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
-    }
+        private readonly BackgroundTaskId id = new("processing-test");
+        private ProcessSessionSnapshot? view;
+        public object? Request { get; private set; }
+        public BackgroundTaskState State { get; set; } = BackgroundTaskState.Queued;
+        public int Starts { get; private set; }
+        public int Lists { get; private set; }
+        public int Cancels { get; private set; }
+        public int Waits { get; private set; }
+        public bool WaitResult { get; set; } = true;
 
-    private sealed class CountingSnapshotService(ApplicationSnapshot snapshot) : IApplicationSnapshotService
-    {
-        public int RefreshCount { get; private set; }
-
-        public ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
+        public ValueTask<BackgroundTaskSnapshot> StartAsync<TRequest>(BackgroundTaskKind kind, string key, string? subject, TRequest request, object? initialView = null, CancellationToken cancellationToken = default)
         {
-            RefreshCount++;
-            return ValueTask.FromResult(snapshot);
+            if (Request is null) { Starts++; Request = request; view = initialView as ProcessSessionSnapshot; }
+            return ValueTask.FromResult(Snapshot());
         }
-    }
-
-    private sealed class NullBrandFrameResolver : IBrandFrameResolver
-    {
-        public ValueTask<FileReference?> ResolveCompatibleFrameAsync(DiscoveredBrand brand, ImageSize targetSize, CancellationToken cancellationToken = default) => ValueTask.FromResult<FileReference?>(null);
-    }
-
-    private sealed class RecordingPrintableBookApplication(bool observesCancellation = true) : IPrintableBookApplication
-    {
-        public SynchronizationContext? ExecutionContext { get; private set; }
-        public CancellationToken LastCancellationToken { get; private set; }
-        public int InvocationCount { get; private set; }
-        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public ValueTask<ProcessingResult> ProcessAsync(ProcessingRequest request, IProgress<ProcessingProgress>? progress = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-
-        public async ValueTask<BookProcessingQueueResult> ProcessBooksAsync(BookProcessingQueueRequest request, Action<BookProcessingProgress>? progress = null, CancellationToken cancellationToken = default)
-        {
-            InvocationCount++;
-            ExecutionContext = SynchronizationContext.Current;
-            LastCancellationToken = cancellationToken;
-            Started.TrySetResult();
-            await Release.Task.WaitAsync(observesCancellation ? cancellationToken : CancellationToken.None);
-            return new BookProcessingQueueResult(false, request.Books.Select(book => BookProcessingQueueBookResult.Completed(book.BookId, null)).ToArray());
-        }
-    }
-
-    private static async Task WaitUntilAsync(Func<ValueTask<bool>> condition)
-    {
-        var deadline = DateTime.UtcNow.AddSeconds(2);
-        while (!await condition())
-        {
-            if (DateTime.UtcNow >= deadline) throw new TimeoutException("The process session did not reach its expected state.");
-            await Task.Delay(10);
-        }
+        public ValueTask<BackgroundTaskSnapshot?> GetAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) => ValueTask.FromResult<BackgroundTaskSnapshot?>(Snapshot());
+        public ValueTask<IReadOnlyList<BackgroundTaskSnapshot>> ListAsync(BackgroundTaskKind? kind = null, CancellationToken cancellationToken = default) { Lists++; return ValueTask.FromResult<IReadOnlyList<BackgroundTaskSnapshot>>([Snapshot()]); }
+        public ValueTask<BackgroundTaskSnapshot?> CancelAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) { Cancels++; if (State is BackgroundTaskState.Queued or BackgroundTaskState.Running) State = BackgroundTaskState.Cancelling; return ValueTask.FromResult<BackgroundTaskSnapshot?>(Snapshot()); }
+        public ValueTask<bool> WaitAsync(BackgroundTaskId taskId, TimeSpan timeout, CancellationToken cancellationToken = default) { Waits++; return ValueTask.FromResult(WaitResult); }
+        public bool TryGetResult<TResult>(BackgroundTaskId taskId, out TResult? result) { result = default; return false; }
+        public bool TryGetView<TView>(BackgroundTaskId taskId, out TView? result) where TView : class { result = view as TView; return result is not null; }
+        public void SetView(ProcessSessionSnapshot value) => view = value;
+        private BackgroundTaskSnapshot Snapshot() => new(id, BackgroundTaskKind.ProcessingSession, State, "processing", "book-one", null, null, null, null, DateTimeOffset.UtcNow, null, null, null);
     }
 }
