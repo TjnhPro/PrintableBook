@@ -50,6 +50,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     },
     setInterval: (callback) => { intervals.push(callback); return intervals.length; },
     clearInterval: () => { },
+    confirm: () => true,
     requestAnimationFrame: (callback) => { callback(); return 1; }
   };
 
@@ -66,7 +67,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSelect, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages };
+  return { messageHandler, status, content, brandSelect, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages, browserWindow };
 }
 
 test("bridge accepts the JSON response emitted by the .NET host", () => {
@@ -130,6 +131,65 @@ test("Books display the total local folder size with the Interior page count", (
 
   assert.match(content.innerHTML, /22 Interior pages · 1\.5 GB/);
   assert.match(readFileSync(appScriptPath, "utf8"), /Math\.round\(value \/ 1024\)/);
+});
+
+test("books toolbar starts one confirmed cache cleanup and polls it", () => {
+  const { messageHandler, contentListeners, messages, intervals } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: { discovery: { brands: [], books: [] }, globalSettings: {}, bookSummaries: [] } } });
+
+  const clear = { dataset: { action: "clear-cache" }, closest: () => clear };
+  contentListeners.click({ target: clear });
+  assert.equal(messages.at(-1).command, "cache.clear");
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { taskId: "cleanup", kind: "CacheCleanup", state: "Running" } } });
+  assert.match(messages.at(-1).command, /cache\.clear/);
+  intervals.at(-1)();
+  assert.equal(messages.at(-1).command, "task.get");
+});
+
+test("books toolbar does not start cleanup when confirmation is declined", () => {
+  const { messageHandler, contentListeners, messages, browserWindow } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: { discovery: { brands: [], books: [] }, globalSettings: {}, bookSummaries: [] } } });
+  browserWindow.confirm = () => false;
+
+  const clear = { dataset: { action: "clear-cache" }, closest: () => clear };
+  contentListeners.click({ target: clear });
+
+  assert.notEqual(messages.at(-1).command, "cache.clear");
+});
+
+test("completed cache cleanup fetches its result once, shows the summary, and refreshes the library", () => {
+  const { messageHandler, status, messages } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: { discovery: { brands: [], books: [] }, globalSettings: {}, bookSummaries: [] } } });
+  messageHandler({ data: { version: 1, id: "cleanup", ok: true, command: "background.task", payload: { taskId: "cleanup", kind: "CacheCleanup", state: "Completed" } } });
+  assert.equal(messages.at(-1).command, "cache.clear.result");
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "cache.cleanup.result", payload: { scannedBooks: 10, cleanedBooks: 8, skippedBooks: 2, failedBooks: 0, freedBytes: 4509715660, books: [] } } });
+  assert.match(status.textContent, /Cleared 8 Books/);
+  assert.match(status.textContent, /Freed/);
+  assert.match(status.textContent, /2 skipped/);
+  assert.equal(messages.at(-1).command, "app.refresh");
+});
+
+test("clear cache is disabled while processing or library refresh is active", () => {
+  const { messageHandler, content } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: { discovery: { brands: [], books: [] }, globalSettings: {}, bookSummaries: [] } } });
+  messageHandler({ data: { version: 1, id: "process", ok: true, command: "process.snapshot", payload: { isActive: true, isCancelling: false } } });
+  assert.match(content.innerHTML, /data-action="clear-cache" disabled/);
+
+  messageHandler({ data: { version: 1, id: "refresh", ok: true, command: "background.task", payload: { taskId: "refresh", kind: "LibraryRefresh", state: "Running" } } });
+  assert.match(content.innerHTML, /data-action="clear-cache" disabled/);
+});
+
+test("cache cleanup active refresh error does not replace a usable library with failure UI", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: { discovery: { brands: [], books: [{ name: "Book 001" }] }, globalSettings: {}, bookSummaries: [] } } });
+  const refresh = { dataset: { action: "refresh" }, closest: () => refresh };
+  contentListeners.click({ target: refresh });
+  messageHandler({ data: { version: 1, id: "request-1", ok: false, error: "cache_cleanup_active" } });
+
+  assert.match(content.innerHTML, /Book 001/);
+  assert.doesNotMatch(content.innerHTML, /Unable to load library/);
 });
 
 test("startup shows a loading library view while the first application refresh is pending", () => {

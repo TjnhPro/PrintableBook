@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF outputs", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, processStartPending: false, lastTerminalRefreshSession: "", backgroundTasks: [], pendingCommands: new Map() };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processStartPending: false, lastTerminalRefreshSession: "", backgroundTasks: [], pendingCommands: new Map() };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -61,6 +61,8 @@
   const panel = (title, body, extra = "") => `<section class="panel ${extra}"><h2 class="panel-title">${title}</h2>${body}</section>`;
   const currentRoute = () => document.querySelector(".nav-item-active")?.dataset.route ?? "books";
   const applicationIsLoading = () => state.applicationLoadState === "loading" || state.applicationLoadState === "refreshing";
+  const processIsActive = () => valueFor(window.processSnapshot, "isActive", false) || valueFor(window.processSnapshot, "isCancelling", false);
+  const cacheCleanupBlocked = () => applicationIsLoading() || processIsActive() || state.cacheCleanupActive;
   const updateGlobalRefreshControl = () => {
     const refreshButton = document.getElementById("refresh-button");
     if (!refreshButton) return;
@@ -103,6 +105,33 @@
     state.applicationLoadState = "failed";
     state.applicationLoadError = valueFor(task, "errorMessage", "Application refresh failed.");
     render(currentRoute(), false);
+  };
+  const pollCacheCleanup = () => {
+    if (state.cacheCleanupTaskId) send("task.get", { taskId: state.cacheCleanupTaskId });
+  };
+  const observeCacheCleanup = (task) => {
+    const taskId = valueFor(task, "taskId", "");
+    if (!taskId) return;
+    state.cacheCleanupTaskId = taskId;
+    const taskState = valueFor(task, "state", "Queued");
+    if (["Queued", "Running", "Cancelling"].includes(taskState)) {
+      state.cacheCleanupActive = true;
+      if (state.cacheCleanupPollTimer === null) state.cacheCleanupPollTimer = window.setInterval(pollCacheCleanup, 250);
+      if (currentRoute() === "books") render("books", false);
+      return;
+    }
+    if (state.cacheCleanupPollTimer !== null && window.clearInterval) window.clearInterval(state.cacheCleanupPollTimer);
+    state.cacheCleanupPollTimer = null;
+    state.cacheCleanupActive = false;
+    if (taskState === "Completed" && !state.cacheCleanupResultRequested) {
+      state.cacheCleanupResultRequested = true;
+      send("cache.clear.result", { taskId });
+      return;
+    }
+    state.cacheCleanupTaskId = "";
+    state.cacheCleanupResultRequested = false;
+    status.textContent = taskState === "Cancelled" ? "Cache cleanup cancelled" : valueFor(task, "errorMessage", "Cache cleanup failed.");
+    if (currentRoute() === "books") render("books", false);
   };
   const selectedBook = () => books().find((book) => bookId(book) === state.selectedBookId);
   const assetsFor = (summary) => valueFor(summary, "assets", []);
@@ -255,7 +284,7 @@
     };
     const start = filtered.length ? (state.bookPage - 1) * pageSize + 1 : 0;
     const end = Math.min(state.bookPage * pageSize, filtered.length);
-    content.innerHTML = `<div class="page-header"><div><h1>Books</h1><p>Filter local Books, validate only what needs review, and send selected Books to Interior Processing.</p></div><div class="page-actions">${refreshAction()}<button class="button-secondary" data-action="validate-all">Validate all</button><button class="button-primary" data-action="go-process">Process Interior</button></div></div><section class="book-toolbar"><label class="field"><span>Search books</span><input class="control" data-action="filter-books" value="${escapeHtml(state.bookFilter)}" placeholder="Book name"></label><label class="field"><span>Sort</span><select class="control" data-action="book-sort"><option value="activity" ${state.bookSort === "activity" ? "selected" : ""}>Last activity</option><option value="name" ${state.bookSort === "name" ? "selected" : ""}>Book name</option></select></label><div class="asset-view-toggle" aria-label="Book view"><button class="${state.bookView === "grid" ? "active" : ""}" data-action="book-view" data-book-view="grid" aria-pressed="${state.bookView === "grid"}">Grid</button><button class="${state.bookView === "list" ? "active" : ""}" data-action="book-view" data-book-view="list" aria-pressed="${state.bookView === "list"}">Compact list</button></div></section><div class="status-filters" role="group" aria-label="Book status filters">${statusCounts.map(({ name, count }) => `<button class="${state.bookStatus === name ? "active" : ""}" data-action="book-status" data-book-status="${name}" aria-pressed="${state.bookStatus === name}">${name}<strong>${count}</strong></button>`).join("")}</div><section class="book-secondary-filters"><label class="field"><span>Frame mode</span><select class="control" data-action="book-frame-filter">${["Any", "Auto", "Frame", "No frame", "Needs review"].map((name) => `<option value="${name}" ${state.bookFrameFilter === name ? "selected" : ""}>${name}</option>`).join("")}</select></label><button class="button-secondary" data-action="clear-book-filters">Clear filters</button><span class="book-filter-result" role="status" aria-atomic="true">${filtered.length} Books match the active filters.</span></section><section class="${state.bookView === "grid" ? "book-grid" : "book-compact-list"}">${pageItems.length ? pageItems.map(card).join("") : `<div class="book-grid-empty"><strong>No Books match this view.</strong><span>Clear a filter or refresh the local source folders.</span></div>`}</section><footer class="book-pagination" data-book-total-pages="${totalPages}"><span>${start}–${end} of ${filtered.length}</span><div><button class="button-secondary" data-action="book-page" data-book-page="first" ${state.bookPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="book-page" data-book-page="previous" ${state.bookPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.bookPage} of ${totalPages}</span><button class="button-secondary" data-action="book-page" data-book-page="next" ${state.bookPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="book-page" data-book-page="last" ${state.bookPage === totalPages ? "disabled" : ""}>Last</button></div><button class="button-primary" data-action="go-process" ${state.selectedBookIds.size ? "" : "disabled"}>Process ${state.selectedBookIds.size} selected</button></footer>`;
+    content.innerHTML = `<div class="page-header"><div><h1>Books</h1><p>Filter local Books, validate only what needs review, and send selected Books to Interior Processing.</p></div><div class="page-actions">${refreshAction()}<button class="button-secondary" data-action="clear-cache" ${cacheCleanupBlocked() ? "disabled" : ""}>${state.cacheCleanupActive ? "Clearing…" : "Clear Cache"}</button><button class="button-secondary" data-action="validate-all">Validate all</button><button class="button-primary" data-action="go-process">Process Interior</button></div></div><section class="book-toolbar"><label class="field"><span>Search books</span><input class="control" data-action="filter-books" value="${escapeHtml(state.bookFilter)}" placeholder="Book name"></label><label class="field"><span>Sort</span><select class="control" data-action="book-sort"><option value="activity" ${state.bookSort === "activity" ? "selected" : ""}>Last activity</option><option value="name" ${state.bookSort === "name" ? "selected" : ""}>Book name</option></select></label><div class="asset-view-toggle" aria-label="Book view"><button class="${state.bookView === "grid" ? "active" : ""}" data-action="book-view" data-book-view="grid" aria-pressed="${state.bookView === "grid"}">Grid</button><button class="${state.bookView === "list" ? "active" : ""}" data-action="book-view" data-book-view="list" aria-pressed="${state.bookView === "list"}">Compact list</button></div></section><div class="status-filters" role="group" aria-label="Book status filters">${statusCounts.map(({ name, count }) => `<button class="${state.bookStatus === name ? "active" : ""}" data-action="book-status" data-book-status="${name}" aria-pressed="${state.bookStatus === name}">${name}<strong>${count}</strong></button>`).join("")}</div><section class="book-secondary-filters"><label class="field"><span>Frame mode</span><select class="control" data-action="book-frame-filter">${["Any", "Auto", "Frame", "No frame", "Needs review"].map((name) => `<option value="${name}" ${state.bookFrameFilter === name ? "selected" : ""}>${name}</option>`).join("")}</select></label><button class="button-secondary" data-action="clear-book-filters">Clear filters</button><span class="book-filter-result" role="status" aria-atomic="true">${filtered.length} Books match the active filters.</span></section><section class="${state.bookView === "grid" ? "book-grid" : "book-compact-list"}">${pageItems.length ? pageItems.map(card).join("") : `<div class="book-grid-empty"><strong>No Books match this view.</strong><span>Clear a filter or refresh the local source folders.</span></div>`}</section><footer class="book-pagination" data-book-total-pages="${totalPages}"><span>${start}–${end} of ${filtered.length}</span><div><button class="button-secondary" data-action="book-page" data-book-page="first" ${state.bookPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="book-page" data-book-page="previous" ${state.bookPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.bookPage} of ${totalPages}</span><button class="button-secondary" data-action="book-page" data-book-page="next" ${state.bookPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="book-page" data-book-page="last" ${state.bookPage === totalPages ? "disabled" : ""}>Last</button></div><button class="button-primary" data-action="go-process" ${state.selectedBookIds.size ? "" : "disabled"}>Process ${state.selectedBookIds.size} selected</button></footer>`;
     const selected = selectedBook();
     if (selected) content.insertAdjacentHTML("beforeend", renderBookDrawer(selected, summaryFor(selected)));
     if (state.drawerFocusTitle) {
@@ -374,6 +403,12 @@
     if (action === "book-status") { state.bookStatus = target.dataset.bookStatus; state.bookPage = 1; render("books", false); }
     if (action === "book-view") { state.bookView = target.dataset.bookView; render("books", false); }
     if (action === "clear-book-filters") { state.bookFilter = ""; state.bookStatus = "All"; state.bookFrameFilter = "Any"; state.bookPage = 1; render("books", false); }
+    if (action === "clear-cache" && !cacheCleanupBlocked()) {
+      if (window.confirm("Clear processed image cache for completed Books?")) {
+        state.cacheCleanupResultRequested = false;
+        send("cache.clear");
+      }
+    }
     if (action === "book-page") { const last = Number(target.closest("[data-book-total-pages]")?.dataset.bookTotalPages ?? 1); state.bookPage = target.dataset.bookPage === "first" ? 1 : target.dataset.bookPage === "last" ? last : Math.min(last, Math.max(1, state.bookPage + (target.dataset.bookPage === "next" ? 1 : -1))); render("books", false); }
     if (action === "validate-book") send("book.validate", { bookId: target.dataset.bookId });
     if (action === "go-process") render("process");
@@ -414,6 +449,8 @@
       status.textContent = "Connected";
     } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "LibraryRefresh") {
       observeLibraryRefresh(valueFor(response, "payload", {}));
+    } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "CacheCleanup") {
+      observeCacheCleanup(valueFor(response, "payload", {}));
     } else if (ok && command === "app.snapshot") {
       window.appSnapshot = valueFor(response, "payload", {});
       state.applicationLoadState = "ready";
@@ -426,6 +463,17 @@
       if (brandSelect) brandSelect.value = state.selectedBrand;
       render(document.querySelector(".nav-item-active")?.dataset.route ?? "books", false);
       status.textContent = "Connected";
+    } else if (ok && command === "cache.cleanup.result") {
+      const result = valueFor(response, "payload", {});
+      const cleaned = valueFor(result, "cleanedBooks", 0);
+      const skipped = valueFor(result, "skippedBooks", 0);
+      const failed = valueFor(result, "failedBooks", 0);
+      const freed = fileSize(valueFor(result, "freedBytes", 0));
+      state.cacheCleanupTaskId = "";
+      state.cacheCleanupResultRequested = false;
+      state.cacheCleanupActive = false;
+      status.textContent = `Cleared ${cleaned} Books • Freed ${freed}` + (skipped ? ` • ${skipped} skipped` : "") + (failed ? ` • ${failed} failed` : "");
+      beginApplicationRefresh();
     } else if (ok && command === "settings.saved") {
       window.appSnapshot = { ...(window.appSnapshot ?? {}), globalSettings: valueFor(response, "payload", {}) };
       render("configuration", false);
@@ -441,6 +489,7 @@
       }
       updateGlobalProcessStatus();
       if (document.querySelector(".nav-item-active")?.dataset.route === "process") render("process", false);
+      if (document.querySelector(".nav-item-active")?.dataset.route === "books") render("books", false);
       status.textContent = "Connected";
     } else if (ok && command === "brand.settings") {
       state.brandSettings = valueFor(response, "payload", "{}");
@@ -463,11 +512,32 @@
     } else {
       const error = valueFor(response, "error", "unexpected response");
       if (requestCommand === "app.refresh") {
+        if (error === "cache_cleanup_active") {
+          state.applicationLoadState = window.appSnapshot ? "ready" : "idle";
+          state.applicationLoadError = "";
+          status.textContent = "Clear Cache is running";
+          render(currentRoute(), false);
+          return;
+        }
         state.applicationLoadState = "failed";
         state.applicationLoadError = error;
         render(currentRoute(), false);
       }
-      if (requestCommand === "process.start") state.processStartPending = false;
+      if (requestCommand === "cache.clear" && ["cache_cleanup_processing_active", "cache_cleanup_refresh_active"].includes(error)) {
+        state.cacheCleanupTaskId = "";
+        state.cacheCleanupResultRequested = false;
+        state.cacheCleanupActive = false;
+        status.textContent = error === "cache_cleanup_processing_active" ? "Interior Processing is running" : "Library refresh is running";
+        if (currentRoute() === "books") render("books", false);
+        return;
+      }
+      if (requestCommand === "process.start") {
+        state.processStartPending = false;
+        if (error === "cache_cleanup_active") {
+          status.textContent = "Clear Cache is running";
+          return;
+        }
+      }
       status.textContent = `Bridge error: ${error}`;
     }
   });
