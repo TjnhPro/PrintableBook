@@ -60,7 +60,7 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.DoesNotContain("queueVisible" + "AssetPreviews", script, StringComparison.Ordinal);
         Assert.DoesNotContain("book.asset" + ".preview", script, StringComparison.Ordinal);
         Assert.Contains("asset-folder-group", script, StringComparison.Ordinal);
-        Assert.Contains("Every discovered Interior page is included in this run.", script, StringComparison.Ordinal);
+        Assert.Contains("Choose exactly which pages will be processed", script, StringComparison.Ordinal);
         Assert.Contains("assetSearchFocused", script, StringComparison.Ordinal);
         Assert.Contains("search.setSelectionRange", script, StringComparison.Ordinal);
         Assert.Contains("--pb-asset-preview: 1 / 1", layout, StringComparison.Ordinal);
@@ -73,7 +73,8 @@ public sealed class BookWorkspaceLayoutContractTests
     {
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
 
-        Assert.Contains("Every discovered Interior page is included in this run.", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"set-interior-active\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"set-book-background\"", script, StringComparison.Ordinal);
         Assert.Contains("<span>Frame mode</span>", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"set-interior-frame-mode\"", script, StringComparison.Ordinal);
         Assert.Contains("data-source-reference", script, StringComparison.Ordinal);
