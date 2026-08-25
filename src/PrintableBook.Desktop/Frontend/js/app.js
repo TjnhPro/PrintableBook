@@ -31,6 +31,7 @@
     const seconds = totalSeconds % 60;
     return `${minutes}:${String(seconds).padStart(2, "0")}`;
   };
+  const fileSize = (bytes) => bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : bytes >= 1024 ? `${Math.round(bytes / 1024)} KB` : `${bytes || 0} B`;
   const panel = (title, body, extra = "") => `<section class="panel ${extra}"><h2 class="panel-title">${title}</h2>${body}</section>`;
   const selectedBook = () => books().find((book) => bookId(book) === state.selectedBookId);
   const assetsFor = (summary) => valueFor(summary, "assets", []);
@@ -173,8 +174,10 @@
   };
 
   const renderOutputs = () => {
-    const outputSummaries = summaries().filter((summary) => valueFor(summary, "publishedArtifacts", []).length);
-    content.innerHTML = `<div class="page-header"><div><h1>Outputs</h1><p>Generated, validated Interior PDF artifacts.</p></div></div>${outputSummaries.length ? `<div class="output-grid">${outputSummaries.flatMap((summary) => valueFor(summary, "publishedArtifacts", []).map((artifact) => `<article class="output-card"><div class="pdf-mark">PDF</div><div><h2>${escapeHtml(artifact.split(/[\\/]/).pop())}</h2><p>${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}</p><small>${dateTime(valueFor(summary, "lastRunAt", null))}</small></div></article>`)).join("")}</div>` : panel("Latest run", "<p class=\"empty-copy\">No published outputs discovered.</p>")}${panel("Previous runs", `<table class="data-table"><thead><tr><th>Book</th><th>Status</th><th>Interior artifacts</th></tr></thead><tbody>${outputSummaries.length ? outputSummaries.map((summary) => `<tr><td>${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}</td><td>${badge(workspaceStatus(summary))}</td><td>${valueFor(summary, "publishedArtifacts", []).length}</td></tr>`).join("") : "<tr><td colspan=\"3\" class=\"empty-row\">No history yet.</td></tr>"}</tbody></table>`, "mt-5")}`;
+    const outputs = summaries().flatMap((summary) => valueFor(summary, "outputSummaries", []).map((output) => ({ summary, output })));
+    const latest = [...outputs].sort((left, right) => new Date(valueFor(right.output, "generatedAt", 0)).getTime() - new Date(valueFor(left.output, "generatedAt", 0)).getTime()).slice(0, 2);
+    const actions = (summary, output) => `<div class="output-actions"><button class="button-primary" data-action="open-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Open PDF</button><button class="button-secondary" data-action="reveal-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Reveal in Explorer</button><button class="button-secondary" data-action="copy-output-path" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Copy path</button></div>`;
+    content.innerHTML = `<div class="page-header"><div><h1>Outputs</h1><p>Review the locally generated PDF deliverables before publishing.</p></div></div>${latest.length ? `<section class="output-review-grid">${latest.map(({ summary, output }) => `<article class="output-review-card"><div class="pdf-mark">PDF</div><div class="min-w-0"><div class="flex items-start justify-between gap-3"><h2>${escapeHtml(valueFor(output, "fileName", "PDF output"))}</h2>${badge(valueFor(output, "verificationStatus", "Available"))}</div><p>${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))} · ${dateTime(valueFor(output, "generatedAt", null))}</p><dl><div><dt>Pages</dt><dd>${valueFor(output, "pageCount", "—")}</dd></div><div><dt>Size</dt><dd>${valueFor(output, "widthInches", null) ? `${valueFor(output, "widthInches", 0)} × ${valueFor(output, "heightInches", 0)} in` : "—"}</dd></div><div><dt>File</dt><dd>${fileSize(valueFor(output, "fileSizeBytes", 0))}</dd></div></dl>${actions(summary, output)}</div></article>`).join("")}</section>` : panel("No PDF outputs yet", "<p class=\"empty-copy\">Run Interior Processing from a ready Book to create a local PDF for review.</p>")}${panel("Previous runs", `<table class="data-table"><thead><tr><th>Book</th><th>PDF</th><th>Verification</th><th>Generated</th><th>Actions</th></tr></thead><tbody>${outputs.length ? outputs.map(({ summary, output }) => `<tr><td>${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}</td><td>${escapeHtml(valueFor(output, "fileName", ""))}<br><small>${fileSize(valueFor(output, "fileSizeBytes", 0))}</small></td><td>${badge(valueFor(output, "verificationStatus", "Available"))}</td><td>${dateTime(valueFor(output, "generatedAt", null))}</td><td>${actions(summary, output)}</td></tr>`).join("") : "<tr><td colspan=\"5\" class=\"empty-row\">No history yet.</td></tr>"}</tbody></table>`, "mt-5")}`;
   };
 
   const renderDiagnostics = () => {
@@ -221,6 +224,9 @@
     if (action === "go-process") render("process");
     if (action === "start-process") send("process.start", { bookIds: [...state.selectedBookIds], brandName: state.selectedBrand || brandSelect?.value || null, mode: "interior-only" });
     if (action === "cancel-process") send("process.cancel");
+    if (action === "open-output") send("book.output.open", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
+    if (action === "reveal-output") send("book.output.reveal", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
+    if (action === "copy-output-path") send("book.output.copy-path", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
   });
   content.addEventListener("input", (event) => {
     if (event.target.dataset.action === "filter-books") { state.bookFilter = event.target.value; render("books", false); }
@@ -263,6 +269,8 @@
       state.assetPreviews.set(valueFor(preview, "sourceReference", ""), preview);
       if (document.querySelector(".nav-item-active")?.dataset.route === "books" && state.selectedBookTab === "assets") render("books", false);
       status.textContent = "Preview ready";
+    } else if (ok && command === "book.output.action.completed") {
+      status.textContent = "Output action completed";
     } else status.textContent = `Bridge error: ${valueFor(response, "error", "unexpected response")}`;
   });
 

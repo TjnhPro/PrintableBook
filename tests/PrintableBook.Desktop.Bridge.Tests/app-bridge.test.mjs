@@ -296,3 +296,18 @@ test("validation keeps missing cover informational for Interior and actionable f
   assert.match(content.innerHTML, /Refresh local files/);
   assert.match(content.innerHTML, /Needs attention/);
 });
+
+test("output review shows verified PDF facts and only sends a book-scoped action", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "output-1", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [] }, globalSettings: {},
+    bookSummaries: [{ bookId: { value: "Book 001" }, outputSummaries: [{ artifactReference: "D:/PrintableBook/outputs/Book-001-interior.pdf", fileName: "Book-001-interior.pdf", fileSizeBytes: 2200000, pageCount: 42, widthInches: 8.5, heightInches: 8.5, verificationStatus: "Verified", generatedAt: "2026-08-25T00:00:00Z" }] }]
+  } } });
+  assert.match(content.innerHTML, /Book-001-interior\.pdf/);
+  assert.match(content.innerHTML, /42/);
+  assert.match(content.innerHTML, /2\.1 MB/);
+  assert.match(content.innerHTML, /Reveal in Explorer/);
+  const open = { dataset: { action: "open-output", bookId: "Book 001", artifactReference: "D:/PrintableBook/outputs/Book-001-interior.pdf" }, closest: () => open };
+  contentListeners.click({ target: open });
+  assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.open", payload: { bookId: "Book 001", artifactReference: "D:/PrintableBook/outputs/Book-001-interior.pdf" } });
+});

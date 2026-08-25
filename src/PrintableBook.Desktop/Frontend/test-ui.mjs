@@ -36,6 +36,10 @@ const expected = [
   ,"process-status-strip"
   ,"Run needs review"
   ,"Elapsed"
+  ,"Open PDF"
+  ,"Reveal in Explorer"
+  ,"book.output.open"
+  ,"book.output.copy-path"
 ];
 
 for (const value of expected) {

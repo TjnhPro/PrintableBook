@@ -17,6 +17,7 @@ public partial class App : Application
         var services = new ServiceCollection();
         services.AddPrintableBookCore();
         services.AddPrintableBookInfrastructure();
+        services.AddSingleton<ILocalOutputActionService, LocalOutputActionService>();
         services.AddSingleton<IProcessShutdownPrompt, ProcessShutdownPrompt>();
         services.AddSingleton<ProcessWindowShutdownCoordinator>();
         services.AddSingleton<MainWindow>();

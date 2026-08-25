@@ -16,7 +16,8 @@ internal sealed class WebViewBridgeRouter(
     IBrandSettingsStore? brandSettingsStore = null,
     IBookCoverSelectionService? coverSelectionService = null,
     IInteriorFrameModeService? interiorFrameModeService = null,
-    IBookAssetPreviewService? assetPreviewService = null)
+    IBookAssetPreviewService? assetPreviewService = null,
+    ILocalOutputActionService? outputActionService = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -107,6 +108,30 @@ internal sealed class WebViewBridgeRouter(
                 return preview is null
                     ? new BridgeResponse(Version, request.Id, false, null, "asset_preview_not_found")
                     : BridgeResponse.Succeeded(request.Id, "book.asset.preview", preview);
+            }
+
+            if (request.Command is "book.output.open" or "book.output.reveal" or "book.output.copy-path")
+            {
+                if (snapshotService is null || outputActionService is null || request.Payload is not { } outputPayload ||
+                    !outputPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
+                    !outputPayload.TryGetProperty("artifactReference", out var artifactElement) || string.IsNullOrWhiteSpace(artifactElement.GetString()))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_output_action");
+                }
+
+                var snapshot = await snapshotService.RefreshAsync(cancellationToken);
+                var book = snapshot.BookSummaries.FirstOrDefault(item => item.BookId.Value == bookIdElement.GetString());
+                var artifact = artifactElement.GetString()!;
+                if (book is null || !book.PublishedArtifacts.Contains(artifact, StringComparer.Ordinal) || !System.IO.File.Exists(artifact))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "output_not_found");
+                }
+
+                var file = new PrintableBook.Core.Abstractions.FileReference(artifact);
+                if (request.Command == "book.output.open") await outputActionService.OpenAsync(file, cancellationToken);
+                if (request.Command == "book.output.reveal") await outputActionService.RevealAsync(file, cancellationToken);
+                if (request.Command == "book.output.copy-path") await outputActionService.CopyPathAsync(file, cancellationToken);
+                return BridgeResponse.Succeeded(request.Id, "book.output.action.completed", new { });
             }
 
             if (request.Command is "process.get" or "process.cancel" or "process.start")
@@ -203,7 +228,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.asset.preview.get" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.asset.preview.get" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 
