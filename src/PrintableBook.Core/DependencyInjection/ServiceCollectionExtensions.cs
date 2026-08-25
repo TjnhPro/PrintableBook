@@ -21,6 +21,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IApplicationSnapshotService, ApplicationSnapshotService>();
         services.AddSingleton<IBookCoverSelectionService, BookCoverSelectionService>();
         services.AddSingleton<IInteriorFrameModeService, InteriorFrameModeService>();
+        services.AddSingleton<IBookInteriorSettingsService, BookInteriorSettingsService>();
         services.AddSingleton<IInterruptedProcessingRecoveryService, InterruptedProcessingRecoveryService>();
         services.AddKeyedSingleton<IBackgroundTaskWorker, LibraryRefreshWorker>(BackgroundTaskKind.LibraryRefresh);
         services.AddKeyedSingleton<IBackgroundTaskWorker, ProcessingSessionWorker>(BackgroundTaskKind.ProcessingSession);

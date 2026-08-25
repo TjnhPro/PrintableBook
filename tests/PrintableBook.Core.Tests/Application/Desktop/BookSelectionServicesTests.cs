@@ -40,6 +40,18 @@ public sealed class BookSelectionServicesTests
         Assert.DoesNotContain(typeof(InteriorFrameModeService).GetConstructors().Single().GetParameters(), parameter => parameter.ParameterType == typeof(IBookSourceScanner));
     }
 
+    [Fact]
+    public async Task Book_interior_settings_persist_background_and_normalized_source_activation()
+    {
+        var store = new RecordingWorkspaceStateStore();
+        var book = CreateBook();
+        var service = new BookInteriorSettingsService(store);
+        await service.SetHasBackgroundAsync(book, true);
+        await service.SetActiveAsync(book, new FileReference("Book interior/page-001.png"), false);
+        Assert.True(store.Saved!.HasBackground);
+        Assert.False(store.Saved.IsInteriorActive("BOOK INTERIOR/PAGE-001.PNG"));
+    }
+
     private static DiscoveredBook CreateBook()
     {
         var id = new BookId("book-one");

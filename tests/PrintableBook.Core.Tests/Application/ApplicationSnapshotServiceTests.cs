@@ -121,6 +121,20 @@ public sealed class ApplicationSnapshotServiceTests
         Assert.Equal(1_610_612_736, Assert.Single(snapshot.BookSummaries).FolderSizeBytes);
     }
 
+    [Fact]
+    public async Task RefreshAsync_exposes_background_choice_active_sources_and_zero_active_validation()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("Book A")).SetHasBackground(true).SetInteriorActive("page-1.png", false);
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new StubScanner(), new StubStateStore(explicitState: state), new StubFileSystem(), new StubBookStorageMaintenance(0)).RefreshAsync();
+        var summary = Assert.Single(snapshot.BookSummaries);
+        Assert.True(summary.HasBackground);
+        Assert.Equal(0, summary.ActiveInteriorSourcePageCount);
+        Assert.False(Assert.Single(summary.InteriorSourcePages!).IsActive);
+        Assert.False(Assert.Single(summary.Assets!, asset => asset.Kind == "Interior").IsActive);
+        Assert.Equal("Invalid", summary.ValidationStatus);
+        Assert.Contains(summary.ValidationChecks, check => check.Code == "book.no_active_interior_pages");
+    }
+
     private sealed class StubDiscovery : IApplicationRootDiscovery
     {
         public int CallCount { get; private set; }
@@ -212,12 +226,12 @@ public sealed class ApplicationSnapshotServiceTests
                 new BookAsset(Path.Combine(bookDirectory.Value, "Interior", "page-1.png"), BookAssetKind.Interior)])));
     }
 
-    private sealed class StubStateStore(string? selectedCoverReference = null) : IBookWorkspaceStateStore
+    private sealed class StubStateStore(string? selectedCoverReference = null, BookProcessingState? explicitState = null) : IBookWorkspaceStateStore
     {
         public ValueTask<BookProcessingState?> LoadAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult<BookProcessingState?>(selectedCoverReference is null
+            ValueTask.FromResult<BookProcessingState?>(explicitState ?? (selectedCoverReference is null
                 ? null
-                : BookProcessingState.NotStarted(workspace.BookId).SelectCover(selectedCoverReference));
+                : BookProcessingState.NotStarted(workspace.BookId).SelectCover(selectedCoverReference)));
         public ValueTask SaveAsync(BookWorkspace workspace, BookProcessingState state, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask AppendLogAsync(BookWorkspace workspace, BookProcessingLogEntry entry, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask<IReadOnlyList<BookProcessingLogEntry>> LoadLogsAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<BookProcessingLogEntry>>([]);
