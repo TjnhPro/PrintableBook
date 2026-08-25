@@ -202,7 +202,41 @@ public sealed class BackgroundTaskManagerTests
     }
 
     [Fact]
-    public async Task Cancel_and_dispose_are_safe_while_a_cancellation_callback_is_blocked()
+    public async Task Running_cancel_returns_before_a_blocked_callback_is_released()
+    {
+        var worker = new BlockingCancellationWorker();
+        using var manager = CreateManager(
+            worker,
+            new BlockingWorker(BackgroundTaskKind.ProcessingSession),
+            new BlockingWorker(BackgroundTaskKind.AssetPreview));
+        var previous = SynchronizationContext.Current;
+        var marker = new MarkerSynchronizationContext();
+
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(marker);
+            var task = await manager.StartAsync(BackgroundTaskKind.LibraryRefresh, "library", "library", new TaskRequest("library"));
+            await worker.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            var cancelTask = manager.CancelAsync(task.TaskId).AsTask();
+            await worker.CallbackEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.Same(cancelTask, await Task.WhenAny(cancelTask, Task.Delay(TimeSpan.FromSeconds(2))));
+
+            var snapshot = await cancelTask;
+            Assert.NotNull(snapshot);
+            Assert.Equal(BackgroundTaskState.Cancelling, snapshot!.State);
+            Assert.NotSame(marker, worker.CallbackContext);
+        }
+        finally
+        {
+            worker.ReleaseCallback.TrySetResult();
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
+    [Fact]
+    public async Task Direct_cancel_and_dispose_are_safe_while_callback_is_blocked()
     {
         var cancellationWorker = new BlockingCancellationWorker();
         var processing = new BlockingWorker(BackgroundTaskKind.ProcessingSession);
@@ -213,8 +247,11 @@ public sealed class BackgroundTaskManagerTests
             var task = await manager.StartAsync(BackgroundTaskKind.LibraryRefresh, "library", null, new TaskRequest("library"));
             await cancellationWorker.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
-            var cancel = Task.Run(async () => await manager.CancelAsync(task.TaskId));
+            var cancel = manager.CancelAsync(task.TaskId).AsTask();
             await cancellationWorker.CallbackEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.Same(cancel, await Task.WhenAny(cancel, Task.Delay(TimeSpan.FromSeconds(2))));
+
             var dispose = Task.Run(manager.Dispose);
 
             cancellationWorker.ReleaseCallback.TrySetResult();
@@ -315,11 +352,13 @@ public sealed class BackgroundTaskManagerTests
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource CallbackEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ReleaseCallback { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public SynchronizationContext? CallbackContext { get; private set; }
 
         protected override async ValueTask<string> ExecuteTypedAsync(TaskRequest request, IBackgroundTaskContext context, CancellationToken cancellationToken)
         {
             using var registration = cancellationToken.Register(() =>
             {
+                CallbackContext = SynchronizationContext.Current;
                 CallbackEntered.TrySetResult();
                 ReleaseCallback.Task.GetAwaiter().GetResult();
             });

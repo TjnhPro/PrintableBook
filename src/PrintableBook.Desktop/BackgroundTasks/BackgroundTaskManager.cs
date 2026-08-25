@@ -80,6 +80,7 @@ public sealed class BackgroundTaskManager(
         cancellationToken.ThrowIfCancellationRequested();
         CancellationTokenSource? source = null;
         object? cancellationSync = null;
+        BackgroundTaskEntry? cancellationEntry = null;
         BackgroundTaskLaneKind? dispatchLane = null;
         string? lifecycleEvent = null;
         string? lifecycleSubject = null;
@@ -104,8 +105,7 @@ public sealed class BackgroundTaskManager(
             else if (entry.State == BackgroundTaskState.Running)
             {
                 entry.State = BackgroundTaskState.Cancelling;
-                source = entry.Cancellation;
-                cancellationSync = entry.CancellationSync;
+                cancellationEntry = entry;
                 lifecycleEvent = "task.cancelling";
                 lifecycleSubject = entry.Subject;
                 lifecycleDetail = entry.Kind.ToString();
@@ -120,12 +120,12 @@ public sealed class BackgroundTaskManager(
             {
                 try
                 {
-                    if (snapshot?.State == BackgroundTaskState.Cancelling) source.Cancel();
-                    else source.Dispose();
+                    source.Dispose();
                 }
                 catch (ObjectDisposedException) { }
             }
         }
+        if (cancellationEntry is not null) BeginCancellationSignal(cancellationEntry);
         if (dispatchLane is not null) TryDispatch(dispatchLane.Value);
         return ValueTask.FromResult<BackgroundTaskSnapshot?>(snapshot);
     }
@@ -212,6 +212,37 @@ public sealed class BackgroundTaskManager(
     {
         diagnostics.Record("task.started", entry.Subject, entry.Kind.ToString());
         entry.ExecutionTask = Task.Run(() => ExecuteEntryAsync(entry), CancellationToken.None);
+    }
+
+    private void BeginCancellationSignal(BackgroundTaskEntry entry)
+    {
+        lock (entry.CancellationSync)
+        {
+            if (!entry.CancellationSignalTask.IsCompleted) return;
+
+            entry.CancellationSignalTask = Task.Run(
+                () =>
+                {
+                    lock (entry.CancellationSync)
+                    {
+                        try
+                        {
+                            entry.Cancellation.Cancel();
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // The worker completed before the scheduled cancellation signal acquired this lock.
+                        }
+                    }
+                },
+                CancellationToken.None);
+        }
+
+        _ = entry.CancellationSignalTask.ContinueWith(
+            static completed => _ = completed.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     private async Task ExecuteEntryAsync(BackgroundTaskEntry entry)
