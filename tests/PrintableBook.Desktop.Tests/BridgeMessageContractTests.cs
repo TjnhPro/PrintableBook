@@ -432,6 +432,36 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Book_interior_settings_save_persists_a_batch_and_starts_one_refresh()
+    {
+        var settings = new StubBookInteriorSettingsService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), bookInteriorSettingsService: settings);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"save","command":"book.interior.settings.save","payload":{"bookId":"Book One","hasBackground":true,"assets":[{"sourceReference":"Book interior/page-001.png","active":false,"frameMode":"enabled"}]}}""");
+
+        Assert.True(response.Ok);
+        Assert.True(settings.Batch!.HasBackground);
+        var asset = Assert.Single(settings.Batch.Assets);
+        Assert.Equal("Book interior/page-001.png", asset.Source.Value);
+        Assert.False(asset.IsActive);
+        Assert.Equal(FrameMode.Enabled, asset.FrameMode);
+        Assert.Equal(1, manager.Starts);
+    }
+
+    [Fact]
+    public async Task Book_interior_settings_save_rejects_unknown_or_empty_changes()
+    {
+        var router = new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(CreateSnapshot())), bookInteriorSettingsService: new StubBookInteriorSettingsService());
+
+        var unknown = await router.HandleAsync("""{"version":1,"id":"unknown","command":"book.interior.settings.save","payload":{"bookId":"Book One","assets":[{"sourceReference":"outside.png","active":false}]}}""");
+        var empty = await router.HandleAsync("""{"version":1,"id":"empty","command":"book.interior.settings.save","payload":{"bookId":"Book One","assets":[]}}""");
+
+        Assert.Equal("invalid_book_interior_settings", unknown.Error);
+        Assert.Equal("invalid_book_interior_settings", empty.Error);
+    }
+
+    [Fact]
     public async Task Book_interior_mutations_reject_active_or_cancelling_processes_without_persisting()
     {
         var settings = new StubBookInteriorSettingsService();
@@ -707,8 +737,10 @@ public sealed class BridgeMessageContractTests
     {
         public (string BookId, bool Enabled)? Background { get; private set; }
         public (string BookId, string SourceReference, bool Active)? Active { get; private set; }
+        public BookInteriorSettingsChange? Batch { get; private set; }
         public ValueTask SetHasBackgroundAsync(DiscoveredBook book, bool enabled, CancellationToken cancellationToken = default) { Background = (book.Id.Value, enabled); return ValueTask.CompletedTask; }
         public ValueTask SetActiveAsync(DiscoveredBook book, FileReference source, bool isActive, CancellationToken cancellationToken = default) { Active = (book.Id.Value, source.Value, isActive); return ValueTask.CompletedTask; }
+        public ValueTask SaveAsync(DiscoveredBook book, BookInteriorSettingsChange change, CancellationToken cancellationToken = default) { Batch = change; return ValueTask.CompletedTask; }
     }
 
     private sealed class ThrowingInteriorFrameModeService : IInteriorFrameModeService

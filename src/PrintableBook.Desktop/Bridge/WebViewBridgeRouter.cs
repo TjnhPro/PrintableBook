@@ -221,6 +221,102 @@ internal sealed class WebViewBridgeRouter(
                 }
             }
 
+            if (request.Command == "book.interior.settings.save")
+            {
+                if (applicationLoadCoordinator is null || bookInteriorSettingsService is null || request.Payload is not { } settingsPayload ||
+                    !settingsPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                }
+
+                if (processSessionService is not null)
+                {
+                    var process = await processSessionService.GetAsync(cancellationToken);
+                    if (process.IsActive || process.IsCancelling) return new BridgeResponse(Version, request.Id, false, null, "processing_active");
+                }
+
+                var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                if (snapshot is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+                var book = snapshot.Discovery.Books.FirstOrDefault(item => string.Equals(item.Id.Value, bookIdElement.GetString(), StringComparison.Ordinal));
+                var summary = book is null ? null : snapshot.BookSummaries.FirstOrDefault(item => item.BookId == book.Id);
+                if (book is null || summary is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+
+                bool? hasBackground = null;
+                if (settingsPayload.TryGetProperty("hasBackground", out var backgroundElement))
+                {
+                    if (backgroundElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                    }
+                    hasBackground = backgroundElement.GetBoolean();
+                }
+
+                var changes = new List<InteriorAssetSettingsChange>();
+                if (settingsPayload.TryGetProperty("assets", out var assetsElement))
+                {
+                    if (assetsElement.ValueKind != JsonValueKind.Array)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                    }
+
+                    var knownSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var assetElement in assetsElement.EnumerateArray())
+                    {
+                        if (assetElement.ValueKind != JsonValueKind.Object ||
+                            !assetElement.TryGetProperty("sourceReference", out var sourceElement) || string.IsNullOrWhiteSpace(sourceElement.GetString()) ||
+                            !knownSources.Add(sourceElement.GetString()!))
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                        }
+
+                        var source = summary.InteriorSourcePages?.FirstOrDefault(item => string.Equals(item.SourceReference, sourceElement.GetString(), StringComparison.OrdinalIgnoreCase));
+                        if (source is null) return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+
+                        bool? isActive = null;
+                        if (assetElement.TryGetProperty("active", out var activeElement))
+                        {
+                            if (activeElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+                            {
+                                return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                            }
+                            isActive = activeElement.GetBoolean();
+                        }
+
+                        FrameMode? frameMode = null;
+                        if (assetElement.TryGetProperty("frameMode", out var modeElement))
+                        {
+                            if (!TryParseFrameMode(modeElement, out var parsedMode))
+                            {
+                                return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                            }
+                            frameMode = parsedMode;
+                        }
+
+                        if (isActive is null && frameMode is null)
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                        }
+
+                        changes.Add(new InteriorAssetSettingsChange(new PrintableBook.Core.Abstractions.FileReference(source.SourceReference), isActive, frameMode));
+                    }
+                }
+
+                if (hasBackground is null && changes.Count == 0)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                }
+
+                try
+                {
+                    await bookInteriorSettingsService.SaveAsync(book, new BookInteriorSettingsChange(hasBackground, changes), cancellationToken);
+                    return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
+                }
+                catch (ArgumentException)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                }
+            }
+
             if (request.Command is "book.background.set" or "book.interior.active.set")
             {
                 if (applicationLoadCoordinator is null || bookInteriorSettingsService is null || request.Payload is not { } settingsPayload ||
@@ -395,7 +491,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.background.set" or "book.interior.active.set" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

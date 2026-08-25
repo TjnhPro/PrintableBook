@@ -425,35 +425,60 @@ test("book detail renders frame mode truth and sends per-image overrides through
 
   assert.match(content.innerHTML, /Interior assets/);
   assert.match(content.innerHTML, /Use Brand background/);
-  assert.match(content.innerHTML, /0 \/ 1 Interior active/);
+  assert.match(content.innerHTML, /0 of 1 active/);
   assert.match(content.innerHTML, /set-interior-active/);
   assert.match(content.innerHTML, /is-inactive/);
   assert.match(content.innerHTML, /Choose exactly which pages will be processed/);
   assert.match(content.innerHTML, /option value="auto" selected/);
+  const messageCountBeforeEdit = messages.length;
   contentListeners.change({ target: { dataset: { action: "set-book-background", bookId: "Book 001" }, checked: false } });
-  assert.deepEqual(messages.at(-1), {
-    version: 1,
-    id: "request-1",
-    command: "book.background.set",
-    payload: { bookId: "Book 001", enabled: false }
-  });
   contentListeners.change({ target: { dataset: { action: "set-interior-active", bookId: "Book 001", sourceReference: "Book interior/page-001.png" }, checked: true } });
-  assert.deepEqual(messages.at(-1), {
-    version: 1,
-    id: "request-1",
-    command: "book.interior.active.set",
-    payload: { bookId: "Book 001", sourceReference: "Book interior/page-001.png", active: true }
-  });
   contentListeners.change({ target: { dataset: { action: "set-interior-frame-mode", bookId: "Book 001", sourceReference: "Book interior/page-001.png" }, value: "enabled" } });
-  assert.deepEqual(messages.at(-1), {
-    version: 1,
-    id: "request-1",
-    command: "book.interior.frame-mode.set",
-    payload: { bookId: "Book 001", sourceReference: "Book interior/page-001.png", mode: "enabled" }
-  });
+  assert.equal(messages.length, messageCountBeforeEdit);
 
   messageHandler({ data: { version: 1, id: "book-2", ok: true, command: "app.snapshot", payload: snapshot(1) } });
   assert.match(content.innerHTML, /option value="enabled" selected/);
+});
+
+test("Book Interior edits stay local until one explicit save request", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      interiorSourcePageCount: 1, activeInteriorSourcePageCount: 1, hasBackground: false,
+      assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto", isActive: true }]
+    }]
+  };
+
+  messageHandler({ data: { version: 1, id: "book-draft", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
+  contentListeners.click({ target: assetsTab });
+  const messageCountBeforeEdit = messages.length;
+
+  contentListeners.change({ target: { dataset: { action: "set-book-background", bookId: "Book 001" }, checked: true } });
+  contentListeners.change({ target: { dataset: { action: "set-interior-active", bookId: "Book 001", sourceReference: "Book interior/page-001.png" }, checked: false } });
+  contentListeners.change({ target: { dataset: { action: "set-interior-frame-mode", bookId: "Book 001", sourceReference: "Book interior/page-001.png" }, value: "enabled" } });
+
+  assert.equal(messages.length, messageCountBeforeEdit, "editing must not refresh the Book drawer");
+  assert.match(content.innerHTML, /data-action="save-book-interior-settings"/);
+  assert.match(content.innerHTML, /Unsaved changes/);
+
+  const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
+  contentListeners.click({ target: save });
+  assert.deepEqual(messages.at(-1), {
+    version: 1,
+    id: "request-1",
+    command: "book.interior.settings.save",
+    payload: {
+      bookId: "Book 001",
+      hasBackground: true,
+      assets: [{ sourceReference: "Book interior/page-001.png", active: false, frameMode: "enabled" }]
+    }
+  });
 });
 
 test("Books render direct Cover and Interior local image URLs and replace a failed image locally", () => {

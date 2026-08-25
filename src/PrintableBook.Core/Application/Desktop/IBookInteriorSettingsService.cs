@@ -9,7 +9,12 @@ public interface IBookInteriorSettingsService
 {
     ValueTask SetHasBackgroundAsync(DiscoveredBook book, bool enabled, CancellationToken cancellationToken = default);
     ValueTask SetActiveAsync(DiscoveredBook book, FileReference source, bool isActive, CancellationToken cancellationToken = default);
+    ValueTask SaveAsync(DiscoveredBook book, BookInteriorSettingsChange change, CancellationToken cancellationToken = default);
 }
+
+public sealed record InteriorAssetSettingsChange(FileReference Source, bool? IsActive, FrameMode? FrameMode);
+
+public sealed record BookInteriorSettingsChange(bool? HasBackground, IReadOnlyList<InteriorAssetSettingsChange> Assets);
 
 public sealed class BookInteriorSettingsService(IBookWorkspaceStateStore stateStore) : IBookInteriorSettingsService
 {
@@ -26,5 +31,29 @@ public sealed class BookInteriorSettingsService(IBookWorkspaceStateStore stateSt
         ArgumentNullException.ThrowIfNull(source);
         var state = await stateStore.LoadAsync(book.Workspace, cancellationToken) ?? BookProcessingState.NotStarted(book.Id);
         await stateStore.SaveAsync(book.Workspace, state.SetInteriorActive(InteriorSourceKey.FromBookRoot(book.Directory, source), isActive), cancellationToken);
+    }
+
+    public async ValueTask SaveAsync(DiscoveredBook book, BookInteriorSettingsChange change, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(book);
+        ArgumentNullException.ThrowIfNull(change);
+
+        var state = await stateStore.LoadAsync(book.Workspace, cancellationToken) ?? BookProcessingState.NotStarted(book.Id);
+        if (change.HasBackground is { } hasBackground) state = state.SetHasBackground(hasBackground);
+
+        foreach (var asset in change.Assets)
+        {
+            ArgumentNullException.ThrowIfNull(asset);
+            ArgumentNullException.ThrowIfNull(asset.Source);
+            var key = InteriorSourceKey.FromBookRoot(book.Directory, asset.Source);
+            if (asset.IsActive is { } isActive) state = state.SetInteriorActive(key, isActive);
+            if (asset.FrameMode is { } frameMode)
+            {
+                if (!Enum.IsDefined(frameMode)) throw new ArgumentOutOfRangeException(nameof(change), frameMode, "Unsupported frame mode.");
+                state = state.SetInteriorFrameMode(key, frameMode);
+            }
+        }
+
+        await stateStore.SaveAsync(book.Workspace, state, cancellationToken);
     }
 }

@@ -52,6 +52,23 @@ public sealed class BookSelectionServicesTests
         Assert.False(store.Saved.IsInteriorActive("BOOK INTERIOR/PAGE-001.PNG"));
     }
 
+    [Fact]
+    public async Task Book_interior_settings_save_applies_a_batch_with_one_state_write()
+    {
+        var store = new RecordingWorkspaceStateStore();
+        var book = CreateBook();
+        var service = new BookInteriorSettingsService(store);
+
+        await service.SaveAsync(book, new BookInteriorSettingsChange(
+            true,
+            [new InteriorAssetSettingsChange(new FileReference("Book interior/page-001.png"), false, FrameMode.Enabled)]));
+
+        Assert.Equal(1, store.SaveCount);
+        Assert.True(store.Saved!.HasBackground);
+        Assert.False(store.Saved.IsInteriorActive("Book interior/page-001.png"));
+        Assert.Equal(FrameMode.Enabled, store.Saved.GetInteriorFrameMode("Book interior/page-001.png"));
+    }
+
     private static DiscoveredBook CreateBook()
     {
         var id = new BookId("book-one");
@@ -61,8 +78,9 @@ public sealed class BookSelectionServicesTests
     private sealed class RecordingWorkspaceStateStore : IBookWorkspaceStateStore
     {
         public BookProcessingState? Saved { get; private set; }
+        public int SaveCount { get; private set; }
         public ValueTask<BookProcessingState?> LoadAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) => ValueTask.FromResult<BookProcessingState?>(Saved);
-        public ValueTask SaveAsync(BookWorkspace workspace, BookProcessingState state, CancellationToken cancellationToken = default) { Saved = state; return ValueTask.CompletedTask; }
+        public ValueTask SaveAsync(BookWorkspace workspace, BookProcessingState state, CancellationToken cancellationToken = default) { Saved = state; SaveCount++; return ValueTask.CompletedTask; }
         public ValueTask AppendLogAsync(BookWorkspace workspace, BookProcessingLogEntry entry, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask<IReadOnlyList<BookProcessingLogEntry>> LoadLogsAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<BookProcessingLogEntry>>([]);
         public ValueTask SaveErrorAsync(BookWorkspace workspace, ProcessingFailure failure, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;

@@ -7,7 +7,8 @@ const expected = [
   "Processing",
   "Outputs",
   "Logs",
-  "book.interior.frame-mode.set",
+  "book.interior.settings.save",
+  "Save changes",
   "Frame mode",
   "No frame",
   "Process Interior",
@@ -24,7 +25,7 @@ const expected = [
   ,"width=\"256\" height=\"256\""
   ,"decoding=\"async\""
   ,"Interior assets"
-  ,"Every discovered Interior page is included in this run"
+  ,"Choose exactly which pages will be processed"
   ,"filter-assets"
   ,"Interior-only preflight checks the source pages"
   ,"Current stage"
