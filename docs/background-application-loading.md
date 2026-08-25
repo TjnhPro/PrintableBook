@@ -29,6 +29,9 @@ New worker kinds require an independent user-visible start/cancel/observe lifecy
 | `book.asset.preview.get` | AssetPreview task; result is fetched explicitly after completion |
 | `task.get/list/cancel` | RAM-only TaskManager observation/control |
 | `book.validate` | requests a fresh Library snapshot and is retained for the existing preflight flow |
-| settings, brand settings, cover/frame choice | small local persistence/mutation; UI requests normal refresh afterwards |
+| settings | small local persistence mutation |
+| brand settings, cover/frame choice | validate against the newest completed LibraryRefresh snapshot held in RAM, persist the small mutation, then queue a normal LibraryRefresh; never call discovery or source scanning from the bridge |
 | output open/reveal/copy | UI-affine shell/clipboard actions, no new worker kind |
 | diagnostics | bounded in-memory diagnostics/task data |
+
+The completed LibraryRefresh snapshot is the UI command authority for Book and Brand identity. If no completed snapshot is retained, a mutation command returns a safe `snapshot_unavailable` response rather than synchronously creating a refresh. `ProcessingSessionWorker` is the only consumer that deliberately requests a fresh snapshot, and it does so from its BackgroundTaskManager-owned worker execution.
