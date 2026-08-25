@@ -6,6 +6,7 @@ using PrintableBook.Core.Application.BackgroundTasks;
 using PrintableBook.Core.Application.BackgroundTasks.Workers;
 using PrintableBook.Desktop.Diagnostics;
 using PrintableBook.Core.Abstractions;
+using PrintableBook.Core.Application.Storage;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
@@ -122,6 +123,104 @@ public sealed class BridgeMessageContractTests
 
         Assert.Equal("app.snapshot", result.Command);
         Assert.Same(snapshot, result.Payload);
+    }
+
+    [Fact]
+    public async Task Cache_clear_returns_a_cache_cleanup_background_task()
+    {
+        var manager = new CleanupTaskManager { CleanupState = BackgroundTaskState.Running };
+        var response = await new WebViewBridgeRouter(backgroundTaskManager: manager)
+            .HandleAsync("""{"version":1,"id":"clear-1","command":"cache.clear"}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("background.task", response.Command);
+        Assert.Equal("CacheCleanup", Assert.IsType<BackgroundTaskBridgeSnapshot>(response.Payload).Kind);
+    }
+
+    [Fact]
+    public async Task Cache_clear_duplicate_returns_the_existing_task()
+    {
+        var manager = new CleanupTaskManager { CleanupState = BackgroundTaskState.Running };
+        var router = new WebViewBridgeRouter(backgroundTaskManager: manager);
+
+        var first = await router.HandleAsync("""{"version":1,"id":"clear-1","command":"cache.clear"}""");
+        var second = await router.HandleAsync("""{"version":1,"id":"clear-2","command":"cache.clear"}""");
+
+        Assert.Equal(
+            Assert.IsType<BackgroundTaskBridgeSnapshot>(first.Payload).TaskId,
+            Assert.IsType<BackgroundTaskBridgeSnapshot>(second.Payload).TaskId);
+        Assert.Equal(1, manager.CleanupStarts);
+    }
+
+    [Fact]
+    public async Task Cache_clear_result_returns_typed_cleanup_result_only_after_completion()
+    {
+        var result = new CacheCleanupResult(10, 8, 2, 0, 4_509_715_660, []);
+        var manager = new CleanupTaskManager { CleanupResult = result };
+        var router = new WebViewBridgeRouter(backgroundTaskManager: manager);
+        var started = await router.HandleAsync("""{"version":1,"id":"clear","command":"cache.clear"}""");
+        var taskId = Assert.IsType<BackgroundTaskBridgeSnapshot>(started.Payload).TaskId;
+
+        var response = await router.HandleAsync($"{{\"version\":1,\"id\":\"result\",\"command\":\"cache.clear.result\",\"payload\":{{\"taskId\":\"{taskId}\"}}}}");
+
+        Assert.True(response.Ok);
+        Assert.Equal("cache.cleanup.result", response.Command);
+        Assert.Same(result, response.Payload);
+    }
+
+    [Fact]
+    public async Task Cache_clear_result_rejects_non_cleanup_task()
+    {
+        var manager = new CleanupTaskManager { LookupTask = new BackgroundTaskSnapshot(new BackgroundTaskId("library"), BackgroundTaskKind.LibraryRefresh, BackgroundTaskState.Completed, "library", null, null, null, null, null, null, null, null, null) };
+        var response = await new WebViewBridgeRouter(backgroundTaskManager: manager)
+            .HandleAsync("""{"version":1,"id":"result","command":"cache.clear.result","payload":{"taskId":"library"}}""");
+
+        Assert.Equal("task_not_completed", response.Error);
+    }
+
+    [Fact]
+    public async Task Cache_clear_result_rejects_non_completed_cleanup_task()
+    {
+        var manager = new CleanupTaskManager { CleanupState = BackgroundTaskState.Running };
+        var response = await new WebViewBridgeRouter(backgroundTaskManager: manager)
+            .HandleAsync("""{"version":1,"id":"result","command":"cache.clear.result","payload":{"taskId":"cleanup-task"}}""");
+
+        Assert.Equal("task_not_completed", response.Error);
+    }
+
+    [Theory]
+    [InlineData(BackgroundTaskKind.ProcessingSession, "cache_cleanup_processing_active")]
+    [InlineData(BackgroundTaskKind.LibraryRefresh, "cache_cleanup_refresh_active")]
+    public async Task Cache_clear_returns_the_safe_error_for_an_active_conflicting_task(BackgroundTaskKind activeKind, string error)
+    {
+        var manager = new CleanupTaskManager { ConflictActiveKind = activeKind };
+        var response = await new WebViewBridgeRouter(backgroundTaskManager: manager)
+            .HandleAsync("""{"version":1,"id":"clear","command":"cache.clear"}""");
+
+        Assert.Equal(error, response.Error);
+    }
+
+    [Fact]
+    public async Task App_refresh_returns_cache_cleanup_active_while_cleanup_is_active()
+    {
+        var manager = new CleanupTaskManager { ConflictActiveKind = BackgroundTaskKind.CacheCleanup };
+        var response = await new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), backgroundTaskManager: manager)
+            .HandleAsync("""{"version":1,"id":"refresh","command":"app.refresh"}""");
+
+        Assert.Equal("cache_cleanup_active", response.Error);
+    }
+
+    [Fact]
+    public async Task Process_start_returns_cache_cleanup_active_while_cleanup_is_active()
+    {
+        var session = new StubProcessSessionService(new ProcessSessionSnapshot(false, false, null, null, null, []))
+        {
+            StartException = new BackgroundTaskConflictException(BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup)
+        };
+        var response = await new WebViewBridgeRouter(processSessionService: session)
+            .HandleAsync("""{"version":1,"id":"process","command":"process.start","payload":{"bookIds":["Book One"],"mode":"interior-only"}}""");
+
+        Assert.Equal("cache_cleanup_active", response.Error);
     }
 
     [Fact]
@@ -509,9 +608,11 @@ public sealed class BridgeMessageContractTests
         public BookProcessingMode? LastMode { get; private set; }
         public ProcessSessionSnapshot? StartSnapshot { get; init; }
         public ProcessSessionSnapshot? CancelSnapshot { get; init; }
+        public Exception? StartException { get; init; }
         public ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(current);
         public ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default)
         {
+            if (StartException is not null) return ValueTask.FromException<ProcessSessionSnapshot>(StartException);
             LastMode = mode;
             current = StartSnapshot ?? initialSnapshot;
             return ValueTask.FromResult(current);
@@ -522,6 +623,37 @@ public sealed class BridgeMessageContractTests
             return ValueTask.FromResult(current);
         }
         public ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
+    }
+
+    private sealed class CleanupTaskManager : IBackgroundTaskManager
+    {
+        private readonly BackgroundTaskId cleanupTaskId = new("cleanup-task");
+        public BackgroundTaskState CleanupState { get; init; } = BackgroundTaskState.Completed;
+        public CacheCleanupResult? CleanupResult { get; init; } = new(0, 0, 0, 0, 0, []);
+        public BackgroundTaskKind? ConflictActiveKind { get; init; }
+        public BackgroundTaskSnapshot? LookupTask { get; init; }
+        public int CleanupStarts { get; private set; }
+
+        public ValueTask<BackgroundTaskSnapshot> StartAsync<TRequest>(BackgroundTaskKind kind, string key, string? subject, TRequest request, object? initialView = null, CancellationToken cancellationToken = default)
+        {
+            if (ConflictActiveKind is { } active) throw new BackgroundTaskConflictException(kind, active);
+            if (kind == BackgroundTaskKind.CacheCleanup && CleanupStarts == 0) CleanupStarts++;
+            return ValueTask.FromResult(Current(kind));
+        }
+
+        public ValueTask<BackgroundTaskSnapshot?> GetAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<BackgroundTaskSnapshot?>(LookupTask ?? (taskId == cleanupTaskId ? Current(BackgroundTaskKind.CacheCleanup) : null));
+        public ValueTask<IReadOnlyList<BackgroundTaskSnapshot>> ListAsync(BackgroundTaskKind? kind = null, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<BackgroundTaskSnapshot>>([Current(BackgroundTaskKind.CacheCleanup)]);
+        public ValueTask<BackgroundTaskSnapshot?> CancelAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) => ValueTask.FromResult<BackgroundTaskSnapshot?>(Current(BackgroundTaskKind.CacheCleanup));
+        public ValueTask<bool> WaitAsync(BackgroundTaskId taskId, TimeSpan timeout, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
+        public bool TryGetResult<TResult>(BackgroundTaskId taskId, out TResult? result)
+        {
+            if (taskId == cleanupTaskId && CleanupResult is TResult typed) { result = typed; return true; }
+            result = default;
+            return false;
+        }
+        public bool TryGetView<TView>(BackgroundTaskId taskId, out TView? view) where TView : class { view = default; return false; }
+        private BackgroundTaskSnapshot Current(BackgroundTaskKind kind) => new(cleanupTaskId, kind, kind == BackgroundTaskKind.CacheCleanup ? CleanupState : BackgroundTaskState.Completed, "cleanup", "Library", null, null, null, null, DateTimeOffset.UtcNow, CleanupState == BackgroundTaskState.Completed ? DateTimeOffset.UtcNow : null, null, null);
     }
 
     private sealed class StubCoverSelectionService : IBookCoverSelectionService
