@@ -24,6 +24,10 @@ const expected = [
   ,"global-process-status"
   ,"book.asset.preview.get"
   ,"assetPreviews"
+  ,"Asset Workspace"
+  ,"Load preview"
+  ,"filter-assets"
+  ,"asset-view"
 ];
 
 for (const value of expected) {

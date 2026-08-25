@@ -245,3 +245,27 @@ test("book detail renders frame mode truth and sends per-image overrides through
   messageHandler({ data: { version: 1, id: "book-2", ok: true, command: "app.snapshot", payload: snapshot(1) } });
   assert.match(content.innerHTML, /option value="enabled" selected/);
 });
+
+test("asset workspace loads an allowlisted preview only after the user selects an asset", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "book-asset", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{ bookId: { value: "Book 001" }, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto", previewAvailable: true }] }]
+  } } });
+
+  const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
+  contentListeners.click({ target: assetsTab });
+  assert.match(content.innerHTML, /Asset Workspace/);
+  assert.match(content.innerHTML, /page-001\.png/);
+  assert.match(content.innerHTML, /Load preview/);
+
+  const asset = { dataset: { action: "select-asset", sourceReference: "Book interior/page-001.png" }, closest: () => asset };
+  contentListeners.click({ target: asset });
+  assert.deepEqual(messages.at(-1), {
+    version: 1,
+    id: "request-1",
+    command: "book.asset.preview.get",
+    payload: { bookId: "Book 001", sourceReference: "Book interior/page-001.png" }
+  });
+});

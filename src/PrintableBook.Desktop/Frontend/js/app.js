@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF outputs", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookFilter: "", bookStatus: "All", brandSettings: "{}", assetPreviews: new Map() };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookFilter: "", bookStatus: "All", brandSettings: "{}", assetPreviews: new Map(), selectedAssetReference: "", assetView: "list", assetFilter: "" };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -26,6 +26,13 @@
   const dateTime = (value) => value ? new Date(value).toLocaleString() : "—";
   const panel = (title, body, extra = "") => `<section class="panel ${extra}"><h2 class="panel-title">${title}</h2>${body}</section>`;
   const selectedBook = () => books().find((book) => bookId(book) === state.selectedBookId);
+  const assetsFor = (summary) => valueFor(summary, "assets", []);
+  const previewFor = (sourceReference) => state.assetPreviews.get(sourceReference);
+  const assetDimensions = (asset) => {
+    const width = valueFor(asset, "width", null);
+    const height = valueFor(asset, "height", null);
+    return width && height ? `${width} × ${height}` : "Dimensions unavailable";
+  };
   const updateGlobalProcessStatus = () => {
     const control = document.getElementById("global-process-status");
     if (!control) return;
@@ -58,6 +65,7 @@
     const artifacts = valueFor(summary, "publishedArtifacts", []);
     const pages = valueFor(summary, "interiorPages", []);
     const sourcePages = valueFor(summary, "interiorSourcePages", []);
+    const assets = assetsFor(summary);
     const logs = valueFor(summary, "logs", []);
     const tabButton = (id, label) => `<button class="detail-tab ${state.selectedBookTab === id ? "active" : ""}" data-action="book-tab" data-book-tab="${id}">${label}</button>`;
     let body = "";
@@ -69,11 +77,32 @@
       }).join("");
       body = `<div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Validation</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div>${panel("Interior frame mode", sourcePages.length ? `<p class="mb-3 text-sm text-slate-500">Auto uses detected artwork type.</p><table class="data-table"><thead><tr><th>Interior source</th><th>Frame mode</th></tr></thead><tbody>${frameModeRows}</tbody></table>` : "<p class=\"empty-copy\">No discovered Interior images.</p>", "mt-4")}${panel("Folders", `<table class="data-table"><thead><tr><th>Folder</th><th>Status</th><th>Files</th></tr></thead><tbody>${folders.map((folder) => `<tr><td>${escapeHtml(valueFor(folder, "name", ""))}</td><td>${badge(valueFor(folder, "status", "Missing"))}</td><td>${valueFor(folder, "imageCount", 0)} image(s) / ${valueFor(folder, "fileCount", 0)} file(s)</td></tr>`).join("")}</tbody></table>`, "mt-4")}`;
     }
+    if (state.selectedBookTab === "assets") {
+      const matchingAssets = assets.filter((asset) => `${valueFor(asset, "fileName", "")} ${valueFor(asset, "relativePath", "")} ${valueFor(asset, "kind", "")}`.toLowerCase().includes(state.assetFilter.toLowerCase()));
+      if (!matchingAssets.some((asset) => valueFor(asset, "sourceReference", "") === state.selectedAssetReference)) state.selectedAssetReference = valueFor(matchingAssets[0], "sourceReference", "");
+      const selectedAsset = matchingAssets.find((asset) => valueFor(asset, "sourceReference", "") === state.selectedAssetReference) ?? null;
+      const preview = selectedAsset ? previewFor(valueFor(selectedAsset, "sourceReference", "")) : null;
+      const previewUrl = valueFor(preview, "dataUrl", "");
+      const assetRow = (asset) => {
+        const reference = valueFor(asset, "sourceReference", "");
+        const selected = reference === state.selectedAssetReference;
+        const thumbnail = valueFor(previewFor(reference), "dataUrl", "");
+        return `<button type="button" class="asset-row ${selected ? "selected" : ""}" data-action="select-asset" data-source-reference="${escapeHtml(reference)}" aria-pressed="${selected}"><span class="asset-thumb">${thumbnail ? `<img src="${escapeHtml(thumbnail)}" alt="" loading="lazy">` : "<span aria-hidden=\"true\">Preview</span>"}</span><span class="asset-row-copy"><strong>${escapeHtml(valueFor(asset, "fileName", "Unnamed asset"))}</strong><small>${escapeHtml(valueFor(asset, "relativePath", ""))}</small></span><span>${badge(valueFor(asset, "kind", "Asset"))}</span></button>`;
+      };
+      const gridCard = (asset) => {
+        const reference = valueFor(asset, "sourceReference", "");
+        const selected = reference === state.selectedAssetReference;
+        const thumbnail = valueFor(previewFor(reference), "dataUrl", "");
+        return `<button type="button" class="asset-card ${selected ? "selected" : ""}" data-action="select-asset" data-source-reference="${escapeHtml(reference)}" aria-pressed="${selected}"><span class="asset-card-preview">${thumbnail ? `<img src="${escapeHtml(thumbnail)}" alt="" loading="lazy">` : "<span aria-hidden=\"true\">Preview unavailable</span>"}</span><strong>${escapeHtml(valueFor(asset, "fileName", "Unnamed asset"))}</strong><small>${escapeHtml(assetDimensions(asset))} · ${escapeHtml(valueFor(asset, "kind", "Asset"))}</small></button>`;
+      };
+      const inspector = selectedAsset ? `<section class="asset-inspector" aria-label="Selected asset inspector"><div class="asset-inspector-preview">${previewUrl ? `<img src="${escapeHtml(previewUrl)}" alt="Preview of ${escapeHtml(valueFor(selectedAsset, "fileName", "selected asset"))}">` : "<span>Preview has not been loaded.</span>"}</div><h3>${escapeHtml(valueFor(selectedAsset, "fileName", "Selected asset"))}</h3><dl><div><dt>Folder</dt><dd>${escapeHtml(valueFor(selectedAsset, "folder", "Unknown"))}</dd></div><div><dt>Dimensions</dt><dd>${escapeHtml(assetDimensions(selectedAsset))}</dd></div><div><dt>Frame mode</dt><dd>${escapeHtml(frameModeValue(valueFor(selectedAsset, "frameMode", "auto")))}</dd></div><div><dt>Path</dt><dd>${escapeHtml(valueFor(selectedAsset, "relativePath", ""))}</dd></div></dl><button class="button-secondary w-full mt-4" data-action="request-asset-preview" data-source-reference="${escapeHtml(valueFor(selectedAsset, "sourceReference", ""))}">${previewUrl ? "Refresh preview" : "Load preview"}</button></section>` : `<section class="asset-inspector"><p class="empty-copy">Select an asset to inspect its local metadata.</p></section>`;
+      body = `<section class="asset-workspace"><aside class="asset-source-panel"><h3>Source folders</h3><p>Assets stay local. Previews are requested only when selected.</p><div class="asset-folder-count"><span>Interior</span><strong>${assets.filter((asset) => valueFor(asset, "kind", "") === "Interior").length}</strong></div><div class="asset-folder-count"><span>Cover candidates</span><strong>${assets.filter((asset) => valueFor(asset, "kind", "") === "Cover").length}</strong></div></aside><section class="asset-browser"><div class="asset-browser-toolbar"><div><h3 class="panel-title">Asset Workspace</h3><p class="panel-note">Review local files before processing.</p></div><div class="asset-view-toggle" aria-label="Asset view"><button class="${state.assetView === "list" ? "active" : ""}" data-action="asset-view" data-asset-view="list" aria-pressed="${state.assetView === "list"}">List</button><button class="${state.assetView === "grid" ? "active" : ""}" data-action="asset-view" data-asset-view="grid" aria-pressed="${state.assetView === "grid"}">Grid</button></div></div><label class="field mt-4"><span>Search assets</span><input class="control" data-action="filter-assets" value="${escapeHtml(state.assetFilter)}" placeholder="File name or path"></label><p class="asset-result-count">${matchingAssets.length} of ${assets.length} local assets</p><div class="${state.assetView === "grid" ? "asset-grid" : "asset-list"}">${matchingAssets.length ? matchingAssets.map(state.assetView === "grid" ? gridCard : assetRow).join("") : "<p class=\"empty-copy\">No assets match this search.</p>"}</div></section>${inspector}</section>`;
+    }
     if (state.selectedBookTab === "validation") body = panel("Validation checks", `<ul class="check-list">${checks.length ? checks.map((check) => { const warning = valueFor(check, "isWarning", false); const success = valueFor(check, "isSuccess", false); return `<li class="${warning ? "warning" : success ? "success" : "failure"}">${warning ? "!" : success ? "✓" : "✕"}<span>${escapeHtml(valueFor(check, "message", ""))}</span></li>`; }).join("") : "<li class=\"empty-row\">No validation result yet.</li>"}</ul>`);
     if (state.selectedBookTab === "processing") body = panel("Processing", `<dl class="summary-grid"><div><span>Workspace</span>${badge(workspaceStatus(summary))}</div><div><span>Current step</span><strong>${escapeHtml(valueFor(summary, "currentStep", "Not started"))}</strong></div><div><span>Completed pages</span><strong>${pages.length} / ${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></dl>${pages.length ? `<table class="data-table mt-4"><thead><tr><th>Page</th><th>Status</th><th>Final page</th></tr></thead><tbody>${pages.map((page) => `<tr><td>${escapeHtml(valueFor(page, "pageId", ""))}</td><td>${badge(valueFor(page, "status", ""))}</td><td class="detail-path">${escapeHtml(valueFor(page, "finalPagePath", ""))}</td></tr>`).join("")}</tbody></table>` : "<p class=\"empty-copy mt-4\">No processed interior pages yet.</p>"}`);
     if (state.selectedBookTab === "outputs") body = panel("Published outputs", artifacts.length ? `<ul class="artifact-list">${artifacts.map((artifact) => `<li>${escapeHtml(artifact)}</li>`).join("")}</ul>` : "<p class=\"empty-copy\">No published output yet.</p>");
     if (state.selectedBookTab === "logs") body = panel("Workspace logs", logs.length ? `<table class="data-table"><thead><tr><th>Time</th><th>Event</th><th>Detail</th></tr></thead><tbody>${logs.map((log) => `<tr><td>${dateTime(valueFor(log, "timestamp", null))}</td><td>${escapeHtml(valueFor(log, "eventName", ""))}</td><td>${escapeHtml(valueFor(log, "detail", ""))}</td></tr>`).join("")}</tbody></table>` : "<p class=\"empty-copy\">No workspace log entries yet.</p>");
-    return `<div class="book-heading"><div><h2>${escapeHtml(valueFor(book, "name", ""))}</h2><p>${escapeHtml(valueFor(valueFor(book, "directory", {}), "value", ""))}</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Validate</button><button class="button-primary" data-action="queue-selected-book">Process Interior</button></div></div><nav class="detail-tabs">${tabButton("overview", "Overview")}${tabButton("validation", "Validation")}${tabButton("processing", "Processing")}${tabButton("outputs", "Outputs")}${tabButton("logs", "Logs")}</nav><div class="tab-body">${body}</div>`;
+    return `<div class="book-heading"><div><h2>${escapeHtml(valueFor(book, "name", ""))}</h2><p>${escapeHtml(valueFor(valueFor(book, "directory", {}), "value", ""))}</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book">Process Interior</button></div></div><nav class="detail-tabs">${tabButton("overview", "Overview")}${tabButton("assets", `Assets (${assets.length})`)}${tabButton("validation", "Validation")}${tabButton("processing", "Processing")}${tabButton("outputs", "Outputs")}${tabButton("logs", "Logs")}</nav><div class="tab-body">${body}</div>`;
   };
 
   const renderBooks = () => {
@@ -148,10 +177,13 @@
     if (action === "select-brand") { state.selectedBrand = target.dataset.brandName; if (brandSelect) brandSelect.value = state.selectedBrand; render("brands"); }
     if (action === "load-brand-settings") send("brand.settings.get", { brandName: state.selectedBrand });
     if (action === "save-brand-settings") send("brand.settings.save", { brandName: state.selectedBrand, json: document.querySelector("[data-brand-settings]")?.value ?? "{}" });
-    if (action === "select-book") { state.selectedBookId = target.dataset.bookId; state.selectedBookTab = "overview"; render("books"); }
+    if (action === "select-book") { state.selectedBookId = target.dataset.bookId; state.selectedBookTab = "overview"; state.selectedAssetReference = ""; render("books"); }
     if (action === "queue-book") { const id = target.dataset.bookId; if (target.checked) state.selectedBookIds.add(id); else state.selectedBookIds.delete(id); }
     if (action === "queue-selected-book") { if (state.selectedBookId) state.selectedBookIds.add(state.selectedBookId); render("process"); }
     if (action === "book-tab") { state.selectedBookTab = target.dataset.bookTab; render("books", false); }
+    if (action === "select-asset") { state.selectedAssetReference = target.dataset.sourceReference; requestAssetPreview(state.selectedBookId, state.selectedAssetReference); render("books", false); }
+    if (action === "request-asset-preview") requestAssetPreview(state.selectedBookId, target.dataset.sourceReference);
+    if (action === "asset-view") { state.assetView = target.dataset.assetView; render("books", false); }
     if (action === "book-status") { state.bookStatus = target.dataset.bookStatus; render("books", false); }
     if (action === "validate-book") send("book.validate", { bookId: target.dataset.bookId });
     if (action === "select-cover") send("book.cover.select", { bookId: target.dataset.bookId, coverReference: target.dataset.coverReference });
@@ -159,7 +191,10 @@
     if (action === "start-process") send("process.start", { bookIds: [...state.selectedBookIds], brandName: state.selectedBrand || brandSelect?.value || null, mode: "interior-only" });
     if (action === "cancel-process") send("process.cancel");
   });
-  content.addEventListener("input", (event) => { if (event.target.dataset.action === "filter-books") { state.bookFilter = event.target.value; render("books", false); } });
+  content.addEventListener("input", (event) => {
+    if (event.target.dataset.action === "filter-books") { state.bookFilter = event.target.value; render("books", false); }
+    if (event.target.dataset.action === "filter-assets") { state.assetFilter = event.target.value; render("books", false); }
+  });
   content.addEventListener("change", (event) => {
     if (event.target.dataset.action === "diagnostic-book") { state.selectedBookId = event.target.value; render("diagnostics", false); }
     if (event.target.dataset.action === "set-interior-frame-mode") send("book.interior.frame-mode.set", { bookId: event.target.dataset.bookId, sourceReference: event.target.dataset.sourceReference, mode: event.target.value });
@@ -195,6 +230,7 @@
     } else if (ok && command === "book.asset.preview") {
       const preview = valueFor(response, "payload", {});
       state.assetPreviews.set(valueFor(preview, "sourceReference", ""), preview);
+      if (document.querySelector(".nav-item-active")?.dataset.route === "books" && state.selectedBookTab === "assets") render("books", false);
       status.textContent = "Preview ready";
     } else status.textContent = `Bridge error: ${valueFor(response, "error", "unexpected response")}`;
   });

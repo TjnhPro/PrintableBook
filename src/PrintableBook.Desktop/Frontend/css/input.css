@@ -100,5 +100,38 @@
   .status-dot { @apply h-2 w-2 rounded-full bg-slate-300; }
   .global-process-status.is-active .status-dot { @apply bg-violet-600; animation: pb-pulse 1.6s ease-in-out infinite; }
   .global-process-status.is-cancelling .status-dot { @apply bg-amber-500; }
+  .asset-workspace { @apply grid min-h-[540px] grid-cols-[180px_minmax(0,1fr)_260px] overflow-hidden rounded-xl border border-slate-200 bg-white; }
+  .asset-source-panel { @apply border-r border-slate-200 bg-slate-50 p-4; }
+  .asset-source-panel h3, .asset-inspector h3 { @apply text-sm font-semibold text-slate-900; }
+  .asset-source-panel p { @apply mt-2 text-xs leading-5 text-slate-500; }
+  .asset-folder-count { @apply mt-4 flex items-center justify-between text-sm text-slate-600; }
+  .asset-folder-count strong { @apply rounded-full bg-white px-2 py-0.5 text-xs text-slate-700 shadow-sm; }
+  .asset-browser { @apply min-w-0 p-4; }
+  .asset-browser-toolbar { @apply flex items-end justify-between gap-3; }
+  .asset-browser-toolbar .field { @apply flex-1; }
+  .asset-view-toggle { @apply flex overflow-hidden rounded-md border border-slate-200; }
+  .asset-view-toggle button { @apply px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50; }
+  .asset-view-toggle button.active { @apply bg-violet-50 text-violet-700; }
+  .asset-result-count { @apply mt-3 text-xs text-slate-500; }
+  .asset-list { @apply mt-3 grid gap-1; }
+  .asset-row { @apply grid w-full grid-cols-[56px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg p-2 text-left hover:bg-slate-50; }
+  .asset-row.selected, .asset-card.selected { @apply bg-violet-50 ring-1 ring-violet-200; }
+  .asset-thumb { @apply grid aspect-square w-12 place-items-center overflow-hidden rounded-md bg-slate-100 text-[10px] text-slate-500; }
+  .asset-thumb img, .asset-card-preview img, .asset-inspector-preview img { @apply h-full w-full object-contain; }
+  .asset-row-copy { @apply grid min-w-0 gap-1; }
+  .asset-row-copy strong { @apply truncate text-sm font-medium text-slate-800; }
+  .asset-row-copy small { @apply truncate text-xs text-slate-500; }
+  .asset-grid { @apply mt-3 grid grid-cols-3 gap-3; }
+  .asset-card { @apply grid min-w-0 gap-2 rounded-lg p-2 text-left hover:bg-slate-50; }
+  .asset-card-preview { @apply grid aspect-square place-items-center overflow-hidden rounded-md bg-slate-100 p-2 text-center text-xs text-slate-500; }
+  .asset-card strong { @apply truncate text-sm font-medium text-slate-800; }
+  .asset-card small { @apply truncate text-xs text-slate-500; }
+  .asset-inspector { @apply border-l border-slate-200 bg-slate-50 p-4; }
+  .asset-inspector-preview { @apply grid aspect-square place-items-center overflow-hidden rounded-lg border border-slate-200 bg-white p-3 text-center text-xs text-slate-500; }
+  .asset-inspector h3 { @apply mt-4 break-words; }
+  .asset-inspector dl { @apply mt-4 grid gap-3 text-xs; }
+  .asset-inspector dt { @apply font-medium text-slate-500; }
+  .asset-inspector dd { @apply mt-1 break-words text-slate-700; }
+  @media (max-width: 1100px) { .asset-workspace { @apply grid-cols-[minmax(0,1fr)_240px]; } .asset-source-panel { @apply hidden; } }
 }
 @keyframes pb-pulse { 50% { opacity: .45; } }
