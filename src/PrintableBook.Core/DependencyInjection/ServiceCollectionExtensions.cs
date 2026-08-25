@@ -24,6 +24,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IInterruptedProcessingRecoveryService, InterruptedProcessingRecoveryService>();
         services.AddKeyedSingleton<IBackgroundTaskWorker, LibraryRefreshWorker>(BackgroundTaskKind.LibraryRefresh);
         services.AddKeyedSingleton<IBackgroundTaskWorker, ProcessingSessionWorker>(BackgroundTaskKind.ProcessingSession);
+        services.AddKeyedSingleton<IBackgroundTaskWorker, CacheCleanupWorker>(BackgroundTaskKind.CacheCleanup);
         services.AddSingleton<IProcessSessionService, ProcessSessionService>();
         services.AddSingleton<IBookProcessingPipeline, BookProcessingPipeline>();
         services.AddSingleton<IBookProcessingQueueBookProcessor, WorkspaceBookProcessingQueueBookProcessor>();
