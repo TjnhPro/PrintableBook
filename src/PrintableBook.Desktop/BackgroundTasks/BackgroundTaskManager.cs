@@ -322,7 +322,6 @@ public sealed class BackgroundTaskManager(
                 entry.ErrorMessage = errorMessage;
                 entry.FinishedAt = DateTimeOffset.UtcNow;
                 lanes[laneKind].ActiveCount--;
-                entry.Terminal.TrySetResult();
                 AddTerminalLocked(entry);
             }
             lock (entry.CancellationSync) entry.Cancellation.Dispose();
@@ -332,6 +331,7 @@ public sealed class BackgroundTaskManager(
                 BackgroundTaskState.Cancelled => "task.cancelled",
                 _ => "task.failed"
             }, entry.Subject, errorCode ?? entry.Kind.ToString());
+            entry.Terminal.TrySetResult();
             TryDispatch(laneKind);
         }
     }

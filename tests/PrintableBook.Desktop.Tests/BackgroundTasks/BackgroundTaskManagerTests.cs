@@ -341,9 +341,10 @@ public sealed class BackgroundTaskManagerTests
     private sealed class RecordingDiagnostics : IOperationDiagnostics
     {
         private readonly List<(string Operation, string? Subject)> events = [];
+        private readonly Lock sync = new();
         public IDisposable Begin(string operation, string? subject = null) => new Scope();
-        public void Record(string operation, string? subject = null, string? detail = null) => events.Add((operation, subject));
-        public IReadOnlyList<string> EventsFor(string subject) => events.Where(entry => entry.Subject == subject).Select(entry => entry.Operation).ToArray();
+        public void Record(string operation, string? subject = null, string? detail = null) { lock (sync) events.Add((operation, subject)); }
+        public IReadOnlyList<string> EventsFor(string subject) { lock (sync) return events.Where(entry => entry.Subject == subject).Select(entry => entry.Operation).ToArray(); }
         private sealed class Scope : IDisposable { public void Dispose() { } }
     }
 }
