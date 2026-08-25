@@ -60,7 +60,7 @@ public sealed class BackgroundTaskManagerTests
         var first = await manager.StartAsync(BackgroundTaskKind.AssetPreview, "one", null, new TaskRequest("one"));
         var second = await manager.StartAsync(BackgroundTaskKind.AssetPreview, "two", null, new TaskRequest("two"));
         var third = await manager.StartAsync(BackgroundTaskKind.AssetPreview, "three", null, new TaskRequest("three"));
-        await Task.WhenAll(library.Started.Task, processing.Started.Task, preview.Started.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+        await Task.WhenAll(library.Started.Task, processing.Started.Task, preview.StartedTwo.Task.WaitAsync(TimeSpan.FromSeconds(2)));
 
         Assert.Equal(1, library.MaximumActive);
         Assert.Equal(1, processing.MaximumActive);
@@ -271,6 +271,7 @@ public sealed class BackgroundTaskManagerTests
         private int active;
         public override BackgroundTaskKind Kind => kind;
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource StartedTwo { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource StartedThree { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int MaximumActive { get; private set; }
@@ -284,6 +285,7 @@ public sealed class BackgroundTaskManagerTests
             MaximumActive = Math.Max(MaximumActive, current);
             StartedRequests.Add(request.Value);
             Started.TrySetResult();
+            if (StartedRequests.Count >= 2) StartedTwo.TrySetResult();
             if (StartedRequests.Count >= 3) StartedThree.TrySetResult();
             try
             {
