@@ -23,6 +23,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IInteriorFrameModeService, InteriorFrameModeService>();
         services.AddSingleton<IInterruptedProcessingRecoveryService, InterruptedProcessingRecoveryService>();
         services.AddKeyedSingleton<IBackgroundTaskWorker, LibraryRefreshWorker>(BackgroundTaskKind.LibraryRefresh);
+        services.AddKeyedSingleton<IBackgroundTaskWorker, AssetPreviewWorker>(BackgroundTaskKind.AssetPreview);
         services.AddSingleton<IProcessSessionService, ProcessSessionService>();
         services.AddSingleton<IBookProcessingPipeline, BookProcessingPipeline>();
         services.AddSingleton<IBookProcessingQueueBookProcessor, WorkspaceBookProcessingQueueBookProcessor>();
