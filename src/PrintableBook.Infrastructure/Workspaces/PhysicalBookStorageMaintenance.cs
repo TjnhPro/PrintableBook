@@ -6,7 +6,11 @@ namespace PrintableBook.Infrastructure.Workspaces;
 public sealed class PhysicalBookStorageMaintenance : IBookStorageMaintenance
 {
     private const string LegacyStampSuffix = ".input-stamp.json";
-    private static readonly string[] HeavyPageStageFileNames = ["prepared.png", "framed.png", "working-page.png"];
+    private static readonly HashSet<string> PageCacheMetadataFileNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "classification.json",
+        "input-stamp.json"
+    };
 
     public ValueTask<long> GetBookSizeBytesAsync(
         DirectoryReference bookDirectory,
@@ -29,7 +33,7 @@ public sealed class PhysicalBookStorageMaintenance : IBookStorageMaintenance
             var cacheRoot = Path.Combine(workspace.WorkingDirectory.Value, "cache");
             var processedInterior = Path.Combine(workspace.ProcessedDirectory.Value, "interior");
             MigrateLegacyStamps(cacheRoot, processedInterior, cancellationToken);
-            DeletePageStageImages(cacheRoot, ref freedBytes, cancellationToken);
+            DeletePageCacheArtifacts(cacheRoot, ref freedBytes, cancellationToken);
             DeleteDirectoryContents(processedInterior, ref freedBytes, cancellationToken);
             DeleteDirectoryContents(workspace.TemporaryOutputDirectory.Value, ref freedBytes, cancellationToken);
             return ValueTask.FromResult(freedBytes);
@@ -107,17 +111,32 @@ public sealed class PhysicalBookStorageMaintenance : IBookStorageMaintenance
         }
     }
 
-    private static void DeletePageStageImages(string cacheRoot, ref long freedBytes, CancellationToken cancellationToken)
+    private static void DeletePageCacheArtifacts(string cacheRoot, ref long freedBytes, CancellationToken cancellationToken)
     {
         if (!Directory.Exists(cacheRoot)) return;
         foreach (var pageDirectory in Directory.EnumerateDirectories(cacheRoot))
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (IsReparsePoint(pageDirectory)) continue;
-            foreach (var fileName in HeavyPageStageFileNames)
+            DeletePageCacheArtifactsTree(pageDirectory, ref freedBytes, cancellationToken);
+        }
+    }
+
+    private static void DeletePageCacheArtifactsTree(string directory, ref long freedBytes, CancellationToken cancellationToken)
+    {
+        foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!PageCacheMetadataFileNames.Contains(Path.GetFileName(file)))
             {
-                DeleteFileAndCount(Path.Combine(pageDirectory, fileName), ref freedBytes);
+                DeleteFileAndCount(file, ref freedBytes);
             }
+        }
+
+        foreach (var child in Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!IsReparsePoint(child)) DeletePageCacheArtifactsTree(child, ref freedBytes, cancellationToken);
         }
     }
 
