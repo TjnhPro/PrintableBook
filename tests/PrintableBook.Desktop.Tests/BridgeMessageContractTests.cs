@@ -1,6 +1,7 @@
 using PrintableBook.Desktop.Bridge;
 using PrintableBook.Desktop.Loading;
 using PrintableBook.Core.Application.Diagnostics;
+using PrintableBook.Desktop.Diagnostics;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
@@ -111,6 +112,20 @@ public sealed class BridgeMessageContractTests
 
         Assert.True(response.Ok);
         Assert.Contains("bridge.app.refresh", diagnostics.Operations);
+    }
+
+    [Fact]
+    public async Task DiagnosticsRequest_returns_the_bounded_desktop_diagnostic_snapshot()
+    {
+        var diagnostics = new UiDiagnosticsService();
+        diagnostics.RecordDispatcherStall(TimeSpan.FromMilliseconds(300));
+
+        var response = await new WebViewBridgeRouter(uiDiagnosticsService: diagnostics)
+            .HandleAsync("""{"version":1,"id":"diagnostics","command":"diagnostics.get"}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("diagnostics.snapshot", response.Command);
+        Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<UiDiagnosticEvent>>(response.Payload));
     }
 
     [Fact]

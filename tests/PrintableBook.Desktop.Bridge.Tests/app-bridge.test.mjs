@@ -26,6 +26,10 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   const refreshButton = { addEventListener: () => { } };
   const messages = [];
   const intervals = [];
+  const routeButtons = ["configuration", "brands", "books", "process", "outputs", "diagnostics"].map((route) => {
+    const listeners = {};
+    return { dataset: { route }, listeners, classList: { toggle: () => { } }, addEventListener: (eventName, handler) => { listeners[eventName] = handler; } };
+  });
   let messageHandler;
   const browserWindow = {
     appSnapshot: activeRoute === "process" ? { discovery: { brands: [], books: [] }, bookSummaries: [] } : undefined,
@@ -45,7 +49,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     crypto: { randomUUID: () => "request-1" },
     document: {
       getElementById: (id) => ({ "bridge-status": status, "app-content": content, "brand-select": brandSelect, "refresh-button": refreshButton }[id]),
-      querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : [],
+      querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : [],
       querySelector: (selector) => selector === ".nav-item-active" && activeRoute ? { dataset: { route: activeRoute } } : null,
       addEventListener: (eventName, handler) => { documentListeners[eventName] = handler; }
     },
@@ -53,7 +57,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSelect, contentListeners, documentListeners, intervals, messages };
+  return { messageHandler, status, content, brandSelect, contentListeners, documentListeners, routeButtons, intervals, messages };
 }
 
 test("bridge accepts the JSON response emitted by the .NET host", () => {
@@ -380,4 +384,17 @@ test("output review shows verified PDF facts and only sends a book-scoped action
   const open = { dataset: { action: "open-output", bookId: "Book 001", artifactReference: "D:/PrintableBook/outputs/Book-001-interior.pdf" }, closest: () => open };
   contentListeners.click({ target: open });
   assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.open", payload: { bookId: "Book 001", artifactReference: "D:/PrintableBook/outputs/Book-001-interior.pdf" } });
+});
+
+test("Diagnostics route requests and renders sanitized responsiveness events", () => {
+  const { messageHandler, content, routeButtons, messages } = loadBridge("diagnostics");
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [] }, globalSettings: {}, bookSummaries: []
+  } } });
+  routeButtons.find((button) => button.dataset.route === "diagnostics").listeners.click();
+  assert.equal(messages.at(-1).command, "diagnostics.get");
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "diagnostics.snapshot", payload: [{ timestamp: "2026-08-25T00:00:00Z", severity: "Slow", kind: "dispatcher.stall", operation: "dispatcher", durationMilliseconds: 300, subject: null, activeOperations: ["book.scan (Book 001)"] }] } });
+  assert.match(content.innerHTML, /UI responsiveness/);
+  assert.match(content.innerHTML, /Slow/);
+  assert.match(content.innerHTML, /Active during stall/);
 });

@@ -332,7 +332,9 @@
     const summary = book ? summaryFor(book) : null;
     const folders = valueFor(summary, "sourceFolders", []);
     const logs = valueFor(summary, "logs", []);
-    content.innerHTML = `<div class="page-header"><div><h1>Diagnostics</h1><p>Inspect the current workspace without giving the web page direct file access.</p></div><select class="control diagnostic-select" data-action="diagnostic-book">${books().map((item) => `<option value="${escapeHtml(bookId(item))}" ${bookId(item) === state.selectedBookId ? "selected" : ""}>${escapeHtml(valueFor(item, "name", ""))}</option>`).join("")}</select></div><div class="diagnostics-grid">${panel("Workspace info", book ? `<dl class="path-grid"><div><dt>Workspace state</dt><dd>${badge(workspaceStatus(summary))}</dd></div><div><dt>Current step</dt><dd>${escapeHtml(valueFor(summary, "currentStep", "Not started"))}</dd></div><div><dt>Last run</dt><dd>${dateTime(valueFor(summary, "lastRunAt", null))}</dd></div></dl>` : "<p class=\"empty-copy\">No Book selected.</p>")}${panel("Files", `<table class="data-table"><thead><tr><th>Folder</th><th>Status</th><th>Images</th></tr></thead><tbody>${folders.map((folder) => `<tr><td>${escapeHtml(valueFor(folder, "name", ""))}</td><td>${badge(valueFor(folder, "status", "Missing"))}</td><td>${valueFor(folder, "imageCount", 0)}</td></tr>`).join("")}</tbody></table>`)}</div>${panel("Latest log", logs.length ? `<ul class="log-list">${logs.slice(-12).reverse().map((log) => `<li><time>${dateTime(valueFor(log, "timestamp", null))}</time><span>${escapeHtml(valueFor(log, "eventName", ""))} · ${escapeHtml(valueFor(log, "detail", ""))}</span></li>`).join("")}</ul>` : "<p class=\"empty-copy\">No logs for this Book.</p>", "mt-5")}`;
+    const events = valueFor(window, "uiDiagnostics", []);
+    const eventRows = events.length ? events.map((item) => `<tr><td>${dateTime(valueFor(item, "timestamp", null))}</td><td>${escapeHtml(valueFor(item, "severity", "Info"))}</td><td>${escapeHtml(valueFor(item, "kind", "operation"))}</td><td>${escapeHtml(valueFor(item, "operation", ""))}</td><td>${valueFor(item, "durationMilliseconds", 0)} ms</td><td>${escapeHtml(valueFor(item, "subject", "—"))}</td><td>${escapeHtml(valueFor(item, "activeOperations", []).join(", ") || "—")}</td></tr>`).join("") : "<tr><td colspan=\"7\" class=\"empty-row\">No slow UI operations recorded.</td></tr>";
+    content.innerHTML = `<div class="page-header"><div><h1>Diagnostics</h1><p>Inspect the current workspace without giving the web page direct file access.</p></div><div class="page-actions"><button class="button-secondary" data-action="refresh-diagnostics">Refresh diagnostics</button><select class="control diagnostic-select" data-action="diagnostic-book">${books().map((item) => `<option value="${escapeHtml(bookId(item))}" ${bookId(item) === state.selectedBookId ? "selected" : ""}>${escapeHtml(valueFor(item, "name", ""))}</option>`).join("")}</select></div></div>${panel("UI responsiveness", `<table class="data-table"><thead><tr><th>Time</th><th>Severity</th><th>Kind</th><th>Operation</th><th>Duration</th><th>Subject</th><th>Active during stall</th></tr></thead><tbody>${eventRows}</tbody></table>`)}<div class="diagnostics-grid">${panel("Workspace info", book ? `<dl class="path-grid"><div><dt>Workspace state</dt><dd>${badge(workspaceStatus(summary))}</dd></div><div><dt>Current step</dt><dd>${escapeHtml(valueFor(summary, "currentStep", "Not started"))}</dd></div><div><dt>Last run</dt><dd>${dateTime(valueFor(summary, "lastRunAt", null))}</dd></div></dl>` : "<p class=\"empty-copy\">No Book selected.</p>")}${panel("Files", `<table class="data-table"><thead><tr><th>Folder</th><th>Status</th><th>Images</th></tr></thead><tbody>${folders.map((folder) => `<tr><td>${escapeHtml(valueFor(folder, "name", ""))}</td><td>${badge(valueFor(folder, "status", "Missing"))}</td><td>${valueFor(folder, "imageCount", 0)}</td></tr>`).join("")}</tbody></table>`)}</div>${panel("Latest log", logs.length ? `<ul class="log-list">${logs.slice(-12).reverse().map((log) => `<li><time>${dateTime(valueFor(log, "timestamp", null))}</time><span>${escapeHtml(valueFor(log, "eventName", ""))} · ${escapeHtml(valueFor(log, "detail", ""))}</span></li>`).join("")}</ul>` : "<p class=\"empty-copy\">No logs for this Book.</p>", "mt-5")}`;
   };
 
   const render = (route, requestProcess = true) => {
@@ -354,7 +356,7 @@
     if (state.applicationLoadState === "failed") content.insertAdjacentHTML("afterbegin", renderRefreshFailure());
   };
 
-  document.querySelectorAll("[data-route]").forEach((button) => button.addEventListener("click", () => render(button.dataset.route)));
+  document.querySelectorAll("[data-route]").forEach((button) => button.addEventListener("click", () => { render(button.dataset.route); if (button.dataset.route === "diagnostics") send("diagnostics.get"); }));
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape" || !state.bookDrawerOpen) return;
     event.preventDefault();
@@ -367,6 +369,7 @@
     if (!target) return;
     const action = target.dataset.action;
     if (action === "refresh" || action === "validate-all") beginApplicationRefresh();
+    if (action === "refresh-diagnostics") send("diagnostics.get");
     if (action === "save-settings") { const payload = {}; document.querySelectorAll("[data-setting]").forEach((input) => { payload[input.dataset.setting] = Number(input.value); }); send("settings.save", payload); }
     if (action === "select-brand") { state.selectedBrand = target.dataset.brandName; if (brandSelect) brandSelect.value = state.selectedBrand; render("brands"); }
     if (action === "load-brand-settings") send("brand.settings.get", { brandName: state.selectedBrand });
@@ -452,6 +455,10 @@
       status.textContent = "Preview ready";
     } else if (ok && command === "book.output.action.completed") {
       status.textContent = "Output action completed";
+    } else if (ok && command === "diagnostics.snapshot") {
+      window.uiDiagnostics = valueFor(response, "payload", []);
+      if (currentRoute() === "diagnostics") render("diagnostics", false);
+      status.textContent = "Diagnostics refreshed";
     } else {
       if (state.activePreviewRequests && String(valueFor(response, "error", "")).includes("preview")) {
         const failed = state.activePreviewKeys.shift();

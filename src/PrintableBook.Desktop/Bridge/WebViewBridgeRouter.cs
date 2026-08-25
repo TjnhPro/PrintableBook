@@ -4,6 +4,7 @@ using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Desktop.Loading;
 using PrintableBook.Core.Application.Diagnostics;
+using PrintableBook.Desktop.Diagnostics;
 
 namespace PrintableBook.Desktop.Bridge;
 
@@ -20,7 +21,8 @@ internal sealed class WebViewBridgeRouter(
     IInteriorFrameModeService? interiorFrameModeService = null,
     IBookAssetPreviewService? assetPreviewService = null,
     ILocalOutputActionService? outputActionService = null,
-    IOperationDiagnostics? diagnostics = null)
+    IOperationDiagnostics? diagnostics = null,
+    UiDiagnosticsService? uiDiagnosticsService = null)
 {
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -43,6 +45,12 @@ internal sealed class WebViewBridgeRouter(
             using var operation = diagnostics.Begin($"bridge.{request.Command}");
             var response = RouteSynchronous(request);
             if (response.Error is not null || response.Command is not null) return response;
+            if (request.Command == "diagnostics.get")
+            {
+                return uiDiagnosticsService is null
+                    ? BridgeResponse.UnsupportedCommand(request.Id)
+                    : BridgeResponse.Succeeded(request.Id, "diagnostics.snapshot", uiDiagnosticsService.Snapshot());
+            }
             if (request.Command is "app.refresh" or "book.validate")
             {
                 if (applicationLoadCoordinator is null) return BridgeResponse.UnsupportedCommand(request.Id);
@@ -235,7 +243,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.asset.preview.get" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.asset.preview.get" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 
