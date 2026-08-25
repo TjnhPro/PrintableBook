@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF outputs", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", assetPreviews: new Map(), queuedPreviewKeys: new Set(), previewQueue: [], activePreviewKeys: [], activePreviewRequests: 0, pendingPreviewByRequestId: new Map(), previewTasks: new Map(), previewTaskResultsRequested: new Set(), previewPollTimer: null, selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, processStartPending: false, lastTerminalRefreshSession: "", backgroundTasks: [], pendingCommands: new Map() };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, processStartPending: false, lastTerminalRefreshSession: "", backgroundTasks: [], pendingCommands: new Map() };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -42,65 +42,6 @@
     state.pendingCommands.set(id, command);
     window.chrome.webview.postMessage(JSON.stringify({ version: 1, id, command, ...(payload ? { payload } : {}) }));
     return id;
-  };
-  const previewKey = (bookId, sourceReference) => `${bookId}\u0000${sourceReference}`;
-  const requestAssetPreview = (bookId, sourceReference) => send("book.asset.preview.get", { bookId, sourceReference });
-  const releaseAssetPreview = (key) => {
-    if (!key) return;
-    state.queuedPreviewKeys.delete(key);
-    const activeIndex = state.activePreviewKeys.indexOf(key);
-    if (activeIndex >= 0) {
-      state.activePreviewKeys.splice(activeIndex, 1);
-      state.activePreviewRequests = Math.max(0, state.activePreviewRequests - 1);
-    }
-    for (const [taskId, taskKey] of state.previewTasks) if (taskKey === key) {
-      state.previewTasks.delete(taskId);
-      state.previewTaskResultsRequested.delete(taskId);
-    }
-    pumpPreviewQueue();
-  };
-  const pollPreviewTasks = () => {
-    if (!state.previewTasks.size) return;
-    for (const taskId of state.previewTasks.keys()) send("task.get", { taskId });
-  };
-  const observeAssetPreviewTask = (task, responseId) => {
-    const taskId = valueFor(task, "taskId", "");
-    if (!taskId) return;
-    const key = state.pendingPreviewByRequestId.get(responseId) ?? state.previewTasks.get(taskId);
-    state.pendingPreviewByRequestId.delete(responseId);
-    if (!key) return;
-    state.previewTasks.set(taskId, key);
-    const taskState = valueFor(task, "state", "Queued");
-    if (["Queued", "Running", "Cancelling"].includes(taskState)) {
-      if (state.previewPollTimer === null) state.previewPollTimer = window.setInterval(pollPreviewTasks, 250);
-      return;
-    }
-    if (taskState === "Completed" && !state.previewTaskResultsRequested.has(taskId)) {
-      state.previewTaskResultsRequested.add(taskId);
-      send("book.asset.preview.result", { taskId });
-      return;
-    }
-    releaseAssetPreview(key);
-    if (!state.previewTasks.size && state.previewPollTimer !== null && window.clearInterval) {
-      window.clearInterval(state.previewPollTimer);
-      state.previewPollTimer = null;
-    }
-  };
-  const pumpPreviewQueue = () => {
-    while (state.activePreviewRequests < 4 && state.previewQueue.length) {
-      const request = state.previewQueue.shift();
-      state.activePreviewRequests += 1;
-      state.activePreviewKeys.push(request.key);
-      state.pendingPreviewByRequestId.set(requestAssetPreview(request.bookId, request.sourceReference), request.key);
-    }
-  };
-  const queueAssetPreview = (bookId, sourceReference) => {
-    if (!bookId || !sourceReference) return;
-    const key = previewKey(bookId, sourceReference);
-    if (state.assetPreviews.has(key) || state.queuedPreviewKeys.has(key)) return;
-    state.queuedPreviewKeys.add(key);
-    state.previewQueue.push({ bookId, sourceReference, key });
-    pumpPreviewQueue();
   };
   const dateTime = (value) => value ? new Date(value).toLocaleString() : "—";
   const elapsedTime = (value) => {
@@ -166,39 +107,10 @@
       ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async" data-local-image data-image-fallback="${escapeHtml(fallback)}">`
       : `<span class="book-preview-fallback" aria-label="${escapeHtml(fallback)}">${escapeHtml(fallback)}</span>`;
   };
-  const previewFor = (bookId, sourceReference) => state.assetPreviews.get(previewKey(bookId, sourceReference));
   const assetDimensions = (asset) => {
     const width = valueFor(asset, "width", null);
     const height = valueFor(asset, "height", null);
     return width && height ? `${width} × ${height}` : "Dimensions unavailable";
-  };
-  const queueVisibleAssetPreviews = () => {
-    if (state.selectedBookTab !== "assets" || !state.bookDrawerOpen) return;
-    window.requestAnimationFrame(() => document.querySelectorAll("[data-preview-book-id][data-source-reference]").forEach((tile) => {
-      const bounds = tile.getBoundingClientRect();
-      if (bounds.bottom > 0 && bounds.top < window.innerHeight && bounds.right > 0 && bounds.left < window.innerWidth) {
-        queueAssetPreview(tile.dataset.previewBookId, tile.dataset.sourceReference);
-      }
-    }));
-  };
-  const updateVisibleAssetPreview = (preview) => {
-    const previewBookId = valueFor(preview, "bookId", "");
-    const sourceReference = valueFor(preview, "sourceReference", "");
-    const dataUrl = valueFor(preview, "dataUrl", "");
-    if (!previewBookId || !sourceReference || !dataUrl) return false;
-    const selector = `[data-preview-book-id="${CSS.escape(previewBookId)}"][data-source-reference="${CSS.escape(sourceReference)}"]`;
-    let updated = false;
-    document.querySelectorAll(selector).forEach((tile) => {
-      const previewContainer = tile.querySelector(".folder-asset-preview");
-      if (!previewContainer || previewContainer.querySelector("img")) return;
-      const image = document.createElement("img");
-      image.src = dataUrl;
-      image.alt = `Preview of ${tile.querySelector("strong")?.textContent ?? "asset"}`;
-      image.loading = "lazy";
-      previewContainer.replaceChildren(image);
-      updated = true;
-    });
-    return updated;
   };
   const updateGlobalProcessStatus = () => {
     const control = document.getElementById("global-process-status");
@@ -450,8 +362,7 @@
     if (action === "queue-book") { const id = target.dataset.bookId; if (target.checked) state.selectedBookIds.add(id); else state.selectedBookIds.delete(id); }
     if (action === "queue-selected-book") { if (state.selectedBookId) state.selectedBookIds.add(state.selectedBookId); render("process"); }
     if (action === "book-tab") { state.selectedBookTab = target.dataset.bookTab; render("books", false); }
-    if (action === "select-asset") { state.selectedAssetReference = target.dataset.sourceReference; queueAssetPreview(state.selectedBookId, state.selectedAssetReference); render("books", false); }
-    if (action === "request-asset-preview") queueAssetPreview(state.selectedBookId, target.dataset.sourceReference);
+    if (action === "select-asset") { state.selectedAssetReference = target.dataset.sourceReference; render("books", false); }
     if (action === "asset-view") { state.assetView = target.dataset.assetView; render("books", false); }
     if (action === "asset-folder") { state.assetFolder = target.dataset.assetFolder; render("books", false); }
     if (action === "book-status") { state.bookStatus = target.dataset.bookStatus; state.bookPage = 1; render("books", false); }
@@ -486,8 +397,6 @@
     fallback.textContent = image.dataset.imageFallback || "Image unavailable";
     image.replaceWith(fallback);
   }, true);
-  content.addEventListener("scroll", () => queueVisibleAssetPreviews(), true);
-
   window.chrome.webview.addEventListener("message", (event) => {
     const response = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
     const responseId = valueFor(response, "id", "");
@@ -499,8 +408,6 @@
       status.textContent = "Connected";
     } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "LibraryRefresh") {
       observeLibraryRefresh(valueFor(response, "payload", {}));
-    } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "AssetPreview") {
-      observeAssetPreviewTask(valueFor(response, "payload", {}), responseId);
     } else if (ok && command === "app.snapshot") {
       window.appSnapshot = valueFor(response, "payload", {});
       state.applicationLoadState = "ready";
@@ -538,18 +445,6 @@
       if (document.querySelector(".nav-item-active")?.dataset.route === "brands") render("brands", false);
       status.textContent = "Brand settings saved";
       beginApplicationRefresh();
-    } else if (ok && command === "book.asset.preview") {
-      const preview = valueFor(response, "payload", {});
-      const reference = valueFor(preview, "sourceReference", "");
-      const matched = previewKey(valueFor(preview, "bookId", ""), reference);
-      if (matched) {
-        state.assetPreviews.set(matched, preview);
-        releaseAssetPreview(matched);
-      }
-      const isViewingInteriorAssets = document.querySelector(".nav-item-active")?.dataset.route === "books" && state.bookDrawerOpen && state.selectedBookTab === "assets";
-      if (isViewingInteriorAssets) updateVisibleAssetPreview(preview);
-      else if (document.querySelector(".nav-item-active")?.dataset.route === "books") render("books", false);
-      status.textContent = "Preview ready";
     } else if (ok && command === "book.output.action.completed") {
       status.textContent = "Output action completed";
     } else if (ok && command === "diagnostics.snapshot") {
@@ -560,9 +455,6 @@
       state.backgroundTasks = valueFor(response, "payload", []);
       if (currentRoute() === "diagnostics") render("diagnostics", false);
     } else {
-      const previewKeyForFailure = state.pendingPreviewByRequestId.get(responseId);
-      state.pendingPreviewByRequestId.delete(responseId);
-      if (previewKeyForFailure) releaseAssetPreview(previewKeyForFailure);
       const error = valueFor(response, "error", "unexpected response");
       if (requestCommand === "app.refresh") {
         state.applicationLoadState = "failed";

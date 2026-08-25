@@ -49,19 +49,20 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
-    public void AssetWorkspaceGroupsKnownFoldersAndQueuesOnlyVisiblePreviews()
+    public void AssetWorkspaceGroupsKnownFoldersAndLetsTheBrowserLoadLocalImages()
     {
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
         var layout = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css"));
 
-        Assert.Contains("queueVisibleAssetPreviews", script, StringComparison.Ordinal);
-        Assert.Contains("state.activePreviewRequests < 4", script, StringComparison.Ordinal);
+        Assert.Contains("const localImageMarkup", script, StringComparison.Ordinal);
+        Assert.Contains("loading=\"lazy\" decoding=\"async\" data-local-image", script, StringComparison.Ordinal);
+        Assert.Contains("content.addEventListener(\"error" , script, StringComparison.Ordinal);
+        Assert.DoesNotContain("queueVisibleAssetPreviews", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("book.asset.preview", script, StringComparison.Ordinal);
         Assert.Contains("asset-folder-group", script, StringComparison.Ordinal);
         Assert.Contains("Every discovered Interior page is included in this run.", script, StringComparison.Ordinal);
         Assert.Contains("assetSearchFocused", script, StringComparison.Ordinal);
         Assert.Contains("search.setSelectionRange", script, StringComparison.Ordinal);
-        Assert.Contains("updateVisibleAssetPreview", script, StringComparison.Ordinal);
-        Assert.Contains("if (isViewingInteriorAssets) updateVisibleAssetPreview(preview);", script, StringComparison.Ordinal);
         Assert.Contains("--pb-asset-preview: 1 / 1", layout, StringComparison.Ordinal);
         Assert.Contains("grid-template-columns:repeat(3,minmax(0,1fr))", layout, StringComparison.Ordinal);
         Assert.Contains("@media (min-width:1280px)", layout, StringComparison.Ordinal);
@@ -98,7 +99,7 @@ public sealed class BookWorkspaceLayoutContractTests
         var baseStyles = File.ReadAllText(Path.Combine(frontend, "css", "tailwind.css"));
         var workspaceStyles = File.ReadAllText(Path.Combine(frontend, "css", "book-workspace.css"));
 
-        Assert.Contains("queueVisibleAssetPreviews", script, StringComparison.Ordinal);
+        Assert.Contains("localImageMarkup", script, StringComparison.Ordinal);
         Assert.Contains("book-drawer-title", script, StringComparison.Ordinal);
         Assert.Contains("Preview unavailable", script, StringComparison.Ordinal);
         Assert.Contains("prefers-reduced-motion", baseStyles, StringComparison.Ordinal);
