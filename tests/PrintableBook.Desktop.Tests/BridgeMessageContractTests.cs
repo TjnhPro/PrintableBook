@@ -189,6 +189,37 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Mutation_commands_reject_missing_or_unauthorized_snapshot_authority_without_persistence()
+    {
+        var emptyManager = new RetainedSnapshotTaskManager(null);
+        var cover = new StubCoverSelectionService();
+        var frame = new StubInteriorFrameModeService();
+        var brands = new StubBrandSettingsStore();
+        var emptyRouter = new WebViewBridgeRouter(new ApplicationLoadCoordinator(emptyManager), brandSettingsStore: brands, coverSelectionService: cover, interiorFrameModeService: frame);
+
+        var missingCover = await emptyRouter.HandleAsync("""{"version":1,"id":"cover","command":"book.cover.select","payload":{"bookId":"Book One","coverReference":"cover-a.png"}}""");
+        var missingFrame = await emptyRouter.HandleAsync("""{"version":1,"id":"frame","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png","mode":"auto"}}""");
+        var missingBrand = await emptyRouter.HandleAsync("""{"version":1,"id":"brand","command":"brand.settings.save","payload":{"brandName":"Brand One","json":"{}"}}""");
+
+        Assert.All([missingCover, missingFrame, missingBrand], response => Assert.Equal("snapshot_unavailable", response.Error));
+        Assert.Equal(0, emptyManager.Starts);
+        Assert.Null(cover.LastSelection);
+        Assert.Null(frame.LastSelection);
+        Assert.Null(brands.SavedJson);
+
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var retainedRouter = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), brandSettingsStore: brands, coverSelectionService: cover, interiorFrameModeService: frame);
+        var invalidCover = await retainedRouter.HandleAsync("""{"version":1,"id":"invalid-cover","command":"book.cover.select","payload":{"bookId":"Book One","coverReference":"outside.png"}}""");
+        var invalidFrame = await retainedRouter.HandleAsync("""{"version":1,"id":"invalid-frame","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","sourceReference":"outside.png","mode":"auto"}}""");
+        var missingNamedBrand = await retainedRouter.HandleAsync("""{"version":1,"id":"missing-brand","command":"brand.settings.get","payload":{"brandName":"Missing"}}""");
+
+        Assert.Equal("invalid_cover_selection", invalidCover.Error);
+        Assert.Equal("invalid_interior_frame_mode", invalidFrame.Error);
+        Assert.Equal("brand_not_found", missingNamedBrand.Error);
+        Assert.Equal(0, manager.Starts);
+    }
+
+    [Fact]
     public async Task BookValidationRefreshesCSharpOwnedValidationForTheRequestedBook()
     {
         var id = new BookId("Book One");
@@ -455,7 +486,7 @@ public sealed class BridgeMessageContractTests
         private static BackgroundTaskSnapshot Fail(BackgroundTaskId id, string key, string? subject, Exception exception) => new(id, BackgroundTaskKind.AssetPreview, BackgroundTaskState.Failed, key, subject, null, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "preview_failed", exception.Message);
     }
 
-    private sealed class RetainedSnapshotTaskManager(ApplicationSnapshot snapshot) : IBackgroundTaskManager
+    private sealed class RetainedSnapshotTaskManager(ApplicationSnapshot? snapshot) : IBackgroundTaskManager
     {
         private readonly BackgroundTaskId id = new("retained-library-task");
         public int Starts { get; private set; }
@@ -469,7 +500,7 @@ public sealed class BridgeMessageContractTests
         public ValueTask<IReadOnlyList<BackgroundTaskSnapshot>> ListAsync(BackgroundTaskKind? kind = null, CancellationToken cancellationToken = default)
         {
             Lists++;
-            return ValueTask.FromResult<IReadOnlyList<BackgroundTaskSnapshot>>([Current()]);
+            return ValueTask.FromResult<IReadOnlyList<BackgroundTaskSnapshot>>(snapshot is null ? [] : [Current()]);
         }
         public ValueTask<BackgroundTaskSnapshot?> CancelAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) => ValueTask.FromResult<BackgroundTaskSnapshot?>(Current());
         public ValueTask<bool> WaitAsync(BackgroundTaskId taskId, TimeSpan timeout, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
