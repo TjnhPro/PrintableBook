@@ -2,6 +2,7 @@ using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Scanning;
+using PrintableBook.Core.Application.Diagnostics;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 
@@ -79,6 +80,17 @@ public sealed class ApplicationSnapshotServiceTests
         Assert.Equal("cover-b.png", Assert.Single(snapshot.BookSummaries).RepresentativeCoverReference);
     }
 
+    [Fact]
+    public async Task RefreshAsync_opens_sanitized_snapshot_operation_scopes()
+    {
+        var diagnostics = new RecordingDiagnostics();
+        await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new StubScanner(), new StubStateStore(), new StubFileSystem(), diagnostics: diagnostics).RefreshAsync();
+
+        Assert.Contains(("snapshot.refresh", null), diagnostics.Operations);
+        Assert.Contains(("discovery", null), diagnostics.Operations);
+        Assert.Contains(("book.scan", "Book A"), diagnostics.Operations);
+    }
+
     private sealed class StubDiscovery : IApplicationRootDiscovery
     {
         public int CallCount { get; private set; }
@@ -89,6 +101,18 @@ public sealed class ApplicationSnapshotServiceTests
             var id = new BookId("Book A");
             return ValueTask.FromResult(new ApplicationDiscovery(paths, [new DiscoveredBrand("Brand A", new DirectoryReference("brands/Brand A"))], [new DiscoveredBook("Book A", id, new DirectoryReference("sources/Book A"), new BookWorkspace(id, new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("temp")))]));
         }
+    }
+
+    private sealed class RecordingDiagnostics : IOperationDiagnostics
+    {
+        public List<(string Operation, string? Subject)> Operations { get; } = [];
+        public IDisposable Begin(string operation, string? subject = null)
+        {
+            Operations.Add((operation, subject));
+            return new Scope();
+        }
+
+        private sealed class Scope : IDisposable { public void Dispose() { } }
     }
 
     private sealed class StubSettingsStore : IGlobalSettingsStore

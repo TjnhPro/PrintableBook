@@ -4,6 +4,7 @@ using PrintableBook.Core.Application.Scanning;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 using PrintableBook.Core.Application.Processing;
+using PrintableBook.Core.Application.Diagnostics;
 
 namespace PrintableBook.Core.Application.Desktop;
 
@@ -39,16 +40,28 @@ public sealed class ApplicationSnapshotService(
     IBookWorkspaceStateStore stateStore,
     IFileSystem fileSystem,
     IImageInspector? imageInspector = null,
-    IPdfDocumentInspector? pdfDocumentInspector = null) : IApplicationSnapshotService
+    IPdfDocumentInspector? pdfDocumentInspector = null,
+    IOperationDiagnostics? diagnostics = null) : IApplicationSnapshotService
 {
+    private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
+
     public async ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
-        var discoverySnapshot = await discovery.DiscoverAsync(cancellationToken);
+        using var refreshOperation = diagnostics.Begin("snapshot.refresh");
+        ApplicationDiscovery discoverySnapshot;
+        using (diagnostics.Begin("discovery"))
+        {
+            discoverySnapshot = await discovery.DiscoverAsync(cancellationToken);
+        }
         var settings = await settingsStore.LoadAsync(discoverySnapshot.Paths, cancellationToken);
         var summaries = new List<BookDesktopSummary>(discoverySnapshot.Books.Count);
         foreach (var book in discoverySnapshot.Books)
         {
-            var scan = await sourceScanner.ScanAsync(book.Id, book.Directory, cancellationToken);
+            BookSourceScanResult scan;
+            using (diagnostics.Begin("book.scan", book.Id.Value))
+            {
+                scan = await sourceScanner.ScanAsync(book.Id, book.Directory, cancellationToken);
+            }
             var state = await stateStore.LoadAsync(book.Workspace, cancellationToken) ?? BookProcessingState.NotStarted(book.Id);
             var coverCandidates = scan.Source?.GetAssets(BookAssetKind.Cover).Select(asset => asset.Reference).ToArray() ?? [];
             var hasSelectedCover = coverCandidates.Length == 1 || coverCandidates.Any(candidate => string.Equals(candidate, state.SelectedCoverReference, StringComparison.OrdinalIgnoreCase));
@@ -136,7 +149,7 @@ public sealed class ApplicationSnapshotService(
                 sourcePages,
                 assetSummaries,
                 fullBookChecks,
-                await DescribeOutputsAsync(state.PublishedArtifactReferences ?? [], cancellationToken),
+                await DescribeOutputsAsync(book.Id, state.PublishedArtifactReferences ?? [], cancellationToken),
                 FindRepresentativeCoverReference(book, scan.Source, state.SelectedCoverReference)));
         }
 
@@ -167,11 +180,18 @@ public sealed class ApplicationSnapshotService(
         {
             cancellationToken.ThrowIfCancellationRequested();
             var file = new FileReference(asset.Reference);
+            var relativePath = Path.GetRelativePath(book.Directory.Value, asset.Reference);
             ImageInfo? info = null;
-            try { info = imageInspector is null ? null : await imageInspector.GetInfoAsync(file, cancellationToken); }
+            try
+            {
+                if (imageInspector is not null)
+                {
+                    using var inspection = diagnostics.Begin("image.inspect", $"{book.Id.Value}/{relativePath.Replace('\\', '/')}");
+                    info = await imageInspector.GetInfoAsync(file, cancellationToken);
+                }
+            }
             catch (Exception) when (asset.Kind != BookAssetKind.Interior) { }
             catch (Exception) { }
-            var relativePath = Path.GetRelativePath(book.Directory.Value, asset.Reference);
             var folder = Path.GetDirectoryName(relativePath) ?? string.Empty;
             summaries.Add(new BookAssetSummary(
                 asset.Reference,
@@ -187,7 +207,7 @@ public sealed class ApplicationSnapshotService(
         return summaries;
     }
 
-    private async ValueTask<IReadOnlyList<BookOutputSummary>> DescribeOutputsAsync(IReadOnlyList<string> artifacts, CancellationToken cancellationToken)
+    private async ValueTask<IReadOnlyList<BookOutputSummary>> DescribeOutputsAsync(BookId bookId, IReadOnlyList<string> artifacts, CancellationToken cancellationToken)
     {
         var outputs = new List<BookOutputSummary>(artifacts.Count);
         foreach (var artifact in artifacts)
@@ -202,7 +222,12 @@ public sealed class ApplicationSnapshotService(
 
             try
             {
-                var inspection = pdfDocumentInspector is null ? null : await pdfDocumentInspector.InspectAsync(new FileReference(artifact), cancellationToken);
+                PdfDocumentInspection? inspection = null;
+                if (pdfDocumentInspector is not null)
+                {
+                    using var inspectionOperation = diagnostics.Begin("pdf.inspect", $"{bookId.Value}/{Path.GetFileName(artifact)}");
+                    inspection = await pdfDocumentInspector.InspectAsync(new FileReference(artifact), cancellationToken);
+                }
                 outputs.Add(new BookOutputSummary(artifact, info.Name, info.Length, inspection?.PageCount, inspection?.FirstPageSize.WidthInches, inspection?.FirstPageSize.HeightInches, inspection is null ? "Available" : "Verified", new DateTimeOffset(info.LastWriteTimeUtc)));
             }
             catch (Exception)
