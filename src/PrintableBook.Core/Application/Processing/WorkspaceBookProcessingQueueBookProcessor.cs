@@ -59,18 +59,37 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
 
                 state = await CompleteStepAsync(state, "cover-validation", cancellationToken);
             }
-            var interiorRequests = source.GetAssets(BookAssetKind.Interior)
-                .Select((asset, index) => new InteriorPagePipelineRequest(
+            var interiorSources = source.GetAssets(BookAssetKind.Interior)
+                .Select((asset, index) =>
+                {
+                    var sourceFile = new FileReference(asset.Reference);
+                    return new InteriorSource(sourceFile,
+                        InteriorSourceKey.FromBookRoot(command.BookDirectory, sourceFile),
+                        $"page-{index + 1:D4}");
+                })
+                .ToArray();
+            var activeInteriorSources = interiorSources
+                .Where(item => priorState?.IsInteriorActive(item.SourceKey) ?? true)
+                .ToArray();
+            if (activeInteriorSources.Length == 0)
+            {
+                throw new BookProcessingFailureException("scan", new ProcessingFailure(
+                    "book.no_active_interior_pages",
+                    "Activate at least one Interior page before processing."));
+            }
+
+            var interiorRequests = activeInteriorSources
+                .Select(item => new InteriorPagePipelineRequest(
                     workspace,
-                    new FileReference(asset.Reference),
-                    $"page-{index + 1:D4}",
+                    item.Source,
+                    item.PageId,
                     command.ArtworkDetectionThreshold,
                     command.PreparedArtworkSize,
                     command.WorkingPageSize,
                     command.FinalPageSize,
                     command.TargetInteriorDensity,
                     command.Frame,
-                    priorState?.GetInteriorFrameMode(InteriorSourceKey.FromBookRoot(command.BookDirectory, new FileReference(asset.Reference))) ?? FrameMode.Auto))
+                    priorState?.GetInteriorFrameMode(item.SourceKey) ?? FrameMode.Auto))
                 .ToArray();
             state = await BeginStepAsync(state, "interior-pages", cancellationToken);
             await using var concurrencyController = BookPageConcurrencyController.Create(command.MaximumPageConcurrency);
@@ -234,6 +253,8 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         if (covers.Count == 1) return covers[0];
         throw new BookProcessingFailureException("scan", new ProcessingFailure("book.cover_selection_required", "Select one cover candidate before processing."));
     }
+
+    private sealed record InteriorSource(FileReference Source, string SourceKey, string PageId);
 
     private sealed class BookProcessingFailureException(string step, ProcessingFailure failure) : Exception(failure.Message)
     {

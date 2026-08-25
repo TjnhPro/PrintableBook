@@ -203,6 +203,72 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessBookAsync_skips_inactive_interior_without_renumbering_or_deleting_its_cache()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "InactiveInteriorBook"));
+        await CreateInteriorOnlyBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem), CreatePagePipeline(),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new MagickPrintableBookPdfExporter(),
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+        var command = CreateCommand("inactive-interior-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+
+        Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
+        var secondCache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-0002", "prepared.png");
+        Assert.True(File.Exists(secondCache));
+        var secondProcessed = Path.Combine(workspace.WorkingDirectory.Value, "processed", "interior", "page-0002.png");
+        var secondProcessedTimestamp = File.GetLastWriteTimeUtc(secondProcessed);
+
+        var secondSource = new FileReference(Path.Combine(bookDirectory.Value, "Book interior", "page-02.png"));
+        var state = (await stateStore.LoadAsync(workspace))!;
+        await stateStore.SaveAsync(workspace, state.SetInteriorActive(InteriorSourceKey.FromBookRoot(bookDirectory, secondSource), false));
+
+        var inactiveRun = await processor.ProcessBookAsync(command);
+        Assert.Equal(BookProcessingStatus.Completed, inactiveRun.Status);
+        Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "processed", "interior", "page-0001.png")));
+        Assert.Equal(secondProcessedTimestamp, File.GetLastWriteTimeUtc(secondProcessed));
+        Assert.True(File.Exists(secondCache));
+        var inactiveMap = (await new JsonInteriorShuffleStore(fileSystem).LoadAsync(workspace))!;
+        Assert.Equal([Path.Combine(bookDirectory.Value, "Book interior", "page-01.png")], inactiveMap.Entries.Select(entry => entry.Page.Value));
+
+        state = (await stateStore.LoadAsync(workspace))!;
+        await stateStore.SaveAsync(workspace, state.SetInteriorActive(InteriorSourceKey.FromBookRoot(bookDirectory, secondSource), true));
+        Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
+        Assert.True(File.Exists(secondProcessed));
+    }
+
+    [Fact]
+    public async Task ProcessBookAsync_rejects_a_book_when_all_interior_pages_are_inactive()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "NoActiveInteriorBook"));
+        await CreateInteriorOnlyBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem), CreatePagePipeline(),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new MagickPrintableBookPdfExporter(),
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+        var command = CreateCommand("no-active-interior-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        var inactive = BookProcessingState.NotStarted(command.BookId)
+            .SetInteriorActive(InteriorSourceKey.FromBookRoot(bookDirectory, new FileReference(Path.Combine(bookDirectory.Value, "Book interior", "page-01.png"))), false)
+            .SetInteriorActive(InteriorSourceKey.FromBookRoot(bookDirectory, new FileReference(Path.Combine(bookDirectory.Value, "Book interior", "page-02.png"))), false);
+        await stateStore.SaveAsync(workspace, inactive);
+
+        var result = await processor.ProcessBookAsync(command);
+
+        Assert.Equal(BookProcessingStatus.Failed, result.Status);
+        Assert.Equal("book.no_active_interior_pages", result.Failure!.Code);
+    }
+
+    [Fact]
     public async Task ProcessBookAsync_persists_the_active_interior_step_while_the_page_pipeline_is_running()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "InterruptedBook"));
