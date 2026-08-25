@@ -12,5 +12,8 @@ dotnet_style_qualification_for_field = false:suggestion
 dotnet_style_qualification_for_property = false:suggestion
 dotnet_style_qualification_for_method = false:suggestion
 
+[*.js]
+indent_size = 2
+
 [*.{csproj,props,targets,xaml}]
 indent_size = 2

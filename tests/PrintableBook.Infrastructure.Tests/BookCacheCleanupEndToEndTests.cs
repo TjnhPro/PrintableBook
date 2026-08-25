@@ -118,12 +118,16 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new MagickPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = new PrintableBookProcessingCommand(
-            new BookId(bookId), bookDirectory, new DirectoryReference(Path.Combine(rootPath, "legacy-final")),
+            new BookId(bookId), bookDirectory, new DirectoryReference(Path.Combine(bookDirectory.Value, "Output")),
             new ImageSize(300, 300), new ImageSize(300, 300), new ImageSize(300, 300), new ImageSize(300, 300),
             new ImageDensity(300, 300), new PhysicalPageSize(1, 1), new PhysicalPageSize(1, 1), 1,
             new ArtworkDetectionThreshold(20), null, 123) { Mode = BookProcessingMode.InteriorOnly };
         var first = await processor.ProcessBookAsync(command);
         Assert.Equal(BookProcessingStatus.Completed, first.Status);
+        Assert.Equal(
+            Path.Combine(bookDirectory.Value, "Output", $"{bookId} - Interior.pdf"),
+            first.PublishedInteriorOutput!.InteriorPdf.Value);
+        Assert.True(File.Exists(first.PublishedInteriorOutput.InteriorPdf.Value));
         var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
         return new ProcessedFixture(bookDirectory, workspace, command, processor, first);
     }

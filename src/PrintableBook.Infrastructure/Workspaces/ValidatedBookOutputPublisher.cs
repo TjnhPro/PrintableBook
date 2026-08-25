@@ -52,10 +52,10 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
 
     private static void ReplaceFile(FileReference temporaryFile, FileReference finalFile)
     {
-        var pending = $"{finalFile.Value}.{Guid.NewGuid():N}.pending";
+        var pending = $"{finalFile.Value}.pending";
         try
         {
-            File.Copy(temporaryFile.Value, pending, overwrite: true);
+            File.Move(temporaryFile.Value, pending, overwrite: true);
             File.Move(pending, finalFile.Value, overwrite: true);
         }
         finally
