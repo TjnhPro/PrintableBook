@@ -1,29 +1,31 @@
-using PrintableBook.Core.Application.Desktop;
-using PrintableBook.Core.Application.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.IO;
+using PrintableBook.Core.Application.BackgroundTasks;
+using PrintableBook.Core.Application.BackgroundTasks.Workers;
+using PrintableBook.Core.Application.Desktop;
 
 namespace PrintableBook.Desktop.Preview;
 
-public sealed class BookAssetPreviewCoordinator(
-    IBookAssetPreviewService previewService,
-    IOperationDiagnostics diagnostics)
+public sealed class BookAssetPreviewCoordinator(IBackgroundTaskManager taskManager)
 {
-    private readonly SemaphoreSlim slots = new(2, 2);
+    public ValueTask<BackgroundTaskSnapshot> StartAsync(string bookId, string sourceReference, CancellationToken cancellationToken = default) =>
+        taskManager.StartAsync(
+            BackgroundTaskKind.AssetPreview,
+            BuildKey(bookId, sourceReference),
+            $"{bookId}/{Path.GetFileName(sourceReference)}",
+            new AssetPreviewRequest(bookId, sourceReference),
+            cancellationToken: cancellationToken);
 
-    public async ValueTask<BookAssetPreview?> GetAsync(string bookId, string sourceReference, CancellationToken cancellationToken = default)
+    public bool TryGetResult(BackgroundTaskId taskId, out BookAssetPreview? preview) =>
+        taskManager.TryGetResult(taskId, out preview);
+
+    public ValueTask<BackgroundTaskSnapshot?> GetTaskAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) =>
+        taskManager.GetAsync(taskId, cancellationToken);
+
+    private static string BuildKey(string bookId, string sourceReference)
     {
-        await slots.WaitAsync(cancellationToken);
-        try
-        {
-            return await Task.Run(async () =>
-            {
-                using var operation = diagnostics.Begin("preview.generate", $"{bookId}/{Path.GetFileName(sourceReference)}");
-                return await previewService.GetAsync(bookId, sourceReference, cancellationToken);
-            }, CancellationToken.None);
-        }
-        finally
-        {
-            slots.Release();
-        }
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{bookId}\0{sourceReference}")));
+        return $"preview:{bookId}:{hash}";
     }
 }
