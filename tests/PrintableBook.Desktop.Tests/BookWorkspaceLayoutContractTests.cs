@@ -64,4 +64,20 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("data-source-reference", script, StringComparison.Ordinal);
         Assert.DoesNotContain("book.interior.frame-mode.batch", script, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void BoundedBookWorkspaceKeepsPreviewLoadingAndMotionAccessibilityContracts()
+    {
+        var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
+        var script = File.ReadAllText(Path.Combine(frontend, "js", "app.js"));
+        var baseStyles = File.ReadAllText(Path.Combine(frontend, "css", "tailwind.css"));
+        var workspaceStyles = File.ReadAllText(Path.Combine(frontend, "css", "book-workspace.css"));
+
+        Assert.Contains("queueVisibleAssetPreviews", script, StringComparison.Ordinal);
+        Assert.Contains("book-drawer-title", script, StringComparison.Ordinal);
+        Assert.Contains("Preview unavailable", script, StringComparison.Ordinal);
+        Assert.Contains("prefers-reduced-motion", baseStyles, StringComparison.Ordinal);
+        Assert.Contains("overflow-x: hidden", workspaceStyles, StringComparison.Ordinal);
+        Assert.DoesNotContain("file://", script, StringComparison.OrdinalIgnoreCase);
+    }
 }
