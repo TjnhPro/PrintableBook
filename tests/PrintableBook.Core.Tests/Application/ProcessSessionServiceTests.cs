@@ -41,6 +41,25 @@ public sealed class ProcessSessionServiceTests
     }
 
     [Fact]
+    public async Task Repeated_get_reads_only_the_manager_ram_view()
+    {
+        var manager = new Manager { State = BackgroundTaskState.Running };
+        manager.SetView(new ProcessSessionSnapshot(true, false, "Brand", new BookId("book-one"), "Processing", [new ProcessQueueEntry(new BookId("book-one"), BookProcessingStatus.Running, "Processing")]));
+        var service = new ProcessSessionService(manager);
+
+        for (var index = 0; index < 100; index++)
+        {
+            var view = await service.GetAsync();
+            Assert.Equal("Processing", view.CurrentStep);
+        }
+
+        Assert.Equal(100, manager.Lists);
+        Assert.Equal(0, manager.Starts);
+        Assert.Equal(0, manager.Cancels);
+        Assert.Equal(0, manager.Waits);
+    }
+
+    [Fact]
     public async Task Cancel_and_stop_delegate_to_the_manager()
     {
         var manager = new Manager { State = BackgroundTaskState.Running, WaitResult = false };
