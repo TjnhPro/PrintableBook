@@ -229,6 +229,30 @@ public sealed class BackgroundTaskManagerTests
         }
     }
 
+    [Fact]
+    public async Task Terminal_history_is_bounded_while_retaining_the_latest_library_and_processing_tasks()
+    {
+        using var manager = CreateManager(
+            new ImmediateWorker(BackgroundTaskKind.LibraryRefresh),
+            new ImmediateWorker(BackgroundTaskKind.ProcessingSession),
+            new ImmediateWorker(BackgroundTaskKind.AssetPreview));
+
+        var library = await manager.StartAsync(BackgroundTaskKind.LibraryRefresh, "library", null, new TaskRequest("library"));
+        var processing = await manager.StartAsync(BackgroundTaskKind.ProcessingSession, "processing", null, new TaskRequest("processing"));
+        await manager.WaitAsync(library.TaskId, TimeSpan.FromSeconds(2));
+        await manager.WaitAsync(processing.TaskId, TimeSpan.FromSeconds(2));
+        for (var index = 0; index < 120; index++)
+        {
+            var preview = await manager.StartAsync(BackgroundTaskKind.AssetPreview, $"preview-{index}", null, new TaskRequest($"preview-{index}"));
+            Assert.True(await manager.WaitAsync(preview.TaskId, TimeSpan.FromSeconds(2)));
+        }
+
+        var tasks = await manager.ListAsync();
+        Assert.InRange(tasks.Count, 1, 102);
+        Assert.Contains(tasks, task => task.TaskId == library.TaskId && task.State == BackgroundTaskState.Completed);
+        Assert.Contains(tasks, task => task.TaskId == processing.TaskId && task.State == BackgroundTaskState.Completed);
+    }
+
     private static BackgroundTaskManager CreateManager(params IBackgroundTaskWorker[] workers)
         => CreateManager(new NullDiagnostics(), workers);
 
@@ -301,6 +325,12 @@ public sealed class BackgroundTaskManagerTests
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             return request.Value;
         }
+    }
+
+    private sealed class ImmediateWorker(BackgroundTaskKind kind) : BackgroundTaskWorker<TaskRequest, string>
+    {
+        public override BackgroundTaskKind Kind => kind;
+        protected override ValueTask<string> ExecuteTypedAsync(TaskRequest request, IBackgroundTaskContext context, CancellationToken cancellationToken) => ValueTask.FromResult(request.Value);
     }
 
     private sealed class ContextWorker : BackgroundTaskWorker<TaskRequest, string>
