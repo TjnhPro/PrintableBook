@@ -28,6 +28,10 @@ node --test tests/PrintableBook.Desktop.Bridge.Tests/app-bridge.test.mjs
 
 Interior Processing runs independently of the visible WebView page. Start returns immediately, cancellation is a non-blocking request, and the desktop keeps polling active work while the user visits other pages. Closing the desktop uses a five-second graceful-stop flow; a stale `Running` workspace after an abrupt end is recovered as `Interrupted` on the next startup. See [background process session](docs/background-process-session.md).
 
+## Local image display
+
+The Books workspace displays discovered cover and Interior artwork directly from the canonical `LocalImageUrl` included in the application snapshot. The desktop creates this `file://` URL once from the absolute source path; the WebView owns lazy loading, decoding, and its normal in-memory image cache. No thumbnail files, Base64 payloads, preview workers, or preview bridge commands are used. If a local image cannot be loaded, the UI replaces only that image with an unavailable placeholder and leaves the rest of the Book workspace usable.
+
 ### Local artwork corpus
 
 The regular and CI suite runs repository-owned tests only: deterministic fixtures tracked in `tests/**/TestData/` or generated deterministically by the test for compact pixel-geometry cases. Either form must be redistributable and must not depend on user artwork. User-supplied artwork is a separate `LocalCorpus` scope and is ignored by Git.
