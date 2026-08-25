@@ -193,6 +193,7 @@ public sealed class BackgroundTaskManagerTests
     private sealed class NullDiagnostics : IOperationDiagnostics
     {
         public IDisposable Begin(string operation, string? subject = null) => new Scope();
+        public void Record(string operation, string? subject = null, string? detail = null) { }
         private sealed class Scope : IDisposable { public void Dispose() { } }
     }
 }

@@ -51,6 +51,7 @@ public sealed class BackgroundTaskManager(
         }
 
         TryDispatch(laneKind);
+        diagnostics.Record("task.queued", subject, kind.ToString());
         return ValueTask.FromResult(GetSnapshot(entry.TaskId)!);
     }
 
@@ -80,6 +81,9 @@ public sealed class BackgroundTaskManager(
         CancellationTokenSource? source = null;
         object? cancellationSync = null;
         BackgroundTaskLaneKind? dispatchLane = null;
+        string? lifecycleEvent = null;
+        string? lifecycleSubject = null;
+        string? lifecycleDetail = null;
         BackgroundTaskSnapshot? snapshot;
         lock (sync)
         {
@@ -92,6 +96,9 @@ public sealed class BackgroundTaskManager(
                 AddTerminalLocked(entry);
                 source = entry.Cancellation;
                 cancellationSync = entry.CancellationSync;
+                lifecycleEvent = "task.cancelled";
+                lifecycleSubject = entry.Subject;
+                lifecycleDetail = entry.Kind.ToString();
                 dispatchLane = BackgroundTaskPolicies.For(entry.Kind).Lane;
             }
             else if (entry.State == BackgroundTaskState.Running)
@@ -99,10 +106,14 @@ public sealed class BackgroundTaskManager(
                 entry.State = BackgroundTaskState.Cancelling;
                 source = entry.Cancellation;
                 cancellationSync = entry.CancellationSync;
+                lifecycleEvent = "task.cancelling";
+                lifecycleSubject = entry.Subject;
+                lifecycleDetail = entry.Kind.ToString();
             }
             snapshot = SnapshotLocked(entry);
         }
 
+        if (lifecycleEvent is not null) diagnostics.Record(lifecycleEvent, lifecycleSubject, lifecycleDetail);
         if (source is not null && cancellationSync is not null)
         {
             lock (cancellationSync)
@@ -197,7 +208,11 @@ public sealed class BackgroundTaskManager(
         foreach (var entry in dispatch) StartExecution(entry);
     }
 
-    private void StartExecution(BackgroundTaskEntry entry) => entry.ExecutionTask = Task.Run(() => ExecuteEntryAsync(entry), CancellationToken.None);
+    private void StartExecution(BackgroundTaskEntry entry)
+    {
+        diagnostics.Record("task.started", entry.Subject, entry.Kind.ToString());
+        entry.ExecutionTask = Task.Run(() => ExecuteEntryAsync(entry), CancellationToken.None);
+    }
 
     private async Task ExecuteEntryAsync(BackgroundTaskEntry entry)
     {
@@ -246,6 +261,12 @@ public sealed class BackgroundTaskManager(
                 AddTerminalLocked(entry);
             }
             lock (entry.CancellationSync) entry.Cancellation.Dispose();
+            diagnostics.Record(terminal switch
+            {
+                BackgroundTaskState.Completed => "task.completed",
+                BackgroundTaskState.Cancelled => "task.cancelled",
+                _ => "task.failed"
+            }, entry.Subject, errorCode ?? entry.Kind.ToString());
             TryDispatch(laneKind);
         }
     }

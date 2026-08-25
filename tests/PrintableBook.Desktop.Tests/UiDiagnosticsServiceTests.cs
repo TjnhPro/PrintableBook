@@ -45,6 +45,20 @@ public sealed class UiDiagnosticsServiceTests
         Assert.Equal("book.scan (Book One)", diagnostics.Snapshot().Last().ActiveOperations!.Single());
     }
 
+    [Fact]
+    public void Explicit_lifecycle_record_creates_a_bounded_info_event()
+    {
+        var diagnostics = new UiDiagnosticsService();
+
+        diagnostics.Record("task.queued", "Book One", "LibraryRefresh");
+
+        var item = Assert.Single(diagnostics.Snapshot());
+        Assert.Equal(UiDiagnosticSeverity.Info, item.Severity);
+        Assert.Equal("task.queued", item.Operation);
+        Assert.Equal("Book One", item.Subject);
+        Assert.Equal("LibraryRefresh", item.ActiveOperations!.Single());
+    }
+
     private sealed class TestClock
     {
         private DateTimeOffset current = DateTimeOffset.UnixEpoch;

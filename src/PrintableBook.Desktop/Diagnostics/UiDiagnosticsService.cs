@@ -41,6 +41,15 @@ public sealed class UiDiagnosticsService(Func<DateTimeOffset>? clock = null) : I
         return new Scope(this, id);
     }
 
+    public void Record(string operation, string? subject = null, string? detail = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(operation);
+        lock (sync)
+        {
+            Record(new UiDiagnosticEvent(clock(), "event", UiDiagnosticSeverity.Info, operation, 0, subject, string.IsNullOrWhiteSpace(detail) ? null : [detail]));
+        }
+    }
+
     internal void RecordDispatcherStall(TimeSpan duration)
     {
         if (duration < SlowThreshold) return;

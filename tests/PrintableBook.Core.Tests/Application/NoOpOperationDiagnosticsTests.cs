@@ -12,4 +12,10 @@ public sealed class NoOpOperationDiagnosticsTests
         scope.Dispose();
         scope.Dispose();
     }
+
+    [Fact]
+    public void Record_is_a_safe_no_op()
+    {
+        new NoOpOperationDiagnostics().Record("task.queued", "Book One", "LibraryRefresh");
+    }
 }

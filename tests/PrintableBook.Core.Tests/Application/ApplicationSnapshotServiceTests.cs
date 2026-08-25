@@ -112,6 +112,8 @@ public sealed class ApplicationSnapshotServiceTests
             return new Scope();
         }
 
+        public void Record(string operation, string? subject = null, string? detail = null) { }
+
         private sealed class Scope : IDisposable { public void Dispose() { } }
     }
 
