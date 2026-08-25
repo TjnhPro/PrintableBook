@@ -100,6 +100,51 @@ public sealed class BackgroundTaskManagerTests
         Assert.False(manager.TryGetResult<int>(accepted.TaskId, out _));
     }
 
+    [Fact]
+    public async Task Worker_failure_is_sanitized_and_safe_failure_details_are_preserved()
+    {
+        using var unexpected = CreateManager(new ThrowingWorker(new InvalidOperationException("D:\\secret")), new BlockingWorker(BackgroundTaskKind.ProcessingSession), new BlockingWorker(BackgroundTaskKind.AssetPreview));
+        var unexpectedTask = await unexpected.StartAsync(BackgroundTaskKind.LibraryRefresh, "library", null, new TaskRequest("library"));
+        Assert.True(await unexpected.WaitAsync(unexpectedTask.TaskId, TimeSpan.FromSeconds(2)));
+        var unexpectedSnapshot = await unexpected.GetAsync(unexpectedTask.TaskId);
+        Assert.Equal(BackgroundTaskState.Failed, unexpectedSnapshot!.State);
+        Assert.Equal("background_task_failed", unexpectedSnapshot.ErrorCode);
+        Assert.Equal("Background task failed.", unexpectedSnapshot.ErrorMessage);
+
+        using var safe = CreateManager(new ThrowingWorker(new BackgroundTaskFailureException("refresh_failed", "Library cannot be read.")), new BlockingWorker(BackgroundTaskKind.ProcessingSession), new BlockingWorker(BackgroundTaskKind.AssetPreview));
+        var safeTask = await safe.StartAsync(BackgroundTaskKind.LibraryRefresh, "library", null, new TaskRequest("library"));
+        Assert.True(await safe.WaitAsync(safeTask.TaskId, TimeSpan.FromSeconds(2)));
+        var safeSnapshot = await safe.GetAsync(safeTask.TaskId);
+        Assert.Equal("refresh_failed", safeSnapshot!.ErrorCode);
+        Assert.Equal("Library cannot be read.", safeSnapshot.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task Queued_cancel_never_executes_worker_and_running_cancel_transitions_immediately()
+    {
+        var library = new BlockingWorker(BackgroundTaskKind.LibraryRefresh);
+        var processing = new BlockingWorker(BackgroundTaskKind.ProcessingSession);
+        var preview = new BlockingWorker(BackgroundTaskKind.AssetPreview);
+        using var manager = CreateManager(library, processing, preview);
+
+        var first = await manager.StartAsync(BackgroundTaskKind.AssetPreview, "first", null, new TaskRequest("first"));
+        var second = await manager.StartAsync(BackgroundTaskKind.AssetPreview, "second", null, new TaskRequest("second"));
+        var queued = await manager.StartAsync(BackgroundTaskKind.AssetPreview, "queued", null, new TaskRequest("queued"));
+        await preview.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var queuedCancelled = await manager.CancelAsync(queued.TaskId);
+
+        Assert.Equal(BackgroundTaskState.Cancelled, queuedCancelled!.State);
+        Assert.Equal(BackgroundTaskState.Cancelled, (await manager.GetAsync(queued.TaskId))!.State);
+        Assert.DoesNotContain("queued", preview.StartedRequests);
+
+        var runningCancelled = await manager.CancelAsync(first.TaskId);
+        Assert.Equal(BackgroundTaskState.Cancelling, runningCancelled!.State);
+        Assert.True(await manager.WaitAsync(first.TaskId, TimeSpan.FromSeconds(2)));
+        Assert.Equal(BackgroundTaskState.Cancelled, (await manager.GetAsync(first.TaskId))!.State);
+        preview.Release.TrySetResult();
+        Assert.True(await manager.WaitAsync(second.TaskId, TimeSpan.FromSeconds(2)));
+    }
+
     private static BackgroundTaskManager CreateManager(params IBackgroundTaskWorker[] workers)
     {
         var services = new ServiceCollection();
@@ -136,6 +181,13 @@ public sealed class BackgroundTaskManagerTests
             }
             finally { Interlocked.Decrement(ref active); }
         }
+    }
+
+    private sealed class ThrowingWorker(Exception exception) : BackgroundTaskWorker<TaskRequest, string>
+    {
+        public override BackgroundTaskKind Kind => BackgroundTaskKind.LibraryRefresh;
+
+        protected override ValueTask<string> ExecuteTypedAsync(TaskRequest request, IBackgroundTaskContext context, CancellationToken cancellationToken) => ValueTask.FromException<string>(exception);
     }
 
     private sealed class NullDiagnostics : IOperationDiagnostics

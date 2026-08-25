@@ -78,6 +78,7 @@ public sealed class BackgroundTaskManager(
     {
         cancellationToken.ThrowIfCancellationRequested();
         CancellationTokenSource? source = null;
+        object? cancellationSync = null;
         BackgroundTaskLaneKind? dispatchLane = null;
         BackgroundTaskSnapshot? snapshot;
         lock (sync)
@@ -89,21 +90,28 @@ public sealed class BackgroundTaskManager(
                 entry.FinishedAt = DateTimeOffset.UtcNow;
                 entry.Terminal.TrySetResult();
                 AddTerminalLocked(entry);
+                source = entry.Cancellation;
+                cancellationSync = entry.CancellationSync;
                 dispatchLane = BackgroundTaskPolicies.For(entry.Kind).Lane;
             }
             else if (entry.State == BackgroundTaskState.Running)
             {
                 entry.State = BackgroundTaskState.Cancelling;
                 source = entry.Cancellation;
+                cancellationSync = entry.CancellationSync;
             }
             snapshot = SnapshotLocked(entry);
         }
 
-        if (source is not null)
+        if (source is not null && cancellationSync is not null)
         {
-            lock (FindEntry(taskId)!.CancellationSync)
+            lock (cancellationSync)
             {
-                try { source.Cancel(); }
+                try
+                {
+                    if (snapshot?.State == BackgroundTaskState.Cancelling) source.Cancel();
+                    else source.Dispose();
+                }
                 catch (ObjectDisposedException) { }
             }
         }
@@ -154,17 +162,20 @@ public sealed class BackgroundTaskManager(
 
     public void Dispose()
     {
-        CancellationTokenSource[] sources;
+        (CancellationTokenSource Source, object Sync)[] sources;
         lock (sync)
         {
             if (disposed) return;
             disposed = true;
-            sources = registry.Values.Where(entry => !IsTerminal(entry.State)).Select(entry => entry.Cancellation).ToArray();
+            sources = registry.Values.Where(entry => !IsTerminal(entry.State)).Select(entry => (entry.Cancellation, entry.CancellationSync)).ToArray();
         }
         foreach (var source in sources)
         {
-            try { source.Cancel(); }
-            catch (ObjectDisposedException) { }
+            lock (source.Sync)
+            {
+                try { source.Source.Cancel(); }
+                catch (ObjectDisposedException) { }
+            }
         }
     }
 
@@ -264,11 +275,6 @@ public sealed class BackgroundTaskManager(
         entry.Kind == kind && !IsTerminal(entry.State) &&
         (policy is BackgroundTaskDuplicatePolicy.JoinByKind or BackgroundTaskDuplicatePolicy.ReturnExisting || entry.Key == key));
 
-    private BackgroundTaskEntry? FindEntry(BackgroundTaskId taskId)
-    {
-        lock (sync) return registry.TryGetValue(taskId, out var entry) ? entry : null;
-    }
-
     private BackgroundTaskSnapshot? GetSnapshot(BackgroundTaskId taskId)
     {
         lock (sync) return registry.TryGetValue(taskId, out var entry) ? SnapshotLocked(entry) : null;
@@ -282,9 +288,18 @@ public sealed class BackgroundTaskManager(
         while (terminalOrder.Count > MaximumTerminalHistory)
         {
             var expired = terminalOrder.Dequeue();
-            if (registry.TryGetValue(expired, out var candidate) && IsTerminal(candidate.State)) registry.Remove(expired);
+            if (!registry.TryGetValue(expired, out var candidate) || !IsTerminal(candidate.State)) continue;
+            if (IsLatestRetainedKindLocked(candidate))
+            {
+                terminalOrder.Enqueue(expired);
+                continue;
+            }
+            registry.Remove(expired);
         }
     }
+
+    private bool IsLatestRetainedKindLocked(BackgroundTaskEntry candidate) => candidate.Kind is (BackgroundTaskKind.LibraryRefresh or BackgroundTaskKind.ProcessingSession) &&
+        !registry.Values.Any(entry => entry.Kind == candidate.Kind && IsTerminal(entry.State) && entry.Sequence > candidate.Sequence);
 
     private static bool IsTerminal(BackgroundTaskState state) => state is BackgroundTaskState.Completed or BackgroundTaskState.Failed or BackgroundTaskState.Cancelled;
     private void ThrowIfDisposed() { if (disposed) throw new ObjectDisposedException(nameof(BackgroundTaskManager)); }
