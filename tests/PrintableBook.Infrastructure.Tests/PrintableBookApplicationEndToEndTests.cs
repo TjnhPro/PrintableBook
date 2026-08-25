@@ -316,6 +316,47 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessBookAsync_interleaves_a_real_background_without_invalidating_artwork_cache()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "BackgroundBook"));
+        await CreateBookFixtureAsync(bookDirectory);
+        var background = new FileReference(Path.Combine(rootPath, "brand-background.png"));
+        await WriteImageAsync(background.Value, 1, 1, 298, 298);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(), shuffleStore,
+            CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new MagickPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+        var command = CreateCommand("background-book", bookDirectory) with { ShuffleSeed = 73, BackgroundPage = background };
+
+        var first = await processor.ProcessBookAsync(command);
+
+        Assert.Equal(BookProcessingStatus.Completed, first.Status);
+        using (var coverPdf = PdfReader.Open(first.PublishedOutputs!.CoverPdf.Value))
+        using (var interiorPdf = PdfReader.Open(first.PublishedOutputs.InteriorPdf.Value))
+        {
+            Assert.Single(coverPdf.Pages);
+            Assert.Equal(4, interiorPdf.Pages.Count);
+        }
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        var firstArtworkCache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-0001", "prepared.png");
+        var firstArtworkCacheTimestamp = File.GetLastWriteTimeUtc(firstArtworkCache);
+        var shuffle = (await shuffleStore.LoadAsync(workspace))!;
+        Assert.DoesNotContain(shuffle.Entries, entry => entry.Page == background);
+
+        await WriteImageAsync(background.Value, 2, 2, 297, 297);
+        var second = await processor.ProcessBookAsync(command);
+
+        Assert.Equal(BookProcessingStatus.Completed, second.Status);
+        Assert.Equal(firstArtworkCacheTimestamp, File.GetLastWriteTimeUtc(firstArtworkCache));
+        using var replacementPdf = PdfReader.Open(second.PublishedOutputs!.InteriorPdf.Value);
+        Assert.Equal(4, replacementPdf.Pages.Count);
+    }
+
+    [Fact]
     public async Task ProcessBookAsync_persists_the_active_interior_step_while_the_page_pipeline_is_running()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "InterruptedBook"));
