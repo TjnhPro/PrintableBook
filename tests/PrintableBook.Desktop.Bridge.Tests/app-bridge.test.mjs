@@ -23,7 +23,13 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     insertAdjacentHTML: (_position, markup) => { content.innerHTML += markup; }
   };
   const brandSelect = { innerHTML: "", value: "", addEventListener: () => { } };
-  const refreshButton = { addEventListener: () => { } };
+  const refreshButton = {
+    disabled: false,
+    textContent: "Refresh",
+    attributes: {},
+    addEventListener: () => { },
+    setAttribute: (name, value) => { refreshButton.attributes[name] = value; }
+  };
   const messages = [];
   const intervals = [];
   const routeButtons = ["configuration", "brands", "books", "process", "outputs", "diagnostics"].map((route) => {
@@ -57,7 +63,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSelect, contentListeners, documentListeners, routeButtons, intervals, messages };
+  return { messageHandler, status, content, brandSelect, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages };
 }
 
 test("bridge accepts the JSON response emitted by the .NET host", () => {
@@ -120,7 +126,7 @@ test("startup shows a loading library view while the first application refresh i
 });
 
 test("manual refresh keeps the existing Books visible and does not enqueue a duplicate frontend refresh", () => {
-  const { messageHandler, content, contentListeners, messages } = loadBridge();
+  const { messageHandler, content, contentListeners, messages, refreshButton } = loadBridge();
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] }, globalSettings: {}, bookSummaries: []
   } } });
@@ -129,6 +135,9 @@ test("manual refresh keeps the existing Books visible and does not enqueue a dup
   contentListeners.click({ target: refresh });
   assert.match(content.innerHTML, /Book 001/);
   assert.match(content.innerHTML, /disabled>Refreshing…/);
+  assert.equal(refreshButton.disabled, true);
+  assert.equal(refreshButton.textContent, "Refreshing…");
+  assert.equal(refreshButton.attributes["aria-busy"], "true");
   const messageCount = messages.length;
 
   contentListeners.click({ target: refresh });
