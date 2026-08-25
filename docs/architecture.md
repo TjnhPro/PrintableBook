@@ -77,6 +77,20 @@ ShouldApplyFrame = FrameAvailable &&
 
 `Auto` is the default. Only explicit `Enabled` and `Disabled` overrides are persisted in the Book workspace state, keyed by normalized source-relative path rather than a page index. This makes overrides survive refresh/restart while source ordering may change.
 
+Interior processing also stores two sparse per-Book choices in the same workspace state: `HasBackground` defaults to false, and inactive Interior source keys are the only activation overrides persisted (all sources are active by default). The production order is deliberately small and explicit:
+
+```text
+all Interior assets
+  → assign stable source/page identities
+  → apply per-Book Active filter
+  → process active artwork
+  → deterministic artwork-only shuffle
+  → optional Brand background interleave
+  → PDF
+```
+
+The Brand `background.png` is a separate final-size page, never an overlay. It is optional generally but required when `HasBackground=true`; process start validates that it is readable and exactly matches the effective Final Page raster size. It never enters classification, page cache, frame processing, or `InteriorShuffleMap`. Assembly appends one occurrence after each shuffled active artwork page, so repeated references deliberately become distinct PDF pages. Changing the source image's activation or background setting is blocked while a processing session is running or cancelling.
+
 Core represents file/directory references, image size/point/bounds, PDF document facts, metadata cleaning, and per-book workspaces with neutral contracts. No third-party image or PDF types can leak through those contracts.
 
 ## Desktop and bridge boundary

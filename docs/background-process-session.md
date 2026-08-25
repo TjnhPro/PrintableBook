@@ -13,6 +13,8 @@ WebView process.start
 
 `process.get` is a snapshot read: it does not start work and can be called from any page. The desktop shell polls it once a second while `IsActive` is true, so progress remains current when the Process page is not visible. `process.cancel` only requests cancellation and returns the `Cancelling` snapshot; it never waits for image or PDF work to finish.
 
+Before the queue starts, the worker resolves the selected Brand frame and, only if one or more selected Books enable a background, validates that Brand's `background.png` once against the effective Final Page size. The validated reference is sent only to those enabled Books. Processing then filters inactive Interior sources, processes and shuffles active artwork, and assembly inserts the separate background page after each artwork page. The background is not processed, cached, or shuffled.
+
 ## Shutdown behaviour
 
 Closing the desktop window checks the current snapshot. If processing is active, the user can keep the application open or request a graceful stop. The coordinator calls `StopAndWaitAsync` with a five-second timeout. A timeout presents an explicit choice to keep waiting or force exit; no UI close path blocks the dispatcher synchronously.

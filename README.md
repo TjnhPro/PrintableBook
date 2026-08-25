@@ -6,6 +6,8 @@ Printable Book is a Windows desktop application for preparing printable colourin
 
 Printable Book processes one or more local Book folders through persistent workspaces, bounded per-page image processing, deterministic shuffle maps, real PNG/PDF validation, and retry-safe disk cache reuse. New final PDFs are published directly to `sources/<Book>/Output/`; the previous global `outputs/run-*` layout is legacy-only. Cover and Interior PDFs have independent physical page sizes. The Books page provides a manual Clear Cache action: it only cleans Completed Books with verified recorded output, removes heavy intermediate rasters, and retains classification and input stamps for safe reprocessing.
 
+Each Book may keep only selected Interior assets active. The processing flow assigns stable page identities from the full source list, filters inactive assets before image work, processes and deterministically shuffles only active artwork, then optionally inserts the selected Brand's `background.png` after every artwork page before PDF export. A background is a separate final page—not an overlay—and is required only when that Book enables **Use Brand background**. It must already match the effective Final Page raster size; it is never trimmed, framed, cached, or included in the shuffle map.
+
 See [Phase 2 processing](docs/phase-2-core-processing.md), [image-engine.md](docs/image-engine.md), and [pdf-engine.md](docs/pdf-engine.md) for the implemented boundaries and engine decisions.
 
 ## Development prerequisites
