@@ -15,4 +15,16 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("--pb-webview-height: 900px", layout, StringComparison.Ordinal);
         Assert.Contains("overflow-x: hidden", layout, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void BookLibraryContractIncludesPaginatedGridFiltersAndTextualStatusFeedback()
+    {
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
+
+        Assert.Contains("const pageSize = 12", script, StringComparison.Ordinal);
+        Assert.Contains("Needs review", script, StringComparison.Ordinal);
+        Assert.Contains("PDF ready", script, StringComparison.Ordinal);
+        Assert.Contains("book-grid", script, StringComparison.Ordinal);
+        Assert.Contains("role=\"status\"", script, StringComparison.Ordinal);
+    }
 }

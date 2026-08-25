@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF outputs", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookFilter: "", bookStatus: "All", brandSettings: "{}", assetPreviews: new Map(), queuedPreviewKeys: new Set(), previewQueue: [], activePreviewRequests: 0, selectedAssetReference: "", assetView: "list", assetFilter: "", validationMode: "interior" };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", assetPreviews: new Map(), queuedPreviewKeys: new Set(), previewQueue: [], activePreviewRequests: 0, selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", validationMode: "interior" };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -19,6 +19,22 @@
     return ["auto", "enabled", "disabled"].includes(normalized) ? normalized : "auto";
   };
   const workspaceStatus = (summary) => displayStatus(valueFor(summary, "workspaceStatus", "Not started"));
+  const productionStatus = (summary) => {
+    const workspace = workspaceStatus(summary);
+    const validation = valueFor(summary, "validationStatus", "Needs review");
+    const outputs = valueFor(summary, "outputSummaries", []);
+    if (workspace === "Failed" || validation === "Invalid") return "Failed";
+    if (workspace === "Running") return "Processing";
+    if (outputs.some((output) => ["Verified", "Available"].includes(valueFor(output, "verificationStatus", "")))) return "PDF ready";
+    return validation === "Ready" ? "Ready" : "Needs review";
+  };
+  const bookFrameState = (summary) => {
+    const modes = valueFor(summary, "interiorSourcePages", []).map((source) => frameModeValue(valueFor(source, "frameMode", "auto")));
+    if (!modes.length) return "Needs review";
+    if (modes.includes("enabled")) return "Frame";
+    if (modes.includes("disabled")) return "No frame";
+    return "Auto";
+  };
   const statusClass = (value) => value === "Ready" || value === "Completed" || value === "Present" ? "status-good" : value === "Invalid" || value === "Failed" ? "status-bad" : value === "Needs selection" || value === "Running" ? "status-warn" : "status-muted";
   const badge = (value) => { const label = displayStatus(value); return `<span class="status-badge ${statusClass(label)}">${escapeHtml(label)}</span>`; };
   const send = (command, payload) => window.chrome.webview.postMessage(JSON.stringify({ version: 1, id: crypto.randomUUID(), command, ...(payload ? { payload } : {}) }));
@@ -150,12 +166,25 @@
 
   const renderBooks = () => {
     const allBooks = books();
-    if (!state.selectedBookId && allBooks.length) state.selectedBookId = bookId(allBooks[0]);
-    const statuses = ["All", "Ready", "Invalid", "Needs selection", "Running", "Interrupted", "Failed"];
-    const statusCounts = statuses.map((name) => ({ name, count: name === "All" ? allBooks.length : allBooks.filter((book) => valueFor(summaryFor(book), "validationStatus", "") === name || workspaceStatus(summaryFor(book)) === name).length }));
-    const filtered = allBooks.filter((book) => valueFor(book, "name", "").toLowerCase().includes(state.bookFilter.toLowerCase()) && (state.bookStatus === "All" || valueFor(summaryFor(book), "validationStatus", "") === state.bookStatus || workspaceStatus(summaryFor(book)) === state.bookStatus));
-    const book = selectedBook();
-    const row = (item) => {
+    const statuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
+    const statusCounts = statuses.map((name) => ({ name, count: name === "All" ? allBooks.length : allBooks.filter((book) => productionStatus(summaryFor(book)) === name).length }));
+    const filtered = allBooks.filter((book) => {
+      const summary = summaryFor(book);
+      return valueFor(book, "name", "").toLowerCase().includes(state.bookFilter.toLowerCase()) &&
+        (state.bookStatus === "All" || productionStatus(summary) === state.bookStatus) &&
+        (state.bookFrameFilter === "Any" || bookFrameState(summary) === state.bookFrameFilter);
+    }).sort((left, right) => {
+      const leftSummary = summaryFor(left);
+      const rightSummary = summaryFor(right);
+      if (state.bookSort === "name") return valueFor(left, "name", "").localeCompare(valueFor(right, "name", ""));
+      return new Date(valueFor(rightSummary, "lastRunAt", 0)).getTime() - new Date(valueFor(leftSummary, "lastRunAt", 0)).getTime();
+    });
+    const pageSize = 12;
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    state.bookPage = Math.min(Math.max(1, state.bookPage), totalPages);
+    const pageItems = filtered.slice((state.bookPage - 1) * pageSize, state.bookPage * pageSize);
+    if (!pageItems.some((item) => bookId(item) === state.selectedBookId)) state.selectedBookId = pageItems[0] ? bookId(pageItems[0]) : "";
+    const card = (item) => {
       const itemSummary = summaryFor(item);
       const id = bookId(item);
       const coverReference = valueFor(itemSummary, "representativeCoverReference", "");
@@ -164,10 +193,12 @@
       const thumbnail = cover
         ? `<img src="${escapeHtml(cover)}" alt="Cover for ${escapeHtml(valueFor(item, "name", ""))}" loading="lazy">`
         : `<span class="book-preview-fallback" aria-label="Preview unavailable">Preview unavailable</span>`;
-      return `<li class="book-row ${id === state.selectedBookId ? "selected" : ""}" data-action="select-book" data-book-id="${escapeHtml(id)}"><input type="checkbox" aria-label="Queue ${escapeHtml(valueFor(item, "name", ""))}" data-action="queue-book" data-book-id="${escapeHtml(id)}" ${state.selectedBookIds.has(id) ? "checked" : ""}><span class="book-list-preview">${thumbnail}</span><div><strong>${escapeHtml(valueFor(item, "name", ""))}</strong><small>${escapeHtml(workspaceStatus(itemSummary))}</small></div>${badge(valueFor(itemSummary, "validationStatus", "Checking"))}</li>`;
+      return `<article class="book-card ${id === state.selectedBookId ? "selected" : ""}"><button type="button" class="book-card-main" data-action="select-book" data-book-id="${escapeHtml(id)}" aria-label="Open ${escapeHtml(valueFor(item, "name", ""))}"><span class="book-card-preview">${thumbnail}</span><span class="book-card-copy"><strong title="${escapeHtml(valueFor(item, "name", ""))}">${escapeHtml(valueFor(item, "name", ""))}</strong><small>${valueFor(itemSummary, "interiorSourcePageCount", 0)} Interior pages</small><span>${badge(productionStatus(itemSummary))} ${badge(bookFrameState(itemSummary))}</span></span></button><footer><label><input type="checkbox" aria-label="Queue ${escapeHtml(valueFor(item, "name", ""))}" data-action="queue-book" data-book-id="${escapeHtml(id)}" ${state.selectedBookIds.has(id) ? "checked" : ""}> Queue</label><button class="button-secondary book-card-action" data-action="select-book" data-book-id="${escapeHtml(id)}">${productionStatus(itemSummary) === "Ready" ? "Review files" : productionStatus(itemSummary) === "Processing" ? "View process" : "Preflight"}</button></footer></article>`;
     };
-    content.innerHTML = `<div class="page-header"><div><h1>Books</h1><p>Refresh and validate source book folders for Interior Processing.</p></div><div class="page-actions"><button class="button-secondary" data-action="refresh">Refresh</button><button class="button-secondary" data-action="validate-all">Validate all</button><button class="button-primary" data-action="go-process">Process Interior</button></div></div><div class="status-filters">${statusCounts.map(({ name, count }) => `<button class="${state.bookStatus === name ? "active" : ""}" data-action="book-status" data-book-status="${name}">${name}<strong>${count}</strong></button>`).join("")}</div><div class="master-detail books-layout"><section class="panel list-panel"><div class="list-title">Books (${allBooks.length})</div><input class="control w-full mt-3" data-action="filter-books" value="${escapeHtml(state.bookFilter)}" placeholder="Search book…"><ul class="item-list mt-3">${filtered.length ? filtered.map(row).join("") : "<li class=\"empty-row\">No Books match this view.</li>"}</ul></section><section class="detail-pane">${book ? renderBookTabs(book, summaryFor(book)) : panel("Book detail", "<p class=\"empty-copy\">Select a Book to inspect its state.</p>")}</section></div>`;
-    filtered.forEach((item) => queueAssetPreview(bookId(item), valueFor(summaryFor(item), "representativeCoverReference", "")));
+    const start = filtered.length ? (state.bookPage - 1) * pageSize + 1 : 0;
+    const end = Math.min(state.bookPage * pageSize, filtered.length);
+    content.innerHTML = `<div class="page-header"><div><h1>Books</h1><p>Filter local Books, validate only what needs review, and send selected Books to Interior Processing.</p></div><div class="page-actions"><button class="button-secondary" data-action="refresh">Refresh</button><button class="button-secondary" data-action="validate-all">Validate all</button><button class="button-primary" data-action="go-process">Process Interior</button></div></div><section class="book-toolbar"><label class="field"><span>Search books</span><input class="control" data-action="filter-books" value="${escapeHtml(state.bookFilter)}" placeholder="Book name"></label><label class="field"><span>Sort</span><select class="control" data-action="book-sort"><option value="activity" ${state.bookSort === "activity" ? "selected" : ""}>Last activity</option><option value="name" ${state.bookSort === "name" ? "selected" : ""}>Book name</option></select></label><div class="asset-view-toggle" aria-label="Book view"><button class="${state.bookView === "grid" ? "active" : ""}" data-action="book-view" data-book-view="grid" aria-pressed="${state.bookView === "grid"}">Grid</button><button class="${state.bookView === "list" ? "active" : ""}" data-action="book-view" data-book-view="list" aria-pressed="${state.bookView === "list"}">Compact list</button></div></section><div class="status-filters" role="group" aria-label="Book status filters">${statusCounts.map(({ name, count }) => `<button class="${state.bookStatus === name ? "active" : ""}" data-action="book-status" data-book-status="${name}" aria-pressed="${state.bookStatus === name}">${name}<strong>${count}</strong></button>`).join("")}</div><section class="book-secondary-filters"><label class="field"><span>Frame mode</span><select class="control" data-action="book-frame-filter">${["Any", "Auto", "Frame", "No frame", "Needs review"].map((name) => `<option value="${name}" ${state.bookFrameFilter === name ? "selected" : ""}>${name}</option>`).join("")}</select></label><button class="button-secondary" data-action="clear-book-filters">Clear filters</button><span class="book-filter-result" role="status" aria-atomic="true">${filtered.length} Books match the active filters.</span></section><section class="${state.bookView === "grid" ? "book-grid" : "book-compact-list"}">${pageItems.length ? pageItems.map(card).join("") : `<div class="book-grid-empty"><strong>No Books match this view.</strong><span>Clear a filter or refresh the local source folders.</span></div>`}</section><footer class="book-pagination" data-book-total-pages="${totalPages}"><span>${start}–${end} of ${filtered.length}</span><div><button class="button-secondary" data-action="book-page" data-book-page="first" ${state.bookPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="book-page" data-book-page="previous" ${state.bookPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.bookPage} of ${totalPages}</span><button class="button-secondary" data-action="book-page" data-book-page="next" ${state.bookPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="book-page" data-book-page="last" ${state.bookPage === totalPages ? "disabled" : ""}>Last</button></div><button class="button-primary" data-action="go-process" ${state.selectedBookIds.size ? "" : "disabled"}>Process ${state.selectedBookIds.size} selected</button></footer>`;
+    pageItems.forEach((item) => queueAssetPreview(bookId(item), valueFor(summaryFor(item), "representativeCoverReference", "")));
   };
 
   const renderProcess = (requestProcess = true) => {
@@ -246,7 +277,10 @@
     if (action === "select-asset") { state.selectedAssetReference = target.dataset.sourceReference; requestAssetPreview(state.selectedBookId, state.selectedAssetReference); render("books", false); }
     if (action === "request-asset-preview") requestAssetPreview(state.selectedBookId, target.dataset.sourceReference);
     if (action === "asset-view") { state.assetView = target.dataset.assetView; render("books", false); }
-    if (action === "book-status") { state.bookStatus = target.dataset.bookStatus; render("books", false); }
+    if (action === "book-status") { state.bookStatus = target.dataset.bookStatus; state.bookPage = 1; render("books", false); }
+    if (action === "book-view") { state.bookView = target.dataset.bookView; render("books", false); }
+    if (action === "clear-book-filters") { state.bookFilter = ""; state.bookStatus = "All"; state.bookFrameFilter = "Any"; state.bookPage = 1; render("books", false); }
+    if (action === "book-page") { const last = Number(target.closest("[data-book-total-pages]")?.dataset.bookTotalPages ?? 1); state.bookPage = target.dataset.bookPage === "first" ? 1 : target.dataset.bookPage === "last" ? last : Math.min(last, Math.max(1, state.bookPage + (target.dataset.bookPage === "next" ? 1 : -1))); render("books", false); }
     if (action === "validate-book") send("book.validate", { bookId: target.dataset.bookId });
     if (action === "select-cover") send("book.cover.select", { bookId: target.dataset.bookId, coverReference: target.dataset.coverReference });
     if (action === "go-process") render("process");
@@ -257,12 +291,14 @@
     if (action === "copy-output-path") send("book.output.copy-path", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
   });
   content.addEventListener("input", (event) => {
-    if (event.target.dataset.action === "filter-books") { state.bookFilter = event.target.value; render("books", false); }
+    if (event.target.dataset.action === "filter-books") { state.bookFilter = event.target.value; state.bookPage = 1; render("books", false); }
     if (event.target.dataset.action === "filter-assets") { state.assetFilter = event.target.value; render("books", false); }
   });
   content.addEventListener("change", (event) => {
     if (event.target.dataset.action === "diagnostic-book") { state.selectedBookId = event.target.value; render("diagnostics", false); }
     if (event.target.dataset.action === "set-interior-frame-mode") send("book.interior.frame-mode.set", { bookId: event.target.dataset.bookId, sourceReference: event.target.dataset.sourceReference, mode: event.target.value });
+    if (event.target.dataset.action === "book-frame-filter") { state.bookFrameFilter = event.target.value; state.bookPage = 1; render("books", false); }
+    if (event.target.dataset.action === "book-sort") { state.bookSort = event.target.value; state.bookPage = 1; render("books", false); }
   });
 
   window.chrome.webview.addEventListener("message", (event) => {
