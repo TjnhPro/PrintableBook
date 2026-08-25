@@ -20,7 +20,7 @@ public sealed class ProcessingSessionTaskManagerIntegrationTests
         var application = new CancellationResultApplication();
         var services = new ServiceCollection()
             .AddKeyedSingleton<IBackgroundTaskWorker>(BackgroundTaskKind.LibraryRefresh, new UnusedWorker(BackgroundTaskKind.LibraryRefresh))
-            .AddKeyedSingleton<IBackgroundTaskWorker>(BackgroundTaskKind.ProcessingSession, new ProcessingSessionWorker(new SnapshotProvider(CreateSnapshot()), application, new NoFrameResolver()))
+            .AddKeyedSingleton<IBackgroundTaskWorker>(BackgroundTaskKind.ProcessingSession, new ProcessingSessionWorker(new SnapshotProvider(CreateSnapshot()), application, new NoFrameResolver(), new NoFileSystem(), new NoImageInspector()))
             .BuildServiceProvider();
         using var manager = new BackgroundTaskManager(services, new NullDiagnostics());
 
@@ -65,6 +65,27 @@ public sealed class ProcessingSessionTaskManagerIntegrationTests
     private sealed class NoFrameResolver : IBrandFrameResolver
     {
         public ValueTask<FileReference?> ResolveCompatibleFrameAsync(DiscoveredBrand brand, ImageSize targetSize, CancellationToken cancellationToken = default) => ValueTask.FromResult<FileReference?>(null);
+    }
+
+    private sealed class NoFileSystem : IFileSystem
+    {
+        public ValueTask<bool> FileExistsAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
+        public ValueTask<bool> DirectoryExistsAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
+        public ValueTask CreateDirectoryAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public async IAsyncEnumerable<DirectoryReference> EnumerateDirectoriesAsync(DirectoryReference directory, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) { await Task.CompletedTask; yield break; }
+        public async IAsyncEnumerable<FileReference> EnumerateFilesAsync(DirectoryReference directory, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) { await Task.CompletedTask; yield break; }
+        public ValueTask<string> ReadTextAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult("");
+        public ValueTask WriteTextAtomicallyAsync(FileReference file, string content, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask CopyFileAsync(FileReference source, FileReference destination, bool overwrite, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask MoveFileAsync(FileReference source, FileReference destination, bool overwrite, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask DeleteFileAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask DeleteDirectoryAsync(DirectoryReference directory, bool recursive, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    }
+
+    private sealed class NoImageInspector : IImageInspector
+    {
+        public ValueTask<ImageSize> GetSizeAsync(FileReference image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<ImageInfo> GetInfoAsync(FileReference image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class CancellationResultApplication : IPrintableBookApplication
