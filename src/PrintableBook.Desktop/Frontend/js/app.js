@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF outputs", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", assetPreviews: new Map(), queuedPreviewKeys: new Set(), previewQueue: [], activePreviewKeys: [], activePreviewRequests: 0, selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", pendingCommands: new Map() };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", assetPreviews: new Map(), queuedPreviewKeys: new Set(), previewQueue: [], activePreviewKeys: [], activePreviewRequests: 0, selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, pendingCommands: new Map() };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -88,8 +88,33 @@
     if (applicationIsLoading()) return;
     state.applicationLoadState = window.appSnapshot ? "refreshing" : "loading";
     state.applicationLoadError = "";
+    state.libraryRefreshTaskId = "";
+    state.libraryRefreshResultRequested = false;
     render(currentRoute(), false);
     send("app.refresh");
+  };
+  const pollLibraryRefresh = () => {
+    if (state.libraryRefreshTaskId) send("task.get", { taskId: state.libraryRefreshTaskId });
+  };
+  const observeLibraryRefresh = (task) => {
+    const taskId = valueFor(task, "taskId", "");
+    if (!taskId) return;
+    state.libraryRefreshTaskId = taskId;
+    const taskState = valueFor(task, "state", "Queued");
+    if (["Queued", "Running", "Cancelling"].includes(taskState)) {
+      if (state.libraryRefreshPollTimer === null) state.libraryRefreshPollTimer = window.setInterval(pollLibraryRefresh, 250);
+      return;
+    }
+    if (state.libraryRefreshPollTimer !== null && window.clearInterval) window.clearInterval(state.libraryRefreshPollTimer);
+    state.libraryRefreshPollTimer = null;
+    if (taskState === "Completed" && !state.libraryRefreshResultRequested) {
+      state.libraryRefreshResultRequested = true;
+      send("app.refresh.result", { taskId });
+      return;
+    }
+    state.applicationLoadState = "failed";
+    state.applicationLoadError = valueFor(task, "errorMessage", "Application refresh failed.");
+    render(currentRoute(), false);
   };
   const selectedBook = () => books().find((book) => bookId(book) === state.selectedBookId);
   const assetsFor = (summary) => valueFor(summary, "assets", []);
@@ -424,10 +449,14 @@
     const command = valueFor(response, "command", "");
     if (ok && command === "app.pong") {
       status.textContent = "Connected";
+    } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "LibraryRefresh") {
+      observeLibraryRefresh(valueFor(response, "payload", {}));
     } else if (ok && command === "app.snapshot") {
       window.appSnapshot = valueFor(response, "payload", {});
       state.applicationLoadState = "ready";
       state.applicationLoadError = "";
+      state.libraryRefreshTaskId = "";
+      state.libraryRefreshResultRequested = false;
       const allBrands = valueFor(discovery(), "brands", []);
       if (!state.selectedBrand && allBrands.length) state.selectedBrand = valueFor(allBrands[0], "name", "");
       if (brandSelect) brandSelect.innerHTML = allBrands.length ? allBrands.map((brand) => `<option>${escapeHtml(valueFor(brand, "name", ""))}</option>`).join("") : "<option>No brands</option>";

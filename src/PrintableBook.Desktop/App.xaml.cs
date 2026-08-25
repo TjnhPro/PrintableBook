@@ -5,7 +5,9 @@ using PrintableBook.Infrastructure.DependencyInjection;
 using PrintableBook.Desktop.Loading;
 using PrintableBook.Desktop.Diagnostics;
 using PrintableBook.Core.Application.Diagnostics;
+using PrintableBook.Core.Application.BackgroundTasks;
 using PrintableBook.Desktop.Preview;
+using PrintableBook.Desktop.BackgroundTasks;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -27,9 +29,11 @@ public partial class App : Application
         services.AddSingleton<ProcessWindowShutdownCoordinator>();
         services.AddSingleton<UiDiagnosticsService>();
         services.AddSingleton<IOperationDiagnostics>(provider => provider.GetRequiredService<UiDiagnosticsService>());
+        services.AddSingleton<IBackgroundTaskManager, BackgroundTaskManager>();
         services.AddSingleton(provider => new DispatcherStallMonitor(Dispatcher.CurrentDispatcher, provider.GetRequiredService<UiDiagnosticsService>()));
         services.AddSingleton<BookAssetPreviewCoordinator>();
         services.AddSingleton<ApplicationLoadCoordinator>();
+        services.AddSingleton<IApplicationSnapshotProvider>(provider => provider.GetRequiredService<ApplicationLoadCoordinator>());
         services.AddSingleton<MainWindow>();
 
         serviceProvider = services.BuildServiceProvider();

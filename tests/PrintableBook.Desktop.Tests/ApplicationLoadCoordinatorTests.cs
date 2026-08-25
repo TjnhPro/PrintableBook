@@ -1,4 +1,5 @@
 using PrintableBook.Core.Abstractions;
+using PrintableBook.Core.Application.BackgroundTasks;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Desktop.Loading;
@@ -8,156 +9,67 @@ namespace PrintableBook.Desktop.Tests;
 public sealed class ApplicationLoadCoordinatorTests
 {
     [Fact]
-    public async Task RefreshAsync_coalesces_concurrent_callers_into_one_snapshot_refresh()
+    public async Task StartRefreshAsync_returns_the_manager_owned_task_without_waiting_for_worker_completion()
     {
-        var snapshots = new BlockingSnapshotService();
-        var recovery = new RecordingRecoveryService();
-        var coordinator = new ApplicationLoadCoordinator(snapshots, recovery);
+        var manager = new RecordingTaskManager(CreateSnapshot(), completed: false);
+        var coordinator = new ApplicationLoadCoordinator(manager);
 
-        var first = coordinator.RefreshAsync(ApplicationLoadKind.Initial).AsTask();
-        var second = coordinator.RefreshAsync(ApplicationLoadKind.Refresh).AsTask();
-        await snapshots.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var task = await coordinator.StartRefreshAsync();
 
-        Assert.Equal(1, snapshots.RefreshCount);
-        snapshots.Complete(CreateSnapshot());
-
-        Assert.Same(await first, await second);
-        Assert.Equal(1, recovery.Calls);
+        Assert.Equal(BackgroundTaskKind.LibraryRefresh, task.Kind);
+        Assert.Equal("library", task.Key);
+        Assert.Equal(1, manager.StartCount);
     }
 
     [Fact]
-    public async Task RefreshAsync_cancels_only_the_callers_wait_and_keeps_the_shared_refresh_running()
+    public async Task Provider_waits_for_the_manager_result_and_returns_the_snapshot()
     {
-        var snapshots = new BlockingSnapshotService();
-        var coordinator = new ApplicationLoadCoordinator(snapshots, new RecordingRecoveryService());
-        using var cancelledWait = new CancellationTokenSource();
+        var expected = CreateSnapshot();
+        var coordinator = new ApplicationLoadCoordinator(new RecordingTaskManager(expected));
 
-        var first = coordinator.RefreshAsync(ApplicationLoadKind.Initial).AsTask();
-        await snapshots.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        var second = coordinator.RefreshAsync(ApplicationLoadKind.Refresh, cancelledWait.Token).AsTask();
-        cancelledWait.Cancel();
+        var actual = await coordinator.GetFreshAsync();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second);
-        Assert.Equal(1, snapshots.RefreshCount);
-        snapshots.Complete(CreateSnapshot());
-
-        Assert.NotNull(await first);
+        Assert.Same(expected, actual);
     }
 
     [Fact]
-    public async Task RefreshAsync_starts_a_new_refresh_after_a_previous_failure()
+    public async Task Provider_caller_cancellation_cancels_only_its_wait()
     {
-        var snapshots = new SequencedSnapshotService(new InvalidDataException("scan failed"), CreateSnapshot());
-        var coordinator = new ApplicationLoadCoordinator(snapshots, new RecordingRecoveryService());
+        using var cancellation = new CancellationTokenSource();
+        var manager = new RecordingTaskManager(CreateSnapshot(), completed: false);
+        var coordinator = new ApplicationLoadCoordinator(manager);
+        cancellation.Cancel();
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => coordinator.RefreshAsync(ApplicationLoadKind.Initial).AsTask());
-        var snapshot = await coordinator.RefreshAsync(ApplicationLoadKind.Refresh);
-
-        Assert.NotNull(snapshot);
-        Assert.Equal(2, snapshots.RefreshCount);
-    }
-
-    [Fact]
-    public async Task RefreshAsync_recovers_before_the_first_snapshot_and_only_once_after_success()
-    {
-        var events = new List<string>();
-        var snapshots = new RecordingSnapshotService(events);
-        var recovery = new RecordingRecoveryService(events);
-        var coordinator = new ApplicationLoadCoordinator(snapshots, recovery);
-
-        await coordinator.RefreshAsync(ApplicationLoadKind.Initial);
-        await coordinator.RefreshAsync(ApplicationLoadKind.Refresh);
-
-        Assert.Equal(["recover", "snapshot", "snapshot"], events);
-    }
-
-    [Fact]
-    public async Task RefreshAsync_retries_recovery_when_the_first_recovery_fails()
-    {
-        var recovery = new SequencedRecoveryService(new InvalidDataException("recovery failed"), null);
-        var snapshots = new RecordingSnapshotService([]);
-        var coordinator = new ApplicationLoadCoordinator(snapshots, recovery);
-
-        await Assert.ThrowsAsync<InvalidDataException>(() => coordinator.RefreshAsync(ApplicationLoadKind.Initial).AsTask());
-        await coordinator.RefreshAsync(ApplicationLoadKind.Refresh);
-
-        Assert.Equal(2, recovery.Calls);
-        Assert.Equal(1, snapshots.RefreshCount);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.GetFreshAsync(cancellation.Token).AsTask());
+        Assert.Equal(0, manager.CancellationCount);
     }
 
     private static ApplicationSnapshot CreateSnapshot() => new(
         new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [], []),
-        GlobalSettings.Default,
-        [],
-        DateTimeOffset.UtcNow);
+        GlobalSettings.Default, [], DateTimeOffset.UtcNow);
 
-    private sealed class BlockingSnapshotService : IApplicationSnapshotService
+    private sealed class RecordingTaskManager(ApplicationSnapshot snapshot, bool completed = true) : IBackgroundTaskManager
     {
-        private readonly TaskCompletionSource<ApplicationSnapshot> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public int RefreshCount { get; private set; }
-
-        public async ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
+        private readonly BackgroundTaskId id = new("task-library");
+        public int StartCount { get; private set; }
+        public int CancellationCount { get; private set; }
+        public ValueTask<BackgroundTaskSnapshot> StartAsync<TRequest>(BackgroundTaskKind kind, string key, string? subject, TRequest request, object? initialView = null, CancellationToken cancellationToken = default)
         {
-            RefreshCount++;
-            Started.TrySetResult();
-            return await completion.Task;
+            cancellationToken.ThrowIfCancellationRequested();
+            StartCount++;
+            return ValueTask.FromResult(Snapshot(completed ? BackgroundTaskState.Completed : BackgroundTaskState.Running));
         }
-
-        public void Complete(ApplicationSnapshot snapshot) => completion.TrySetResult(snapshot);
-    }
-
-    private sealed class SequencedSnapshotService(params object[] results) : IApplicationSnapshotService
-    {
-        private readonly Queue<object> results = new(results);
-        public int RefreshCount { get; private set; }
-
-        public ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
+        public ValueTask<BackgroundTaskSnapshot?> GetAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) => ValueTask.FromResult<BackgroundTaskSnapshot?>(Snapshot(completed ? BackgroundTaskState.Completed : BackgroundTaskState.Running));
+        public ValueTask<IReadOnlyList<BackgroundTaskSnapshot>> ListAsync(BackgroundTaskKind? kind = null, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<BackgroundTaskSnapshot>>([Snapshot(BackgroundTaskState.Completed)]);
+        public ValueTask<BackgroundTaskSnapshot?> CancelAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) { CancellationCount++; return ValueTask.FromResult<BackgroundTaskSnapshot?>(Snapshot(BackgroundTaskState.Cancelled)); }
+        public async ValueTask<bool> WaitAsync(BackgroundTaskId taskId, TimeSpan timeout, CancellationToken cancellationToken = default) { if (!completed) await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken); return true; }
+        public bool TryGetResult<TResult>(BackgroundTaskId taskId, out TResult? result)
         {
-            RefreshCount++;
-            return results.Dequeue() switch
-            {
-                Exception exception => ValueTask.FromException<ApplicationSnapshot>(exception),
-                ApplicationSnapshot snapshot => ValueTask.FromResult(snapshot),
-                _ => throw new InvalidOperationException()
-            };
+            if (snapshot is TResult typed) { result = typed; return true; }
+            result = default;
+            return false;
         }
-    }
-
-    private sealed class RecordingSnapshotService(List<string> events) : IApplicationSnapshotService
-    {
-        public int RefreshCount { get; private set; }
-
-        public ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
-        {
-            RefreshCount++;
-            events.Add("snapshot");
-            return ValueTask.FromResult(CreateSnapshot());
-        }
-    }
-
-    private sealed class RecordingRecoveryService(List<string>? events = null) : IInterruptedProcessingRecoveryService
-    {
-        public int Calls { get; private set; }
-
-        public ValueTask RecoverAsync(CancellationToken cancellationToken = default)
-        {
-            Calls++;
-            events?.Add("recover");
-            return ValueTask.CompletedTask;
-        }
-    }
-
-    private sealed class SequencedRecoveryService(params Exception?[] results) : IInterruptedProcessingRecoveryService
-    {
-        private readonly Queue<Exception?> results = new(results);
-        public int Calls { get; private set; }
-
-        public ValueTask RecoverAsync(CancellationToken cancellationToken = default)
-        {
-            Calls++;
-            var result = results.Dequeue();
-            return result is null ? ValueTask.CompletedTask : ValueTask.FromException(result);
-        }
+        public bool TryGetView<TView>(BackgroundTaskId taskId, out TView? view) where TView : class { view = null; return false; }
+        private BackgroundTaskSnapshot Snapshot(BackgroundTaskState state) => new(id, BackgroundTaskKind.LibraryRefresh, state, "library", "Library", null, null, null, null, DateTimeOffset.UtcNow, state == BackgroundTaskState.Completed ? DateTimeOffset.UtcNow : null, null, null);
     }
 }

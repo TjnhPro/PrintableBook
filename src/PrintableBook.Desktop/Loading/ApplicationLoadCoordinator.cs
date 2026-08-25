@@ -1,75 +1,44 @@
+using PrintableBook.Core.Application.BackgroundTasks;
+using PrintableBook.Core.Application.BackgroundTasks.Workers;
 using PrintableBook.Core.Application.Desktop;
-using PrintableBook.Core.Application.Diagnostics;
 
 namespace PrintableBook.Desktop.Loading;
 
-public enum ApplicationLoadKind
+public enum ApplicationLoadKind { Initial, Refresh }
+
+public sealed class ApplicationLoadCoordinator(IBackgroundTaskManager taskManager) : IApplicationSnapshotProvider
 {
-    Initial,
-    Refresh
-}
+    public ValueTask<BackgroundTaskSnapshot> StartRefreshAsync(CancellationToken cancellationToken = default) =>
+        taskManager.StartAsync(
+            BackgroundTaskKind.LibraryRefresh,
+            key: "library",
+            subject: "Library",
+            request: new LibraryRefreshRequest(),
+            cancellationToken: cancellationToken);
 
-public sealed class ApplicationLoadCoordinator(
-    IApplicationSnapshotService snapshotService,
-    IInterruptedProcessingRecoveryService interruptedRecoveryService,
-    IOperationDiagnostics? diagnostics = null)
-{
-    private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
-    private readonly Lock sync = new();
-    private Task<ApplicationSnapshot>? activeRefresh;
-    private bool initialRecoveryCompleted;
+    public ValueTask<BackgroundTaskSnapshot?> GetTaskAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) =>
+        taskManager.GetAsync(taskId, cancellationToken);
 
-    public ValueTask<ApplicationSnapshot> RefreshAsync(
-        ApplicationLoadKind kind,
-        CancellationToken cancellationToken = default)
+    public bool TryGetResult(BackgroundTaskId taskId, out ApplicationSnapshot? snapshot) =>
+        taskManager.TryGetResult(taskId, out snapshot);
+
+    public async ValueTask<ApplicationSnapshot> GetFreshAsync(CancellationToken cancellationToken = default)
     {
-        Task<ApplicationSnapshot> shared;
+        var task = await StartRefreshAsync(cancellationToken);
+        var completed = await taskManager.WaitAsync(task.TaskId, Timeout.InfiniteTimeSpan, cancellationToken);
+        if (!completed) throw new InvalidOperationException("Library refresh wait ended unexpectedly.");
 
-        lock (sync)
+        var current = await taskManager.GetAsync(task.TaskId, cancellationToken)
+            ?? throw new InvalidOperationException("Library refresh task disappeared.");
+        if (current.State == BackgroundTaskState.Cancelled) throw new OperationCanceledException("Library refresh was cancelled.");
+        if (current.State == BackgroundTaskState.Failed) throw new InvalidOperationException(current.ErrorMessage ?? "Library refresh failed.");
+        if (!taskManager.TryGetResult<ApplicationSnapshot>(task.TaskId, out var snapshot) || snapshot is null)
         {
-            shared = activeRefresh is { IsCompleted: false }
-                ? activeRefresh
-                : activeRefresh = RunRefreshAsync();
+            throw new InvalidOperationException("Library refresh completed without a snapshot.");
         }
 
-        return new ValueTask<ApplicationSnapshot>(shared.WaitAsync(cancellationToken));
+        return snapshot;
     }
 
-    private async Task<ApplicationSnapshot> RunRefreshAsync()
-    {
-        try
-        {
-            return await Task.Run(ExecuteRefreshAsync, CancellationToken.None);
-        }
-        finally
-        {
-            lock (sync)
-            {
-                activeRefresh = null;
-            }
-        }
-    }
-
-    private async Task<ApplicationSnapshot> ExecuteRefreshAsync()
-    {
-        bool recover;
-        lock (sync)
-        {
-            recover = !initialRecoveryCompleted;
-        }
-
-        if (recover)
-        {
-            using (diagnostics.Begin("startup.recovery"))
-            {
-                await interruptedRecoveryService.RecoverAsync();
-            }
-            lock (sync)
-            {
-                initialRecoveryCompleted = true;
-            }
-        }
-
-        return await snapshotService.RefreshAsync();
-    }
+    public ValueTask<ApplicationSnapshot> RefreshAsync(ApplicationLoadKind kind, CancellationToken cancellationToken = default) => GetFreshAsync(cancellationToken);
 }

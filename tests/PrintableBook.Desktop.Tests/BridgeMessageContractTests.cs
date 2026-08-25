@@ -69,7 +69,7 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
-    public async Task RefreshRequestReturnsTheSnapshotFromTheApplicationLayer()
+    public async Task RefreshRequestReturnsAnAcceptedBackgroundTask()
     {
         var snapshot = new ApplicationSnapshot(
             new ApplicationDiscovery(
@@ -82,38 +82,34 @@ public sealed class BridgeMessageContractTests
         var response = await router.HandleAsync("""{"version":1,"id":"request-4","command":"app.refresh"}""");
 
         Assert.True(response.Ok);
-        Assert.Equal("app.snapshot", response.Command);
-        Assert.Same(snapshot, response.Payload);
+        Assert.Equal("background.task", response.Command);
+        Assert.Equal("LibraryRefresh", Assert.IsType<BackgroundTaskBridgeSnapshot>(response.Payload).Kind);
     }
 
     [Fact]
-    public async Task RefreshFailureReturnsACorrelatedBridgeErrorInsteadOfEscapingTheDesktopMessageHandler()
+    public async Task RefreshFailureIsObservedThroughItsTaskInsteadOfEscapingTheDesktopMessageHandler()
     {
         var router = new WebViewBridgeRouter(CreateCoordinator(new ThrowingSnapshotService(new InvalidDataException("The workspace processing log is invalid."))));
 
         var response = await router.HandleAsync("""{"version":1,"id":"request-refresh-failure","command":"app.refresh"}""");
 
-        Assert.False(response.Ok);
-        Assert.Equal("request-refresh-failure", response.Id);
-        Assert.Equal("app_refresh_failed: The workspace processing log is invalid.", response.Error);
+        Assert.True(response.Ok);
+        Assert.Equal("background.task", response.Command);
+        Assert.Equal("Failed", Assert.IsType<BackgroundTaskBridgeSnapshot>(response.Payload).State);
     }
 
     [Fact]
-    public async Task ConcurrentRefreshCommandsUseOneCoordinatorOwnedSnapshotScan()
+    public async Task RefreshResultReturnsAnExistingCompletedSnapshotWithoutStartingAnother_refresh()
     {
-        var snapshots = new BlockingSnapshotService();
-        var router = new WebViewBridgeRouter(CreateCoordinator(snapshots));
+        var snapshot = CreateSnapshot();
+        var router = new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(snapshot)));
 
-        var first = router.HandleAsync("""{"version":1,"id":"first","command":"app.refresh"}""").AsTask();
-        await snapshots.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        var second = router.HandleAsync("""{"version":1,"id":"second","command":"app.refresh"}""").AsTask();
+        var accepted = await router.HandleAsync("""{"version":1,"id":"start","command":"app.refresh"}""");
+        var task = Assert.IsType<BackgroundTaskBridgeSnapshot>(accepted.Payload);
+        var result = await router.HandleAsync($"{{\"version\":1,\"id\":\"result\",\"command\":\"app.refresh.result\",\"payload\":{{\"taskId\":\"{task.TaskId}\"}}}}");
 
-        Assert.Equal(1, snapshots.RefreshCount);
-        snapshots.Complete(CreateSnapshot());
-
-        Assert.Equal("app.snapshot", (await first).Command);
-        Assert.Equal("app.snapshot", (await second).Command);
-        Assert.Equal(1, snapshots.RefreshCount);
+        Assert.Equal("app.snapshot", result.Command);
+        Assert.Same(snapshot, result.Payload);
     }
 
     [Fact]
@@ -345,7 +341,27 @@ public sealed class BridgeMessageContractTests
     }
 
     private static ApplicationLoadCoordinator CreateCoordinator(IApplicationSnapshotService snapshots) =>
-        new(snapshots, new NoopRecoveryService());
+        new(new SnapshotTaskManager(snapshots));
+
+    private sealed class SnapshotTaskManager(IApplicationSnapshotService snapshots) : IBackgroundTaskManager
+    {
+        private readonly BackgroundTaskId id = new("task-test-library");
+        private ApplicationSnapshot? snapshot;
+        private Exception? failure;
+        public ValueTask<BackgroundTaskSnapshot> StartAsync<TRequest>(BackgroundTaskKind kind, string key, string? subject, TRequest request, object? initialView = null, CancellationToken cancellationToken = default)
+        {
+            try { snapshot = snapshots.RefreshAsync(cancellationToken).AsTask().GetAwaiter().GetResult(); }
+            catch (Exception exception) { failure = exception; }
+            return ValueTask.FromResult(Current());
+        }
+        public ValueTask<BackgroundTaskSnapshot?> GetAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) => ValueTask.FromResult<BackgroundTaskSnapshot?>(Current());
+        public ValueTask<IReadOnlyList<BackgroundTaskSnapshot>> ListAsync(BackgroundTaskKind? kind = null, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<BackgroundTaskSnapshot>>([Current()]);
+        public ValueTask<BackgroundTaskSnapshot?> CancelAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) => ValueTask.FromResult<BackgroundTaskSnapshot?>(Current());
+        public ValueTask<bool> WaitAsync(BackgroundTaskId taskId, TimeSpan timeout, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
+        public bool TryGetResult<TResult>(BackgroundTaskId taskId, out TResult? result) { if (snapshot is TResult typed) { result = typed; return true; } result = default; return false; }
+        public bool TryGetView<TView>(BackgroundTaskId taskId, out TView? view) where TView : class { view = null; return false; }
+        private BackgroundTaskSnapshot Current() => new(id, BackgroundTaskKind.LibraryRefresh, failure is null ? BackgroundTaskState.Completed : BackgroundTaskState.Failed, "library", "Library", null, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, failure is null ? null : "refresh_failed", failure?.Message);
+    }
 
     private static BookAssetPreviewCoordinator CreatePreviewCoordinator(IBookAssetPreviewService previews) =>
         new(previews, new NoOpOperationDiagnostics());
