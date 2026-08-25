@@ -1,6 +1,8 @@
 using PrintableBook.Desktop.Bridge;
+using PrintableBook.Desktop.BackgroundTasks;
 using PrintableBook.Desktop.Loading;
 using PrintableBook.Core.Application.Diagnostics;
+using PrintableBook.Core.Application.BackgroundTasks;
 using PrintableBook.Desktop.Diagnostics;
 using PrintableBook.Desktop.Preview;
 using PrintableBook.Core.Abstractions;
@@ -14,6 +16,16 @@ namespace PrintableBook.Desktop.Tests;
 
 public sealed class BridgeMessageContractTests
 {
+    [Fact]
+    public void Background_task_bridge_snapshot_keeps_kind_and_state_as_stable_strings()
+    {
+        var dto = BackgroundTaskBridgeSnapshot.From(new BackgroundTaskSnapshot(
+            new BackgroundTaskId("task-123"), BackgroundTaskKind.ProcessingSession, BackgroundTaskState.Running,
+            "processing", null, "interior-pages", 2, 10, null, DateTimeOffset.UtcNow, null, null, null));
+
+        Assert.Equal("ProcessingSession", dto.Kind);
+        Assert.Equal("Running", dto.State);
+    }
     [Fact]
     public void PingRequestIsRoutedWithoutReachingIntoMainWindow()
     {
