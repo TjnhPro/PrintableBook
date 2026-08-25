@@ -28,14 +28,17 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
         var content = await fileSystem.ReadTextAsync(stateFile, cancellationToken);
         var state = JsonSerializer.Deserialize<BookProcessingState>(content, JsonOptions)
             ?? throw new InvalidDataException("The workspace state file is empty or invalid.");
-        return state.InteriorFrameOverrides is null
-            ? state
-            : state with
-            {
-                InteriorFrameOverrides = new Dictionary<string, FrameMode>(
-                    state.InteriorFrameOverrides,
-                    StringComparer.OrdinalIgnoreCase)
-            };
+        return state with
+        {
+            InteriorFrameOverrides = state.InteriorFrameOverrides is null
+                ? null
+                : new Dictionary<string, FrameMode>(state.InteriorFrameOverrides, StringComparer.OrdinalIgnoreCase),
+            InactiveInteriorSourceKeys = state.InactiveInteriorSourceKeys?
+                .Where(key => !string.IsNullOrWhiteSpace(key))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
+                .ToArray() is { Length: > 0 } inactive ? inactive : null
+        };
     }
 
     public ValueTask SaveAsync(BookWorkspace workspace, BookProcessingState state, CancellationToken cancellationToken = default)

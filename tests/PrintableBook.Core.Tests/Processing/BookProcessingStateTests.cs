@@ -7,6 +7,46 @@ namespace PrintableBook.Core.Tests.Processing;
 public sealed class BookProcessingStateTests
 {
     [Fact]
+    public void New_book_defaults_to_no_background_and_all_interior_active()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book"));
+        Assert.False(state.HasBackground);
+        Assert.True(state.IsInteriorActive("Book interior/page.png"));
+        Assert.Null(state.InactiveInteriorSourceKeys);
+    }
+
+    [Fact]
+    public void SetHasBackground_persists_explicit_choice() =>
+        Assert.True(BookProcessingState.NotStarted(new BookId("book")).SetHasBackground(true).HasBackground);
+
+    [Fact]
+    public void SetInteriorActive_stores_only_inactive_source_keys()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book")).SetInteriorActive("Book interior/b.png", false).SetInteriorActive("Book interior/a.png", false);
+        Assert.Equal(["Book interior/a.png", "Book interior/b.png"], state.InactiveInteriorSourceKeys);
+    }
+
+    [Fact]
+    public void SetInteriorActive_reactivate_removes_sparse_override()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book")).SetInteriorActive("Book interior/a.png", false).SetInteriorActive("Book interior/a.png", true);
+        Assert.Null(state.InactiveInteriorSourceKeys);
+    }
+
+    [Fact]
+    public void Interior_activation_source_keys_are_case_insensitive()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book")).SetInteriorActive("Book interior/A.png", false);
+        Assert.False(state.IsInteriorActive("book INTERIOR/a.PNG"));
+    }
+
+    [Fact]
+    public void SetInteriorActive_does_not_duplicate_equivalent_keys()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book")).SetInteriorActive("Book interior/a.png", false).SetInteriorActive("BOOK INTERIOR/A.PNG", false);
+        Assert.Single(state.InactiveInteriorSourceKeys!);
+    }
+    [Fact]
     public void Interior_frame_modes_persist_only_explicit_overrides_immutably()
     {
         var original = BookProcessingState.NotStarted(new BookId("book"));

@@ -18,7 +18,9 @@ public sealed record BookProcessingState(
     string? ConfigurationFingerprint = null,
     IReadOnlyList<string>? PublishedArtifactReferences = null,
     string? SelectedCoverReference = null,
-    IReadOnlyDictionary<string, FrameMode>? InteriorFrameOverrides = null)
+    IReadOnlyDictionary<string, FrameMode>? InteriorFrameOverrides = null,
+    bool HasBackground = false,
+    IReadOnlyList<string>? InactiveInteriorSourceKeys = null)
 {
     public static BookProcessingState NotStarted(BookId bookId) => new(
         bookId,
@@ -147,6 +149,24 @@ public sealed record BookProcessingState(
             : new Dictionary<string, FrameMode>(InteriorFrameOverrides, StringComparer.OrdinalIgnoreCase);
         if (mode == FrameMode.Auto) overrides.Remove(sourceKey); else overrides[sourceKey] = mode;
         return this with { InteriorFrameOverrides = overrides.Count == 0 ? null : overrides };
+    }
+
+    public BookProcessingState SetHasBackground(bool enabled) => this with { HasBackground = enabled };
+
+    public bool IsInteriorActive(string sourceKey)
+    {
+        ValidateSourceKey(sourceKey);
+        return InactiveInteriorSourceKeys is null || !InactiveInteriorSourceKeys.Contains(sourceKey, StringComparer.OrdinalIgnoreCase);
+    }
+
+    public BookProcessingState SetInteriorActive(string sourceKey, bool isActive)
+    {
+        ValidateSourceKey(sourceKey);
+        var inactive = InactiveInteriorSourceKeys is null
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(InactiveInteriorSourceKeys.Where(key => !string.IsNullOrWhiteSpace(key)), StringComparer.OrdinalIgnoreCase);
+        if (isActive) inactive.Remove(sourceKey); else inactive.Add(sourceKey);
+        return this with { InactiveInteriorSourceKeys = inactive.Count == 0 ? null : inactive.OrderBy(key => key, StringComparer.OrdinalIgnoreCase).ToArray() };
     }
 
     private static void ValidateSourceKey(string sourceKey)
