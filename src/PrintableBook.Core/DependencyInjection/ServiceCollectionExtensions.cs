@@ -2,6 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using PrintableBook.Core.Application.Execution;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Diagnostics;
+using PrintableBook.Core.Application.BackgroundTasks;
+using PrintableBook.Core.Application.BackgroundTasks.Workers;
 using PrintableBook.Core.Application.Pipelines;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Services;
@@ -20,6 +22,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBookCoverSelectionService, BookCoverSelectionService>();
         services.AddSingleton<IInteriorFrameModeService, InteriorFrameModeService>();
         services.AddSingleton<IInterruptedProcessingRecoveryService, InterruptedProcessingRecoveryService>();
+        services.AddKeyedSingleton<IBackgroundTaskWorker, LibraryRefreshWorker>(BackgroundTaskKind.LibraryRefresh);
         services.AddSingleton<IProcessSessionService, ProcessSessionService>();
         services.AddSingleton<IBookProcessingPipeline, BookProcessingPipeline>();
         services.AddSingleton<IBookProcessingQueueBookProcessor, WorkspaceBookProcessingQueueBookProcessor>();

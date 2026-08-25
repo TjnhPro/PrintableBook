@@ -33,6 +33,11 @@ public interface IApplicationSnapshotService
     ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default);
 }
 
+public interface IApplicationSnapshotProvider
+{
+    ValueTask<ApplicationSnapshot> GetFreshAsync(CancellationToken cancellationToken = default);
+}
+
 public sealed class ApplicationSnapshotService(
     IApplicationRootDiscovery discovery,
     IGlobalSettingsStore settingsStore,
