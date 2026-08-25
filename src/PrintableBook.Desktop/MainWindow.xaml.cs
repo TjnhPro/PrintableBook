@@ -15,6 +15,7 @@ public partial class MainWindow : Window
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly WebViewBridgeRouter bridgeRouter;
     private readonly ProcessWindowShutdownCoordinator shutdownCoordinator;
+    private readonly CancellationTokenSource closeFlowCancellation = new();
     private bool allowClose;
     private bool closeFlowRunning;
     private bool systemShutdown;
@@ -29,11 +30,24 @@ public partial class MainWindow : Window
         bridgeRouter = new WebViewBridgeRouter(snapshotService, settingsStore, processSessionService, rootDiscovery, brandSettingsStore, coverSelectionService, interiorFrameModeService, assetPreviewService, outputActionService);
         InitializeComponent();
         Closing += OnClosing;
+        Closed += OnClosed;
     }
 
     internal IPrintableBookApplication Application { get; }
 
-    internal void BeginSystemShutdown() => systemShutdown = true;
+    internal void BeginSystemShutdown()
+    {
+        systemShutdown = true;
+
+        try
+        {
+            closeFlowCancellation.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Window lifecycle already completed.
+        }
+    }
 
     internal static bool ShouldHandleInteractiveClose(bool allowClose, bool systemShutdown) =>
         !allowClose && !systemShutdown;
@@ -90,7 +104,7 @@ public partial class MainWindow : Window
             // Let the Closing event return after it has been cancelled before a completed
             // coordinator result can attempt to invoke Close again.
             await Task.Yield();
-            switch (await shutdownCoordinator.RequestCloseAsync())
+            switch (await shutdownCoordinator.RequestCloseAsync(closeFlowCancellation.Token))
             {
                 case ProcessWindowCloseOutcome.KeepOpen:
                     closeFlowRunning = false;
@@ -119,5 +133,10 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
+    }
+
+    private void OnClosed(object? sender, EventArgs e)
+    {
+        closeFlowCancellation.Dispose();
     }
 }

@@ -70,6 +70,23 @@ public sealed class ProcessWindowShutdownCoordinatorTests
         Assert.Equal(ProcessWindowCloseOutcome.ForceExit, outcome);
     }
 
+    [Fact]
+    public async Task RequestCloseAsync_does_not_prompt_for_a_timeout_when_system_shutdown_cancels_the_interactive_close_flow()
+    {
+        var prompt = new StubPrompt(ActiveProcessCloseDecision.StopAndExit, ProcessStopTimeoutDecision.ForceExit);
+        var session = new BlockingStopSession();
+        var coordinator = new ProcessWindowShutdownCoordinator(session, prompt);
+        using var shutdown = new CancellationTokenSource();
+
+        var closing = coordinator.RequestCloseAsync(shutdown.Token).AsTask();
+        await session.StopStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        shutdown.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => closing);
+        Assert.Equal(1, prompt.ActivePromptCount);
+        Assert.Equal(0, prompt.TimeoutPromptCount);
+    }
+
     private sealed class StubPrompt(ActiveProcessCloseDecision activeDecision = ActiveProcessCloseDecision.StopAndExit, ProcessStopTimeoutDecision timeoutDecision = ProcessStopTimeoutDecision.ForceExit) : IProcessShutdownPrompt
     {
         public int ActivePromptCount { get; private set; }
@@ -91,6 +108,27 @@ public sealed class ProcessWindowShutdownCoordinatorTests
             StopCalls++;
             Timeouts.Add(timeout);
             return ValueTask.FromResult(results.Dequeue());
+        }
+    }
+
+    private sealed class BlockingStopSession : IProcessSessionService
+    {
+        public TaskCompletionSource StopStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(new ProcessSessionSnapshot(true, false, null, new BookId("book"), null, []));
+
+        public ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public async ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
+        {
+            StopStarted.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return false;
         }
     }
 }
