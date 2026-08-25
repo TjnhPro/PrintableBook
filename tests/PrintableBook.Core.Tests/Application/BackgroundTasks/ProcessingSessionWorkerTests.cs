@@ -44,6 +44,24 @@ public sealed class ProcessingSessionWorkerTests
         Assert.Equal("Failed", context.View.CurrentStep);
     }
 
+    [Fact]
+    public async Task Requested_cancellation_with_a_cancelled_book_publishes_the_terminal_view_then_throws()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var context = new Context();
+        IBackgroundTaskWorker worker = new ProcessingSessionWorker(
+            new Provider(Snapshot()),
+            new Application(new BookProcessingQueueResult(false, [new BookProcessingQueueBookResult(new BookId("book-one"), BookProcessingStatus.Cancelled, null, null)])),
+            new FrameResolver());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => worker.ExecuteAsync(Request(), context, cancellation.Token).AsTask());
+
+        Assert.False(context.View!.IsActive);
+        Assert.Equal("Cancelled", context.View.CurrentStep);
+        Assert.Collection(context.View.Queue, entry => Assert.Equal(BookProcessingStatus.Cancelled, entry.Status));
+    }
+
     private static ProcessingSessionWorkerRequest Request() => new(["book-one"], "Brand", BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow);
 
     private static ApplicationSnapshot Snapshot()
@@ -78,7 +96,7 @@ public sealed class ProcessingSessionWorkerTests
         public ValueTask<FileReference?> ResolveCompatibleFrameAsync(DiscoveredBrand brand, ImageSize targetSize, CancellationToken cancellationToken = default) { Calls++; return ValueTask.FromResult<FileReference?>(null); }
     }
 
-    private sealed class Application : IPrintableBookApplication
+    private sealed class Application(BookProcessingQueueResult? result = null) : IPrintableBookApplication
     {
         public BookProcessingQueueRequest? Request { get; private set; }
         public ValueTask<ProcessingResult> ProcessAsync(PrintableBook.Core.Application.Commands.ProcessingRequest request, IProgress<PrintableBook.Core.Application.Progress.ProcessingProgress>? progress = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
@@ -86,7 +104,7 @@ public sealed class ProcessingSessionWorkerTests
         {
             Request = request;
             progress?.Invoke(new BookProcessingProgress(request.Books[0].BookId, BookProcessingStatus.Running, "interior-pages", 1, 1));
-            return ValueTask.FromResult(new BookProcessingQueueResult(false, [BookProcessingQueueBookResult.CompletedInterior(request.Books[0].BookId, new PublishedInteriorOutput(new DirectoryReference("output"), new FileReference("interior.pdf")))]));
+            return ValueTask.FromResult(result ?? new BookProcessingQueueResult(false, [BookProcessingQueueBookResult.CompletedInterior(request.Books[0].BookId, new PublishedInteriorOutput(new DirectoryReference("output"), new FileReference("interior.pdf")))]));
         }
     }
 }

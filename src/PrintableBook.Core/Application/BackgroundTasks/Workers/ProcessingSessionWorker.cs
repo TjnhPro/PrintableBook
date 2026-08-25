@@ -96,6 +96,10 @@ public sealed class ProcessingSessionWorker(
                 : queue.Any(entry => entry.Status == BookProcessingStatus.Cancelled) ? "Cancelled" : "Completed";
         }
         Publish(active: false);
+        if (cancellationToken.IsCancellationRequested && result.Books.Any(book => book.Status == BookProcessingStatus.Cancelled))
+        {
+            throw new OperationCanceledException(cancellationToken);
+        }
         return result;
     }
 
