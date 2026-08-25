@@ -37,7 +37,7 @@ public sealed class BackgroundTaskContractTests
     public void V1_kinds_and_states_are_canonical()
     {
         Assert.Equal(
-            [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.AssetPreview],
+            [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession],
             Enum.GetValues<BackgroundTaskKind>());
         Assert.Equal(
             [BackgroundTaskState.Queued, BackgroundTaskState.Running, BackgroundTaskState.Cancelling, BackgroundTaskState.Completed, BackgroundTaskState.Failed, BackgroundTaskState.Cancelled],
