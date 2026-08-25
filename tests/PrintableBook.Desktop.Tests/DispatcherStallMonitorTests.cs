@@ -17,4 +17,13 @@ public sealed class DispatcherStallMonitorTests
 
         Assert.Equal([UiDiagnosticSeverity.Slow, UiDiagnosticSeverity.Severe], diagnostics.Snapshot().Select(item => item.Severity));
     }
+
+    [Fact]
+    public void Dispose_is_idempotent_when_the_window_and_service_provider_both_release_the_singleton()
+    {
+        var monitor = new DispatcherStallMonitor(Dispatcher.CurrentDispatcher, new UiDiagnosticsService());
+
+        monitor.Dispose();
+        monitor.Dispose();
+    }
 }

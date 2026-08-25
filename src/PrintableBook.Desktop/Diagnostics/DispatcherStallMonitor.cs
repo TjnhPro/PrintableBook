@@ -10,8 +10,18 @@ public sealed class DispatcherStallMonitor(Dispatcher dispatcher, UiDiagnosticsS
     internal static readonly TimeSpan SevereThreshold = TimeSpan.FromMilliseconds(1000);
     private readonly CancellationTokenSource cancellation = new();
     private Task? monitorTask;
+    private int disposed;
 
-    public void Start() => monitorTask ??= Task.Run(MonitorAsync, CancellationToken.None);
+    public void Start()
+    {
+        if (Volatile.Read(ref disposed) != 0) return;
+
+        monitorTask ??= Task.Run(MonitorAsync, CancellationToken.None);
+        _ = monitorTask.ContinueWith(static completed => _ = completed.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
 
     internal void RecordLatency(TimeSpan duration)
     {
@@ -34,10 +44,16 @@ public sealed class DispatcherStallMonitor(Dispatcher dispatcher, UiDiagnosticsS
         {
             // Normal window shutdown.
         }
+        catch (InvalidOperationException) when (dispatcher.HasShutdownStarted)
+        {
+            // WPF has already stopped accepting work during application shutdown.
+        }
     }
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref disposed, 1) != 0) return;
+
         cancellation.Cancel();
         cancellation.Dispose();
     }

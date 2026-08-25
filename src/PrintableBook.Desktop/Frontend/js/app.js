@@ -73,6 +73,14 @@
   const panel = (title, body, extra = "") => `<section class="panel ${extra}"><h2 class="panel-title">${title}</h2>${body}</section>`;
   const currentRoute = () => document.querySelector(".nav-item-active")?.dataset.route ?? "books";
   const applicationIsLoading = () => state.applicationLoadState === "loading" || state.applicationLoadState === "refreshing";
+  const updateGlobalRefreshControl = () => {
+    const refreshButton = document.getElementById("refresh-button");
+    if (!refreshButton) return;
+    const loading = applicationIsLoading();
+    refreshButton.disabled = loading;
+    refreshButton.setAttribute("aria-busy", String(loading));
+    refreshButton.textContent = state.applicationLoadState === "refreshing" ? "Refreshing…" : state.applicationLoadState === "loading" ? "Loading…" : "Refresh";
+  };
   const refreshAction = (label = "Refresh") => `<button class="button-secondary" data-action="refresh" ${applicationIsLoading() ? "disabled" : ""}>${state.applicationLoadState === "refreshing" ? "Refreshing…" : label}</button>`;
   const renderLoadFailure = () => `<section class="panel" role="alert"><h2 class="panel-title">Unable to load library</h2><p class="panel-note">${escapeHtml(state.applicationLoadError || "Application refresh failed.")}</p><div class="page-actions mt-4"><button class="button-primary" data-action="refresh">Retry</button></div></section>`;
   const renderRefreshFailure = () => `<section class="refresh-failure" role="alert"><span>Refresh failed</span><span>${escapeHtml(state.applicationLoadError || "Application refresh failed.")}</span><button class="button-secondary" data-action="refresh">Retry</button></section>`;
@@ -338,6 +346,7 @@
   };
 
   const render = (route, requestProcess = true) => {
+    updateGlobalRefreshControl();
     document.querySelectorAll("[data-route]").forEach((button) => button.classList.toggle("nav-item-active", button.dataset.route === route));
     const subtitle = document.getElementById("page-subtitle");
     if (subtitle) subtitle.textContent = `${routeNames[route] ?? "Application"} workspace`;
