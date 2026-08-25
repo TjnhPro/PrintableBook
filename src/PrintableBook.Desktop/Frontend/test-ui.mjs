@@ -40,6 +40,8 @@ const expected = [
   ,"Reveal in Explorer"
   ,"book.output.open"
   ,"book.output.copy-path"
+  ,"Brands & templates"
+  ,"Advanced JSON settings"
 ];
 
 for (const value of expected) {

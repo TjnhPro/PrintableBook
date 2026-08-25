@@ -175,5 +175,11 @@
   .output-actions { @apply mt-4 flex flex-wrap gap-2; }
   .data-table .output-actions { @apply mt-0; }
   .data-table .output-actions button { @apply h-8 px-2 text-xs; }
+  .brand-asset-grid { @apply mt-4 grid grid-cols-2 gap-3; }
+  .brand-asset-grid > div { @apply grid gap-1 rounded-lg border border-slate-200 bg-slate-50 p-3; }
+  .brand-asset-grid strong { @apply text-sm text-slate-900; }
+  .brand-asset-grid small { @apply text-xs text-slate-500; }
+  .advanced-settings { @apply mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700; }
+  .advanced-settings summary { @apply cursor-pointer font-medium; }
 }
 @keyframes pb-pulse { 50% { opacity: .45; } }
