@@ -60,6 +60,8 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("Every discovered Interior page is included in this run.", script, StringComparison.Ordinal);
         Assert.Contains("assetSearchFocused", script, StringComparison.Ordinal);
         Assert.Contains("search.setSelectionRange", script, StringComparison.Ordinal);
+        Assert.Contains("updateVisibleAssetPreview", script, StringComparison.Ordinal);
+        Assert.Contains("if (isViewingInteriorAssets) updateVisibleAssetPreview(preview);", script, StringComparison.Ordinal);
         Assert.Contains("--pb-asset-preview: 1 / 1", layout, StringComparison.Ordinal);
         Assert.Contains("grid-template-columns:repeat(3,minmax(0,1fr))", layout, StringComparison.Ordinal);
         Assert.Contains("@media (min-width:1280px)", layout, StringComparison.Ordinal);

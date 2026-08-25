@@ -83,6 +83,25 @@
       }
     }));
   };
+  const updateVisibleAssetPreview = (preview) => {
+    const previewBookId = valueFor(preview, "bookId", "");
+    const sourceReference = valueFor(preview, "sourceReference", "");
+    const dataUrl = valueFor(preview, "dataUrl", "");
+    if (!previewBookId || !sourceReference || !dataUrl) return false;
+    const selector = `[data-preview-book-id="${CSS.escape(previewBookId)}"][data-source-reference="${CSS.escape(sourceReference)}"]`;
+    let updated = false;
+    document.querySelectorAll(selector).forEach((tile) => {
+      const previewContainer = tile.querySelector(".folder-asset-preview");
+      if (!previewContainer || previewContainer.querySelector("img")) return;
+      const image = document.createElement("img");
+      image.src = dataUrl;
+      image.alt = `Preview of ${tile.querySelector("strong")?.textContent ?? "asset"}`;
+      image.loading = "lazy";
+      previewContainer.replaceChildren(image);
+      updated = true;
+    });
+    return updated;
+  };
   const updateGlobalProcessStatus = () => {
     const control = document.getElementById("global-process-status");
     if (!control) return;
@@ -399,7 +418,9 @@
         state.activePreviewRequests = Math.max(0, state.activePreviewRequests - 1);
         pumpPreviewQueue();
       }
-      if (document.querySelector(".nav-item-active")?.dataset.route === "books") render("books", false);
+      const isViewingInteriorAssets = document.querySelector(".nav-item-active")?.dataset.route === "books" && state.bookDrawerOpen && state.selectedBookTab === "assets";
+      if (isViewingInteriorAssets) updateVisibleAssetPreview(preview);
+      else if (document.querySelector(".nav-item-active")?.dataset.route === "books") render("books", false);
       status.textContent = "Preview ready";
     } else if (ok && command === "book.output.action.completed") {
       status.textContent = "Output action completed";
