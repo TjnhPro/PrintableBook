@@ -7,11 +7,9 @@ const expected = [
   "Processing",
   "Outputs",
   "Logs",
-  "book.cover.select",
   "book.interior.frame-mode.set",
   "Frame mode",
-  "Interior frame mode",
-  "No Frame",
+  "No frame",
   "Process Interior",
   "Diagnostics",
   "Interrupted",
@@ -19,19 +17,14 @@ const expected = [
   "Last Interior Processing session",
   "Last session",
   "Start New Interior Processing"
-  ,"Book Library"
   ,"Nothing processing"
   ,"global-process-status"
   ,"book.asset.preview.get"
   ,"assetPreviews"
-  ,"Asset Workspace"
-  ,"Load preview"
+  ,"Interior assets"
+  ,"Every discovered Interior page is included in this run"
   ,"filter-assets"
-  ,"asset-view"
-  ,"Interior preflight"
-  ,"Full-book preflight"
-  ,"Ready to process"
-  ,"validation-mode"
+  ,"Interior-only preflight checks the source pages"
   ,"Current stage"
   ,"process-status-strip"
   ,"Run needs review"

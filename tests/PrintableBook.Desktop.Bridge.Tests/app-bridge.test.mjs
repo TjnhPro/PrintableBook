@@ -13,36 +13,46 @@ const appScriptPath = join(
   "app.js"
 );
 
-function loadBridge(activeRoute = null) {
+function loadBridge(activeRoute = null, visibleTiles = []) {
   const status = { textContent: "" };
   const contentListeners = {};
-  const content = { innerHTML: "", addEventListener: (eventName, handler) => { contentListeners[eventName] = handler; } };
+  const documentListeners = {};
+  const content = {
+    innerHTML: "",
+    addEventListener: (eventName, handler) => { contentListeners[eventName] = handler; },
+    insertAdjacentHTML: (_position, markup) => { content.innerHTML += markup; }
+  };
   const brandSelect = { innerHTML: "", value: "", addEventListener: () => { } };
   const refreshButton = { addEventListener: () => { } };
   const messages = [];
   const intervals = [];
   let messageHandler;
   const browserWindow = {
+    innerWidth: 1600,
+    innerHeight: 900,
     chrome: {
       webview: {
         addEventListener: (_eventName, handler) => { messageHandler = handler; },
         postMessage: (message) => { messages.push(JSON.parse(message)); }
       }
     },
-    setInterval: (callback) => { intervals.push(callback); return intervals.length; }
+    setInterval: (callback) => { intervals.push(callback); return intervals.length; },
+    requestAnimationFrame: (callback) => { callback(); return 1; }
   };
 
   vm.runInNewContext(readFileSync(appScriptPath, "utf8"), {
     crypto: { randomUUID: () => "request-1" },
     document: {
       getElementById: (id) => ({ "bridge-status": status, "app-content": content, "brand-select": brandSelect, "refresh-button": refreshButton }[id]),
-      querySelectorAll: () => [],
-      querySelector: (selector) => selector === ".nav-item-active" && activeRoute ? { dataset: { route: activeRoute } } : null
+      querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : [],
+      querySelector: (selector) => selector === ".nav-item-active" && activeRoute ? { dataset: { route: activeRoute } } : null,
+      addEventListener: (eventName, handler) => { documentListeners[eventName] = handler; }
     },
-    window: browserWindow
+    window: browserWindow,
+    CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSelect, contentListeners, intervals, messages };
+  return { messageHandler, status, content, brandSelect, contentListeners, documentListeners, intervals, messages };
 }
 
 test("bridge accepts the JSON response emitted by the .NET host", () => {
@@ -90,7 +100,7 @@ test("snapshot rendering opens the Book Library and keeps discovery and brand da
 
   assert.equal(status.textContent, "Connected");
   assert.match(brandSelect.innerHTML, /Amazon/);
-  assert.match(content.innerHTML, /Books \(1\)/);
+  assert.match(content.innerHTML, /1 Books match the active filters/);
   assert.match(content.innerHTML, /Book 001/);
   assert.match(content.innerHTML, /Process Interior/);
   assert.doesNotMatch(content.innerHTML, /Paths \(Read Only\)/);
@@ -202,7 +212,7 @@ test("a mixed terminal queue retains the most severe terminal step", () => {
   assert.match(content.innerHTML, /PDF export failed/);
 });
 
-test("book filters render the recovered interrupted workspace status", () => {
+test("book filters render a recovered interrupted workspace without failing", () => {
   const { messageHandler, content } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-1", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
@@ -210,7 +220,8 @@ test("book filters render the recovered interrupted workspace status", () => {
     bookSummaries: [{ bookId: { value: "Book 001" }, workspaceStatus: 5, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [] }]
   } } });
 
-  assert.match(content.innerHTML, /Interrupted/);
+  assert.match(content.innerHTML, /Book 001/);
+  assert.match(content.innerHTML, /Preflight/);
 });
 
 test("book detail renders frame mode truth and sends per-image overrides through the bridge", () => {
@@ -227,14 +238,19 @@ test("book detail renders frame mode truth and sends per-image overrides through
       workspaceStatus: "Not started",
       validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
       interiorSourcePageCount: 1,
-      interiorSourcePages: [{ sourceReference: "Book interior/page-001.png", frameMode }]
+      assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode }]
     }]
   });
 
   messageHandler({ data: { version: 1, id: "book-1", ok: true, command: "app.snapshot", payload: snapshot(0) } });
 
-  assert.match(content.innerHTML, /Interior frame mode/);
-  assert.match(content.innerHTML, /Auto uses detected artwork type/);
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
+  contentListeners.click({ target: assetsTab });
+
+  assert.match(content.innerHTML, /Interior assets/);
+  assert.match(content.innerHTML, /Choose its frame mode directly on the image/);
   assert.match(content.innerHTML, /option value="auto" selected/);
   contentListeners.change({ target: { dataset: { action: "set-interior-frame-mode", bookId: "Book 001", sourceReference: "Book interior/page-001.png" }, value: "enabled" } });
   assert.deepEqual(messages.at(-1), {
@@ -248,22 +264,25 @@ test("book detail renders frame mode truth and sends per-image overrides through
   assert.match(content.innerHTML, /option value="enabled" selected/);
 });
 
-test("asset workspace loads an allowlisted preview only after the user selects an asset", () => {
-  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+test("asset workspace queues allowlisted previews for visible Interior assets", () => {
+  const visibleTile = {
+    dataset: { previewBookId: "Book 001", sourceReference: "Book interior/page-001.png" },
+    getBoundingClientRect: () => ({ top: 0, left: 0, right: 1, bottom: 1 })
+  };
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books", [visibleTile]);
   messageHandler({ data: { version: 1, id: "book-asset", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
     bookSummaries: [{ bookId: { value: "Book 001" }, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto", previewAvailable: true }] }]
   } } });
 
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
   const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
   contentListeners.click({ target: assetsTab });
-  assert.match(content.innerHTML, /Asset Workspace/);
+  assert.match(content.innerHTML, /Interior assets/);
   assert.match(content.innerHTML, /page-001\.png/);
-  assert.match(content.innerHTML, /Load preview/);
-
-  const asset = { dataset: { action: "select-asset", sourceReference: "Book interior/page-001.png" }, closest: () => asset };
-  contentListeners.click({ target: asset });
+  assert.match(content.innerHTML, /Loading preview/);
   assert.deepEqual(messages.at(-1), {
     version: 1,
     id: "request-1",
@@ -272,7 +291,7 @@ test("asset workspace loads an allowlisted preview only after the user selects a
   });
 });
 
-test("validation keeps missing cover informational for Interior and actionable for full-book review", () => {
+test("validation limits Book detail to Interior preflight while cover work is deferred", () => {
   const { messageHandler, content, contentListeners } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-validation", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
@@ -284,17 +303,13 @@ test("validation keeps missing cover informational for Interior and actionable f
     }]
   } } });
 
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
   const validationTab = { dataset: { action: "book-tab", bookTab: "validation" }, closest: () => validationTab };
   contentListeners.click({ target: validationTab });
-  assert.match(content.innerHTML, /Cover is optional for this Interior-only run/);
-  assert.match(content.innerHTML, /Interior Processing can continue without a Cover/);
-  assert.match(content.innerHTML, /Informational/);
-
-  const fullBook = { dataset: { action: "validation-mode", validationMode: "full-book" }, closest: () => fullBook };
-  contentListeners.click({ target: fullBook });
-  assert.match(content.innerHTML, /A Cover PNG is required/);
-  assert.match(content.innerHTML, /Refresh local files/);
-  assert.match(content.innerHTML, /Needs attention/);
+  assert.match(content.innerHTML, /Interior-only preflight checks the source pages that will be processed/);
+  assert.match(content.innerHTML, /Interior source images were discovered/);
+  assert.doesNotMatch(content.innerHTML, /Cover is unavailable/);
 });
 
 test("output review shows verified PDF facts and only sends a book-scoped action", () => {
