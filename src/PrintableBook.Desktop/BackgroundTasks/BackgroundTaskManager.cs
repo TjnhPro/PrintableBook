@@ -33,6 +33,12 @@ public sealed class BackgroundTaskManager(
             var duplicate = FindActiveDuplicateLocked(kind, policy.DuplicatePolicy);
             if (duplicate is not null) return ValueTask.FromResult(SnapshotLocked(duplicate));
 
+            var conflict = FindActiveConflictLocked(policy);
+            if (conflict is not null)
+            {
+                throw new BackgroundTaskConflictException(kind, conflict.Kind);
+            }
+
             entry = new BackgroundTaskEntry
             {
                 TaskId = BackgroundTaskId.New(),
@@ -358,6 +364,9 @@ public sealed class BackgroundTaskManager(
         _ => throw new ArgumentOutOfRangeException(nameof(policy), policy, "Unsupported background task duplicate policy.")
     };
 
+    private BackgroundTaskEntry? FindActiveConflictLocked(BackgroundTaskPolicy policy) => registry.Values.FirstOrDefault(entry =>
+        !IsTerminal(entry.State) && policy.Conflicts.Contains(entry.Kind));
+
     private BackgroundTaskSnapshot? GetSnapshot(BackgroundTaskId taskId)
     {
         lock (sync) return registry.TryGetValue(taskId, out var entry) ? SnapshotLocked(entry) : null;
@@ -381,7 +390,7 @@ public sealed class BackgroundTaskManager(
         }
     }
 
-    private bool IsLatestRetainedKindLocked(BackgroundTaskEntry candidate) => candidate.Kind is (BackgroundTaskKind.LibraryRefresh or BackgroundTaskKind.ProcessingSession) &&
+    private bool IsLatestRetainedKindLocked(BackgroundTaskEntry candidate) => candidate.Kind is (BackgroundTaskKind.LibraryRefresh or BackgroundTaskKind.ProcessingSession or BackgroundTaskKind.CacheCleanup) &&
         !registry.Values.Any(entry => entry.Kind == candidate.Kind && IsTerminal(entry.State) && entry.Sequence > candidate.Sequence);
 
     private static bool IsTerminal(BackgroundTaskState state) => state is BackgroundTaskState.Completed or BackgroundTaskState.Failed or BackgroundTaskState.Cancelled;

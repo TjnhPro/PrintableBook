@@ -8,17 +8,18 @@ namespace PrintableBook.Desktop.Tests.BackgroundTasks;
 public sealed class BackgroundTaskManagerTests
 {
     [Fact]
-    public void Policies_define_only_library_and_processing_lanes()
+    public void Policies_define_library_processing_and_cleanup_with_locked_conflicts()
     {
         Assert.Equal(
-            [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession],
+            [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup],
             BackgroundTaskPolicies.All.Keys.Order());
-        Assert.Equal(new BackgroundTaskPolicy(BackgroundTaskLaneKind.Library, 1, BackgroundTaskDuplicatePolicy.JoinByKind), BackgroundTaskPolicies.For(BackgroundTaskKind.LibraryRefresh));
-        Assert.Equal(new BackgroundTaskPolicy(BackgroundTaskLaneKind.Processing, 1, BackgroundTaskDuplicatePolicy.ReturnExisting), BackgroundTaskPolicies.For(BackgroundTaskKind.ProcessingSession));
+        AssertPolicy(BackgroundTaskKind.LibraryRefresh, BackgroundTaskLaneKind.Library, BackgroundTaskDuplicatePolicy.JoinByKind, [BackgroundTaskKind.CacheCleanup]);
+        AssertPolicy(BackgroundTaskKind.ProcessingSession, BackgroundTaskLaneKind.Processing, BackgroundTaskDuplicatePolicy.ReturnExisting, [BackgroundTaskKind.CacheCleanup]);
+        AssertPolicy(BackgroundTaskKind.CacheCleanup, BackgroundTaskLaneKind.Cleanup, BackgroundTaskDuplicatePolicy.ReturnExisting, [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession]);
     }
 
     [Fact]
-    public async Task StartAsync_applies_the_two_locked_duplicate_policies_and_independent_lanes()
+    public async Task StartAsync_allows_library_and_processing_to_run_together()
     {
         var library = new BlockingWorker(BackgroundTaskKind.LibraryRefresh);
         var processing = new BlockingWorker(BackgroundTaskKind.ProcessingSession);
@@ -40,6 +41,53 @@ public sealed class BackgroundTaskManagerTests
         processing.Release.TrySetResult();
         Assert.True(await manager.WaitAsync(libraryFirst.TaskId, TimeSpan.FromSeconds(2)));
         Assert.True(await manager.WaitAsync(processingFirst.TaskId, TimeSpan.FromSeconds(2)));
+    }
+
+    [Fact]
+    public async Task StartAsync_rejects_cleanup_while_library_is_active()
+    {
+        var library = new BlockingWorker(BackgroundTaskKind.LibraryRefresh);
+        using var manager = CreateManager(library);
+        await StartAndAssertConflictAsync(manager, library, BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.CacheCleanup);
+    }
+
+    [Fact]
+    public async Task StartAsync_rejects_cleanup_while_processing_is_active()
+    {
+        var processing = new BlockingWorker(BackgroundTaskKind.ProcessingSession);
+        using var manager = CreateManager(processing);
+        await StartAndAssertConflictAsync(manager, processing, BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup);
+    }
+
+    [Fact]
+    public async Task StartAsync_rejects_library_while_cleanup_is_active()
+    {
+        var cleanup = new BlockingWorker(BackgroundTaskKind.CacheCleanup);
+        using var manager = CreateManager(cleanup);
+        await StartAndAssertConflictAsync(manager, cleanup, BackgroundTaskKind.CacheCleanup, BackgroundTaskKind.LibraryRefresh);
+    }
+
+    [Fact]
+    public async Task StartAsync_rejects_processing_while_cleanup_is_active()
+    {
+        var cleanup = new BlockingWorker(BackgroundTaskKind.CacheCleanup);
+        using var manager = CreateManager(cleanup);
+        await StartAndAssertConflictAsync(manager, cleanup, BackgroundTaskKind.CacheCleanup, BackgroundTaskKind.ProcessingSession);
+    }
+
+    [Fact]
+    public async Task StartAsync_returns_existing_cleanup_for_duplicate_cleanup_start()
+    {
+        var cleanup = new BlockingWorker(BackgroundTaskKind.CacheCleanup);
+        using var manager = CreateManager(cleanup);
+
+        var first = await manager.StartAsync(BackgroundTaskKind.CacheCleanup, "cleanup-1", null, new TaskRequest("cleanup-1"));
+        await cleanup.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var second = await manager.StartAsync(BackgroundTaskKind.CacheCleanup, "cleanup-2", null, new TaskRequest("cleanup-2"));
+
+        Assert.Equal(first.TaskId, second.TaskId);
+        cleanup.Release.TrySetResult();
+        Assert.True(await manager.WaitAsync(first.TaskId, TimeSpan.FromSeconds(2)));
     }
 
     [Fact]
@@ -167,7 +215,43 @@ public sealed class BackgroundTaskManagerTests
     {
         var services = new ServiceCollection();
         foreach (var worker in workers) services.AddKeyedSingleton<IBackgroundTaskWorker>(worker.Kind, worker);
+        foreach (var kind in Enum.GetValues<BackgroundTaskKind>().Where(kind => workers.All(worker => worker.Kind != kind)))
+        {
+            services.AddKeyedSingleton<IBackgroundTaskWorker>(kind, new ImmediateWorker(kind));
+        }
         return new BackgroundTaskManager(services.BuildServiceProvider(), diagnostics);
+    }
+
+    private static async Task StartAndAssertConflictAsync(
+        BackgroundTaskManager manager,
+        BlockingWorker activeWorker,
+        BackgroundTaskKind activeKind,
+        BackgroundTaskKind requestedKind)
+    {
+        var active = await manager.StartAsync(activeKind, "active", null, new TaskRequest("active"));
+        await activeWorker.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var conflict = await Assert.ThrowsAsync<BackgroundTaskConflictException>(() =>
+            manager.StartAsync(requestedKind, "requested", null, new TaskRequest("requested")).AsTask());
+
+        Assert.Equal(requestedKind, conflict.RequestedKind);
+        Assert.Equal(activeKind, conflict.ActiveKind);
+        activeWorker.Release.TrySetResult();
+        Assert.True(await manager.WaitAsync(active.TaskId, TimeSpan.FromSeconds(2)));
+    }
+
+    private static void AssertPolicy(
+        BackgroundTaskKind kind,
+        BackgroundTaskLaneKind lane,
+        BackgroundTaskDuplicatePolicy duplicatePolicy,
+        IReadOnlyList<BackgroundTaskKind> conflicts)
+    {
+        var policy = BackgroundTaskPolicies.For(kind);
+
+        Assert.Equal(lane, policy.Lane);
+        Assert.Equal(1, policy.MaximumConcurrency);
+        Assert.Equal(duplicatePolicy, policy.DuplicatePolicy);
+        Assert.Equal(conflicts, policy.Conflicts);
     }
 
     private sealed record TaskRequest(string Value);

@@ -5,7 +5,8 @@ namespace PrintableBook.Desktop.BackgroundTasks;
 internal enum BackgroundTaskLaneKind
 {
     Library,
-    Processing
+    Processing,
+    Cleanup
 }
 
 internal enum BackgroundTaskDuplicatePolicy
@@ -17,15 +18,29 @@ internal enum BackgroundTaskDuplicatePolicy
 internal sealed record BackgroundTaskPolicy(
     BackgroundTaskLaneKind Lane,
     int MaximumConcurrency,
-    BackgroundTaskDuplicatePolicy DuplicatePolicy);
+    BackgroundTaskDuplicatePolicy DuplicatePolicy,
+    IReadOnlyList<BackgroundTaskKind> Conflicts);
 
 internal static class BackgroundTaskPolicies
 {
     private static readonly IReadOnlyDictionary<BackgroundTaskKind, BackgroundTaskPolicy> policies =
         new Dictionary<BackgroundTaskKind, BackgroundTaskPolicy>
         {
-            [BackgroundTaskKind.LibraryRefresh] = new(BackgroundTaskLaneKind.Library, 1, BackgroundTaskDuplicatePolicy.JoinByKind),
-            [BackgroundTaskKind.ProcessingSession] = new(BackgroundTaskLaneKind.Processing, 1, BackgroundTaskDuplicatePolicy.ReturnExisting)
+            [BackgroundTaskKind.LibraryRefresh] = new(
+                BackgroundTaskLaneKind.Library,
+                1,
+                BackgroundTaskDuplicatePolicy.JoinByKind,
+                [BackgroundTaskKind.CacheCleanup]),
+            [BackgroundTaskKind.ProcessingSession] = new(
+                BackgroundTaskLaneKind.Processing,
+                1,
+                BackgroundTaskDuplicatePolicy.ReturnExisting,
+                [BackgroundTaskKind.CacheCleanup]),
+            [BackgroundTaskKind.CacheCleanup] = new(
+                BackgroundTaskLaneKind.Cleanup,
+                1,
+                BackgroundTaskDuplicatePolicy.ReturnExisting,
+                [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession])
         };
 
     internal static IReadOnlyDictionary<BackgroundTaskKind, BackgroundTaskPolicy> All => policies;
