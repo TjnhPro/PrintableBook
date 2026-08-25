@@ -21,12 +21,9 @@ public partial class MainWindow : Window
     private bool closeFlowRunning;
     private bool systemShutdown;
 
-    private readonly IInterruptedProcessingRecoveryService interruptedRecoveryService;
-
-    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookAssetPreviewService assetPreviewService, ILocalOutputActionService outputActionService, IInterruptedProcessingRecoveryService interruptedRecoveryService, ProcessWindowShutdownCoordinator shutdownCoordinator)
+    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookAssetPreviewService assetPreviewService, ILocalOutputActionService outputActionService, ProcessWindowShutdownCoordinator shutdownCoordinator)
     {
         Application = application;
-        this.interruptedRecoveryService = interruptedRecoveryService;
         this.shutdownCoordinator = shutdownCoordinator;
         bridgeRouter = new WebViewBridgeRouter(applicationLoadCoordinator, settingsStore, processSessionService, rootDiscovery, brandSettingsStore, coverSelectionService, interiorFrameModeService, assetPreviewService, outputActionService);
         InitializeComponent();
@@ -57,7 +54,6 @@ public partial class MainWindow : Window
     {
         try
         {
-            await interruptedRecoveryService.RecoverAsync();
             await Browser.EnsureCoreWebView2Async();
             Browser.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
 
@@ -67,8 +63,8 @@ public partial class MainWindow : Window
         catch (Exception exception)
         {
             MessageBox.Show(
-                $"The application could not recover interrupted processing.\n\n{exception.Message}",
-                "Startup recovery failed",
+                $"The application UI could not start.\n\n{exception.Message}",
+                "Startup failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
