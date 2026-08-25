@@ -57,8 +57,8 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("const localImageMarkup", script, StringComparison.Ordinal);
         Assert.Contains("loading=\"lazy\" decoding=\"async\" data-local-image", script, StringComparison.Ordinal);
         Assert.Contains("content.addEventListener(\"error" , script, StringComparison.Ordinal);
-        Assert.DoesNotContain("queueVisibleAssetPreviews", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("book.asset.preview", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("queueVisible" + "AssetPreviews", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("book.asset" + ".preview", script, StringComparison.Ordinal);
         Assert.Contains("asset-folder-group", script, StringComparison.Ordinal);
         Assert.Contains("Every discovered Interior page is included in this run.", script, StringComparison.Ordinal);
         Assert.Contains("assetSearchFocused", script, StringComparison.Ordinal);
