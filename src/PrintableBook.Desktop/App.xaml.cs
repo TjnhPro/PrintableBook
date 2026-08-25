@@ -6,6 +6,7 @@ using PrintableBook.Desktop.Loading;
 using PrintableBook.Desktop.Diagnostics;
 using PrintableBook.Core.Application.Diagnostics;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace PrintableBook.Desktop;
 
@@ -25,6 +26,7 @@ public partial class App : Application
         services.AddSingleton<ProcessWindowShutdownCoordinator>();
         services.AddSingleton<UiDiagnosticsService>();
         services.AddSingleton<IOperationDiagnostics>(provider => provider.GetRequiredService<UiDiagnosticsService>());
+        services.AddSingleton(provider => new DispatcherStallMonitor(Dispatcher.CurrentDispatcher, provider.GetRequiredService<UiDiagnosticsService>()));
         services.AddSingleton<ApplicationLoadCoordinator>();
         services.AddSingleton<MainWindow>();
 

@@ -7,6 +7,7 @@ using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Desktop.Bridge;
 using PrintableBook.Desktop.Loading;
+using PrintableBook.Desktop.Diagnostics;
 using PrintableBook.Core.Application.Diagnostics;
 using System.Windows;
 
@@ -17,17 +18,20 @@ public partial class MainWindow : Window
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly WebViewBridgeRouter bridgeRouter;
     private readonly ProcessWindowShutdownCoordinator shutdownCoordinator;
+    private readonly DispatcherStallMonitor dispatcherStallMonitor;
     private readonly CancellationTokenSource closeFlowCancellation = new();
     private bool allowClose;
     private bool closeFlowRunning;
     private bool systemShutdown;
 
-    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookAssetPreviewService assetPreviewService, ILocalOutputActionService outputActionService, IOperationDiagnostics diagnostics, ProcessWindowShutdownCoordinator shutdownCoordinator)
+    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookAssetPreviewService assetPreviewService, ILocalOutputActionService outputActionService, IOperationDiagnostics diagnostics, DispatcherStallMonitor dispatcherStallMonitor, ProcessWindowShutdownCoordinator shutdownCoordinator)
     {
         Application = application;
         this.shutdownCoordinator = shutdownCoordinator;
+        this.dispatcherStallMonitor = dispatcherStallMonitor;
         bridgeRouter = new WebViewBridgeRouter(applicationLoadCoordinator, settingsStore, processSessionService, rootDiscovery, brandSettingsStore, coverSelectionService, interiorFrameModeService, assetPreviewService, outputActionService, diagnostics);
         InitializeComponent();
+        dispatcherStallMonitor.Start();
         Closing += OnClosing;
         Closed += OnClosed;
     }
@@ -135,6 +139,7 @@ public partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        dispatcherStallMonitor.Dispose();
         closeFlowCancellation.Dispose();
     }
 }

@@ -19,7 +19,7 @@ internal sealed record UiDiagnosticEvent(
     string? Subject,
     IReadOnlyList<string>? ActiveOperations = null);
 
-internal sealed class UiDiagnosticsService(Func<DateTimeOffset>? clock = null) : IOperationDiagnostics
+public sealed class UiDiagnosticsService(Func<DateTimeOffset>? clock = null) : IOperationDiagnostics
 {
     private const int MaximumEvents = 200;
     private static readonly TimeSpan SlowThreshold = TimeSpan.FromMilliseconds(250);
@@ -41,7 +41,7 @@ internal sealed class UiDiagnosticsService(Func<DateTimeOffset>? clock = null) :
         return new Scope(this, id);
     }
 
-    public void RecordDispatcherStall(TimeSpan duration)
+    internal void RecordDispatcherStall(TimeSpan duration)
     {
         if (duration < SlowThreshold) return;
         lock (sync)
@@ -50,7 +50,7 @@ internal sealed class UiDiagnosticsService(Func<DateTimeOffset>? clock = null) :
         }
     }
 
-    public IReadOnlyList<UiDiagnosticEvent> Snapshot()
+    internal IReadOnlyList<UiDiagnosticEvent> Snapshot()
     {
         lock (sync) return events.ToArray();
     }
