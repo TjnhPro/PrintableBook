@@ -201,6 +201,34 @@ public sealed class BackgroundTaskManagerTests
         preview.Release.TrySetResult();
     }
 
+    [Fact]
+    public async Task Cancel_and_dispose_are_safe_while_a_cancellation_callback_is_blocked()
+    {
+        var cancellationWorker = new BlockingCancellationWorker();
+        var processing = new BlockingWorker(BackgroundTaskKind.ProcessingSession);
+        var preview = new BlockingWorker(BackgroundTaskKind.AssetPreview);
+        var manager = CreateManager(cancellationWorker, processing, preview);
+        try
+        {
+            var task = await manager.StartAsync(BackgroundTaskKind.LibraryRefresh, "library", null, new TaskRequest("library"));
+            await cancellationWorker.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            var cancel = Task.Run(async () => await manager.CancelAsync(task.TaskId));
+            await cancellationWorker.CallbackEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            var dispose = Task.Run(manager.Dispose);
+
+            cancellationWorker.ReleaseCallback.TrySetResult();
+            await Task.WhenAll(cancel, dispose).WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.True(await manager.WaitAsync(task.TaskId, TimeSpan.FromSeconds(2)));
+            Assert.Equal(BackgroundTaskState.Cancelled, (await manager.GetAsync(task.TaskId))!.State);
+        }
+        finally
+        {
+            cancellationWorker.ReleaseCallback.TrySetResult();
+            manager.Dispose();
+        }
+    }
+
     private static BackgroundTaskManager CreateManager(params IBackgroundTaskWorker[] workers)
         => CreateManager(new NullDiagnostics(), workers);
 
@@ -253,6 +281,26 @@ public sealed class BackgroundTaskManagerTests
     {
         public override BackgroundTaskKind Kind => BackgroundTaskKind.LibraryRefresh;
         protected override ValueTask<string> ExecuteTypedAsync(TaskRequest request, IBackgroundTaskContext context, CancellationToken cancellationToken) => ValueTask.FromResult(request.Value);
+    }
+
+    private sealed class BlockingCancellationWorker : BackgroundTaskWorker<TaskRequest, string>
+    {
+        public override BackgroundTaskKind Kind => BackgroundTaskKind.LibraryRefresh;
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource CallbackEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseCallback { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override async ValueTask<string> ExecuteTypedAsync(TaskRequest request, IBackgroundTaskContext context, CancellationToken cancellationToken)
+        {
+            using var registration = cancellationToken.Register(() =>
+            {
+                CallbackEntered.TrySetResult();
+                ReleaseCallback.Task.GetAwaiter().GetResult();
+            });
+            Started.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return request.Value;
+        }
     }
 
     private sealed class ContextWorker : BackgroundTaskWorker<TaskRequest, string>
