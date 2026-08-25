@@ -153,8 +153,22 @@ internal sealed class WebViewBridgeRouter(
                     return new BridgeResponse(Version, request.Id, false, null, "invalid_asset_preview_request");
                 }
 
-                var preview = await bookAssetPreviewCoordinator.GetAsync(bookIdElement.GetString()!, sourceElement.GetString()!, cancellationToken);
-                return preview is null
+                return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await bookAssetPreviewCoordinator.StartAsync(bookIdElement.GetString()!, sourceElement.GetString()!, cancellationToken)));
+            }
+
+            if (request.Command == "book.asset.preview.result")
+            {
+                if (bookAssetPreviewCoordinator is null || request.Payload is not { } resultPayload ||
+                    !resultPayload.TryGetProperty("taskId", out var taskIdElement) || !TryParseTaskId(taskIdElement, out var taskId))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_task_id");
+                }
+                var task = await bookAssetPreviewCoordinator.GetTaskAsync(taskId, cancellationToken);
+                if (task is null || task.Kind != BackgroundTaskKind.AssetPreview || task.State != BackgroundTaskState.Completed)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "task_not_completed");
+                }
+                return !bookAssetPreviewCoordinator.TryGetResult(taskId, out var preview) || preview is null
                     ? new BridgeResponse(Version, request.Id, false, null, "asset_preview_not_found")
                     : BridgeResponse.Succeeded(request.Id, "book.asset.preview", preview);
             }
@@ -277,7 +291,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.asset.preview.get" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.asset.preview.get" or "book.asset.preview.result" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

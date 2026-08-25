@@ -3,6 +3,7 @@ using PrintableBook.Desktop.BackgroundTasks;
 using PrintableBook.Desktop.Loading;
 using PrintableBook.Core.Application.Diagnostics;
 using PrintableBook.Core.Application.BackgroundTasks;
+using PrintableBook.Core.Application.BackgroundTasks.Workers;
 using PrintableBook.Desktop.Diagnostics;
 using PrintableBook.Desktop.Preview;
 using PrintableBook.Core.Abstractions;
@@ -233,20 +234,30 @@ public sealed class BridgeMessageContractTests
     {
         var preview = new BookAssetPreview("Book One", "Book interior/page-001.png", 120, 120, "data:image/png;base64,preview");
         var service = new StubAssetPreviewService(preview);
-        var response = await new WebViewBridgeRouter(bookAssetPreviewCoordinator: CreatePreviewCoordinator(service))
+        var router = new WebViewBridgeRouter(bookAssetPreviewCoordinator: CreatePreviewCoordinator(service));
+        var response = await router
             .HandleAsync("""{"version":1,"id":"preview","command":"book.asset.preview.get","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png"}}""");
 
         Assert.True(response.Ok);
-        Assert.Equal("book.asset.preview", response.Command);
-        Assert.Same(preview, response.Payload);
+        Assert.Equal("background.task", response.Command);
+        var task = Assert.IsType<BackgroundTaskBridgeSnapshot>(response.Payload);
         Assert.Equal(("Book One", "Book interior/page-001.png"), service.LastRequest);
+
+        var result = await router
+            .HandleAsync($"{{\"version\":1,\"id\":\"preview-result\",\"command\":\"book.asset.preview.result\",\"payload\":{{\"taskId\":\"{task.TaskId}\"}}}}");
+
+        Assert.True(result.Ok);
+        Assert.Equal("book.asset.preview", result.Command);
+        Assert.Equal(preview, result.Payload);
     }
 
     [Fact]
     public async Task AssetPreviewRejectsMissingOrUnknownAssets()
     {
-        var response = await new WebViewBridgeRouter(bookAssetPreviewCoordinator: CreatePreviewCoordinator(new StubAssetPreviewService(null)))
-            .HandleAsync("""{"version":1,"id":"preview-missing","command":"book.asset.preview.get","payload":{"bookId":"Book One","sourceReference":"outside.png"}}""");
+        var router = new WebViewBridgeRouter(bookAssetPreviewCoordinator: CreatePreviewCoordinator(new StubAssetPreviewService(null)));
+        var accepted = await router.HandleAsync("""{"version":1,"id":"preview-missing","command":"book.asset.preview.get","payload":{"bookId":"Book One","sourceReference":"outside.png"}}""");
+        var task = Assert.IsType<BackgroundTaskBridgeSnapshot>(accepted.Payload);
+        var response = await router.HandleAsync($"{{\"version\":1,\"id\":\"preview-missing-result\",\"command\":\"book.asset.preview.result\",\"payload\":{{\"taskId\":\"{task.TaskId}\"}}}}");
 
         Assert.False(response.Ok);
         Assert.Equal("asset_preview_not_found", response.Error);
@@ -364,7 +375,45 @@ public sealed class BridgeMessageContractTests
     }
 
     private static BookAssetPreviewCoordinator CreatePreviewCoordinator(IBookAssetPreviewService previews) =>
-        new(previews, new NoOpOperationDiagnostics());
+        new(new PreviewTaskManager(previews));
+
+    private sealed class PreviewTaskManager(IBookAssetPreviewService previews) : IBackgroundTaskManager
+    {
+        private readonly Dictionary<BackgroundTaskId, BookAssetPreview?> results = [];
+        private readonly Dictionary<BackgroundTaskId, BackgroundTaskSnapshot> tasks = [];
+
+        public ValueTask<BackgroundTaskSnapshot> StartAsync<TRequest>(BackgroundTaskKind kind, string key, string? subject, TRequest request, object? initialView = null, CancellationToken cancellationToken = default)
+        {
+            var existing = tasks.Values.FirstOrDefault(task => task.Key == key);
+            if (existing is not null) return ValueTask.FromResult(existing);
+            var id = new BackgroundTaskId($"task-preview-{tasks.Count}");
+            try
+            {
+                var asset = (AssetPreviewRequest)(object)request!;
+                results[id] = previews.GetAsync(asset.BookId, asset.SourceReference, cancellationToken).AsTask().GetAwaiter().GetResult();
+                tasks[id] = Complete(id, key, subject);
+            }
+            catch (Exception exception)
+            {
+                tasks[id] = Fail(id, key, subject, exception);
+            }
+            return ValueTask.FromResult(tasks[id]);
+        }
+
+        public ValueTask<BackgroundTaskSnapshot?> GetAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) => ValueTask.FromResult(tasks.GetValueOrDefault(taskId));
+        public ValueTask<IReadOnlyList<BackgroundTaskSnapshot>> ListAsync(BackgroundTaskKind? kind = null, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<BackgroundTaskSnapshot>>(tasks.Values.ToArray());
+        public ValueTask<BackgroundTaskSnapshot?> CancelAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) => GetAsync(taskId, cancellationToken);
+        public ValueTask<bool> WaitAsync(BackgroundTaskId taskId, TimeSpan timeout, CancellationToken cancellationToken = default) => ValueTask.FromResult(tasks.ContainsKey(taskId));
+        public bool TryGetResult<TResult>(BackgroundTaskId taskId, out TResult? result)
+        {
+            if (results.TryGetValue(taskId, out var value) && value is TResult typed) { result = typed; return true; }
+            result = default;
+            return false;
+        }
+        public bool TryGetView<TView>(BackgroundTaskId taskId, out TView? view) where TView : class { view = null; return false; }
+        private static BackgroundTaskSnapshot Complete(BackgroundTaskId id, string key, string? subject) => new(id, BackgroundTaskKind.AssetPreview, BackgroundTaskState.Completed, key, subject, null, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null, null);
+        private static BackgroundTaskSnapshot Fail(BackgroundTaskId id, string key, string? subject, Exception exception) => new(id, BackgroundTaskKind.AssetPreview, BackgroundTaskState.Failed, key, subject, null, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "preview_failed", exception.Message);
+    }
 
     private sealed class NoopRecoveryService : IInterruptedProcessingRecoveryService
     {
