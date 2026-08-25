@@ -269,6 +269,53 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessBookAsync_keeps_a_concrete_shuffle_seed_when_active_pages_change_or_a_legacy_map_is_upgraded()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "StableShuffleSeedBook"));
+        await CreateInteriorOnlyBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(), shuffleStore,
+            CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new MagickPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+        var command = CreateCommand("stable-shuffle-seed-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly, ShuffleSeed = null };
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+
+        Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
+        var initial = (await shuffleStore.LoadAsync(workspace))!;
+        Assert.NotNull(initial.Seed);
+
+        await shuffleStore.SaveAsync(workspace, initial with { Seed = null });
+        Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
+        var legacyUpgraded = (await shuffleStore.LoadAsync(workspace))!;
+        Assert.NotNull(legacyUpgraded.Seed);
+        Assert.Equal(initial.Entries, legacyUpgraded.Entries);
+
+        var secondSource = new FileReference(Path.Combine(bookDirectory.Value, "Book interior", "page-02.png"));
+        var state = (await stateStore.LoadAsync(workspace))!;
+        await stateStore.SaveAsync(workspace, state.SetInteriorActive(InteriorSourceKey.FromBookRoot(bookDirectory, secondSource), false));
+        Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
+        var reduced = (await shuffleStore.LoadAsync(workspace))!;
+        Assert.Equal(legacyUpgraded.Seed, reduced.Seed);
+        Assert.Single(reduced.Entries);
+
+        state = (await stateStore.LoadAsync(workspace))!;
+        await stateStore.SaveAsync(workspace, state.SetInteriorActive(InteriorSourceKey.FromBookRoot(bookDirectory, secondSource), true));
+        Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
+        var restored = (await shuffleStore.LoadAsync(workspace))!;
+        Assert.Equal(legacyUpgraded.Seed, restored.Seed);
+        var sources = new[]
+        {
+            new FileReference(Path.Combine(bookDirectory.Value, "Book interior", "page-01.png")),
+            secondSource
+        };
+        Assert.Equal(InteriorShuffleIndexGenerator.Generate(sources, restored.Seed).Entries, restored.Entries);
+    }
+
+    [Fact]
     public async Task ProcessBookAsync_persists_the_active_interior_step_while_the_page_pipeline_is_running()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "InterruptedBook"));

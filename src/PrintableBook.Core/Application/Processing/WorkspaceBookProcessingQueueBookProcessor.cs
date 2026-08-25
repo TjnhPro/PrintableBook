@@ -103,9 +103,18 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
 
             state = await BeginStepAsync(state, "shuffle", cancellationToken);
             var shuffleMap = await shuffleStore.LoadAsync(workspace, cancellationToken);
-            if (!IsCompatible(shuffleMap, pageResults, command.ShuffleSeed))
+            if (HasCompatiblePageSet(shuffleMap, pageResults) && command.ShuffleSeed is null)
             {
-                shuffleMap = InteriorShuffleIndexGenerator.Generate(pageResults.Select(page => page.Source).ToArray(), command.ShuffleSeed);
+                if (shuffleMap!.Seed is null)
+                {
+                    shuffleMap = shuffleMap with { Seed = Random.Shared.Next() };
+                    await shuffleStore.SaveAsync(workspace, shuffleMap, cancellationToken);
+                }
+            }
+            else if (!HasCompatiblePageSet(shuffleMap, pageResults) || command.ShuffleSeed != shuffleMap!.Seed)
+            {
+                var effectiveSeed = command.ShuffleSeed ?? shuffleMap?.Seed ?? Random.Shared.Next();
+                shuffleMap = InteriorShuffleIndexGenerator.Generate(pageResults.Select(page => page.Source).ToArray(), effectiveSeed);
                 await shuffleStore.SaveAsync(workspace, shuffleMap, cancellationToken);
             }
 
@@ -224,11 +233,10 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         }
     }
 
-    private static bool IsCompatible(InteriorShuffleMap? shuffleMap, IReadOnlyList<InteriorPageProcessingResult> pageResults, int? seed) =>
+    private static bool HasCompatiblePageSet(InteriorShuffleMap? shuffleMap, IReadOnlyList<InteriorPageProcessingResult> pageResults) =>
         shuffleMap is not null &&
-        shuffleMap.Seed == seed &&
-        shuffleMap.Entries.Select(entry => entry.Page).OrderBy(page => page.Value)
-            .SequenceEqual(pageResults.Select(page => page.Source).OrderBy(page => page.Value));
+        shuffleMap.Entries.Select(entry => entry.Page.Value).OrderBy(page => page, StringComparer.OrdinalIgnoreCase)
+            .SequenceEqual(pageResults.Select(page => page.Source.Value).OrderBy(page => page, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
 
     private static string CreateConfigurationFingerprint(PrintableBookProcessingCommand command) =>
         string.Join("|", command.PreparedArtworkSize.Width, command.PreparedArtworkSize.Height,
