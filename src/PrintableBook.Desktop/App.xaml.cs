@@ -5,6 +5,7 @@ using PrintableBook.Infrastructure.DependencyInjection;
 using PrintableBook.Desktop.Loading;
 using PrintableBook.Desktop.Diagnostics;
 using PrintableBook.Core.Application.Diagnostics;
+using PrintableBook.Desktop.Preview;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -27,6 +28,7 @@ public partial class App : Application
         services.AddSingleton<UiDiagnosticsService>();
         services.AddSingleton<IOperationDiagnostics>(provider => provider.GetRequiredService<UiDiagnosticsService>());
         services.AddSingleton(provider => new DispatcherStallMonitor(Dispatcher.CurrentDispatcher, provider.GetRequiredService<UiDiagnosticsService>()));
+        services.AddSingleton<BookAssetPreviewCoordinator>();
         services.AddSingleton<ApplicationLoadCoordinator>();
         services.AddSingleton<MainWindow>();
 
