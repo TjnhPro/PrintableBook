@@ -104,7 +104,7 @@
   const localImageMarkup = (asset, alt, fallback = "Preview unavailable") => {
     const url = valueFor(asset, "localImageUrl", "");
     return url
-      ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async" data-local-image data-image-fallback="${escapeHtml(fallback)}">`
+      ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="256" height="256" loading="lazy" decoding="async" data-local-image data-image-fallback="${escapeHtml(fallback)}">`
       : `<span class="book-preview-fallback" aria-label="${escapeHtml(fallback)}">${escapeHtml(fallback)}</span>`;
   };
   const assetDimensions = (asset) => {

@@ -73,6 +73,45 @@ public sealed class BackgroundTaskManagerTests
     }
 
     [Fact]
+    public async Task Worker_execution_isolated_from_the_callers_synchronization_context()
+    {
+        var worker = new ContextWorker();
+        using var manager = CreateManager(worker, new ImmediateWorker(BackgroundTaskKind.ProcessingSession));
+        var previous = SynchronizationContext.Current;
+        var marker = new MarkerSynchronizationContext();
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(marker);
+            var task = await manager.StartAsync(BackgroundTaskKind.LibraryRefresh, "library", null, new TaskRequest("library"));
+            await worker.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.NotSame(marker, worker.ExecutionContext);
+            worker.Release.TrySetResult();
+            Assert.True(await manager.WaitAsync(task.TaskId, TimeSpan.FromSeconds(2)));
+        }
+        finally
+        {
+            worker.Release.TrySetResult();
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
+    [Fact]
+    public async Task Lifecycle_diagnostics_remain_ordered_for_retained_task_kinds()
+    {
+        var diagnostics = new RecordingDiagnostics();
+        using var manager = CreateManager(diagnostics, new ImmediateWorker(BackgroundTaskKind.LibraryRefresh), new ImmediateWorker(BackgroundTaskKind.ProcessingSession));
+
+        var library = await manager.StartAsync(BackgroundTaskKind.LibraryRefresh, "library", "Library", new TaskRequest("library"));
+        var processing = await manager.StartAsync(BackgroundTaskKind.ProcessingSession, "processing", "Processing", new TaskRequest("processing"));
+
+        Assert.True(await manager.WaitAsync(library.TaskId, TimeSpan.FromSeconds(2)));
+        Assert.True(await manager.WaitAsync(processing.TaskId, TimeSpan.FromSeconds(2)));
+        Assert.Equal(["task.queued", "task.started", "task.completed"], diagnostics.EventsFor("Library"));
+        Assert.Equal(["task.queued", "task.started", "task.completed"], diagnostics.EventsFor("Processing"));
+    }
+
+    [Fact]
     public async Task Cancellation_and_disposal_do_not_block_on_a_worker_callback()
     {
         var worker = new BlockingCancellationWorker();
@@ -105,22 +144,30 @@ public sealed class BackgroundTaskManagerTests
     {
         using var manager = CreateManager(new ImmediateWorker(BackgroundTaskKind.LibraryRefresh), new ImmediateWorker(BackgroundTaskKind.ProcessingSession));
 
-        for (var index = 0; index < 3; index++)
+        var processing = await manager.StartAsync(BackgroundTaskKind.ProcessingSession, "processing", null, new TaskRequest("processing"));
+        Assert.True(await manager.WaitAsync(processing.TaskId, TimeSpan.FromSeconds(2)));
+        BackgroundTaskSnapshot? lastLibrary = null;
+        for (var index = 0; index < 120; index++)
         {
             var task = await manager.StartAsync(BackgroundTaskKind.LibraryRefresh, $"library-{index}", null, new TaskRequest($"library-{index}"));
             Assert.True(await manager.WaitAsync(task.TaskId, TimeSpan.FromSeconds(2)));
+            lastLibrary = task;
         }
 
-        var history = await manager.ListAsync(BackgroundTaskKind.LibraryRefresh);
-        Assert.Equal(3, history.Count);
-        Assert.All(history, task => Assert.Equal(BackgroundTaskState.Completed, task.State));
+        var history = await manager.ListAsync();
+        Assert.InRange(history.Count, 2, 101);
+        Assert.Contains(history, task => task.TaskId == processing.TaskId && task.State == BackgroundTaskState.Completed);
+        Assert.Contains(history, task => task.TaskId == lastLibrary!.TaskId && task.State == BackgroundTaskState.Completed);
     }
 
     private static BackgroundTaskManager CreateManager(params IBackgroundTaskWorker[] workers)
+        => CreateManager(new NullDiagnostics(), workers);
+
+    private static BackgroundTaskManager CreateManager(IOperationDiagnostics diagnostics, params IBackgroundTaskWorker[] workers)
     {
         var services = new ServiceCollection();
         foreach (var worker in workers) services.AddKeyedSingleton<IBackgroundTaskWorker>(worker.Kind, worker);
-        return new BackgroundTaskManager(services.BuildServiceProvider(), new NullDiagnostics());
+        return new BackgroundTaskManager(services.BuildServiceProvider(), diagnostics);
     }
 
     private sealed record TaskRequest(string Value);
@@ -182,10 +229,37 @@ public sealed class BackgroundTaskManagerTests
         }
     }
 
+    private sealed class ContextWorker : BackgroundTaskWorker<TaskRequest, string>
+    {
+        public override BackgroundTaskKind Kind => BackgroundTaskKind.LibraryRefresh;
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public SynchronizationContext? ExecutionContext { get; private set; }
+
+        protected override async ValueTask<string> ExecuteTypedAsync(TaskRequest request, IBackgroundTaskContext context, CancellationToken cancellationToken)
+        {
+            ExecutionContext = SynchronizationContext.Current;
+            Started.TrySetResult();
+            await Release.Task.WaitAsync(cancellationToken);
+            return request.Value;
+        }
+    }
+
+    private sealed class MarkerSynchronizationContext : SynchronizationContext;
+
     private sealed class NullDiagnostics : IOperationDiagnostics
     {
         public IDisposable Begin(string operation, string? subject = null) => new Scope();
         public void Record(string operation, string? subject = null, string? detail = null) { }
+        private sealed class Scope : IDisposable { public void Dispose() { } }
+    }
+
+    private sealed class RecordingDiagnostics : IOperationDiagnostics
+    {
+        private readonly List<(string Operation, string? Subject)> events = [];
+        public IDisposable Begin(string operation, string? subject = null) => new Scope();
+        public void Record(string operation, string? subject = null, string? detail = null) => events.Add((operation, subject));
+        public IReadOnlyList<string> EventsFor(string subject) => events.Where(entry => entry.Subject == subject).Select(entry => entry.Operation).ToArray();
         private sealed class Scope : IDisposable { public void Dispose() { } }
     }
 }

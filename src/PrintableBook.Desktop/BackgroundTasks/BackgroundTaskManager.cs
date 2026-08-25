@@ -30,7 +30,7 @@ public sealed class BackgroundTaskManager(
         {
             ThrowIfDisposed();
             var policy = BackgroundTaskPolicies.For(kind);
-            var duplicate = FindActiveDuplicateLocked(kind, key, policy.DuplicatePolicy);
+            var duplicate = FindActiveDuplicateLocked(kind, policy.DuplicatePolicy);
             if (duplicate is not null) return ValueTask.FromResult(SnapshotLocked(duplicate));
 
             entry = new BackgroundTaskEntry
@@ -351,9 +351,12 @@ public sealed class BackgroundTaskManager(
         }
     }
 
-    private BackgroundTaskEntry? FindActiveDuplicateLocked(BackgroundTaskKind kind, string key, BackgroundTaskDuplicatePolicy policy) => registry.Values.FirstOrDefault(entry =>
-        entry.Kind == kind && !IsTerminal(entry.State) &&
-        (policy is BackgroundTaskDuplicatePolicy.JoinByKind or BackgroundTaskDuplicatePolicy.ReturnExisting || entry.Key == key));
+    private BackgroundTaskEntry? FindActiveDuplicateLocked(BackgroundTaskKind kind, BackgroundTaskDuplicatePolicy policy) => policy switch
+    {
+        BackgroundTaskDuplicatePolicy.JoinByKind or BackgroundTaskDuplicatePolicy.ReturnExisting => registry.Values.FirstOrDefault(entry =>
+            entry.Kind == kind && !IsTerminal(entry.State)),
+        _ => throw new ArgumentOutOfRangeException(nameof(policy), policy, "Unsupported background task duplicate policy.")
+    };
 
     private BackgroundTaskSnapshot? GetSnapshot(BackgroundTaskId taskId)
     {

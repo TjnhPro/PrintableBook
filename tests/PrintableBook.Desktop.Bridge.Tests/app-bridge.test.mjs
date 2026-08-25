@@ -364,16 +364,23 @@ test("book detail renders frame mode truth and sends per-image overrides through
   assert.match(content.innerHTML, /option value="enabled" selected/);
 });
 
-test("asset workspace renders local image URLs directly and replaces failed images with a local fallback", () => {
+test("Books render direct Cover and Interior local image URLs and replace a failed image locally", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-asset", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
-    bookSummaries: [{ bookId: { value: "Book 001" }, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [{ sourceReference: "Book interior/page-001.png", localImageUrl: "file:///D:/Printable%20Book/B%E1%BB%99%20s%C3%A1ch%20%231%20%25/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto" }] }]
+    bookSummaries: [{ bookId: { value: "Book 001" }, representativeCoverReference: "Book cover/cover.png", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [
+      { sourceReference: "Book cover/cover.png", localImageUrl: "file:///D:/Printable%20Book/Cover%20%231%20%25.png", relativePath: "Book cover/cover.png", fileName: "cover.png", folder: "Book cover", kind: "Cover", width: 2550, height: 2550, frameMode: "auto" },
+      { sourceReference: "Book interior/page-001.png", localImageUrl: "file:///D:/Printable%20Book/B%E1%BB%99%20s%C3%A1ch%20%231%20%25/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto" }
+    ] }]
   } } });
+
+  assert.match(content.innerHTML, /src="file:\/\/\/D:\/Printable%20Book\/Cover%20%231%20%25\.png"/);
+  assert.match(content.innerHTML, /width="256" height="256" loading="lazy" decoding="async" data-local-image/);
 
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
+  assert.match(content.innerHTML, /src="file:\/\/\/D:\/Printable%20Book\/Cover%20%231%20%25\.png"/);
   const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
   contentListeners.click({ target: assetsTab });
   assert.match(content.innerHTML, /Interior assets/);
@@ -386,6 +393,14 @@ test("asset workspace renders local image URLs directly and replaces failed imag
   contentListeners.error({ target: { matches: (selector) => selector === "img[data-local-image]", dataset: { imageFallback: "Image unavailable" }, replaceWith: (replacement) => { fallback = replacement; } } });
   assert.equal(fallback.className, "book-preview-fallback");
   assert.equal(fallback.textContent, "Image unavailable");
+});
+
+test("frontend source contains no removed asset-preview bridge protocol", () => {
+  const script = readFileSync(appScriptPath, "utf8");
+
+  for (const removedProtocol of ["asset.preview.request", "asset.preview.get", "asset.preview.result", "asset.preview.error"]) {
+    assert.equal(script.includes(removedProtocol), false, `Removed protocol remains: ${removedProtocol}`);
+  }
 });
 
 test("validation limits Book detail to Interior preflight while cover work is deferred", () => {

@@ -19,6 +19,8 @@ The manager retains RAM-only task snapshots, typed result/view objects, cancella
 
 Book cover and Interior image display is intentionally outside this task runtime. A LibraryRefresh supplies each discovered asset with a canonical local `file://` URL; WebView2 loads and caches that URL directly with native lazy image loading. This avoids generating thumbnails, Base64 payloads, task polling, and retained preview results.
 
+Keep this delivery path deliberately simple: do not reintroduce thumbnail processing, bridge transfer, UI image caching, or background scheduling for local artwork display unless profiling demonstrates a concrete need.
+
 New worker kinds require an independent user-visible start/cancel/observe lifecycle. Do not introduce arbitrary bridge delegates or a separate PDF worker merely to move an internal processing step.
 
 ## Bridge command audit

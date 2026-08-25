@@ -55,7 +55,7 @@ public sealed class BookWorkspaceLayoutContractTests
         var layout = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css"));
 
         Assert.Contains("const localImageMarkup", script, StringComparison.Ordinal);
-        Assert.Contains("loading=\"lazy\" decoding=\"async\" data-local-image", script, StringComparison.Ordinal);
+        Assert.Contains("width=\"256\" height=\"256\" loading=\"lazy\" decoding=\"async\" data-local-image", script, StringComparison.Ordinal);
         Assert.Contains("content.addEventListener(\"error" , script, StringComparison.Ordinal);
         Assert.DoesNotContain("queueVisible" + "AssetPreviews", script, StringComparison.Ordinal);
         Assert.DoesNotContain("book.asset" + ".preview", script, StringComparison.Ordinal);

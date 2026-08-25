@@ -21,6 +21,7 @@ const expected = [
   ,"global-process-status"
   ,"localImageUrl"
   ,"data-local-image"
+  ,"width=\"256\" height=\"256\""
   ,"decoding=\"async\""
   ,"Interior assets"
   ,"Every discovered Interior page is included in this run"
