@@ -120,6 +120,18 @@ test("snapshot rendering opens the Book Library and keeps discovery and brand da
   assert.doesNotMatch(content.innerHTML, /Paths \(Read Only\)/);
 });
 
+test("Books display the total local folder size with the Interior page count", () => {
+  const { messageHandler, content } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "book-size", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{ bookId: { value: "Book 001" }, interiorSourcePageCount: 22, folderSizeBytes: 1610612736, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [] }]
+  } } });
+
+  assert.match(content.innerHTML, /22 Interior pages · 1\.5 GB/);
+  assert.match(readFileSync(appScriptPath, "utf8"), /Math\.round\(value \/ 1024\)/);
+});
+
 test("startup shows a loading library view while the first application refresh is pending", () => {
   const { content, messages } = loadBridge();
 

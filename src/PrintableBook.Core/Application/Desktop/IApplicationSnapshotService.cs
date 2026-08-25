@@ -5,6 +5,7 @@ using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Diagnostics;
+using PrintableBook.Core.Application.Storage;
 
 namespace PrintableBook.Core.Application.Desktop;
 
@@ -20,7 +21,7 @@ public interface ILocalOutputActionService
     ValueTask RevealAsync(FileReference file, CancellationToken cancellationToken = default);
     ValueTask CopyPathAsync(FileReference file, CancellationToken cancellationToken = default);
 }
-public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null);
+public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, long FolderSizeBytes = 0);
 public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt);
 
 public interface IApplicationSnapshotService
@@ -39,6 +40,7 @@ public sealed class ApplicationSnapshotService(
     IBookSourceScanner sourceScanner,
     IBookWorkspaceStateStore stateStore,
     IFileSystem fileSystem,
+    IBookStorageMaintenance storageMaintenance,
     IImageInspector? imageInspector = null,
     IPdfDocumentInspector? pdfDocumentInspector = null,
     IOperationDiagnostics? diagnostics = null) : IApplicationSnapshotService
@@ -131,6 +133,7 @@ public sealed class ApplicationSnapshotService(
                 .Select(asset => new InteriorSourcePageSummary(asset.Reference, state.GetInteriorFrameMode(InteriorSourceKey.FromBookRoot(book.Directory, new FileReference(asset.Reference)))))
                 .ToArray() ?? [];
             var assetSummaries = await DescribeAssetsAsync(book, scan.Source, state, cancellationToken);
+            var folderSizeBytes = await storageMaintenance.GetBookSizeBytesAsync(book.Directory, cancellationToken);
             summaries.Add(new BookDesktopSummary(
                 book.Id,
                 isReady ? "Ready" : scan.IsSuccess ? "Needs selection" : "Invalid",
@@ -150,7 +153,8 @@ public sealed class ApplicationSnapshotService(
                 assetSummaries,
                 fullBookChecks,
                 await DescribeOutputsAsync(book.Id, state.PublishedArtifactReferences ?? [], cancellationToken),
-                FindRepresentativeCoverReference(book, scan.Source, state.SelectedCoverReference)));
+                FindRepresentativeCoverReference(book, scan.Source, state.SelectedCoverReference),
+                FolderSizeBytes: folderSizeBytes));
         }
 
         return new ApplicationSnapshot(discoverySnapshot, settings, summaries, DateTimeOffset.UtcNow);

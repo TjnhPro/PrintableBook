@@ -3,6 +3,7 @@ using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Scanning;
 using PrintableBook.Core.Application.Diagnostics;
+using PrintableBook.Core.Application.Storage;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 
@@ -15,7 +16,7 @@ public sealed class ApplicationSnapshotServiceTests
     {
         var discovery = new StubDiscovery();
         var settings = new StubSettingsStore();
-        var snapshot = await new ApplicationSnapshotService(discovery, settings, new StubScanner(), new StubStateStore(), new StubFileSystem()).RefreshAsync();
+        var snapshot = await new ApplicationSnapshotService(discovery, settings, new StubScanner(), new StubStateStore(), new StubFileSystem(), new StubBookStorageMaintenance(0)).RefreshAsync();
 
         Assert.Equal("Brand A", Assert.Single(snapshot.Discovery.Brands).Name);
         Assert.Equal("Book A", Assert.Single(snapshot.Discovery.Books).Name);
@@ -28,7 +29,7 @@ public sealed class ApplicationSnapshotServiceTests
     [Fact]
     public async Task RefreshAsync_allows_multiple_cover_candidates_for_interior_only_processing()
     {
-        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new MultipleCoverScanner(), new StubStateStore(), new StubFileSystem()).RefreshAsync();
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new MultipleCoverScanner(), new StubStateStore(), new StubFileSystem(), new StubBookStorageMaintenance(0)).RefreshAsync();
 
         var summary = Assert.Single(snapshot.BookSummaries);
         Assert.Equal("Ready", summary.ValidationStatus);
@@ -39,7 +40,7 @@ public sealed class ApplicationSnapshotServiceTests
     [Fact]
     public async Task RefreshAsync_marks_an_interior_only_book_ready_and_reports_missing_cover_as_a_warning()
     {
-        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new InteriorOnlyScanner(), new StubStateStore(), new StubFileSystem()).RefreshAsync();
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new InteriorOnlyScanner(), new StubStateStore(), new StubFileSystem(), new StubBookStorageMaintenance(0)).RefreshAsync();
 
         var summary = Assert.Single(snapshot.BookSummaries);
         Assert.Equal("Ready", summary.ValidationStatus);
@@ -50,7 +51,7 @@ public sealed class ApplicationSnapshotServiceTests
     [Fact]
     public async Task RefreshAsync_requires_an_explicit_cover_selection_for_full_book_validation_when_multiple_covers_exist()
     {
-        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new MultipleCoverScanner(), new StubStateStore(), new StubFileSystem()).RefreshAsync();
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new MultipleCoverScanner(), new StubStateStore(), new StubFileSystem(), new StubBookStorageMaintenance(0)).RefreshAsync();
 
         var summary = Assert.Single(snapshot.BookSummaries);
         Assert.Contains(summary.FullBookValidationChecks!, check => check.Code == "book.cover_selection_required" && !check.IsSuccess);
@@ -59,7 +60,7 @@ public sealed class ApplicationSnapshotServiceTests
     [Fact]
     public async Task RefreshAsync_exposes_only_a_book_cover_asset_as_the_representative_preview()
     {
-        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new BookCoverScanner(), new StubStateStore(), new StubFileSystem()).RefreshAsync();
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new BookCoverScanner(), new StubStateStore(), new StubFileSystem(), new StubBookStorageMaintenance(0)).RefreshAsync();
 
         Assert.EndsWith(Path.Combine("Book cover", "cover.png"), Assert.Single(snapshot.BookSummaries).RepresentativeCoverReference, StringComparison.Ordinal);
     }
@@ -73,7 +74,8 @@ public sealed class ApplicationSnapshotServiceTests
             new StubSettingsStore(),
             new DirectReferenceScanner(sourceReference),
             new StubStateStore(),
-            new StubFileSystem()).RefreshAsync();
+            new StubFileSystem(),
+            new StubBookStorageMaintenance(0)).RefreshAsync();
 
         var asset = Assert.Single(Assert.Single(snapshot.BookSummaries).Assets!);
 
@@ -85,7 +87,7 @@ public sealed class ApplicationSnapshotServiceTests
     [Fact]
     public async Task RefreshAsync_uses_an_available_cover_folder_asset_when_book_cover_is_not_present()
     {
-        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new CoverFolderScanner(), new StubStateStore(), new StubFileSystem()).RefreshAsync();
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new CoverFolderScanner(), new StubStateStore(), new StubFileSystem(), new StubBookStorageMaintenance(0)).RefreshAsync();
 
         Assert.EndsWith(Path.Combine("Cover", "cover.png"), Assert.Single(snapshot.BookSummaries).RepresentativeCoverReference, StringComparison.Ordinal);
     }
@@ -93,7 +95,7 @@ public sealed class ApplicationSnapshotServiceTests
     [Fact]
     public async Task RefreshAsync_prefers_the_cover_explicitly_selected_by_the_user_for_the_representative_preview()
     {
-        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new MultipleCoverScanner(), new StubStateStore("cover-b.png"), new StubFileSystem()).RefreshAsync();
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new MultipleCoverScanner(), new StubStateStore("cover-b.png"), new StubFileSystem(), new StubBookStorageMaintenance(0)).RefreshAsync();
 
         Assert.Equal("cover-b.png", Assert.Single(snapshot.BookSummaries).RepresentativeCoverReference);
     }
@@ -102,11 +104,21 @@ public sealed class ApplicationSnapshotServiceTests
     public async Task RefreshAsync_opens_sanitized_snapshot_operation_scopes()
     {
         var diagnostics = new RecordingDiagnostics();
-        await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new StubScanner(), new StubStateStore(), new StubFileSystem(), diagnostics: diagnostics).RefreshAsync();
+        await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new StubScanner(), new StubStateStore(), new StubFileSystem(), new StubBookStorageMaintenance(0), diagnostics: diagnostics).RefreshAsync();
 
         Assert.Contains(("snapshot.refresh", null), diagnostics.Operations);
         Assert.Contains(("discovery", null), diagnostics.Operations);
         Assert.Contains(("book.scan", "Book A"), diagnostics.Operations);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_includes_total_book_folder_size()
+    {
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(), new StubSettingsStore(), new StubScanner(), new StubStateStore(), new StubFileSystem(),
+            new StubBookStorageMaintenance(1_610_612_736)).RefreshAsync();
+
+        Assert.Equal(1_610_612_736, Assert.Single(snapshot.BookSummaries).FolderSizeBytes);
     }
 
     private sealed class StubDiscovery : IApplicationRootDiscovery
@@ -225,5 +237,11 @@ public sealed class ApplicationSnapshotServiceTests
         public ValueTask MoveFileAsync(FileReference source, FileReference destination, bool overwrite, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask DeleteFileAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask DeleteDirectoryAsync(DirectoryReference directory, bool recursive, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    }
+
+    private sealed class StubBookStorageMaintenance(long sizeBytes) : IBookStorageMaintenance
+    {
+        public ValueTask<long> GetBookSizeBytesAsync(DirectoryReference bookDirectory, CancellationToken cancellationToken = default) => ValueTask.FromResult(sizeBytes);
+        public ValueTask<long> ClearHeavyProcessingCacheAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) => ValueTask.FromResult(0L);
     }
 }
