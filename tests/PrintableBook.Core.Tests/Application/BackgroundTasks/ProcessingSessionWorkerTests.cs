@@ -120,6 +120,23 @@ public sealed class ProcessingSessionWorkerTests
         Assert.Equal(new FileReference(Path.Combine("brand", "background.png")), Assert.Single(application.Request!.Books).BackgroundPage);
     }
 
+    [Fact]
+    public async Task Mixed_queue_passes_one_validated_background_only_to_books_that_enable_it()
+    {
+        var application = new Application();
+        var files = new FileSystem(true);
+        var inspector = new ImageInspector();
+        IBackgroundTaskWorker worker = new ProcessingSessionWorker(new Provider(MixedSnapshot()), application, new FrameResolver(), files, inspector);
+
+        await worker.ExecuteAsync(new ProcessingSessionWorkerRequest(["book-one", "book-two"], "Brand", BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow), new Context(), CancellationToken.None);
+
+        Assert.Equal(1, files.Calls);
+        Assert.Equal(1, inspector.Calls);
+        Assert.Collection(application.Request!.Books,
+            first => Assert.Equal(new FileReference(Path.Combine("brand", "background.png")), first.BackgroundPage),
+            second => Assert.Null(second.BackgroundPage));
+    }
+
     private static ApplicationSnapshot Snapshot(bool hasBackground = false, GlobalSettings? settings = null)
     {
         var bookId = new BookId("book-one");
@@ -129,6 +146,22 @@ public sealed class ProcessingSessionWorkerTests
             new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [new DiscoveredBrand("Brand", new DirectoryReference("brand"))], [book]),
             settings ?? GlobalSettings.Default,
             [new BookDesktopSummary(bookId, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1, HasBackground: hasBackground)],
+            DateTimeOffset.UtcNow);
+    }
+
+    private static ApplicationSnapshot MixedSnapshot()
+    {
+        var bookOneId = new BookId("book-one");
+        var bookTwoId = new BookId("book-two");
+        var bookOne = new DiscoveredBook("Book One", bookOneId, new DirectoryReference("book-one"), new BookWorkspace(bookOneId, new DirectoryReference("workspace-one"), new DirectoryReference("processed-one"), new DirectoryReference("temp-one")));
+        var bookTwo = new DiscoveredBook("Book Two", bookTwoId, new DirectoryReference("book-two"), new BookWorkspace(bookTwoId, new DirectoryReference("workspace-two"), new DirectoryReference("processed-two"), new DirectoryReference("temp-two")));
+        return new ApplicationSnapshot(
+            new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [new DiscoveredBrand("Brand", new DirectoryReference("brand"))], [bookOne, bookTwo]),
+            GlobalSettings.Default,
+            [
+                new BookDesktopSummary(bookOneId, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1, HasBackground: true),
+                new BookDesktopSummary(bookTwoId, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1, HasBackground: false)
+            ],
             DateTimeOffset.UtcNow);
     }
 
