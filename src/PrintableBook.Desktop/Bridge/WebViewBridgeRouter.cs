@@ -2,6 +2,7 @@ using System.Text.Json;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
+using PrintableBook.Desktop.Loading;
 
 namespace PrintableBook.Desktop.Bridge;
 
@@ -9,7 +10,7 @@ namespace PrintableBook.Desktop.Bridge;
 /// Parses and routes the narrow, versioned messages accepted from the WebView.
 /// </summary>
 internal sealed class WebViewBridgeRouter(
-    IApplicationSnapshotService? snapshotService = null,
+    ApplicationLoadCoordinator? applicationLoadCoordinator = null,
     IGlobalSettingsStore? settingsStore = null,
     IProcessSessionService? processSessionService = null,
     IApplicationRootDiscovery? rootDiscovery = null,
@@ -40,8 +41,10 @@ internal sealed class WebViewBridgeRouter(
             if (response.Error is not null || response.Command is not null) return response;
             if (request.Command is "app.refresh" or "book.validate")
             {
-                if (snapshotService is null) return BridgeResponse.UnsupportedCommand(request.Id);
-                var snapshot = await snapshotService.RefreshAsync(cancellationToken);
+                if (applicationLoadCoordinator is null) return BridgeResponse.UnsupportedCommand(request.Id);
+                var snapshot = await applicationLoadCoordinator.RefreshAsync(
+                    request.Command == "app.refresh" ? ApplicationLoadKind.Initial : ApplicationLoadKind.Refresh,
+                    cancellationToken);
                 if (request.Command == "book.validate" &&
                     (request.Payload is not { } validationPayload ||
                      !validationPayload.TryGetProperty("bookId", out var bookId) ||
@@ -56,7 +59,7 @@ internal sealed class WebViewBridgeRouter(
 
             if (request.Command == "book.cover.select")
             {
-                if (snapshotService is null || coverSelectionService is null || request.Payload is not { } coverPayload ||
+                if (applicationLoadCoordinator is null || coverSelectionService is null || request.Payload is not { } coverPayload ||
                     !coverPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
                     !coverPayload.TryGetProperty("coverReference", out var coverElement) || string.IsNullOrWhiteSpace(coverElement.GetString()))
                 {
@@ -66,7 +69,7 @@ internal sealed class WebViewBridgeRouter(
                 try
                 {
                     await coverSelectionService.SelectAsync(bookIdElement.GetString()!, coverElement.GetString()!, cancellationToken);
-                    return BridgeResponse.Succeeded(request.Id, "app.snapshot", await snapshotService.RefreshAsync(cancellationToken));
+                    return BridgeResponse.Succeeded(request.Id, "app.snapshot", await applicationLoadCoordinator.RefreshAsync(ApplicationLoadKind.Refresh, cancellationToken));
                 }
                 catch (ArgumentException)
                 {
@@ -76,7 +79,7 @@ internal sealed class WebViewBridgeRouter(
 
             if (request.Command == "book.interior.frame-mode.set")
             {
-                if (snapshotService is null || interiorFrameModeService is null || request.Payload is not { } frameModePayload ||
+                if (applicationLoadCoordinator is null || interiorFrameModeService is null || request.Payload is not { } frameModePayload ||
                     !frameModePayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
                     !frameModePayload.TryGetProperty("sourceReference", out var sourceElement) || string.IsNullOrWhiteSpace(sourceElement.GetString()) ||
                     !frameModePayload.TryGetProperty("mode", out var modeElement) || !TryParseFrameMode(modeElement, out var mode))
@@ -87,7 +90,7 @@ internal sealed class WebViewBridgeRouter(
                 try
                 {
                     await interiorFrameModeService.SetAsync(bookIdElement.GetString()!, sourceElement.GetString()!, mode, cancellationToken);
-                    return BridgeResponse.Succeeded(request.Id, "app.snapshot", await snapshotService.RefreshAsync(cancellationToken));
+                    return BridgeResponse.Succeeded(request.Id, "app.snapshot", await applicationLoadCoordinator.RefreshAsync(ApplicationLoadKind.Refresh, cancellationToken));
                 }
                 catch (ArgumentException)
                 {
@@ -112,14 +115,14 @@ internal sealed class WebViewBridgeRouter(
 
             if (request.Command is "book.output.open" or "book.output.reveal" or "book.output.copy-path")
             {
-                if (snapshotService is null || outputActionService is null || request.Payload is not { } outputPayload ||
+                if (applicationLoadCoordinator is null || outputActionService is null || request.Payload is not { } outputPayload ||
                     !outputPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
                     !outputPayload.TryGetProperty("artifactReference", out var artifactElement) || string.IsNullOrWhiteSpace(artifactElement.GetString()))
                 {
                     return new BridgeResponse(Version, request.Id, false, null, "invalid_output_action");
                 }
 
-                var snapshot = await snapshotService.RefreshAsync(cancellationToken);
+                var snapshot = await applicationLoadCoordinator.RefreshAsync(ApplicationLoadKind.Refresh, cancellationToken);
                 var book = snapshot.BookSummaries.FirstOrDefault(item => item.BookId.Value == bookIdElement.GetString());
                 var artifact = artifactElement.GetString()!;
                 if (book is null || !book.PublishedArtifacts.Contains(artifact, StringComparer.Ordinal) || !System.IO.File.Exists(artifact))

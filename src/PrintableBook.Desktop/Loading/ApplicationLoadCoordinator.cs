@@ -2,13 +2,13 @@ using PrintableBook.Core.Application.Desktop;
 
 namespace PrintableBook.Desktop.Loading;
 
-internal enum ApplicationLoadKind
+public enum ApplicationLoadKind
 {
     Initial,
     Refresh
 }
 
-internal sealed class ApplicationLoadCoordinator(
+public sealed class ApplicationLoadCoordinator(
     IApplicationSnapshotService snapshotService,
     IInterruptedProcessingRecoveryService interruptedRecoveryService)
 {

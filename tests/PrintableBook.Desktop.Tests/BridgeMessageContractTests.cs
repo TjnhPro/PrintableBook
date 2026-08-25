@@ -1,4 +1,5 @@
 using PrintableBook.Desktop.Bridge;
+using PrintableBook.Desktop.Loading;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
@@ -61,7 +62,7 @@ public sealed class BridgeMessageContractTests
             GlobalSettings.Default,
             [],
             DateTimeOffset.UnixEpoch);
-        var router = new WebViewBridgeRouter(new StubSnapshotService(snapshot));
+        var router = new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(snapshot)));
 
         var response = await router.HandleAsync("""{"version":1,"id":"request-4","command":"app.refresh"}""");
 
@@ -73,13 +74,31 @@ public sealed class BridgeMessageContractTests
     [Fact]
     public async Task RefreshFailureReturnsACorrelatedBridgeErrorInsteadOfEscapingTheDesktopMessageHandler()
     {
-        var router = new WebViewBridgeRouter(new ThrowingSnapshotService(new InvalidDataException("The workspace processing log is invalid.")));
+        var router = new WebViewBridgeRouter(CreateCoordinator(new ThrowingSnapshotService(new InvalidDataException("The workspace processing log is invalid."))));
 
         var response = await router.HandleAsync("""{"version":1,"id":"request-refresh-failure","command":"app.refresh"}""");
 
         Assert.False(response.Ok);
         Assert.Equal("request-refresh-failure", response.Id);
         Assert.Equal("app_refresh_failed: The workspace processing log is invalid.", response.Error);
+    }
+
+    [Fact]
+    public async Task ConcurrentRefreshCommandsUseOneCoordinatorOwnedSnapshotScan()
+    {
+        var snapshots = new BlockingSnapshotService();
+        var router = new WebViewBridgeRouter(CreateCoordinator(snapshots));
+
+        var first = router.HandleAsync("""{"version":1,"id":"first","command":"app.refresh"}""").AsTask();
+        await snapshots.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var second = router.HandleAsync("""{"version":1,"id":"second","command":"app.refresh"}""").AsTask();
+
+        Assert.Equal(1, snapshots.RefreshCount);
+        snapshots.Complete(CreateSnapshot());
+
+        Assert.Equal("app.snapshot", (await first).Command);
+        Assert.Equal("app.snapshot", (await second).Command);
+        Assert.Equal(1, snapshots.RefreshCount);
     }
 
     [Fact]
@@ -105,7 +124,7 @@ public sealed class BridgeMessageContractTests
             [new BookDesktopSummary(id, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 0)],
             DateTimeOffset.UnixEpoch);
 
-        var response = await new WebViewBridgeRouter(new StubSnapshotService(snapshot))
+        var response = await new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(snapshot)))
             .HandleAsync("""{"version":1,"id":"request-6","command":"book.validate","payload":{"bookId":"Book One"}}""");
 
         Assert.True(response.Ok);
@@ -123,7 +142,7 @@ public sealed class BridgeMessageContractTests
             DateTimeOffset.UnixEpoch);
         var selection = new StubCoverSelectionService();
 
-        var response = await new WebViewBridgeRouter(new StubSnapshotService(snapshot), coverSelectionService: selection)
+        var response = await new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(snapshot)), coverSelectionService: selection)
             .HandleAsync("""{"version":1,"id":"request-6a","command":"book.cover.select","payload":{"bookId":"Book One","coverReference":"cover-a.png"}}""");
 
         Assert.True(response.Ok);
@@ -140,7 +159,7 @@ public sealed class BridgeMessageContractTests
         var selection = new StubInteriorFrameModeService();
         var snapshot = CreateSnapshot();
         var router = new WebViewBridgeRouter(
-            new StubSnapshotService(snapshot),
+            CreateCoordinator(new StubSnapshotService(snapshot)),
             interiorFrameModeService: selection);
 
         var response = await router.HandleAsync($"{{\"version\":1,\"id\":\"request-frame-mode\",\"command\":\"book.interior.frame-mode.set\",\"payload\":{{\"bookId\":\"Book One\",\"sourceReference\":\"Book interior/page-001.png\",\"mode\":\"{mode}\"}}}}");
@@ -156,7 +175,7 @@ public sealed class BridgeMessageContractTests
     [InlineData("")]
     public async Task InteriorFrameModeSelectionRejectsInvalidModes(string mode)
     {
-        var response = await new WebViewBridgeRouter(new StubSnapshotService(CreateSnapshot()), interiorFrameModeService: new StubInteriorFrameModeService())
+        var response = await new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(CreateSnapshot())), interiorFrameModeService: new StubInteriorFrameModeService())
             .HandleAsync($"{{\"version\":1,\"id\":\"request-invalid-frame-mode\",\"command\":\"book.interior.frame-mode.set\",\"payload\":{{\"bookId\":\"Book One\",\"sourceReference\":\"Book interior/page-001.png\",\"mode\":\"{mode}\"}}}}");
 
         Assert.False(response.Ok);
@@ -166,7 +185,7 @@ public sealed class BridgeMessageContractTests
     [Fact]
     public async Task InteriorFrameModeSelectionRejectsMissingSourceReference()
     {
-        var response = await new WebViewBridgeRouter(new StubSnapshotService(CreateSnapshot()), interiorFrameModeService: new StubInteriorFrameModeService())
+        var response = await new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(CreateSnapshot())), interiorFrameModeService: new StubInteriorFrameModeService())
             .HandleAsync("""{"version":1,"id":"request-missing-source","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","mode":"auto"}}""");
 
         Assert.False(response.Ok);
@@ -201,7 +220,7 @@ public sealed class BridgeMessageContractTests
     public async Task InteriorFrameModeSelectionMapsUnexpectedServiceFailure()
     {
         var router = new WebViewBridgeRouter(
-            new StubSnapshotService(CreateSnapshot()),
+            CreateCoordinator(new StubSnapshotService(CreateSnapshot())),
             interiorFrameModeService: new ThrowingInteriorFrameModeService());
 
         var response = await router.HandleAsync("""{"version":1,"id":"request-frame-failure","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png","mode":"auto"}}""");
@@ -267,6 +286,30 @@ public sealed class BridgeMessageContractTests
     private sealed class ThrowingSnapshotService(Exception exception) : IApplicationSnapshotService
     {
         public ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default) => ValueTask.FromException<ApplicationSnapshot>(exception);
+    }
+
+    private sealed class BlockingSnapshotService : IApplicationSnapshotService
+    {
+        private readonly TaskCompletionSource<ApplicationSnapshot> completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int RefreshCount { get; private set; }
+
+        public async ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
+        {
+            RefreshCount++;
+            Started.TrySetResult();
+            return await completion.Task;
+        }
+
+        public void Complete(ApplicationSnapshot snapshot) => completion.TrySetResult(snapshot);
+    }
+
+    private static ApplicationLoadCoordinator CreateCoordinator(IApplicationSnapshotService snapshots) =>
+        new(snapshots, new NoopRecoveryService());
+
+    private sealed class NoopRecoveryService : IInterruptedProcessingRecoveryService
+    {
+        public ValueTask RecoverAsync(CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 
     private sealed class StubSettingsStore : IGlobalSettingsStore

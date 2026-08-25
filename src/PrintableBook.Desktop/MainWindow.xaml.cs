@@ -6,6 +6,7 @@ using PrintableBook.Core.Application.Services;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Desktop.Bridge;
+using PrintableBook.Desktop.Loading;
 using System.Windows;
 
 namespace PrintableBook.Desktop;
@@ -22,12 +23,12 @@ public partial class MainWindow : Window
 
     private readonly IInterruptedProcessingRecoveryService interruptedRecoveryService;
 
-    public MainWindow(IPrintableBookApplication application, IApplicationSnapshotService snapshotService, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookAssetPreviewService assetPreviewService, ILocalOutputActionService outputActionService, IInterruptedProcessingRecoveryService interruptedRecoveryService, ProcessWindowShutdownCoordinator shutdownCoordinator)
+    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookAssetPreviewService assetPreviewService, ILocalOutputActionService outputActionService, IInterruptedProcessingRecoveryService interruptedRecoveryService, ProcessWindowShutdownCoordinator shutdownCoordinator)
     {
         Application = application;
         this.interruptedRecoveryService = interruptedRecoveryService;
         this.shutdownCoordinator = shutdownCoordinator;
-        bridgeRouter = new WebViewBridgeRouter(snapshotService, settingsStore, processSessionService, rootDiscovery, brandSettingsStore, coverSelectionService, interiorFrameModeService, assetPreviewService, outputActionService);
+        bridgeRouter = new WebViewBridgeRouter(applicationLoadCoordinator, settingsStore, processSessionService, rootDiscovery, brandSettingsStore, coverSelectionService, interiorFrameModeService, assetPreviewService, outputActionService);
         InitializeComponent();
         Closing += OnClosing;
         Closed += OnClosed;
