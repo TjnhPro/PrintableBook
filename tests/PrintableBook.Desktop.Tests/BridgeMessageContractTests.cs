@@ -176,7 +176,7 @@ public sealed class BridgeMessageContractTests
     [Fact]
     public async Task AssetPreviewIsRoutedOnlyThroughTheCSharpPreviewOwner()
     {
-        var preview = new BookAssetPreview("Book interior/page-001.png", 120, 120, "data:image/png;base64,preview");
+        var preview = new BookAssetPreview("Book One", "Book interior/page-001.png", 120, 120, "data:image/png;base64,preview");
         var service = new StubAssetPreviewService(preview);
         var response = await new WebViewBridgeRouter(assetPreviewService: service)
             .HandleAsync("""{"version":1,"id":"preview","command":"book.asset.preview.get","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png"}}""");

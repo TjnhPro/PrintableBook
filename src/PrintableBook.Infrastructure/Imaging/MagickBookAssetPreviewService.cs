@@ -38,7 +38,7 @@ public sealed class MagickBookAssetPreviewService(
         image.Strip();
         image.Format = MagickFormat.Png;
         var bytes = image.ToByteArray();
-        var preview = new BookAssetPreview(asset.Reference, (int)image.Width, (int)image.Height, $"data:image/png;base64,{Convert.ToBase64String(bytes)}");
+        var preview = new BookAssetPreview(book.Id.Value, asset.Reference, (int)image.Width, (int)image.Height, $"data:image/png;base64,{Convert.ToBase64String(bytes)}");
         if (cache.Count >= MaximumEntries) cache.Clear();
         cache[key] = preview;
         return preview;

@@ -55,6 +55,14 @@ public sealed class ApplicationSnapshotServiceTests
         Assert.Contains(summary.FullBookValidationChecks!, check => check.Code == "book.cover_selection_required" && !check.IsSuccess);
     }
 
+    [Fact]
+    public async Task RefreshAsync_exposes_only_a_book_cover_asset_as_the_representative_preview()
+    {
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new BookCoverScanner(), new StubStateStore(), new StubFileSystem()).RefreshAsync();
+
+        Assert.EndsWith(Path.Combine("Book cover", "cover.png"), Assert.Single(snapshot.BookSummaries).RepresentativeCoverReference, StringComparison.Ordinal);
+    }
+
     private sealed class StubDiscovery : IApplicationRootDiscovery
     {
         public int CallCount { get; private set; }
@@ -107,6 +115,14 @@ public sealed class ApplicationSnapshotServiceTests
         public ValueTask<BookSourceScanResult> ScanAsync(BookId bookId, DirectoryReference bookDirectory, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(BookSourceScanResult.Succeeded(new BookSource([
                 new BookAsset("page-1.jpg", BookAssetKind.Interior)])));
+    }
+
+    private sealed class BookCoverScanner : IBookSourceScanner
+    {
+        public ValueTask<BookSourceScanResult> ScanAsync(BookId bookId, DirectoryReference bookDirectory, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(BookSourceScanResult.Succeeded(new BookSource([
+                new BookAsset(Path.Combine(bookDirectory.Value, "Book cover", "cover.png"), BookAssetKind.Cover),
+                new BookAsset(Path.Combine(bookDirectory.Value, "Book interior", "page-1.png"), BookAssetKind.Interior)])));
     }
 
     private sealed class StubStateStore : IBookWorkspaceStateStore
