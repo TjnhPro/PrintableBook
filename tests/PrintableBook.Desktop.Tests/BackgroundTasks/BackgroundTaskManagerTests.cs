@@ -145,6 +145,29 @@ public sealed class BackgroundTaskManagerTests
         Assert.True(await manager.WaitAsync(second.TaskId, TimeSpan.FromSeconds(2)));
     }
 
+    [Fact]
+    public async Task Worker_execution_isolated_from_the_callers_synchronization_context()
+    {
+        var worker = new ContextWorker();
+        using var manager = CreateManager(worker, new BlockingWorker(BackgroundTaskKind.ProcessingSession), new BlockingWorker(BackgroundTaskKind.AssetPreview));
+        var previous = SynchronizationContext.Current;
+        var marker = new MarkerSynchronizationContext();
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(marker);
+            var task = await manager.StartAsync(BackgroundTaskKind.LibraryRefresh, "library", null, new TaskRequest("library"));
+            await worker.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.NotSame(marker, worker.ExecutionContext);
+            Assert.Equal(BackgroundTaskState.Running, (await manager.GetAsync(task.TaskId))!.State);
+        }
+        finally
+        {
+            worker.Release.TrySetResult();
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
     private static BackgroundTaskManager CreateManager(params IBackgroundTaskWorker[] workers)
     {
         var services = new ServiceCollection();
@@ -189,6 +212,23 @@ public sealed class BackgroundTaskManagerTests
 
         protected override ValueTask<string> ExecuteTypedAsync(TaskRequest request, IBackgroundTaskContext context, CancellationToken cancellationToken) => ValueTask.FromException<string>(exception);
     }
+
+    private sealed class ContextWorker : BackgroundTaskWorker<TaskRequest, string>
+    {
+        public override BackgroundTaskKind Kind => BackgroundTaskKind.LibraryRefresh;
+        public SynchronizationContext? ExecutionContext { get; private set; }
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        protected override async ValueTask<string> ExecuteTypedAsync(TaskRequest request, IBackgroundTaskContext context, CancellationToken cancellationToken)
+        {
+            ExecutionContext = SynchronizationContext.Current;
+            Started.TrySetResult();
+            await Release.Task.WaitAsync(cancellationToken);
+            return request.Value;
+        }
+    }
+
+    private sealed class MarkerSynchronizationContext : SynchronizationContext;
 
     private sealed class NullDiagnostics : IOperationDiagnostics
     {
