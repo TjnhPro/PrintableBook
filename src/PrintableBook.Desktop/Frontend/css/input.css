@@ -133,5 +133,23 @@
   .asset-inspector dt { @apply font-medium text-slate-500; }
   .asset-inspector dd { @apply mt-1 break-words text-slate-700; }
   @media (max-width: 1100px) { .asset-workspace { @apply grid-cols-[minmax(0,1fr)_240px]; } .asset-source-panel { @apply hidden; } }
+  .validation-workspace { @apply grid gap-4; }
+  .validation-mode-toggle { @apply flex w-fit overflow-hidden rounded-lg border border-slate-200 bg-white; }
+  .validation-mode-toggle button { @apply px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50; }
+  .validation-mode-toggle button.active { @apply bg-violet-600 text-white hover:bg-violet-700; }
+  .validation-summary { @apply grid grid-cols-3 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4; }
+  .validation-summary > div { @apply rounded-lg bg-white p-3; }
+  .validation-summary span { @apply block text-xs font-medium text-slate-500; }
+  .validation-summary strong { @apply mt-1 block text-xl font-semibold text-slate-900; }
+  .validation-list { @apply grid gap-3; }
+  .validation-item { @apply grid grid-cols-[72px_minmax(0,1fr)] gap-3 rounded-xl border p-4; }
+  .validation-item.success { @apply border-emerald-200 bg-emerald-50; }
+  .validation-item.warning { @apply border-amber-200 bg-amber-50; }
+  .validation-item.failure { @apply border-rose-200 bg-rose-50; }
+  .validation-icon { @apply grid h-8 place-items-center rounded-md bg-white px-2 text-xs font-semibold text-slate-700 shadow-sm; }
+  .validation-item strong { @apply text-sm font-semibold capitalize text-slate-900; }
+  .validation-item p { @apply mt-1 text-sm text-slate-700; }
+  .validation-item .validation-impact { @apply text-xs text-slate-600; }
+  .validation-actions { @apply mt-3 flex flex-wrap gap-2; }
 }
 @keyframes pb-pulse { 50% { opacity: .45; } }

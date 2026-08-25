@@ -28,6 +28,10 @@ const expected = [
   ,"Load preview"
   ,"filter-assets"
   ,"asset-view"
+  ,"Interior preflight"
+  ,"Full-book preflight"
+  ,"Ready to process"
+  ,"validation-mode"
 ];
 
 for (const value of expected) {

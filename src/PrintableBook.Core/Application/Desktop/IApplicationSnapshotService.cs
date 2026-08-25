@@ -17,7 +17,7 @@ public interface IBookAssetPreviewService
 {
     ValueTask<BookAssetPreview?> GetAsync(string bookId, string sourceReference, CancellationToken cancellationToken = default);
 }
-public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null);
+public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null);
 public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt);
 
 public interface IApplicationSnapshotService
@@ -78,6 +78,33 @@ public sealed class ApplicationSnapshotService(
                     true,
                     true));
             }
+            var fullBookChecks = new List<BookValidationCheck>
+            {
+                scan.IsSuccess
+                    ? new BookValidationCheck("book.interior_ready", "Interior source images were discovered.", true)
+                    : new BookValidationCheck(scan.Failure!.Code, scan.Failure.Message, false)
+            };
+            if (coverCandidates.Length == 0)
+            {
+                fullBookChecks.Add(new BookValidationCheck(
+                    "book.cover_required",
+                    "A Cover PNG is required before this Book can be exported as a full book.",
+                    false));
+            }
+            else if (coverCandidates.Length > 1 && !hasSelectedCover)
+            {
+                fullBookChecks.Add(new BookValidationCheck(
+                    "book.cover_selection_required",
+                    "Choose one Cover PNG before this Book can be exported as a full book.",
+                    false));
+            }
+            else
+            {
+                fullBookChecks.Add(new BookValidationCheck(
+                    "book.cover_ready",
+                    "A Cover PNG is selected for full-book output.",
+                    true));
+            }
             var isReady = scan.IsSuccess;
             var sourcePages = scan.Source?.GetAssets(BookAssetKind.Interior)
                 .Select(asset => new InteriorSourcePageSummary(asset.Reference, state.GetInteriorFrameMode(InteriorSourceKey.FromBookRoot(book.Directory, new FileReference(asset.Reference)))))
@@ -99,7 +126,8 @@ public sealed class ApplicationSnapshotService(
                 state.SelectedCoverReference,
                 state.UpdatedAt == DateTimeOffset.MinValue ? null : state.UpdatedAt,
                 sourcePages,
-                assetSummaries));
+                assetSummaries,
+                fullBookChecks));
         }
 
         return new ApplicationSnapshot(discoverySnapshot, settings, summaries, DateTimeOffset.UtcNow);

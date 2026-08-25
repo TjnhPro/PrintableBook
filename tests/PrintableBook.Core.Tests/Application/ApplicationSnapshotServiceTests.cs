@@ -43,6 +43,16 @@ public sealed class ApplicationSnapshotServiceTests
         var summary = Assert.Single(snapshot.BookSummaries);
         Assert.Equal("Ready", summary.ValidationStatus);
         Assert.Contains(summary.ValidationChecks, check => check.Code == "book.cover_skipped" && check.IsSuccess && check.IsWarning);
+        Assert.Contains(summary.FullBookValidationChecks!, check => check.Code == "book.cover_required" && !check.IsSuccess);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_requires_an_explicit_cover_selection_for_full_book_validation_when_multiple_covers_exist()
+    {
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new MultipleCoverScanner(), new StubStateStore(), new StubFileSystem()).RefreshAsync();
+
+        var summary = Assert.Single(snapshot.BookSummaries);
+        Assert.Contains(summary.FullBookValidationChecks!, check => check.Code == "book.cover_selection_required" && !check.IsSuccess);
     }
 
     private sealed class StubDiscovery : IApplicationRootDiscovery

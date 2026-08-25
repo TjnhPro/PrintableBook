@@ -269,3 +269,28 @@ test("asset workspace loads an allowlisted preview only after the user selects a
     payload: { bookId: "Book 001", sourceReference: "Book interior/page-001.png" }
   });
 });
+
+test("validation keeps missing cover informational for Interior and actionable for full-book review", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "book-validation", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      validationChecks: [{ code: "book.interior_ready", message: "Interior source images were discovered.", isSuccess: true }, { code: "book.cover_skipped", message: "Cover is unavailable and will be skipped for Interior-only processing.", isSuccess: true, isWarning: true }],
+      fullBookValidationChecks: [{ code: "book.interior_ready", message: "Interior source images were discovered.", isSuccess: true }, { code: "book.cover_required", message: "A Cover PNG is required before this Book can be exported as a full book.", isSuccess: false }]
+    }]
+  } } });
+
+  const validationTab = { dataset: { action: "book-tab", bookTab: "validation" }, closest: () => validationTab };
+  contentListeners.click({ target: validationTab });
+  assert.match(content.innerHTML, /Cover is optional for this Interior-only run/);
+  assert.match(content.innerHTML, /Interior Processing can continue without a Cover/);
+  assert.match(content.innerHTML, /Informational/);
+
+  const fullBook = { dataset: { action: "validation-mode", validationMode: "full-book" }, closest: () => fullBook };
+  contentListeners.click({ target: fullBook });
+  assert.match(content.innerHTML, /A Cover PNG is required/);
+  assert.match(content.innerHTML, /Refresh local files/);
+  assert.match(content.innerHTML, /Needs attention/);
+});
