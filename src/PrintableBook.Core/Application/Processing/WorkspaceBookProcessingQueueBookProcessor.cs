@@ -22,6 +22,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
 {
     public async ValueTask<BookProcessingQueueBookResult> ProcessBookAsync(
         PrintableBookProcessingCommand command,
+        Action<BookProcessingProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         var workspace = await workspaceFactory.CreateAsync(command.BookId, command.BookDirectory, cancellationToken);
@@ -185,6 +186,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
 
         async ValueTask<BookProcessingState> BeginStepAsync(BookProcessingState currentState, string step, CancellationToken token)
         {
+            progress?.Invoke(new BookProcessingProgress(command.BookId, BookProcessingStatus.Running, step));
             var started = currentState.BeginStep(step, DateTimeOffset.UtcNow);
             await PersistStateAsync(started, "step.started", step, token);
             return started;
