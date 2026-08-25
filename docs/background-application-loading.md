@@ -1,15 +1,21 @@
-# Background application loading boundaries
+# Background task manager architecture
 
-Printable Book keeps the WPF Dispatcher responsive by assigning each responsibility to a narrow owner.
+Printable Book is a local WPF/WebView application. UI-affine work stays on the Dispatcher; substantial local discovery, image preview, and Interior Processing run through one owned runtime:
 
-- The UI Dispatcher owns WPF/WebView rendering, bridge receive/post work, navigation, and dialogs.
-- `ApplicationLoadCoordinator` owns full snapshot background scheduling, first-load interrupted-processing recovery, and refresh coalescing.
-- `BookAssetPreviewCoordinator` owns temporary bounded preview execution, with a maximum of two workers.
-- Core `ApplicationSnapshotService` owns snapshot composition only; it does not schedule threads.
-- Diagnostics owns operation timing, Dispatcher-stall observation, and a bounded in-memory event list.
+```text
+UI → semantic bridge command → facade → BackgroundTaskManager → keyed worker
+```
 
-An async method name does not guarantee background execution. The only approved background scheduling boundaries are the Desktop load coordinator and preview coordinator (plus the existing processing-session boundary).
+The manager retains RAM-only task snapshots, typed result/view objects, cancellation ownership, lifecycle diagnostics, and bounded lanes:
 
-## Preview delivery
+| Worker kind | Lane | Limit | Duplicate policy |
+| --- | --- | --- | --- |
+| LibraryRefresh | Library | 1 | Join by kind |
+| ProcessingSession | Processing | 1 | Return existing |
+| AssetPreview | Preview | 2 | Join by opaque asset key |
 
-Preview delivery currently remains Base64 over the bridge. This is temporary: a persistent thumbnail/local-URL architecture is the next step. Cache-clear semantics are deliberately deferred until that persistent preview cache exists.
+`app.refresh`, `process.start`, and `book.asset.preview.get` return accepted task/session state; they never wait for their worker to finish. `process.get`, `task.get`, and `task.list` are RAM-only observation calls. Task runtime and task IDs are not persisted. Workspace state is persisted separately, and the first Library Refresh performs interrupted-workspace recovery after restart.
+
+`ProcessSessionService`, `ApplicationLoadCoordinator`, and `BookAssetPreviewCoordinator` are facades only. They do not own a `Task.Run`, semaphore, or per-operation cancellation source. The sole production scheduler for heavy Desktop-triggered work is `BackgroundTaskManager`. `DispatcherStallMonitor` is the independent watchdog exception.
+
+New worker kinds require an independent user-visible start/cancel/observe lifecycle. Do not introduce arbitrary bridge delegates or a separate PDF worker merely to move an internal processing step.
