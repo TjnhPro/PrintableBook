@@ -417,6 +417,32 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Book_background_and_interior_activation_mutations_persist_authorized_values_and_refresh()
+    {
+        var settings = new StubBookInteriorSettingsService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), bookInteriorSettingsService: settings);
+        var background = await router.HandleAsync("""{"version":1,"id":"background","command":"book.background.set","payload":{"bookId":"Book One","enabled":true}}""");
+        var active = await router.HandleAsync("""{"version":1,"id":"active","command":"book.interior.active.set","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png","active":false}}""");
+        Assert.True(background.Ok);
+        Assert.True(active.Ok);
+        Assert.Equal(("Book One", true), settings.Background);
+        Assert.Equal(("Book One", "Book interior/page-001.png", false), settings.Active);
+        Assert.Equal(2, manager.Starts);
+    }
+
+    [Fact]
+    public async Task Book_interior_mutations_reject_active_or_cancelling_processes_without_persisting()
+    {
+        var settings = new StubBookInteriorSettingsService();
+        var snapshot = new ProcessSessionSnapshot(true, true, null, null, null, []);
+        var router = new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(CreateSnapshot())), processSessionService: new StubProcessSessionService(snapshot), bookInteriorSettingsService: settings);
+        var response = await router.HandleAsync("""{"version":1,"id":"active","command":"book.interior.active.set","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png","active":false}}""");
+        Assert.Equal("processing_active", response.Error);
+        Assert.Null(settings.Active);
+    }
+
+    [Fact]
     public async Task ProcessStatusIsProvidedByTheCSharpSessionOwner()
     {
         var id = new BookId("Book One");
@@ -675,6 +701,14 @@ public sealed class BridgeMessageContractTests
             LastSelection = (book.Id.Value, source.Value, mode);
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class StubBookInteriorSettingsService : IBookInteriorSettingsService
+    {
+        public (string BookId, bool Enabled)? Background { get; private set; }
+        public (string BookId, string SourceReference, bool Active)? Active { get; private set; }
+        public ValueTask SetHasBackgroundAsync(DiscoveredBook book, bool enabled, CancellationToken cancellationToken = default) { Background = (book.Id.Value, enabled); return ValueTask.CompletedTask; }
+        public ValueTask SetActiveAsync(DiscoveredBook book, FileReference source, bool isActive, CancellationToken cancellationToken = default) { Active = (book.Id.Value, source.Value, isActive); return ValueTask.CompletedTask; }
     }
 
     private sealed class ThrowingInteriorFrameModeService : IInteriorFrameModeService
