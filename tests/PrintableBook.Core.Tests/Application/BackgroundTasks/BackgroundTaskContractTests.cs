@@ -73,4 +73,48 @@ public sealed class BackgroundTaskContractTests
         Assert.Equal("library_refresh_failed", exception.Code);
         Assert.Equal("Unable to refresh library.", exception.Message);
     }
+
+    [Fact]
+    public async Task Typed_worker_rejects_a_wrong_request_before_business_execution()
+    {
+        IBackgroundTaskWorker worker = new RecordingWorker();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => worker.ExecuteAsync("wrong", new RecordingContext(), CancellationToken.None).AsTask());
+        Assert.False(((RecordingWorker)worker).WasCalled);
+    }
+
+    [Fact]
+    public async Task Typed_worker_receives_typed_request_and_returns_its_typed_result_as_object()
+    {
+        IBackgroundTaskWorker worker = new RecordingWorker();
+        var result = await worker.ExecuteAsync(new RecordingRequest("library"), new RecordingContext(), CancellationToken.None);
+
+        Assert.Equal("library-complete", Assert.IsType<string>(result));
+        Assert.Equal("library", ((RecordingWorker)worker).Request?.Value);
+    }
+
+    private sealed record RecordingRequest(string Value);
+
+    private sealed class RecordingWorker : BackgroundTaskWorker<RecordingRequest, string>
+    {
+        public override BackgroundTaskKind Kind => BackgroundTaskKind.LibraryRefresh;
+        public bool WasCalled { get; private set; }
+        public RecordingRequest? Request { get; private set; }
+
+        protected override ValueTask<string> ExecuteTypedAsync(RecordingRequest request, IBackgroundTaskContext context, CancellationToken cancellationToken)
+        {
+            WasCalled = true;
+            Request = request;
+            return ValueTask.FromResult($"{request.Value}-complete");
+        }
+    }
+
+    private sealed class RecordingContext : IBackgroundTaskContext
+    {
+        public BackgroundTaskId TaskId { get; } = new("task-context");
+
+        public void Report(string step, int? completed = null, int? total = null, string? detail = null, string? subject = null) { }
+
+        public void SetView<TView>(TView view) where TView : class { }
+    }
 }
