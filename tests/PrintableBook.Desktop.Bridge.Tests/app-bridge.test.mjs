@@ -71,7 +71,7 @@ test("webview shell exposes every top-level desktop route", () => {
   assert.match(page, /id="app-content"/);
 });
 
-test("snapshot rendering keeps discovery, settings, and brand data in the bridge response", () => {
+test("snapshot rendering opens the Book Library and keeps discovery and brand data in the bridge response", () => {
   const { messageHandler, status, content, brandSelect, messages } = loadBridge();
 
   assert.deepEqual(messages.map((message) => message.command), ["app.ping", "app.refresh"]);
@@ -90,8 +90,9 @@ test("snapshot rendering keeps discovery, settings, and brand data in the bridge
 
   assert.equal(status.textContent, "Connected");
   assert.match(brandSelect.innerHTML, /Amazon/);
-  assert.match(content.innerHTML, /Maximum concurrency/);
-  assert.match(content.innerHTML, /value="6"/);
+  assert.match(content.innerHTML, /Books \(1\)/);
+  assert.match(content.innerHTML, /Book 001/);
+  assert.match(content.innerHTML, /Process Interior/);
   assert.doesNotMatch(content.innerHTML, /Paths \(Read Only\)/);
 });
 

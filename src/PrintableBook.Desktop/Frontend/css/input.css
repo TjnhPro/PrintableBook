@@ -1,9 +1,18 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@layer base {
+  :root { --pb-canvas: #f7f5f1; --pb-surface: #ffffff; --pb-surface-muted: #f4f1ed; --pb-ink: #182033; --pb-muted: #5e6879; --pb-border: #e4dfd8; --pb-primary: #6547cc; --pb-primary-strong: #5136b7; --pb-primary-soft: #ede9fe; --pb-success: #18794e; --pb-warning: #a35f00; --pb-danger: #b42318; --pb-ring: #8b73e6; }
+  [data-theme="dark"] { --pb-canvas: #171717; --pb-surface: #232323; --pb-surface-muted: #303030; --pb-ink: #f5f3ef; --pb-muted: #b9b3ac; --pb-border: #46413c; --pb-primary: #a896ff; --pb-primary-strong: #c0b4ff; --pb-primary-soft: #342a61; --pb-success: #5bd39b; --pb-warning: #ffbc5d; --pb-danger: #ff8d87; --pb-ring: #c0b4ff; }
+  body { font-family: "Segoe UI Variable", "Segoe UI", sans-serif; }
+  button, input, select, textarea { font: inherit; }
+  :focus-visible { outline: 3px solid var(--pb-ring); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { *, ::before, ::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+}
 @layer components {
-  .nav-item { @apply flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950; }
-  .nav-item-active { @apply bg-violet-50 text-violet-700; }
+  .nav-item { @apply flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 transition-colors hover:bg-[var(--pb-surface-muted)] hover:text-[var(--pb-ink)]; }
+  .nav-item svg { @apply h-4 w-4 shrink-0 stroke-current; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .nav-item-active { @apply bg-[var(--pb-primary-soft)] text-[var(--pb-primary-strong)]; }
   .control { @apply h-9 rounded-md border border-slate-200 bg-white px-3 text-sm shadow-sm outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100 disabled:bg-slate-50 disabled:text-slate-500; }
   .button-primary { @apply inline-flex h-9 items-center justify-center rounded-md bg-violet-600 px-3 text-sm font-medium text-white shadow-sm hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-300; }
   .button-secondary { @apply inline-flex h-9 items-center justify-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50; }
@@ -87,4 +96,9 @@
   .log-list { @apply mt-3 grid gap-2 text-sm; }
   .log-list li { @apply flex gap-4 rounded bg-slate-50 px-3 py-2; }
   .log-list time { @apply shrink-0 font-mono text-xs text-slate-500; }
+  .global-process-status { @apply inline-flex h-9 items-center gap-2 rounded-md border border-[var(--pb-border)] bg-[var(--pb-surface)] px-3 text-xs font-medium text-[var(--pb-muted)] transition-colors hover:bg-[var(--pb-surface-muted)]; }
+  .status-dot { @apply h-2 w-2 rounded-full bg-slate-300; }
+  .global-process-status.is-active .status-dot { @apply bg-violet-600; animation: pb-pulse 1.6s ease-in-out infinite; }
+  .global-process-status.is-cancelling .status-dot { @apply bg-amber-500; }
 }
+@keyframes pb-pulse { 50% { opacity: .45; } }

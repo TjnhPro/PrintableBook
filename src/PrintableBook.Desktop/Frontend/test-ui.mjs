@@ -19,6 +19,9 @@ const expected = [
   "Last Interior Processing session",
   "Last session",
   "Start New Interior Processing"
+  ,"Book Library"
+  ,"Nothing processing"
+  ,"global-process-status"
 ];
 
 for (const value of expected) {

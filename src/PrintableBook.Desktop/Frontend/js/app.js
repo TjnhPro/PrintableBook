@@ -2,7 +2,7 @@
   const status = document.getElementById("bridge-status");
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
-  const routeNames = { configuration: "Configuration", brands: "Brands", books: "Books", process: "Process", outputs: "Outputs", diagnostics: "Diagnostics" };
+  const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF outputs", diagnostics: "Diagnostics" };
   const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookFilter: "", bookStatus: "All", brandSettings: "{}" };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
@@ -25,6 +25,17 @@
   const dateTime = (value) => value ? new Date(value).toLocaleString() : "—";
   const panel = (title, body, extra = "") => `<section class="panel ${extra}"><h2 class="panel-title">${title}</h2>${body}</section>`;
   const selectedBook = () => books().find((book) => bookId(book) === state.selectedBookId);
+  const updateGlobalProcessStatus = () => {
+    const control = document.getElementById("global-process-status");
+    if (!control) return;
+    const snapshot = window.processSnapshot;
+    const active = valueFor(snapshot, "isActive", false);
+    const cancelling = valueFor(snapshot, "isCancelling", false);
+    const step = valueFor(snapshot, "currentStep", "Processing Interior");
+    control.classList?.toggle("is-active", active && !cancelling);
+    control.classList?.toggle("is-cancelling", cancelling);
+    control.innerHTML = `<span class="status-dot"></span><span>${escapeHtml(cancelling ? "Stopping processing" : active ? step : "Nothing processing")}</span>`;
+  };
 
   const renderConfiguration = () => {
     const settings = valueFor(window.appSnapshot, "globalSettings", {});
@@ -165,7 +176,7 @@
       if (!state.selectedBrand && allBrands.length) state.selectedBrand = valueFor(allBrands[0], "name", "");
       if (brandSelect) brandSelect.innerHTML = allBrands.length ? allBrands.map((brand) => `<option>${escapeHtml(valueFor(brand, "name", ""))}</option>`).join("") : "<option>No brands</option>";
       if (brandSelect) brandSelect.value = state.selectedBrand;
-      render(document.querySelector(".nav-item-active")?.dataset.route ?? "configuration", false);
+      render(document.querySelector(".nav-item-active")?.dataset.route ?? "books", false);
       status.textContent = "Connected";
     } else if (ok && command === "settings.saved") {
       window.appSnapshot = { ...(window.appSnapshot ?? {}), globalSettings: valueFor(response, "payload", {}) };
@@ -173,6 +184,7 @@
       status.textContent = "Settings saved";
     } else if (ok && command === "process.snapshot") {
       window.processSnapshot = valueFor(response, "payload", {});
+      updateGlobalProcessStatus();
       if (document.querySelector(".nav-item-active")?.dataset.route === "process") render("process", false);
       status.textContent = "Connected";
     } else if (ok && (command === "brand.settings" || command === "brand.settings.saved")) {
@@ -184,6 +196,9 @@
 
   const refreshButton = document.getElementById("refresh-button");
   if (refreshButton) refreshButton.addEventListener("click", () => send("app.refresh"));
+  const globalProcessStatus = document.getElementById("global-process-status");
+  if (globalProcessStatus) globalProcessStatus.addEventListener("click", () => render("process"));
+  updateGlobalProcessStatus();
   if (brandSelect) brandSelect.addEventListener("change", () => { state.selectedBrand = brandSelect.value; });
   window.setInterval(() => { if (valueFor(window.processSnapshot, "isActive", false) || valueFor(window.processSnapshot, "isCancelling", false)) send("process.get"); }, 1000);
   send("app.ping");
