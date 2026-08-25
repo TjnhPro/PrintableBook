@@ -21,12 +21,12 @@ public partial class MainWindow : Window
 
     private readonly IInterruptedProcessingRecoveryService interruptedRecoveryService;
 
-    public MainWindow(IPrintableBookApplication application, IApplicationSnapshotService snapshotService, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IInterruptedProcessingRecoveryService interruptedRecoveryService, ProcessWindowShutdownCoordinator shutdownCoordinator)
+    public MainWindow(IPrintableBookApplication application, IApplicationSnapshotService snapshotService, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookAssetPreviewService assetPreviewService, IInterruptedProcessingRecoveryService interruptedRecoveryService, ProcessWindowShutdownCoordinator shutdownCoordinator)
     {
         Application = application;
         this.interruptedRecoveryService = interruptedRecoveryService;
         this.shutdownCoordinator = shutdownCoordinator;
-        bridgeRouter = new WebViewBridgeRouter(snapshotService, settingsStore, processSessionService, rootDiscovery, brandSettingsStore, coverSelectionService, interiorFrameModeService);
+        bridgeRouter = new WebViewBridgeRouter(snapshotService, settingsStore, processSessionService, rootDiscovery, brandSettingsStore, coverSelectionService, interiorFrameModeService, assetPreviewService);
         InitializeComponent();
         Closing += OnClosing;
     }

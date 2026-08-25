@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF outputs", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookFilter: "", bookStatus: "All", brandSettings: "{}" };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookFilter: "", bookStatus: "All", brandSettings: "{}", assetPreviews: new Map() };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -22,6 +22,7 @@
   const statusClass = (value) => value === "Ready" || value === "Completed" || value === "Present" ? "status-good" : value === "Invalid" || value === "Failed" ? "status-bad" : value === "Needs selection" || value === "Running" ? "status-warn" : "status-muted";
   const badge = (value) => { const label = displayStatus(value); return `<span class="status-badge ${statusClass(label)}">${escapeHtml(label)}</span>`; };
   const send = (command, payload) => window.chrome.webview.postMessage(JSON.stringify({ version: 1, id: crypto.randomUUID(), command, ...(payload ? { payload } : {}) }));
+  const requestAssetPreview = (bookId, sourceReference) => send("book.asset.preview.get", { bookId, sourceReference });
   const dateTime = (value) => value ? new Date(value).toLocaleString() : "—";
   const panel = (title, body, extra = "") => `<section class="panel ${extra}"><h2 class="panel-title">${title}</h2>${body}</section>`;
   const selectedBook = () => books().find((book) => bookId(book) === state.selectedBookId);
@@ -191,6 +192,10 @@
       state.brandSettings = valueFor(response, "payload", "{}");
       if (document.querySelector(".nav-item-active")?.dataset.route === "brands") render("brands", false);
       status.textContent = command === "brand.settings.saved" ? "Brand settings saved" : "Connected";
+    } else if (ok && command === "book.asset.preview") {
+      const preview = valueFor(response, "payload", {});
+      state.assetPreviews.set(valueFor(preview, "sourceReference", ""), preview);
+      status.textContent = "Preview ready";
     } else status.textContent = `Bridge error: ${valueFor(response, "error", "unexpected response")}`;
   });
 

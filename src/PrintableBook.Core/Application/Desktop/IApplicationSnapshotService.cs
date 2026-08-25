@@ -11,7 +11,13 @@ public sealed record BookValidationCheck(string Code, string Message, bool IsSuc
 public sealed record InteriorPageSummary(string PageId, string Status, string FinalPagePath);
 public sealed record InteriorSourcePageSummary(string SourceReference, FrameMode FrameMode);
 public sealed record BookFolderSummary(string Name, string Status, int FileCount, int ImageCount);
-public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null);
+public sealed record BookAssetSummary(string SourceReference, string RelativePath, string FileName, string Folder, string Kind, int? Width, int? Height, FrameMode FrameMode, bool PreviewAvailable);
+public sealed record BookAssetPreview(string SourceReference, int Width, int Height, string DataUrl);
+public interface IBookAssetPreviewService
+{
+    ValueTask<BookAssetPreview?> GetAsync(string bookId, string sourceReference, CancellationToken cancellationToken = default);
+}
+public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null);
 public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt);
 
 public interface IApplicationSnapshotService
@@ -24,7 +30,8 @@ public sealed class ApplicationSnapshotService(
     IGlobalSettingsStore settingsStore,
     IBookSourceScanner sourceScanner,
     IBookWorkspaceStateStore stateStore,
-    IFileSystem fileSystem) : IApplicationSnapshotService
+    IFileSystem fileSystem,
+    IImageInspector? imageInspector = null) : IApplicationSnapshotService
 {
     public async ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
@@ -72,6 +79,10 @@ public sealed class ApplicationSnapshotService(
                     true));
             }
             var isReady = scan.IsSuccess;
+            var sourcePages = scan.Source?.GetAssets(BookAssetKind.Interior)
+                .Select(asset => new InteriorSourcePageSummary(asset.Reference, state.GetInteriorFrameMode(InteriorSourceKey.FromBookRoot(book.Directory, new FileReference(asset.Reference)))))
+                .ToArray() ?? [];
+            var assetSummaries = await DescribeAssetsAsync(book, scan.Source, state, cancellationToken);
             summaries.Add(new BookDesktopSummary(
                 book.Id,
                 isReady ? "Ready" : scan.IsSuccess ? "Needs selection" : "Invalid",
@@ -87,10 +98,39 @@ public sealed class ApplicationSnapshotService(
                 coverCandidates,
                 state.SelectedCoverReference,
                 state.UpdatedAt == DateTimeOffset.MinValue ? null : state.UpdatedAt,
-                scan.Source?.GetAssets(BookAssetKind.Interior).Select(asset => new InteriorSourcePageSummary(asset.Reference, state.GetInteriorFrameMode(InteriorSourceKey.FromBookRoot(book.Directory, new FileReference(asset.Reference))))).ToArray() ?? []));
+                sourcePages,
+                assetSummaries));
         }
 
         return new ApplicationSnapshot(discoverySnapshot, settings, summaries, DateTimeOffset.UtcNow);
+    }
+
+    private async ValueTask<IReadOnlyList<BookAssetSummary>> DescribeAssetsAsync(DiscoveredBook book, BookSource? source, BookProcessingState state, CancellationToken cancellationToken)
+    {
+        if (source is null) return [];
+        var summaries = new List<BookAssetSummary>(source.Assets.Count);
+        foreach (var asset in source.Assets)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var file = new FileReference(asset.Reference);
+            ImageInfo? info = null;
+            try { info = imageInspector is null ? null : await imageInspector.GetInfoAsync(file, cancellationToken); }
+            catch (Exception) when (asset.Kind != BookAssetKind.Interior) { }
+            catch (Exception) { }
+            var relativePath = Path.GetRelativePath(book.Directory.Value, asset.Reference);
+            var folder = Path.GetDirectoryName(relativePath) ?? string.Empty;
+            summaries.Add(new BookAssetSummary(
+                asset.Reference,
+                relativePath,
+                Path.GetFileName(asset.Reference),
+                folder,
+                asset.Kind.ToString(),
+                info?.Size.Width,
+                info?.Size.Height,
+                state.GetInteriorFrameMode(InteriorSourceKey.FromBookRoot(book.Directory, file)),
+                info is not null));
+        }
+        return summaries;
     }
 
     private async ValueTask<IReadOnlyList<BookFolderSummary>> DiscoverSourceFoldersAsync(DirectoryReference bookDirectory, CancellationToken cancellationToken)

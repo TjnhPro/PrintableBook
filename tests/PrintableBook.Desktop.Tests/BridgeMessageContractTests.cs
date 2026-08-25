@@ -174,6 +174,30 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task AssetPreviewIsRoutedOnlyThroughTheCSharpPreviewOwner()
+    {
+        var preview = new BookAssetPreview("Book interior/page-001.png", 120, 120, "data:image/png;base64,preview");
+        var service = new StubAssetPreviewService(preview);
+        var response = await new WebViewBridgeRouter(assetPreviewService: service)
+            .HandleAsync("""{"version":1,"id":"preview","command":"book.asset.preview.get","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png"}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("book.asset.preview", response.Command);
+        Assert.Same(preview, response.Payload);
+        Assert.Equal(("Book One", "Book interior/page-001.png"), service.LastRequest);
+    }
+
+    [Fact]
+    public async Task AssetPreviewRejectsMissingOrUnknownAssets()
+    {
+        var response = await new WebViewBridgeRouter(assetPreviewService: new StubAssetPreviewService(null))
+            .HandleAsync("""{"version":1,"id":"preview-missing","command":"book.asset.preview.get","payload":{"bookId":"Book One","sourceReference":"outside.png"}}""");
+
+        Assert.False(response.Ok);
+        Assert.Equal("asset_preview_not_found", response.Error);
+    }
+
+    [Fact]
     public async Task InteriorFrameModeSelectionMapsUnexpectedServiceFailure()
     {
         var router = new WebViewBridgeRouter(
@@ -254,6 +278,16 @@ public sealed class BridgeMessageContractTests
         {
             Saved = settings;
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class StubAssetPreviewService(BookAssetPreview? preview) : IBookAssetPreviewService
+    {
+        public (string BookId, string SourceReference)? LastRequest { get; private set; }
+        public ValueTask<BookAssetPreview?> GetAsync(string bookId, string sourceReference, CancellationToken cancellationToken = default)
+        {
+            LastRequest = (bookId, sourceReference);
+            return ValueTask.FromResult(preview);
         }
     }
 

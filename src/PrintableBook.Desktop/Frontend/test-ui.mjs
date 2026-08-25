@@ -22,6 +22,8 @@ const expected = [
   ,"Book Library"
   ,"Nothing processing"
   ,"global-process-status"
+  ,"book.asset.preview.get"
+  ,"assetPreviews"
 ];
 
 for (const value of expected) {

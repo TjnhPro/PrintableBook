@@ -15,7 +15,8 @@ internal sealed class WebViewBridgeRouter(
     IApplicationRootDiscovery? rootDiscovery = null,
     IBrandSettingsStore? brandSettingsStore = null,
     IBookCoverSelectionService? coverSelectionService = null,
-    IInteriorFrameModeService? interiorFrameModeService = null)
+    IInteriorFrameModeService? interiorFrameModeService = null,
+    IBookAssetPreviewService? assetPreviewService = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -91,6 +92,21 @@ internal sealed class WebViewBridgeRouter(
                 {
                     return new BridgeResponse(Version, request.Id, false, null, "invalid_interior_frame_mode");
                 }
+            }
+
+            if (request.Command == "book.asset.preview.get")
+            {
+                if (assetPreviewService is null || request.Payload is not { } previewPayload ||
+                    !previewPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
+                    !previewPayload.TryGetProperty("sourceReference", out var sourceElement) || string.IsNullOrWhiteSpace(sourceElement.GetString()))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_asset_preview_request");
+                }
+
+                var preview = await assetPreviewService.GetAsync(bookIdElement.GetString()!, sourceElement.GetString()!, cancellationToken);
+                return preview is null
+                    ? new BridgeResponse(Version, request.Id, false, null, "asset_preview_not_found")
+                    : BridgeResponse.Succeeded(request.Id, "book.asset.preview", preview);
             }
 
             if (request.Command is "process.get" or "process.cancel" or "process.start")
@@ -187,7 +203,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.asset.preview.get" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 
