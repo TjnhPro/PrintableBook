@@ -1,5 +1,6 @@
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Diagnostics;
+using System.IO;
 
 namespace PrintableBook.Desktop.Preview;
 
