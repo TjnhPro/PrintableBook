@@ -3,6 +3,8 @@ using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.DependencyInjection;
 using PrintableBook.Infrastructure.DependencyInjection;
 using PrintableBook.Desktop.Loading;
+using PrintableBook.Desktop.Diagnostics;
+using PrintableBook.Core.Application.Diagnostics;
 using System.Windows;
 
 namespace PrintableBook.Desktop;
@@ -21,6 +23,8 @@ public partial class App : Application
         services.AddSingleton<ILocalOutputActionService, LocalOutputActionService>();
         services.AddSingleton<IProcessShutdownPrompt, ProcessShutdownPrompt>();
         services.AddSingleton<ProcessWindowShutdownCoordinator>();
+        services.AddSingleton<UiDiagnosticsService>();
+        services.AddSingleton<IOperationDiagnostics>(provider => provider.GetRequiredService<UiDiagnosticsService>());
         services.AddSingleton<ApplicationLoadCoordinator>();
         services.AddSingleton<MainWindow>();
 
