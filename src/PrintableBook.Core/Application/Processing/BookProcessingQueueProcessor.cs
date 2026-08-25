@@ -21,7 +21,8 @@ public sealed record PrintableBookProcessingCommand(
     FileReference? Frame,
     int? ShuffleSeed,
     FileReference? SelectedCover = null,
-    BookProcessingMode Mode = BookProcessingMode.FullBook);
+    BookProcessingMode Mode = BookProcessingMode.FullBook,
+    FileReference? BackgroundPage = null);
 
 public sealed record BookProcessingQueueRequest(IReadOnlyList<PrintableBookProcessingCommand> Books);
 

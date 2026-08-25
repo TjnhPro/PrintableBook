@@ -11,7 +11,9 @@ namespace PrintableBook.Core.Application.BackgroundTasks.Workers;
 public sealed class ProcessingSessionWorker(
     IApplicationSnapshotProvider snapshotProvider,
     IPrintableBookApplication application,
-    IBrandFrameResolver brandFrameResolver) : BackgroundTaskWorker<ProcessingSessionWorkerRequest, BookProcessingQueueResult>
+    IBrandFrameResolver brandFrameResolver,
+    IFileSystem fileSystem,
+    IImageInspector imageInspector) : BackgroundTaskWorker<ProcessingSessionWorkerRequest, BookProcessingQueueResult>
 {
     public override BackgroundTaskKind Kind => BackgroundTaskKind.ProcessingSession;
 
@@ -49,6 +51,36 @@ public sealed class ProcessingSessionWorker(
             cancellationToken);
 
         var summaries = snapshot.BookSummaries.ToDictionary(summary => summary.BookId.Value, StringComparer.Ordinal);
+        FileReference? background = null;
+        if (books.Any(book => summaries[book.Id.Value].HasBackground))
+        {
+            var candidate = new FileReference(Path.Combine(brand.Directory.Value, "background.png"));
+            if (!await fileSystem.FileExistsAsync(candidate, cancellationToken))
+            {
+                Fail(request, context, "process_background_missing", "The selected Brand does not contain background.png.");
+            }
+
+            try
+            {
+                var size = await imageInspector.GetSizeAsync(candidate, cancellationToken);
+                var expected = new ImageSize(settings.FinalPageWidth, settings.FinalPageHeight);
+                if (size != expected)
+                {
+                    Fail(request, context, "process_background_invalid", $"Brand background.png must be {expected.Width}×{expected.Height} pixels.");
+                }
+            }
+            catch (BackgroundTaskFailureException)
+            {
+                throw;
+            }
+            catch (Exception)
+            {
+                Fail(request, context, "process_background_invalid", "The selected Brand background.png cannot be read.");
+            }
+
+            background = candidate;
+        }
+
         var processingRequest = new BookProcessingQueueRequest(books.Select(book => new PrintableBookProcessingCommand(
             book.Id,
             book.Directory,
@@ -64,8 +96,9 @@ public sealed class ProcessingSessionWorker(
             new ArtworkDetectionThreshold(settings.ArtworkDetectionThreshold),
             frame,
             null,
-            string.IsNullOrWhiteSpace(summaries[book.Id.Value].SelectedCoverReference) ? null : new FileReference(summaries[book.Id.Value].SelectedCoverReference!),
-            request.Mode)).ToArray());
+            SelectedCover: string.IsNullOrWhiteSpace(summaries[book.Id.Value].SelectedCoverReference) ? null : new FileReference(summaries[book.Id.Value].SelectedCoverReference!),
+            Mode: request.Mode,
+            BackgroundPage: summaries[book.Id.Value].HasBackground ? background : null)).ToArray());
 
         void Report(BookProcessingProgress progress)
         {
@@ -107,27 +140,28 @@ public sealed class ProcessingSessionWorker(
     {
         if (!snapshot.Discovery.Brands.Any(brand => string.Equals(brand.Name, request.BrandName, StringComparison.Ordinal)))
         {
-            Fail("process_brand_not_found", "The selected Brand no longer exists.");
+            Fail(request, context, "process_brand_not_found", "The selected Brand no longer exists.");
         }
         var ids = request.BookIds.Distinct(StringComparer.Ordinal).ToArray();
         var selected = snapshot.Discovery.Books.Where(book => ids.Contains(book.Id.Value, StringComparer.Ordinal)).ToArray();
         if (selected.Length != ids.Length)
         {
-            Fail("process_book_not_found", "One or more selected Books no longer exist.");
+            Fail(request, context, "process_book_not_found", "One or more selected Books no longer exist.");
         }
         var summaries = snapshot.BookSummaries.ToDictionary(summary => summary.BookId.Value, StringComparer.Ordinal);
         var notReady = selected.FirstOrDefault(book => !summaries.TryGetValue(book.Id.Value, out var summary) || !string.Equals(summary.ValidationStatus, "Ready", StringComparison.Ordinal));
         if (notReady is not null)
         {
-            Fail("process_book_not_ready", $"Book '{notReady.Id.Value}' is not ready for processing.", notReady.Id);
+            Fail(request, context, "process_book_not_ready", $"Book '{notReady.Id.Value}' is not ready for processing.", notReady.Id);
         }
         return selected;
 
-        void Fail(string code, string message, BookId? bookId = null)
-        {
-            var queue = request.BookIds.Select(id => new ProcessQueueEntry(new BookId(id), string.Equals(id, bookId?.Value, StringComparison.Ordinal) ? BookProcessingStatus.Failed : BookProcessingStatus.NotStarted, string.Equals(id, bookId?.Value, StringComparison.Ordinal) ? message : "Waiting")).ToArray();
-            context.SetView(new ProcessSessionSnapshot(false, false, request.BrandName, bookId, "Failed", queue, StartedAt: request.StartedAt));
-            throw new BackgroundTaskFailureException(code, message);
-        }
+    }
+
+    private static void Fail(ProcessingSessionWorkerRequest request, IBackgroundTaskContext context, string code, string message, BookId? bookId = null)
+    {
+        var queue = request.BookIds.Select(id => new ProcessQueueEntry(new BookId(id), string.Equals(id, bookId?.Value, StringComparison.Ordinal) ? BookProcessingStatus.Failed : BookProcessingStatus.NotStarted, string.Equals(id, bookId?.Value, StringComparison.Ordinal) ? message : "Waiting")).ToArray();
+        context.SetView(new ProcessSessionSnapshot(false, false, request.BrandName, bookId, "Failed", queue, StartedAt: request.StartedAt));
+        throw new BackgroundTaskFailureException(code, message);
     }
 }
