@@ -1,0 +1,179 @@
+using PrintableBook.Core.Abstractions;
+using PrintableBook.Core.Application.Storage;
+
+namespace PrintableBook.Infrastructure.Workspaces;
+
+public sealed class PhysicalBookStorageMaintenance : IBookStorageMaintenance
+{
+    private const string LegacyStampSuffix = ".input-stamp.json";
+    private static readonly string[] HeavyPageStageFileNames = ["prepared.png", "framed.png", "working-page.png"];
+
+    public ValueTask<long> GetBookSizeBytesAsync(
+        DirectoryReference bookDirectory,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(bookDirectory);
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(GetDirectorySize(bookDirectory.Value, cancellationToken));
+    }
+
+    public ValueTask<long> ClearHeavyProcessingCacheAsync(
+        BookWorkspace workspace,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(workspace);
+        cancellationToken.ThrowIfCancellationRequested();
+        long freedBytes = 0;
+        try
+        {
+            var cacheRoot = Path.Combine(workspace.WorkingDirectory.Value, "cache");
+            var processedInterior = Path.Combine(workspace.ProcessedDirectory.Value, "interior");
+            MigrateLegacyStamps(cacheRoot, processedInterior, cancellationToken);
+            DeletePageStageImages(cacheRoot, ref freedBytes, cancellationToken);
+            DeleteDirectoryContents(processedInterior, ref freedBytes, cancellationToken);
+            DeleteDirectoryContents(workspace.TemporaryOutputDirectory.Value, ref freedBytes, cancellationToken);
+            return ValueTask.FromResult(freedBytes);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw new BookStorageCleanupException(freedBytes, exception);
+        }
+    }
+
+    private static long GetDirectorySize(string root, CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(root) || IsReparsePoint(root)) return 0;
+        long total = 0;
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var directory = pending.Pop();
+            IEnumerable<string> files;
+            IEnumerable<string> directories;
+            try
+            {
+                files = Directory.EnumerateFiles(directory).ToArray();
+                directories = Directory.EnumerateDirectories(directory).ToArray();
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+            {
+                continue;
+            }
+
+            foreach (var file in files)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try { total = checked(total + new FileInfo(file).Length); }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FileNotFoundException) { }
+            }
+
+            foreach (var child in directories)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    if (!IsReparsePoint(child)) pending.Push(child);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FileNotFoundException or DirectoryNotFoundException) { }
+            }
+        }
+
+        return total;
+    }
+
+    private static void MigrateLegacyStamps(string cacheRoot, string processedInterior, CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(processedInterior)) return;
+        foreach (var legacyStamp in Directory.EnumerateFiles(processedInterior, $"*{LegacyStampSuffix}", SearchOption.TopDirectoryOnly))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var pageId = Path.GetFileName(legacyStamp)[..^LegacyStampSuffix.Length];
+            var pageCache = Path.Combine(cacheRoot, pageId);
+            var destination = Path.Combine(pageCache, "input-stamp.json");
+            Directory.CreateDirectory(pageCache);
+            if (File.Exists(destination))
+            {
+                File.Delete(legacyStamp);
+                continue;
+            }
+
+            File.Move(legacyStamp, destination);
+        }
+    }
+
+    private static void DeletePageStageImages(string cacheRoot, ref long freedBytes, CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(cacheRoot)) return;
+        foreach (var pageDirectory in Directory.EnumerateDirectories(cacheRoot))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (IsReparsePoint(pageDirectory)) continue;
+            foreach (var fileName in HeavyPageStageFileNames)
+            {
+                DeleteFileAndCount(Path.Combine(pageDirectory, fileName), ref freedBytes);
+            }
+        }
+    }
+
+    private static void DeleteDirectoryContents(string directory, ref long freedBytes, CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(directory)) return;
+        foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            DeleteFileAndCount(file, ref freedBytes);
+        }
+
+        foreach (var child in Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (IsReparsePoint(child))
+            {
+                Directory.Delete(child, recursive: false);
+                continue;
+            }
+
+            DeleteDirectoryTree(child, ref freedBytes, cancellationToken);
+        }
+    }
+
+    private static void DeleteDirectoryTree(string directory, ref long freedBytes, CancellationToken cancellationToken)
+    {
+        foreach (var file in Directory.EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            DeleteFileAndCount(file, ref freedBytes);
+        }
+
+        foreach (var child in Directory.EnumerateDirectories(directory, "*", SearchOption.TopDirectoryOnly))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (IsReparsePoint(child))
+            {
+                Directory.Delete(child, recursive: false);
+                continue;
+            }
+
+            DeleteDirectoryTree(child, ref freedBytes, cancellationToken);
+        }
+
+        Directory.Delete(directory, recursive: false);
+    }
+
+    private static void DeleteFileAndCount(string file, ref long freedBytes)
+    {
+        if (!File.Exists(file)) return;
+        var length = new FileInfo(file).Length;
+        File.Delete(file);
+        if (!File.Exists(file)) freedBytes += length;
+    }
+
+    private static bool IsReparsePoint(string path) =>
+        (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+}

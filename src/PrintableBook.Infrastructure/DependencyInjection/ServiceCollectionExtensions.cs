@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Scanning;
+using PrintableBook.Core.Application.Storage;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Processing;
@@ -52,6 +53,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBookSourceScanner, BookSourceScanner>();
         services.AddSingleton<IBookWorkspaceFactory, PhysicalBookWorkspaceFactory>();
         services.AddSingleton<IBookWorkspaceStateStore, JsonBookWorkspaceStateStore>();
+        services.AddSingleton<IBookStorageMaintenance, PhysicalBookStorageMaintenance>();
         services.AddSingleton<IInteriorShuffleStore, JsonInteriorShuffleStore>();
         return services;
     }
