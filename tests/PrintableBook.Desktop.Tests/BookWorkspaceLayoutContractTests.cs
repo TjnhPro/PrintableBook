@@ -53,4 +53,15 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("Folder is missing from this Book.", script, StringComparison.Ordinal);
         Assert.Contains("--pb-asset-preview: 1 / 1", layout, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void InteriorAssetsExposePerAssetFrameModeControlsWithoutABulkMutation()
+    {
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
+
+        Assert.Contains("Auto · Not classified", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"set-interior-frame-mode\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-source-reference", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("book.interior.frame-mode.batch", script, StringComparison.Ordinal);
+    }
 }
