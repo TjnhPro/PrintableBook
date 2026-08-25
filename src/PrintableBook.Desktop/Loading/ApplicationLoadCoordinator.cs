@@ -1,4 +1,5 @@
 using PrintableBook.Core.Application.Desktop;
+using PrintableBook.Core.Application.Diagnostics;
 
 namespace PrintableBook.Desktop.Loading;
 
@@ -10,8 +11,10 @@ public enum ApplicationLoadKind
 
 public sealed class ApplicationLoadCoordinator(
     IApplicationSnapshotService snapshotService,
-    IInterruptedProcessingRecoveryService interruptedRecoveryService)
+    IInterruptedProcessingRecoveryService interruptedRecoveryService,
+    IOperationDiagnostics? diagnostics = null)
 {
+    private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
     private readonly Lock sync = new();
     private Task<ApplicationSnapshot>? activeRefresh;
     private bool initialRecoveryCompleted;
@@ -57,7 +60,10 @@ public sealed class ApplicationLoadCoordinator(
 
         if (recover)
         {
-            await interruptedRecoveryService.RecoverAsync();
+            using (diagnostics.Begin("startup.recovery"))
+            {
+                await interruptedRecoveryService.RecoverAsync();
+            }
             lock (sync)
             {
                 initialRecoveryCompleted = true;

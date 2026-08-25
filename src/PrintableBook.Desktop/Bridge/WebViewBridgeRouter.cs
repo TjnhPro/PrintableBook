@@ -3,6 +3,7 @@ using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Desktop.Loading;
+using PrintableBook.Core.Application.Diagnostics;
 
 namespace PrintableBook.Desktop.Bridge;
 
@@ -18,8 +19,10 @@ internal sealed class WebViewBridgeRouter(
     IBookCoverSelectionService? coverSelectionService = null,
     IInteriorFrameModeService? interiorFrameModeService = null,
     IBookAssetPreviewService? assetPreviewService = null,
-    ILocalOutputActionService? outputActionService = null)
+    ILocalOutputActionService? outputActionService = null,
+    IOperationDiagnostics? diagnostics = null)
 {
+    private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public const int Version = 1;
@@ -37,6 +40,7 @@ internal sealed class WebViewBridgeRouter(
 
         try
         {
+            using var operation = diagnostics.Begin($"bridge.{request.Command}");
             var response = RouteSynchronous(request);
             if (response.Error is not null || response.Command is not null) return response;
             if (request.Command is "app.refresh" or "book.validate")

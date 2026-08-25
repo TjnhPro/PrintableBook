@@ -7,6 +7,7 @@ using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Desktop.Bridge;
 using PrintableBook.Desktop.Loading;
+using PrintableBook.Core.Application.Diagnostics;
 using System.Windows;
 
 namespace PrintableBook.Desktop;
@@ -21,11 +22,11 @@ public partial class MainWindow : Window
     private bool closeFlowRunning;
     private bool systemShutdown;
 
-    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookAssetPreviewService assetPreviewService, ILocalOutputActionService outputActionService, ProcessWindowShutdownCoordinator shutdownCoordinator)
+    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IApplicationRootDiscovery rootDiscovery, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookAssetPreviewService assetPreviewService, ILocalOutputActionService outputActionService, IOperationDiagnostics diagnostics, ProcessWindowShutdownCoordinator shutdownCoordinator)
     {
         Application = application;
         this.shutdownCoordinator = shutdownCoordinator;
-        bridgeRouter = new WebViewBridgeRouter(applicationLoadCoordinator, settingsStore, processSessionService, rootDiscovery, brandSettingsStore, coverSelectionService, interiorFrameModeService, assetPreviewService, outputActionService);
+        bridgeRouter = new WebViewBridgeRouter(applicationLoadCoordinator, settingsStore, processSessionService, rootDiscovery, brandSettingsStore, coverSelectionService, interiorFrameModeService, assetPreviewService, outputActionService, diagnostics);
         InitializeComponent();
         Closing += OnClosing;
         Closed += OnClosed;

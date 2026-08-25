@@ -1,5 +1,6 @@
 using PrintableBook.Desktop.Bridge;
 using PrintableBook.Desktop.Loading;
+using PrintableBook.Core.Application.Diagnostics;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
@@ -99,6 +100,17 @@ public sealed class BridgeMessageContractTests
         Assert.Equal("app.snapshot", (await first).Command);
         Assert.Equal("app.snapshot", (await second).Command);
         Assert.Equal(1, snapshots.RefreshCount);
+    }
+
+    [Fact]
+    public async Task Async_bridge_commands_are_traced_without_changing_their_response_contract()
+    {
+        var diagnostics = new RecordingDiagnostics();
+        var response = await new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(CreateSnapshot())), diagnostics: diagnostics)
+            .HandleAsync("""{"version":1,"id":"request","command":"app.refresh"}""");
+
+        Assert.True(response.Ok);
+        Assert.Contains("bridge.app.refresh", diagnostics.Operations);
     }
 
     [Fact]
@@ -310,6 +322,18 @@ public sealed class BridgeMessageContractTests
     private sealed class NoopRecoveryService : IInterruptedProcessingRecoveryService
     {
         public ValueTask RecoverAsync(CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    }
+
+    private sealed class RecordingDiagnostics : IOperationDiagnostics
+    {
+        public List<string> Operations { get; } = [];
+        public IDisposable Begin(string operation, string? subject = null)
+        {
+            Operations.Add(operation);
+            return new Scope();
+        }
+
+        private sealed class Scope : IDisposable { public void Dispose() { } }
     }
 
     private sealed class StubSettingsStore : IGlobalSettingsStore
