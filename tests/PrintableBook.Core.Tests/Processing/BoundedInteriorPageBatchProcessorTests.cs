@@ -25,6 +25,19 @@ public sealed class BoundedInteriorPageBatchProcessorTests
         Assert.Equal(requests.Select(request => request.PageId), results.Select(result => result.PageId));
     }
 
+    [Fact]
+    public async Task ProcessAsync_reports_each_successful_page_once()
+    {
+        var requests = new[] { Request("page-01"), Request("page-02"), Request("page-03"), Request("page-04") };
+        var completed = new List<(int Count, int Total)>();
+        await using var controller = BookPageConcurrencyController.Create(2);
+
+        await new BoundedInteriorPageBatchProcessor(new ImmediatePipeline()).ProcessAsync(requests, controller, (count, total) => completed.Add((count, total)));
+
+        Assert.Equal([1, 2, 3, 4], completed.Select(item => item.Count).Order());
+        Assert.All(completed, item => Assert.Equal(4, item.Total));
+    }
+
     private static InteriorPagePipelineRequest Request(string pageId) => new(
         new BookWorkspace(new BookId("book-one"), new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("output-temp")),
         new FileReference($"{pageId}.png"),
@@ -75,5 +88,11 @@ public sealed class BoundedInteriorPageBatchProcessorTests
                 }
             }
         }
+    }
+
+    private sealed class ImmediatePipeline : IInteriorPagePipeline
+    {
+        public ValueTask<InteriorPageProcessingResult> ProcessAsync(InteriorPagePipelineRequest request, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(new InteriorPageProcessingResult(request.PageId, request.Source, new FileReference($"output/{request.PageId}.png")));
     }
 }

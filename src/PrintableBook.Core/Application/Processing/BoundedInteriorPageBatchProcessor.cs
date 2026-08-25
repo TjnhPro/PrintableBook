@@ -7,6 +7,7 @@ public sealed class BoundedInteriorPageBatchProcessor(IInteriorPagePipeline page
     public async ValueTask<IReadOnlyList<InteriorPageProcessingResult>> ProcessAsync(
         IReadOnlyList<InteriorPagePipelineRequest> requests,
         IBookPageConcurrencyController concurrencyController,
+        Action<int, int>? pageCompleted = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(requests);
@@ -18,6 +19,7 @@ public sealed class BoundedInteriorPageBatchProcessor(IInteriorPagePipeline page
 
         using var remainingWorkCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var results = new InteriorPageProcessingResult?[requests.Count];
+        var completed = 0;
         var work = requests.Select((request, index) => ProcessOneAsync(request, index)).ToArray();
 
         try
@@ -48,6 +50,7 @@ public sealed class BoundedInteriorPageBatchProcessor(IInteriorPagePipeline page
                 await concurrencyController.RunAsync(async token =>
                 {
                     results[index] = await pagePipeline.ProcessAsync(request, token);
+                    pageCompleted?.Invoke(Interlocked.Increment(ref completed), requests.Count);
                 }, remainingWorkCancellation.Token);
             }
             catch

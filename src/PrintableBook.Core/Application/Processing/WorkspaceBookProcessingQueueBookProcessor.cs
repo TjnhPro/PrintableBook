@@ -75,7 +75,11 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             state = await BeginStepAsync(state, "interior-pages", cancellationToken);
             await using var concurrencyController = BookPageConcurrencyController.Create(command.MaximumPageConcurrency);
             var pageResults = await new BoundedInteriorPageBatchProcessor(interiorPagePipeline)
-                .ProcessAsync(interiorRequests, concurrencyController, cancellationToken);
+                .ProcessAsync(
+                    interiorRequests,
+                    concurrencyController,
+                    (completed, total) => progress?.Invoke(new BookProcessingProgress(command.BookId, BookProcessingStatus.Running, "interior-pages", completed, total)),
+                    cancellationToken);
             state = await CompleteStepAsync(state, "interior-pages", cancellationToken);
 
             state = await BeginStepAsync(state, "shuffle", cancellationToken);
