@@ -44,6 +44,20 @@ public sealed class ApplicationLoadCoordinatorTests
         Assert.Equal(0, manager.CancellationCount);
     }
 
+    [Fact]
+    public async Task Latest_completed_snapshot_is_ram_only_and_does_not_start_refresh()
+    {
+        var expected = CreateSnapshot();
+        var manager = new RecordingTaskManager(expected);
+        var coordinator = new ApplicationLoadCoordinator(manager);
+
+        var actual = await coordinator.GetLatestCompletedSnapshotAsync();
+
+        Assert.Same(expected, actual);
+        Assert.Equal(0, manager.StartCount);
+        Assert.Equal(1, manager.ListCount);
+    }
+
     private static ApplicationSnapshot CreateSnapshot() => new(
         new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [], []),
         GlobalSettings.Default, [], DateTimeOffset.UtcNow);
@@ -52,6 +66,7 @@ public sealed class ApplicationLoadCoordinatorTests
     {
         private readonly BackgroundTaskId id = new("task-library");
         public int StartCount { get; private set; }
+        public int ListCount { get; private set; }
         public int CancellationCount { get; private set; }
         public ValueTask<BackgroundTaskSnapshot> StartAsync<TRequest>(BackgroundTaskKind kind, string key, string? subject, TRequest request, object? initialView = null, CancellationToken cancellationToken = default)
         {
@@ -60,7 +75,11 @@ public sealed class ApplicationLoadCoordinatorTests
             return ValueTask.FromResult(Snapshot(completed ? BackgroundTaskState.Completed : BackgroundTaskState.Running));
         }
         public ValueTask<BackgroundTaskSnapshot?> GetAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) => ValueTask.FromResult<BackgroundTaskSnapshot?>(Snapshot(completed ? BackgroundTaskState.Completed : BackgroundTaskState.Running));
-        public ValueTask<IReadOnlyList<BackgroundTaskSnapshot>> ListAsync(BackgroundTaskKind? kind = null, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<BackgroundTaskSnapshot>>([Snapshot(BackgroundTaskState.Completed)]);
+        public ValueTask<IReadOnlyList<BackgroundTaskSnapshot>> ListAsync(BackgroundTaskKind? kind = null, CancellationToken cancellationToken = default)
+        {
+            ListCount++;
+            return ValueTask.FromResult<IReadOnlyList<BackgroundTaskSnapshot>>([Snapshot(BackgroundTaskState.Completed)]);
+        }
         public ValueTask<BackgroundTaskSnapshot?> CancelAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) { CancellationCount++; return ValueTask.FromResult<BackgroundTaskSnapshot?>(Snapshot(BackgroundTaskState.Cancelled)); }
         public async ValueTask<bool> WaitAsync(BackgroundTaskId taskId, TimeSpan timeout, CancellationToken cancellationToken = default) { if (!completed) await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken); return true; }
         public bool TryGetResult<TResult>(BackgroundTaskId taskId, out TResult? result)

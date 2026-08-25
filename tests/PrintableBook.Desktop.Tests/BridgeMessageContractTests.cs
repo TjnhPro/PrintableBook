@@ -152,6 +152,21 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Brand_settings_use_the_latest_completed_snapshot_and_save_queues_a_refresh()
+    {
+        var settings = new StubBrandSettingsStore();
+        var router = new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(CreateSnapshot())), brandSettingsStore: settings);
+
+        var loaded = await router.HandleAsync("""{"version":1,"id":"brand-get","command":"brand.settings.get","payload":{"brandName":"Brand One"}}""");
+        var saved = await router.HandleAsync("""{"version":1,"id":"brand-save","command":"brand.settings.save","payload":{"brandName":"Brand One","json":"{\"frame\":true}"}}""");
+
+        Assert.Equal("brand.settings", loaded.Command);
+        Assert.Equal("background.task", saved.Command);
+        Assert.Equal("brands/Brand One", settings.LoadedDirectory!.Value);
+        Assert.Equal("{\"frame\":true}", settings.SavedJson);
+    }
+
+    [Fact]
     public async Task BookValidationRefreshesCSharpOwnedValidationForTheRequestedBook()
     {
         var id = new BookId("Book One");
@@ -171,12 +186,7 @@ public sealed class BridgeMessageContractTests
     [Fact]
     public async Task CoverSelectionIsRoutedThroughTheCSharpOwner()
     {
-        var id = new BookId("Book One");
-        var snapshot = new ApplicationSnapshot(
-            new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [], []),
-            GlobalSettings.Default,
-            [new BookDesktopSummary(id, "Needs selection", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 0)],
-            DateTimeOffset.UnixEpoch);
+        var snapshot = CreateSnapshot();
         var selection = new StubCoverSelectionService();
 
         var response = await new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(snapshot)), coverSelectionService: selection)
@@ -353,11 +363,20 @@ public sealed class BridgeMessageContractTests
     private static ApplicationLoadCoordinator CreateCoordinator(IApplicationSnapshotService snapshots) =>
         new(new SnapshotTaskManager(snapshots));
 
-    private sealed class SnapshotTaskManager(IApplicationSnapshotService snapshots) : IBackgroundTaskManager
+    private sealed class SnapshotTaskManager : IBackgroundTaskManager
     {
         private readonly BackgroundTaskId id = new("task-test-library");
+        private readonly IApplicationSnapshotService snapshots;
         private ApplicationSnapshot? snapshot;
         private Exception? failure;
+
+        public SnapshotTaskManager(IApplicationSnapshotService snapshots)
+        {
+            this.snapshots = snapshots;
+            try { snapshot = snapshots.RefreshAsync().AsTask().GetAwaiter().GetResult(); }
+            catch (Exception exception) { failure = exception; }
+        }
+
         public ValueTask<BackgroundTaskSnapshot> StartAsync<TRequest>(BackgroundTaskKind kind, string key, string? subject, TRequest request, object? initialView = null, CancellationToken cancellationToken = default)
         {
             try { snapshot = snapshots.RefreshAsync(cancellationToken).AsTask().GetAwaiter().GetResult(); }
@@ -445,6 +464,23 @@ public sealed class BridgeMessageContractTests
         }
     }
 
+    private sealed class StubBrandSettingsStore : IBrandSettingsStore
+    {
+        public DirectoryReference? LoadedDirectory { get; private set; }
+        public string? SavedJson { get; private set; }
+        public ValueTask<string> LoadAsync(DirectoryReference brandDirectory, CancellationToken cancellationToken = default)
+        {
+            LoadedDirectory = brandDirectory;
+            return ValueTask.FromResult("{}");
+        }
+        public ValueTask SaveAsync(DirectoryReference brandDirectory, string json, CancellationToken cancellationToken = default)
+        {
+            LoadedDirectory = brandDirectory;
+            SavedJson = json;
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private sealed class StubAssetPreviewService(BookAssetPreview? preview) : IBookAssetPreviewService
     {
         public (string BookId, string SourceReference)? LastRequest { get; private set; }
@@ -487,9 +523,9 @@ public sealed class BridgeMessageContractTests
     private sealed class StubCoverSelectionService : IBookCoverSelectionService
     {
         public (string BookId, string CoverReference)? LastSelection { get; private set; }
-        public ValueTask SelectAsync(string bookId, string coverReference, CancellationToken cancellationToken = default)
+        public ValueTask SelectAsync(DiscoveredBook book, string coverReference, IReadOnlyList<BookAsset> discoveredCoverAssets, CancellationToken cancellationToken = default)
         {
-            LastSelection = (bookId, coverReference);
+            LastSelection = (book.Id.Value, coverReference);
             return ValueTask.CompletedTask;
         }
     }
@@ -498,22 +534,27 @@ public sealed class BridgeMessageContractTests
     {
         public (string BookId, string SourceReference, FrameMode Mode)? LastSelection { get; private set; }
 
-        public ValueTask SetAsync(string bookId, string sourceReference, FrameMode mode, CancellationToken cancellationToken = default)
+        public ValueTask SetAsync(DiscoveredBook book, FileReference source, FrameMode mode, CancellationToken cancellationToken = default)
         {
-            LastSelection = (bookId, sourceReference, mode);
+            LastSelection = (book.Id.Value, source.Value, mode);
             return ValueTask.CompletedTask;
         }
     }
 
     private sealed class ThrowingInteriorFrameModeService : IInteriorFrameModeService
     {
-        public ValueTask SetAsync(string bookId, string sourceReference, FrameMode mode, CancellationToken cancellationToken = default) =>
+        public ValueTask SetAsync(DiscoveredBook book, FileReference source, FrameMode mode, CancellationToken cancellationToken = default) =>
             ValueTask.FromException(new InvalidDataException("The workspace state is unavailable."));
     }
 
-    private static ApplicationSnapshot CreateSnapshot() => new(
-        new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [], []),
-        GlobalSettings.Default,
-        [],
-        DateTimeOffset.UnixEpoch);
+    private static ApplicationSnapshot CreateSnapshot()
+    {
+        var id = new BookId("Book One");
+        var book = new DiscoveredBook("Book One", id, new DirectoryReference("sources/Book One"), new BookWorkspace(id, new DirectoryReference("workspace"), new DirectoryReference("processed"), new DirectoryReference("temporary")));
+        return new ApplicationSnapshot(
+            new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [new DiscoveredBrand("Brand One", new DirectoryReference("brands/Brand One"))], [book]),
+            GlobalSettings.Default,
+            [new BookDesktopSummary(id, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1, CoverCandidates: ["cover-a.png"], InteriorSourcePages: [new InteriorSourcePageSummary("Book interior/page-001.png", FrameMode.Auto)])],
+            DateTimeOffset.UnixEpoch);
+    }
 }

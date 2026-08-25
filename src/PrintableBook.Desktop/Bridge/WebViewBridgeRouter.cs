@@ -18,7 +18,6 @@ internal sealed class WebViewBridgeRouter(
     ApplicationLoadCoordinator? applicationLoadCoordinator = null,
     IGlobalSettingsStore? settingsStore = null,
     IProcessSessionService? processSessionService = null,
-    IApplicationRootDiscovery? rootDiscovery = null,
     IBrandSettingsStore? brandSettingsStore = null,
     IBookCoverSelectionService? coverSelectionService = null,
     IInteriorFrameModeService? interiorFrameModeService = null,
@@ -121,9 +120,20 @@ internal sealed class WebViewBridgeRouter(
                     return new BridgeResponse(Version, request.Id, false, null, "invalid_cover_selection");
                 }
 
+                var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                if (snapshot is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+                var book = snapshot.Discovery.Books.FirstOrDefault(item => string.Equals(item.Id.Value, bookIdElement.GetString(), StringComparison.Ordinal));
+                if (book is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+                var summary = snapshot.BookSummaries.FirstOrDefault(item => item.BookId == book.Id);
+                var candidates = summary?.CoverCandidates?.Select(reference => new PrintableBook.Core.Domain.Books.BookAsset(reference, PrintableBook.Core.Domain.Books.BookAssetKind.Cover)).ToArray() ?? [];
+                if (!candidates.Any(candidate => string.Equals(candidate.Reference, coverElement.GetString(), StringComparison.OrdinalIgnoreCase)))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_cover_selection");
+                }
+
                 try
                 {
-                    await coverSelectionService.SelectAsync(bookIdElement.GetString()!, coverElement.GetString()!, cancellationToken);
+                    await coverSelectionService.SelectAsync(book, coverElement.GetString()!, candidates, cancellationToken);
                     return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
                 }
                 catch (ArgumentException)
@@ -142,9 +152,17 @@ internal sealed class WebViewBridgeRouter(
                     return new BridgeResponse(Version, request.Id, false, null, "invalid_interior_frame_mode");
                 }
 
+                var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                if (snapshot is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+                var book = snapshot.Discovery.Books.FirstOrDefault(item => string.Equals(item.Id.Value, bookIdElement.GetString(), StringComparison.Ordinal));
+                if (book is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+                var summary = snapshot.BookSummaries.FirstOrDefault(item => item.BookId == book.Id);
+                var source = summary?.InteriorSourcePages?.FirstOrDefault(item => string.Equals(item.SourceReference, sourceElement.GetString(), StringComparison.OrdinalIgnoreCase));
+                if (source is null) return new BridgeResponse(Version, request.Id, false, null, "invalid_interior_frame_mode");
+
                 try
                 {
-                    await interiorFrameModeService.SetAsync(bookIdElement.GetString()!, sourceElement.GetString()!, mode, cancellationToken);
+                    await interiorFrameModeService.SetAsync(book, new PrintableBook.Core.Abstractions.FileReference(source.SourceReference), mode, cancellationToken);
                     return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
                 }
                 catch (ArgumentException)
@@ -232,13 +250,15 @@ internal sealed class WebViewBridgeRouter(
 
             if (request.Command is "brand.settings.get" or "brand.settings.save")
             {
-                if (rootDiscovery is null || brandSettingsStore is null || request.Payload is not { } brandPayload ||
+                if (applicationLoadCoordinator is null || brandSettingsStore is null || request.Payload is not { } brandPayload ||
                     !brandPayload.TryGetProperty("brandName", out var brandNameElement) || string.IsNullOrWhiteSpace(brandNameElement.GetString()))
                 {
                     return BridgeResponse.UnsupportedCommand(request.Id);
                 }
 
-                var brand = (await rootDiscovery.DiscoverAsync(cancellationToken)).Brands
+                var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                if (snapshot is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+                var brand = snapshot.Discovery.Brands
                     .FirstOrDefault(item => string.Equals(item.Name, brandNameElement.GetString(), StringComparison.Ordinal));
                 if (brand is null) return new BridgeResponse(Version, request.Id, false, null, "brand_not_found");
 
@@ -254,7 +274,7 @@ internal sealed class WebViewBridgeRouter(
                         return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_settings");
                     }
                     await brandSettingsStore.SaveAsync(brand.Directory, jsonElement.GetString()!, cancellationToken);
-                    return BridgeResponse.Succeeded(request.Id, "brand.settings.saved", jsonElement.GetString()!);
+                    return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
                 }
                 catch (JsonException)
                 {
