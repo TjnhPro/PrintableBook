@@ -22,6 +22,16 @@ public sealed class ApplicationLoadCoordinator(IBackgroundTaskManager taskManage
     public bool TryGetResult(BackgroundTaskId taskId, out ApplicationSnapshot? snapshot) =>
         taskManager.TryGetResult(taskId, out snapshot);
 
+    public async ValueTask<ApplicationSnapshot?> GetLatestCompletedSnapshotAsync(CancellationToken cancellationToken = default)
+    {
+        var tasks = await taskManager.ListAsync(BackgroundTaskKind.LibraryRefresh, cancellationToken);
+        foreach (var task in tasks.Where(task => task.State == BackgroundTaskState.Completed))
+        {
+            if (taskManager.TryGetResult(task.TaskId, out ApplicationSnapshot? snapshot) && snapshot is not null) return snapshot;
+        }
+        return null;
+    }
+
     public async ValueTask<ApplicationSnapshot> GetFreshAsync(CancellationToken cancellationToken = default)
     {
         var task = await StartRefreshAsync(cancellationToken);

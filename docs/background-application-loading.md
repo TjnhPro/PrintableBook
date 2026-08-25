@@ -19,3 +19,16 @@ The manager retains RAM-only task snapshots, typed result/view objects, cancella
 `ProcessSessionService`, `ApplicationLoadCoordinator`, and `BookAssetPreviewCoordinator` are facades only. They do not own a `Task.Run`, semaphore, or per-operation cancellation source. The sole production scheduler for heavy Desktop-triggered work is `BackgroundTaskManager`. `DispatcherStallMonitor` is the independent watchdog exception.
 
 New worker kinds require an independent user-visible start/cancel/observe lifecycle. Do not introduce arbitrary bridge delegates or a separate PDF worker merely to move an internal processing step.
+
+## Bridge command audit
+
+| Command family | Execution boundary |
+| --- | --- |
+| `app.refresh` | LibraryRefresh task; result is fetched explicitly after completion |
+| `process.start` | ProcessingSession task; semantic `process.get/cancel` remain facade calls |
+| `book.asset.preview.get` | AssetPreview task; result is fetched explicitly after completion |
+| `task.get/list/cancel` | RAM-only TaskManager observation/control |
+| `book.validate` | requests a fresh Library snapshot and is retained for the existing preflight flow |
+| settings, brand settings, cover/frame choice | small local persistence/mutation; UI requests normal refresh afterwards |
+| output open/reveal/copy | UI-affine shell/clipboard actions, no new worker kind |
+| diagnostics | bounded in-memory diagnostics/task data |

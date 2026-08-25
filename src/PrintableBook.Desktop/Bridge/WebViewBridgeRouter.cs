@@ -108,18 +108,8 @@ internal sealed class WebViewBridgeRouter(
             }
             if (request.Command == "book.validate")
             {
-                if (applicationLoadCoordinator is null) return BridgeResponse.UnsupportedCommand(request.Id);
-                var snapshot = await applicationLoadCoordinator.GetFreshAsync(cancellationToken);
-                if (request.Command == "book.validate" &&
-                    (request.Payload is not { } validationPayload ||
-                     !validationPayload.TryGetProperty("bookId", out var bookId) ||
-                     string.IsNullOrWhiteSpace(bookId.GetString()) ||
-                     !snapshot.BookSummaries.Any(summary => summary.BookId.Value == bookId.GetString())))
-                {
-                    return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
-                }
-
-                return BridgeResponse.Succeeded(request.Id, "app.snapshot", snapshot);
+                if (applicationLoadCoordinator is null || request.Payload is not { } validationPayload || !validationPayload.TryGetProperty("bookId", out var bookId) || string.IsNullOrWhiteSpace(bookId.GetString())) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+                return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
             }
 
             if (request.Command == "book.cover.select")
@@ -134,7 +124,7 @@ internal sealed class WebViewBridgeRouter(
                 try
                 {
                     await coverSelectionService.SelectAsync(bookIdElement.GetString()!, coverElement.GetString()!, cancellationToken);
-                    return BridgeResponse.Succeeded(request.Id, "app.snapshot", await applicationLoadCoordinator.RefreshAsync(ApplicationLoadKind.Refresh, cancellationToken));
+                    return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
                 }
                 catch (ArgumentException)
                 {
@@ -155,7 +145,7 @@ internal sealed class WebViewBridgeRouter(
                 try
                 {
                     await interiorFrameModeService.SetAsync(bookIdElement.GetString()!, sourceElement.GetString()!, mode, cancellationToken);
-                    return BridgeResponse.Succeeded(request.Id, "app.snapshot", await applicationLoadCoordinator.RefreshAsync(ApplicationLoadKind.Refresh, cancellationToken));
+                    return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
                 }
                 catch (ArgumentException)
                 {
@@ -201,8 +191,8 @@ internal sealed class WebViewBridgeRouter(
                     return new BridgeResponse(Version, request.Id, false, null, "invalid_output_action");
                 }
 
-                var snapshot = await applicationLoadCoordinator.RefreshAsync(ApplicationLoadKind.Refresh, cancellationToken);
-                var book = snapshot.BookSummaries.FirstOrDefault(item => item.BookId.Value == bookIdElement.GetString());
+                var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                var book = snapshot?.BookSummaries.FirstOrDefault(item => item.BookId.Value == bookIdElement.GetString());
                 var artifact = artifactElement.GetString()!;
                 if (book is null || !book.PublishedArtifacts.Contains(artifact, StringComparer.Ordinal) || !System.IO.File.Exists(artifact))
                 {

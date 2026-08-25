@@ -165,7 +165,7 @@ public sealed class BridgeMessageContractTests
             .HandleAsync("""{"version":1,"id":"request-6","command":"book.validate","payload":{"bookId":"Book One"}}""");
 
         Assert.True(response.Ok);
-        Assert.Equal("app.snapshot", response.Command);
+        Assert.Equal("background.task", response.Command);
     }
 
     [Fact]
@@ -183,7 +183,7 @@ public sealed class BridgeMessageContractTests
             .HandleAsync("""{"version":1,"id":"request-6a","command":"book.cover.select","payload":{"bookId":"Book One","coverReference":"cover-a.png"}}""");
 
         Assert.True(response.Ok);
-        Assert.Equal("app.snapshot", response.Command);
+        Assert.Equal("background.task", response.Command);
         Assert.Equal(("Book One", "cover-a.png"), selection.LastSelection);
     }
 
@@ -202,8 +202,7 @@ public sealed class BridgeMessageContractTests
         var response = await router.HandleAsync($"{{\"version\":1,\"id\":\"request-frame-mode\",\"command\":\"book.interior.frame-mode.set\",\"payload\":{{\"bookId\":\"Book One\",\"sourceReference\":\"Book interior/page-001.png\",\"mode\":\"{mode}\"}}}}");
 
         Assert.True(response.Ok);
-        Assert.Equal("app.snapshot", response.Command);
-        Assert.Same(snapshot, response.Payload);
+        Assert.Equal("background.task", response.Command);
         Assert.Equal(("Book One", "Book interior/page-001.png", expectedMode), selection.LastSelection);
     }
 
