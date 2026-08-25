@@ -44,7 +44,8 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("role=\"dialog\"", script, StringComparison.Ordinal);
         Assert.Contains("close-book-drawer", script, StringComparison.Ordinal);
         Assert.Contains("event.key !== \"Escape\"", script, StringComparison.Ordinal);
-        Assert.Contains("width:min(720px,52vw)", layout, StringComparison.Ordinal);
+        Assert.Contains("width:75vw", layout, StringComparison.Ordinal);
+        Assert.DoesNotContain("width:min(720px,52vw)", layout, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -56,8 +57,12 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("queueVisibleAssetPreviews", script, StringComparison.Ordinal);
         Assert.Contains("state.activePreviewRequests < 4", script, StringComparison.Ordinal);
         Assert.Contains("asset-folder-group", script, StringComparison.Ordinal);
-        Assert.Contains("Folder is missing from this Book.", script, StringComparison.Ordinal);
+        Assert.Contains("Every discovered Interior page is included in this run.", script, StringComparison.Ordinal);
+        Assert.Contains("assetSearchFocused", script, StringComparison.Ordinal);
+        Assert.Contains("search.setSelectionRange", script, StringComparison.Ordinal);
         Assert.Contains("--pb-asset-preview: 1 / 1", layout, StringComparison.Ordinal);
+        Assert.Contains("grid-template-columns:repeat(3,minmax(0,1fr))", layout, StringComparison.Ordinal);
+        Assert.Contains("@media (min-width:1280px)", layout, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -65,10 +70,22 @@ public sealed class BookWorkspaceLayoutContractTests
     {
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
 
-        Assert.Contains("Auto · Not classified", script, StringComparison.Ordinal);
+        Assert.Contains("Every discovered Interior page is included in this run.", script, StringComparison.Ordinal);
+        Assert.Contains("<span>Frame mode</span>", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"set-interior-frame-mode\"", script, StringComparison.Ordinal);
         Assert.Contains("data-source-reference", script, StringComparison.Ordinal);
         Assert.DoesNotContain("book.interior.frame-mode.batch", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BookDetailIsInteriorOnlyAndKeepsTheOverviewToASummary()
+    {
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
+
+        Assert.Contains("Interior-only preflight checks the source pages", script, StringComparison.Ordinal);
+        Assert.Contains("!valueFor(check, \"code\", \"\").startsWith(\"book.cover_\")", script, StringComparison.Ordinal);
+        Assert.Contains("Use Interior assets to review page previews", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Full-book preflight", script, StringComparison.Ordinal);
     }
 
     [Fact]
