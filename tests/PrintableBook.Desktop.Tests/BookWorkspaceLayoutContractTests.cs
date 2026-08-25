@@ -27,4 +27,17 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("book-grid", script, StringComparison.Ordinal);
         Assert.Contains("role=\"status\"", script, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void BookDetailUsesAnAccessibleDismissibleDrawer()
+    {
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
+        var layout = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css"));
+
+        Assert.Contains("book-drawer", script, StringComparison.Ordinal);
+        Assert.Contains("role=\"dialog\"", script, StringComparison.Ordinal);
+        Assert.Contains("close-book-drawer", script, StringComparison.Ordinal);
+        Assert.Contains("event.key !== \"Escape\"", script, StringComparison.Ordinal);
+        Assert.Contains("width:min(720px,52vw)", layout, StringComparison.Ordinal);
+    }
 }
