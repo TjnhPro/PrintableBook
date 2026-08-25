@@ -98,7 +98,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var reshuffledBook = Assert.Single(reshuffled.Books);
         Assert.Equal(BookProcessingStatus.Completed, reshuffledBook.Status);
         Assert.Equal(456, (await new JsonInteriorShuffleStore(fileSystem).LoadAsync(workspace))!.Seed);
-        Assert.NotEqual(bookResult.PublishedOutputs.InteriorPdf.Value, reshuffledBook.PublishedOutputs!.InteriorPdf.Value);
+        Assert.Equal(bookResult.PublishedOutputs.InteriorPdf.Value, reshuffledBook.PublishedOutputs!.InteriorPdf.Value);
         Assert.Equal(processedPageHash, Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(processedPage))));
         Assert.Equal(processedPageTimestamp, File.GetLastWriteTimeUtc(processedPage));
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-0001", "prepared.png")));

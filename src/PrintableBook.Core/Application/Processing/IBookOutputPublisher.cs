@@ -1,4 +1,5 @@
 using PrintableBook.Core.Abstractions;
+using PrintableBook.Core.Domain.Books;
 
 namespace PrintableBook.Core.Application.Processing;
 
@@ -16,6 +17,7 @@ public sealed record PrintableBookPdfValidation(
     PhysicalPageSize ExpectedInteriorPageSize);
 
 public sealed record BookOutputPublicationRequest(
+    BookId BookId,
     PrintableBookPdfExportResult TemporaryOutput,
     DirectoryReference FinalOutputRoot,
     PrintableBookPdfValidation Validation);
@@ -26,6 +28,7 @@ public sealed record PublishedBookOutputs(
     FileReference InteriorPdf);
 
 public sealed record InteriorOutputPublicationRequest(
+    BookId BookId,
     InteriorPdfExportResult TemporaryOutput,
     DirectoryReference FinalOutputRoot,
     int ExpectedInteriorPageCount,

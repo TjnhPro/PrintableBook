@@ -52,7 +52,7 @@ public sealed class ProcessingSessionWorker(
         var processingRequest = new BookProcessingQueueRequest(books.Select(book => new PrintableBookProcessingCommand(
             book.Id,
             book.Directory,
-            new DirectoryReference(Path.Combine(snapshot.Discovery.Paths.Root.Value, "outputs")),
+            new DirectoryReference(Path.Combine(book.Directory.Value, "Output")),
             new ImageSize(settings.ArtworkMaximumSide, settings.ArtworkMaximumSide),
             new ImageSize(settings.ArtworkMaximumSide, settings.ArtworkMaximumSide),
             new ImageSize(settings.WorkingPageWidth, settings.WorkingPageHeight),

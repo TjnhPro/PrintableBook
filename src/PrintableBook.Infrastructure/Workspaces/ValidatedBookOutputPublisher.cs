@@ -4,7 +4,7 @@ using PrintableBook.Core.Application.Processing;
 namespace PrintableBook.Infrastructure.Workspaces;
 
 /// <summary>
-/// Publishes a complete, validated pair of PDFs as one versioned directory.
+/// Publishes validated PDFs as the current Book-local output files.
 /// </summary>
 public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocumentInspector) : IBookOutputPublisher
 {
@@ -13,28 +13,22 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var temporaryDirectoryPath = Path.GetDirectoryName(request.TemporaryOutput.CoverPdf.Value)
-            ?? throw new ArgumentException("Temporary cover output must have a parent directory.", nameof(request));
-        var interiorDirectoryPath = Path.GetDirectoryName(request.TemporaryOutput.InteriorPdf.Value);
-        if (!string.Equals(temporaryDirectoryPath, interiorDirectoryPath, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ArgumentException("Temporary cover and interior PDFs must be in the same directory.", nameof(request));
-        }
-
         await ValidateAsync(request.TemporaryOutput.CoverPdf, request.Validation.ExpectedCoverPageCount, request.Validation.ExpectedCoverPageSize, cancellationToken);
         await ValidateAsync(request.TemporaryOutput.InteriorPdf, request.Validation.ExpectedInteriorPageCount, request.Validation.ExpectedInteriorPageSize, cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(request.FinalOutputRoot.Value);
-        var publishedDirectory = new DirectoryReference(Path.Combine(
-            request.FinalOutputRoot.Value,
-            $"run-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}"));
-        Directory.Move(temporaryDirectoryPath, publishedDirectory.Value);
+        var publishedDirectory = request.FinalOutputRoot;
+        var coverPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Cover.pdf"));
+        var interiorPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Interior.pdf"));
+        ReplaceFile(request.TemporaryOutput.CoverPdf, coverPdf);
+        ReplaceFile(request.TemporaryOutput.InteriorPdf, interiorPdf);
+        DeleteTemporaryDirectory(request.TemporaryOutput.CoverPdf);
 
         return new PublishedBookOutputs(
             publishedDirectory,
-            new FileReference(Path.Combine(publishedDirectory.Value, Path.GetFileName(request.TemporaryOutput.CoverPdf.Value))),
-            new FileReference(Path.Combine(publishedDirectory.Value, Path.GetFileName(request.TemporaryOutput.InteriorPdf.Value))));
+            coverPdf,
+            interiorPdf);
     }
 
     public async ValueTask<PublishedInteriorOutput> PublishInteriorAsync(
@@ -42,20 +36,45 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var temporaryDirectoryPath = Path.GetDirectoryName(request.TemporaryOutput.InteriorPdf.Value)
-            ?? throw new ArgumentException("Temporary interior output must have a parent directory.", nameof(request));
         await ValidateAsync(request.TemporaryOutput.InteriorPdf, request.ExpectedInteriorPageCount, request.ExpectedInteriorPageSize, cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(request.FinalOutputRoot.Value);
-        var publishedDirectory = new DirectoryReference(Path.Combine(
-            request.FinalOutputRoot.Value,
-            $"run-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}"));
-        Directory.Move(temporaryDirectoryPath, publishedDirectory.Value);
+        var publishedDirectory = request.FinalOutputRoot;
+        var interiorPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Interior.pdf"));
+        ReplaceFile(request.TemporaryOutput.InteriorPdf, interiorPdf);
+        DeleteTemporaryDirectory(request.TemporaryOutput.InteriorPdf);
 
         return new PublishedInteriorOutput(
             publishedDirectory,
-            new FileReference(Path.Combine(publishedDirectory.Value, Path.GetFileName(request.TemporaryOutput.InteriorPdf.Value))));
+            interiorPdf);
+    }
+
+    private static void ReplaceFile(FileReference temporaryFile, FileReference finalFile)
+    {
+        var pending = $"{finalFile.Value}.{Guid.NewGuid():N}.pending";
+        try
+        {
+            File.Copy(temporaryFile.Value, pending, overwrite: true);
+            File.Move(pending, finalFile.Value, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(pending))
+            {
+                File.Delete(pending);
+            }
+        }
+    }
+
+    private static void DeleteTemporaryDirectory(FileReference temporaryFile)
+    {
+        var temporaryDirectory = Path.GetDirectoryName(temporaryFile.Value)
+            ?? throw new InvalidOperationException("Temporary PDF output must have a parent directory.");
+        if (Directory.Exists(temporaryDirectory))
+        {
+            Directory.Delete(temporaryDirectory, recursive: true);
+        }
     }
 
     private async ValueTask ValidateAsync(

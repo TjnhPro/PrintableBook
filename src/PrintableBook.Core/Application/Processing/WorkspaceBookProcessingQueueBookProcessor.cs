@@ -112,6 +112,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 state = await CompleteStepAsync(state, "interior-pdf-export", cancellationToken);
                 state = await BeginStepAsync(state, "interior-publish", cancellationToken);
                 var publishedInterior = await outputPublisher.PublishInteriorAsync(new InteriorOutputPublicationRequest(
+                    command.BookId,
                     interiorPdf,
                     command.FinalOutputRoot,
                     assembly.OrderedPages.Count,
@@ -135,6 +136,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             state = await CompleteStepAsync(state, "pdf-export", cancellationToken);
             state = await BeginStepAsync(state, "publish", cancellationToken);
             var published = await outputPublisher.PublishAsync(new BookOutputPublicationRequest(
+                command.BookId,
                 pdfOutput,
                 command.FinalOutputRoot,
                 new PrintableBookPdfValidation(
