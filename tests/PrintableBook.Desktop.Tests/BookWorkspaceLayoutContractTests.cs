@@ -40,4 +40,17 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("event.key !== \"Escape\"", script, StringComparison.Ordinal);
         Assert.Contains("width:min(720px,52vw)", layout, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void AssetWorkspaceGroupsKnownFoldersAndQueuesOnlyVisiblePreviews()
+    {
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
+        var layout = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css"));
+
+        Assert.Contains("queueVisibleAssetPreviews", script, StringComparison.Ordinal);
+        Assert.Contains("state.activePreviewRequests < 4", script, StringComparison.Ordinal);
+        Assert.Contains("asset-folder-group", script, StringComparison.Ordinal);
+        Assert.Contains("Folder is missing from this Book.", script, StringComparison.Ordinal);
+        Assert.Contains("--pb-asset-preview: 1 / 1", layout, StringComparison.Ordinal);
+    }
 }
