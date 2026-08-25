@@ -167,6 +167,28 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Mutation_commands_use_only_the_retained_snapshot_before_queueing_refreshes()
+    {
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var cover = new StubCoverSelectionService();
+        var frame = new StubInteriorFrameModeService();
+        var brands = new StubBrandSettingsStore();
+        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), brandSettingsStore: brands, coverSelectionService: cover, interiorFrameModeService: frame);
+
+        var coverResponse = await router.HandleAsync("""{"version":1,"id":"cover","command":"book.cover.select","payload":{"bookId":"Book One","coverReference":"cover-a.png"}}""");
+        var frameResponse = await router.HandleAsync("""{"version":1,"id":"frame","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png","mode":"enabled"}}""");
+        var getResponse = await router.HandleAsync("""{"version":1,"id":"brand-get","command":"brand.settings.get","payload":{"brandName":"Brand One"}}""");
+        var saveResponse = await router.HandleAsync("""{"version":1,"id":"brand-save","command":"brand.settings.save","payload":{"brandName":"Brand One","json":"{}"}}""");
+
+        Assert.All([coverResponse, frameResponse, getResponse, saveResponse], response => Assert.True(response.Ok));
+        Assert.Equal(3, manager.Starts);
+        Assert.Equal(4, manager.Lists);
+        Assert.Equal(("Book One", "cover-a.png"), cover.LastSelection);
+        Assert.Equal(("Book One", "Book interior/page-001.png", FrameMode.Enabled), frame.LastSelection);
+        Assert.Equal("{}", brands.SavedJson);
+    }
+
+    [Fact]
     public async Task BookValidationRefreshesCSharpOwnedValidationForTheRequestedBook()
     {
         var id = new BookId("Book One");
@@ -431,6 +453,29 @@ public sealed class BridgeMessageContractTests
         public bool TryGetView<TView>(BackgroundTaskId taskId, out TView? view) where TView : class { view = null; return false; }
         private static BackgroundTaskSnapshot Complete(BackgroundTaskId id, string key, string? subject) => new(id, BackgroundTaskKind.AssetPreview, BackgroundTaskState.Completed, key, subject, null, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null, null);
         private static BackgroundTaskSnapshot Fail(BackgroundTaskId id, string key, string? subject, Exception exception) => new(id, BackgroundTaskKind.AssetPreview, BackgroundTaskState.Failed, key, subject, null, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "preview_failed", exception.Message);
+    }
+
+    private sealed class RetainedSnapshotTaskManager(ApplicationSnapshot snapshot) : IBackgroundTaskManager
+    {
+        private readonly BackgroundTaskId id = new("retained-library-task");
+        public int Starts { get; private set; }
+        public int Lists { get; private set; }
+        public ValueTask<BackgroundTaskSnapshot> StartAsync<TRequest>(BackgroundTaskKind kind, string key, string? subject, TRequest request, object? initialView = null, CancellationToken cancellationToken = default)
+        {
+            Starts++;
+            return ValueTask.FromResult(Current());
+        }
+        public ValueTask<BackgroundTaskSnapshot?> GetAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) => ValueTask.FromResult<BackgroundTaskSnapshot?>(Current());
+        public ValueTask<IReadOnlyList<BackgroundTaskSnapshot>> ListAsync(BackgroundTaskKind? kind = null, CancellationToken cancellationToken = default)
+        {
+            Lists++;
+            return ValueTask.FromResult<IReadOnlyList<BackgroundTaskSnapshot>>([Current()]);
+        }
+        public ValueTask<BackgroundTaskSnapshot?> CancelAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) => ValueTask.FromResult<BackgroundTaskSnapshot?>(Current());
+        public ValueTask<bool> WaitAsync(BackgroundTaskId taskId, TimeSpan timeout, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
+        public bool TryGetResult<TResult>(BackgroundTaskId taskId, out TResult? result) { if (snapshot is TResult typed) { result = typed; return true; } result = default; return false; }
+        public bool TryGetView<TView>(BackgroundTaskId taskId, out TView? view) where TView : class { view = null; return false; }
+        private BackgroundTaskSnapshot Current() => new(id, BackgroundTaskKind.LibraryRefresh, BackgroundTaskState.Completed, "library", "Library", null, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null, null);
     }
 
     private sealed class NoopRecoveryService : IInterruptedProcessingRecoveryService
