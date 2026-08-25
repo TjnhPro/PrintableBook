@@ -33,6 +33,7 @@ public sealed class ProcessSessionServiceTests
             await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
             Assert.True(started.IsActive);
+            Assert.NotNull(started.StartedAt);
             Assert.NotSame(marker, application.ExecutionContext);
         }
         finally

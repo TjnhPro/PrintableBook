@@ -8,7 +8,7 @@ using PrintableBook.Core.Domain.Processing;
 namespace PrintableBook.Core.Application.Desktop;
 
 public sealed record ProcessQueueEntry(BookId BookId, BookProcessingStatus Status, string? Detail);
-public sealed record ProcessSessionSnapshot(bool IsActive, bool IsCancelling, string? BrandName, BookId? CurrentBookId, string? CurrentStep, IReadOnlyList<ProcessQueueEntry> Queue, int PagesCompleted = 0, int PagesTotal = 0, int WorkerLimit = 0);
+public sealed record ProcessSessionSnapshot(bool IsActive, bool IsCancelling, string? BrandName, BookId? CurrentBookId, string? CurrentStep, IReadOnlyList<ProcessQueueEntry> Queue, int PagesCompleted = 0, int PagesTotal = 0, int WorkerLimit = 0, DateTimeOffset? StartedAt = null);
 
 public interface IProcessSessionService
 {
@@ -99,7 +99,7 @@ public sealed class ProcessSessionService(
             if (snapshot.IsActive || executionTask is { IsCompleted: false }) return snapshot;
             sessionCancellation = new CancellationTokenSource();
             cancellation = sessionCancellation;
-            snapshot = new ProcessSessionSnapshot(true, false, brandName, selected[0].Id, "Preparing", selected.Select((book, index) => new ProcessQueueEntry(book.Id, index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Preparing" : "Waiting")).ToArray(), 0, 0, applicationSnapshot.GlobalSettings.MaximumPageConcurrency);
+            snapshot = new ProcessSessionSnapshot(true, false, brandName, selected[0].Id, "Preparing", selected.Select((book, index) => new ProcessQueueEntry(book.Id, index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Preparing" : "Waiting")).ToArray(), 0, 0, applicationSnapshot.GlobalSettings.MaximumPageConcurrency, DateTimeOffset.UtcNow);
             started = snapshot;
             executionTask = Task.Run(
                 () => ExecuteAsync(applicationSnapshot, selected, brandName, mode, sessionCancellation.Token),
@@ -198,7 +198,8 @@ public sealed class ProcessSessionService(
             lock (sync)
             {
                 snapshot = new ProcessSessionSnapshot(false, false, brandName, null, null,
-                    result.Books.Select(book => new ProcessQueueEntry(book.BookId, book.Status, book.Failure?.Message)).ToArray());
+                    result.Books.Select(book => new ProcessQueueEntry(book.BookId, book.Status, book.Failure?.Message)).ToArray(),
+                    snapshot.PagesCompleted, snapshot.PagesTotal, snapshot.WorkerLimit, snapshot.StartedAt);
             }
         }
         catch (OperationCanceledException)

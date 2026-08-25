@@ -32,6 +32,10 @@ const expected = [
   ,"Full-book preflight"
   ,"Ready to process"
   ,"validation-mode"
+  ,"Current stage"
+  ,"process-status-strip"
+  ,"Run needs review"
+  ,"Elapsed"
 ];
 
 for (const value of expected) {

@@ -99,7 +99,7 @@ test("snapshot rendering opens the Book Library and keeps discovery and brand da
 test("phase 4 page markup includes the interior-only processing workflow", () => {
   const script = readFileSync(appScriptPath, "utf8");
 
-  for (const state of ["Selected queue", "Process Interior", "Published outputs", "Workspace logs", "Settings saved", "Brand settings", "Interior processing", "Current step"]) {
+  for (const state of ["Selected queue", "Process Interior", "Published outputs", "Workspace logs", "Settings saved", "Brand settings", "Interior processing", "Current stage", "Elapsed"]) {
     assert.match(script, new RegExp(state));
   }
   assert.match(script, /send\("settings\.save"/);
@@ -198,6 +198,8 @@ test("a mixed terminal queue retains the most severe terminal step", () => {
 
   assert.match(content.innerHTML, /Book failed/);
   assert.match(content.innerHTML, /<strong>Last session<\/strong><span>Failed<\/span>/);
+  assert.match(content.innerHTML, /Run needs review/);
+  assert.match(content.innerHTML, /PDF export failed/);
 });
 
 test("book filters render the recovered interrupted workspace status", () => {
