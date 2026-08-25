@@ -7,7 +7,8 @@ public sealed record OrderedBookAssemblyRequest(
     IReadOnlyList<FileReference> IntroPages,
     IReadOnlyList<InteriorPageProcessingResult> InteriorPages,
     InteriorShuffleMap ShuffleMap,
-    ImageSize ExpectedInteriorSize);
+    ImageSize ExpectedInteriorSize,
+    FileReference? BackgroundPage = null);
 
 public sealed record OrderedBookAssembly(IReadOnlyList<FileReference> OrderedPages);
 

@@ -22,11 +22,22 @@ public sealed class OrderedBookAssembler(IFileSystem fileSystem, IImageInspector
         {
             await ValidateInteriorPageAsync(finalPage, request.ExpectedInteriorSize, cancellationToken);
         }
+        if (request.BackgroundPage is not null)
+        {
+            await ValidateInteriorPageAsync(request.BackgroundPage, request.ExpectedInteriorSize, cancellationToken);
+        }
 
         var orderedInteriors = request.ShuffleMap.Entries
             .OrderBy(entry => entry.OutputIndex)
-            .Select(entry => finalPagesBySource[entry.Page]);
-        return new OrderedBookAssembly(request.IntroPages.Concat(orderedInteriors).ToArray());
+            .Select(entry => finalPagesBySource[entry.Page])
+            .ToArray();
+        var orderedPages = new List<FileReference>(request.IntroPages);
+        foreach (var artwork in orderedInteriors)
+        {
+            orderedPages.Add(artwork);
+            if (request.BackgroundPage is not null) orderedPages.Add(request.BackgroundPage);
+        }
+        return new OrderedBookAssembly(orderedPages);
     }
 
     private async ValueTask ValidateReadableAsync(FileReference page, CancellationToken cancellationToken)

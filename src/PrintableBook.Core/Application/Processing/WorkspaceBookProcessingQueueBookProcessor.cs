@@ -127,7 +127,8 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     : source.GetAssets(BookAssetKind.Intro).Select(asset => new FileReference(asset.Reference)).ToArray(),
                 pageResults,
                 shuffleMap!,
-                command.FinalPageSize), cancellationToken);
+                command.FinalPageSize,
+                command.BackgroundPage), cancellationToken);
             state = await CompleteStepAsync(state, "assembly", cancellationToken);
 
             if (command.Mode == BookProcessingMode.InteriorOnly)

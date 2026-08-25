@@ -45,6 +45,22 @@ public sealed class MagickPrintableBookPdfExporterTests : IAsyncLifetime
         Assert.Contains("/Width 2550", await File.ReadAllTextAsync(result.InteriorPdf.Value));
     }
 
+    [Fact]
+    public async Task ExportInteriorAsync_writes_a_repeated_background_reference_as_distinct_pdf_pages()
+    {
+        Directory.CreateDirectory(rootPath);
+        var pageOne = await CreatePngAsync("art-01.png");
+        var pageTwo = await CreatePngAsync("art-02.png");
+        var background = await CreatePngAsync("background.png");
+        var output = new DirectoryReference(Path.Combine(rootPath, "repeated-background-output"));
+
+        var result = await new MagickPrintableBookPdfExporter().ExportInteriorAsync(new InteriorPdfExportRequest(
+            [pageOne, background, pageTwo, background], output, new PhysicalPageSize(8.5, 8.5)));
+
+        using var interiorPdf = PdfReader.Open(result.InteriorPdf.Value);
+        Assert.Equal(4, interiorPdf.Pages.Count);
+    }
+
     private async Task<FileReference> CreatePngAsync(string filename, uint width = 2550, uint height = 2550)
     {
         var path = Path.Combine(rootPath, filename);
