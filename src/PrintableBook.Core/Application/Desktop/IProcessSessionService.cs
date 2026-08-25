@@ -195,7 +195,7 @@ public sealed class ProcessSessionService(
                 mode)).ToArray());
 
             lock (sync) snapshot = snapshot with { CurrentStep = "Processing" };
-            var result = await application.ProcessBooksAsync(request, cancellationToken);
+            var result = await application.ProcessBooksAsync(request, cancellationToken: cancellationToken);
             lock (sync)
             {
                 snapshot = new ProcessSessionSnapshot(false, false, brandName, null, null,

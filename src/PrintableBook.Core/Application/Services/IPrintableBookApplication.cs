@@ -17,5 +17,6 @@ public interface IPrintableBookApplication
 
     ValueTask<BookProcessingQueueResult> ProcessBooksAsync(
         BookProcessingQueueRequest request,
+        Action<BookProcessingProgress>? progress = null,
         CancellationToken cancellationToken = default);
 }

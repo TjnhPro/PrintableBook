@@ -259,7 +259,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
                 cancellation));
         var command = CreateCommand("committed-book", bookDirectory);
 
-        var result = await processor.ProcessBookAsync(command, cancellation.Token);
+        var result = await processor.ProcessBookAsync(command, cancellationToken: cancellation.Token);
 
         Assert.Equal(BookProcessingStatus.Completed, result.Status);
         Assert.NotNull(result.PublishedOutputs);
@@ -292,7 +292,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             blockingPublisher);
         var command = CreateCommand("cancelled-book", bookDirectory);
 
-        var processing = processor.ProcessBookAsync(command, cancellation.Token).AsTask();
+        var processing = processor.ProcessBookAsync(command, cancellationToken: cancellation.Token).AsTask();
         await blockingPublisher.WaitUntilStartedAsync();
         cancellation.Cancel();
 

@@ -48,6 +48,7 @@ public interface IBookProcessingQueueBookProcessor
 {
     ValueTask<BookProcessingQueueBookResult> ProcessBookAsync(
         PrintableBookProcessingCommand command,
+        Action<BookProcessingProgress>? progress = null,
         CancellationToken cancellationToken = default);
 }
 
@@ -60,6 +61,7 @@ public sealed class BookProcessingQueueProcessor(
 {
     public async ValueTask<BookProcessingQueueResult> ProcessAsync(
         BookProcessingQueueRequest request,
+        Action<BookProcessingProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -78,7 +80,10 @@ public sealed class BookProcessingQueueProcessor(
         foreach (var book in request.Books)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            results.Add(await bookProcessor.ProcessBookAsync(book, cancellationToken));
+            progress?.Invoke(new BookProcessingProgress(book.BookId, BookProcessingStatus.Running, "Preparing"));
+            var result = await bookProcessor.ProcessBookAsync(book, progress, cancellationToken);
+            results.Add(result);
+            progress?.Invoke(new BookProcessingProgress(result.BookId, result.Status, result.Status.ToString(), detail: result.Failure?.Message));
         }
 
         return new BookProcessingQueueResult(false, results);

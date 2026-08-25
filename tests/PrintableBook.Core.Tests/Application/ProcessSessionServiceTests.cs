@@ -351,7 +351,7 @@ public sealed class ProcessSessionServiceTests
 
         public ValueTask<ProcessingResult> ProcessAsync(ProcessingRequest request, IProgress<ProcessingProgress>? progress = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
-        public async ValueTask<BookProcessingQueueResult> ProcessBooksAsync(BookProcessingQueueRequest request, CancellationToken cancellationToken = default)
+        public async ValueTask<BookProcessingQueueResult> ProcessBooksAsync(BookProcessingQueueRequest request, Action<BookProcessingProgress>? progress = null, CancellationToken cancellationToken = default)
         {
             InvocationCount++;
             ExecutionContext = SynchronizationContext.Current;

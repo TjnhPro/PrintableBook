@@ -21,9 +21,10 @@ public sealed class PrintableBookApplication(
 
     public ValueTask<BookProcessingQueueResult> ProcessBooksAsync(
         BookProcessingQueueRequest request,
+        Action<BookProcessingProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return queueProcessor.ProcessAsync(request, cancellationToken);
+        return queueProcessor.ProcessAsync(request, progress, cancellationToken);
     }
 }

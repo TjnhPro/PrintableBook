@@ -40,6 +40,19 @@ public sealed class BookProcessingQueueProcessorTests
         Assert.Equal([BookProcessingStatus.Failed, BookProcessingStatus.Completed], result.Books.Select(book => book.Status));
     }
 
+    [Fact]
+    public async Task ProcessAsync_reports_preparation_and_terminal_status_for_each_book()
+    {
+        var progress = new List<BookProcessingProgress>();
+        var processor = new BookProcessingQueueProcessor(new ProcessingSessionGate(), new RecordingBookProcessor());
+
+        await processor.ProcessAsync(new BookProcessingQueueRequest([Command("failed-book"), Command("next-book")]), progress.Add);
+
+        Assert.Equal(
+            [("failed-book", "Preparing"), ("failed-book", "Failed"), ("next-book", "Preparing"), ("next-book", "Completed")],
+            progress.Select(item => (item.BookId.Value, item.Step)));
+    }
+
     private static PrintableBookProcessingCommand Command(string bookId) => new(
         new BookId(bookId),
         new DirectoryReference(bookId),
@@ -61,7 +74,7 @@ public sealed class BookProcessingQueueProcessorTests
         private readonly TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource started = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public async ValueTask<BookProcessingQueueBookResult> ProcessBookAsync(PrintableBookProcessingCommand command, CancellationToken cancellationToken = default)
+        public async ValueTask<BookProcessingQueueBookResult> ProcessBookAsync(PrintableBookProcessingCommand command, Action<BookProcessingProgress>? progress = null, CancellationToken cancellationToken = default)
         {
             started.TrySetResult();
             await release.Task.WaitAsync(cancellationToken);
@@ -77,7 +90,7 @@ public sealed class BookProcessingQueueProcessorTests
     {
         public List<string> ProcessedBookIds { get; } = [];
 
-        public ValueTask<BookProcessingQueueBookResult> ProcessBookAsync(PrintableBookProcessingCommand command, CancellationToken cancellationToken = default)
+        public ValueTask<BookProcessingQueueBookResult> ProcessBookAsync(PrintableBookProcessingCommand command, Action<BookProcessingProgress>? progress = null, CancellationToken cancellationToken = default)
         {
             ProcessedBookIds.Add(command.BookId.Value);
             return ValueTask.FromResult(command.BookId.Value == "failed-book"
