@@ -273,8 +273,9 @@ internal sealed class WebViewBridgeRouter(
                     {
                         return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_settings");
                     }
-                    await brandSettingsStore.SaveAsync(brand.Directory, jsonElement.GetString()!, cancellationToken);
-                    return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
+                    var savedJson = jsonElement.GetString()!;
+                    await brandSettingsStore.SaveAsync(brand.Directory, savedJson, cancellationToken);
+                    return BridgeResponse.Succeeded(request.Id, "brand.settings.saved", savedJson);
                 }
                 catch (JsonException)
                 {

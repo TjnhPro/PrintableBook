@@ -23,6 +23,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     insertAdjacentHTML: (_position, markup) => { content.innerHTML += markup; }
   };
   const brandSelect = { innerHTML: "", value: "", addEventListener: () => { } };
+  const brandSettingsEditor = { dataset: { brandSettings: "" }, value: "{}" };
   const refreshButton = {
     disabled: false,
     textContent: "Refresh",
@@ -57,14 +58,14 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     document: {
       getElementById: (id) => ({ "bridge-status": status, "app-content": content, "brand-select": brandSelect, "refresh-button": refreshButton }[id]),
       querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : [],
-      querySelector: (selector) => selector === ".nav-item-active" && activeRoute ? { dataset: { route: activeRoute } } : null,
+      querySelector: (selector) => selector === "[data-brand-settings]" ? brandSettingsEditor : selector === ".nav-item-active" && activeRoute ? { dataset: { route: activeRoute } } : null,
       addEventListener: (eventName, handler) => { documentListeners[eventName] = handler; }
     },
     window: browserWindow,
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSelect, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages };
+  return { messageHandler, status, content, brandSelect, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages };
 }
 
 test("bridge accepts the JSON response emitted by the .NET host", () => {
@@ -189,6 +190,35 @@ test("phase 4 page markup includes the interior-only processing workflow", () =>
   assert.match(script, /send\("process\.cancel"/);
   assert.match(script, /send\("app\.refresh"/);
   assert.match(script, /"Interrupted"/);
+});
+
+test("saved brand settings survive the application refresh", () => {
+  const { messageHandler, contentListeners, messages, brandSettingsEditor, content } = loadBridge("brands");
+  const oldJson = "{\"frame\":false}";
+  const newJson = "{\"frame\":true}";
+
+  messageHandler({ data: { version: 1, id: "initial-refresh", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [{ name: "Brand One", assets: [] }], books: [] }, globalSettings: {}, bookSummaries: []
+  } } });
+  messageHandler({ data: { version: 1, id: "brand-get", ok: true, command: "brand.settings", payload: oldJson } });
+  brandSettingsEditor.value = newJson;
+  contentListeners.input({ target: brandSettingsEditor });
+
+  const save = { dataset: { action: "save-brand-settings" }, closest: () => save };
+  contentListeners.click({ target: save });
+
+  const saveRequest = messages.at(-1);
+  assert.equal(saveRequest.command, "brand.settings.save");
+  assert.equal(saveRequest.payload.json, newJson);
+
+  messageHandler({ data: { version: 1, id: saveRequest.id, ok: true, command: "brand.settings.saved", payload: newJson } });
+  assert.equal(messages.at(-1).command, "app.refresh");
+
+  messageHandler({ data: { version: 1, id: "refresh-result", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [{ name: "Brand One", assets: [] }], books: [] }, globalSettings: {}, bookSummaries: []
+  } } });
+
+  assert.match(content.innerHTML, /frame.*true/);
 });
 
 test("active processing is polled globally and stops after a terminal snapshot", () => {

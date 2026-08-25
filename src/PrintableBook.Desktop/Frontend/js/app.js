@@ -449,7 +449,7 @@
     if (action === "save-settings") { const payload = {}; document.querySelectorAll("[data-setting]").forEach((input) => { payload[input.dataset.setting] = Number(input.value); }); send("settings.save", payload); }
     if (action === "select-brand") { state.selectedBrand = target.dataset.brandName; if (brandSelect) brandSelect.value = state.selectedBrand; render("brands"); }
     if (action === "load-brand-settings") send("brand.settings.get", { brandName: state.selectedBrand });
-    if (action === "save-brand-settings") send("brand.settings.save", { brandName: state.selectedBrand, json: document.querySelector("[data-brand-settings]")?.value ?? "{}" });
+    if (action === "save-brand-settings") send("brand.settings.save", { brandName: state.selectedBrand, json: state.brandSettings });
     if (action === "select-book") { state.selectedBookId = target.dataset.bookId; state.selectedBookTab = "overview"; state.selectedAssetReference = ""; state.bookDrawerOpen = true; state.drawerFocusTitle = true; render("books", false); }
     if (action === "close-book-drawer") { state.bookDrawerOpen = false; state.restoreBookFocus = true; render("books", false); }
     if (action === "queue-book") { const id = target.dataset.bookId; if (target.checked) state.selectedBookIds.add(id); else state.selectedBookIds.delete(id); }
@@ -474,6 +474,7 @@
   content.addEventListener("input", (event) => {
     if (event.target.dataset.action === "filter-books") { state.bookFilter = event.target.value; state.bookPage = 1; render("books", false); }
     if (event.target.dataset.action === "filter-assets") { state.assetFilter = event.target.value; render("books", false); }
+    if (event.target.dataset.brandSettings !== undefined) state.brandSettings = event.target.value;
   });
   content.addEventListener("change", (event) => {
     if (event.target.dataset.action === "diagnostic-book") { state.selectedBookId = event.target.value; render("diagnostics", false); }
@@ -524,10 +525,15 @@
       updateGlobalProcessStatus();
       if (document.querySelector(".nav-item-active")?.dataset.route === "process") render("process", false);
       status.textContent = "Connected";
-    } else if (ok && (command === "brand.settings" || command === "brand.settings.saved")) {
+    } else if (ok && command === "brand.settings") {
       state.brandSettings = valueFor(response, "payload", "{}");
       if (document.querySelector(".nav-item-active")?.dataset.route === "brands") render("brands", false);
-      status.textContent = command === "brand.settings.saved" ? "Brand settings saved" : "Connected";
+      status.textContent = "Connected";
+    } else if (ok && command === "brand.settings.saved") {
+      state.brandSettings = valueFor(response, "payload", "{}");
+      if (document.querySelector(".nav-item-active")?.dataset.route === "brands") render("brands", false);
+      status.textContent = "Brand settings saved";
+      beginApplicationRefresh();
     } else if (ok && command === "book.asset.preview") {
       const preview = valueFor(response, "payload", {});
       const reference = valueFor(preview, "sourceReference", "");

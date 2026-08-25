@@ -152,18 +152,20 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
-    public async Task Brand_settings_use_the_latest_completed_snapshot_and_save_queues_a_refresh()
+    public async Task Brand_settings_save_returns_the_exact_saved_json()
     {
         var settings = new StubBrandSettingsStore();
-        var router = new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(CreateSnapshot())), brandSettingsStore: settings);
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), brandSettingsStore: settings);
 
-        var loaded = await router.HandleAsync("""{"version":1,"id":"brand-get","command":"brand.settings.get","payload":{"brandName":"Brand One"}}""");
+        const string json = "{\"frame\":true}";
         var saved = await router.HandleAsync("""{"version":1,"id":"brand-save","command":"brand.settings.save","payload":{"brandName":"Brand One","json":"{\"frame\":true}"}}""");
 
-        Assert.Equal("brand.settings", loaded.Command);
-        Assert.Equal("background.task", saved.Command);
-        Assert.Equal("brands/Brand One", settings.LoadedDirectory!.Value);
-        Assert.Equal("{\"frame\":true}", settings.SavedJson);
+        Assert.True(saved.Ok);
+        Assert.Equal("brand.settings.saved", saved.Command);
+        Assert.Equal(json, Assert.IsType<string>(saved.Payload));
+        Assert.Equal(json, settings.SavedJson);
+        Assert.Equal(0, manager.Starts);
     }
 
     [Fact]
@@ -181,7 +183,7 @@ public sealed class BridgeMessageContractTests
         var saveResponse = await router.HandleAsync("""{"version":1,"id":"brand-save","command":"brand.settings.save","payload":{"brandName":"Brand One","json":"{}"}}""");
 
         Assert.All([coverResponse, frameResponse, getResponse, saveResponse], response => Assert.True(response.Ok));
-        Assert.Equal(3, manager.Starts);
+        Assert.Equal(2, manager.Starts);
         Assert.Equal(4, manager.Lists);
         Assert.Equal(("Book One", "cover-a.png"), cover.LastSelection);
         Assert.Equal(("Book One", "Book interior/page-001.png", FrameMode.Enabled), frame.LastSelection);
