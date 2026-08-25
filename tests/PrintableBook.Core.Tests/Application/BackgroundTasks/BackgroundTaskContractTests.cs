@@ -4,6 +4,16 @@ namespace PrintableBook.Core.Tests.Application.BackgroundTasks;
 
 public sealed class BackgroundTaskContractTests
 {
+    [Fact]
+    public void Manager_port_exposes_only_typed_runtime_operations()
+    {
+        var methods = typeof(IBackgroundTaskManager).GetMethods().Select(method => method.Name).ToArray();
+
+        Assert.Equal(
+            ["StartAsync", "GetAsync", "ListAsync", "CancelAsync", "WaitAsync", "TryGetResult", "TryGetView"],
+            methods);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
