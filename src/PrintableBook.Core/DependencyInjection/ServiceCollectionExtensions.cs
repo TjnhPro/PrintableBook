@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using PrintableBook.Core.Application.Execution;
 using PrintableBook.Core.Application.Desktop;
+using PrintableBook.Core.Application.Diagnostics;
 using PrintableBook.Core.Application.Pipelines;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Services;
@@ -12,6 +13,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddPrintableBookCore(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+        services.AddSingleton<IOperationDiagnostics, NoOpOperationDiagnostics>();
         services.AddSingleton<IProcessingSessionGate, ProcessingSessionGate>();
         services.AddSingleton<IArtworkClassifier, ArtworkClassifier>();
         services.AddSingleton<IApplicationSnapshotService, ApplicationSnapshotService>();
