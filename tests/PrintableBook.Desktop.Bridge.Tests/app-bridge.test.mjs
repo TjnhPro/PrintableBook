@@ -57,6 +57,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     crypto: { randomUUID: () => "request-1" },
     document: {
       getElementById: (id) => ({ "bridge-status": status, "app-content": content, "brand-select": brandSelect, "refresh-button": refreshButton }[id]),
+      createElement: (tagName) => ({ tagName, className: "", textContent: "", attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } }),
       querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : [],
       querySelector: (selector) => selector === "[data-brand-settings]" ? brandSettingsEditor : selector === ".nav-item-active" && activeRoute ? { dataset: { route: activeRoute } } : null,
       addEventListener: (eventName, handler) => { documentListeners[eventName] = handler; }
@@ -363,53 +364,43 @@ test("book detail renders frame mode truth and sends per-image overrides through
   assert.match(content.innerHTML, /option value="enabled" selected/);
 });
 
-test("asset workspace queues allowlisted previews for visible Interior assets", () => {
-  const visibleTile = {
-    dataset: { previewBookId: "Book 001", sourceReference: "Book interior/page-001.png" },
-    getBoundingClientRect: () => ({ top: 0, left: 0, right: 1, bottom: 1 })
-  };
-  const { messageHandler, content, contentListeners, messages } = loadBridge("books", [visibleTile]);
+test("Books render direct Cover and Interior local image URLs and replace a failed image locally", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-asset", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
-    bookSummaries: [{ bookId: { value: "Book 001" }, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto", previewAvailable: true }] }]
+    bookSummaries: [{ bookId: { value: "Book 001" }, representativeCoverReference: "Book cover/cover.png", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [
+      { sourceReference: "Book cover/cover.png", localImageUrl: "file:///D:/Printable%20Book/Cover%20%231%20%25.png", relativePath: "Book cover/cover.png", fileName: "cover.png", folder: "Book cover", kind: "Cover", width: 2550, height: 2550, frameMode: "auto" },
+      { sourceReference: "Book interior/page-001.png", localImageUrl: "file:///D:/Printable%20Book/B%E1%BB%99%20s%C3%A1ch%20%231%20%25/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto" }
+    ] }]
   } } });
+
+  assert.match(content.innerHTML, /src="file:\/\/\/D:\/Printable%20Book\/Cover%20%231%20%25\.png"/);
+  assert.match(content.innerHTML, /width="256" height="256" loading="lazy" decoding="async" data-local-image/);
 
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
+  assert.match(content.innerHTML, /src="file:\/\/\/D:\/Printable%20Book\/Cover%20%231%20%25\.png"/);
   const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
   contentListeners.click({ target: assetsTab });
   assert.match(content.innerHTML, /Interior assets/);
   assert.match(content.innerHTML, /page-001\.png/);
-  assert.match(content.innerHTML, /Loading preview/);
-  assert.deepEqual(messages.at(-1), {
-    version: 1,
-    id: "request-1",
-    command: "book.asset.preview.get",
-    payload: { bookId: "Book 001", sourceReference: "Book interior/page-001.png" }
-  });
+  assert.match(content.innerHTML, /src="file:\/\/\/D:\/Printable%20Book/);
+  assert.match(content.innerHTML, /loading="lazy" decoding="async" data-local-image/);
+  assert.equal(messages.some((message) => message.command.includes("preview")), false);
+
+  let fallback;
+  contentListeners.error({ target: { matches: (selector) => selector === "img[data-local-image]", dataset: { imageFallback: "Image unavailable" }, replaceWith: (replacement) => { fallback = replacement; } } });
+  assert.equal(fallback.className, "book-preview-fallback");
+  assert.equal(fallback.textContent, "Image unavailable");
 });
 
-test("asset preview worker completion fetches its result exactly once", () => {
-  const visibleTile = { dataset: { previewBookId: "Book 001", sourceReference: "Book interior/page-001.png" }, getBoundingClientRect: () => ({ top: 0, left: 0, right: 1, bottom: 1 }) };
-  const { messageHandler, contentListeners, intervals, messages } = loadBridge("books", [visibleTile]);
-  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: {
-    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] }, globalSettings: {},
-    bookSummaries: [{ bookId: { value: "Book 001" }, assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", previewAvailable: true }], validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [] }]
-  } } });
-  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
-  const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
-  contentListeners.click({ target: openBook });
-  contentListeners.click({ target: assetsTab });
+test("frontend source contains no removed asset-preview bridge protocol", () => {
+  const script = readFileSync(appScriptPath, "utf8");
 
-  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { taskId: "preview-1", kind: "AssetPreview", state: "Running" } } });
-  intervals.at(-1)();
-  assert.equal(messages.at(-1).command, "task.get");
-  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { taskId: "preview-1", kind: "AssetPreview", state: "Completed" } } });
-  assert.equal(messages.at(-1).command, "book.asset.preview.result");
-  const resultCount = messages.filter((message) => message.command === "book.asset.preview.result").length;
-  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { taskId: "preview-1", kind: "AssetPreview", state: "Completed" } } });
-  assert.equal(messages.filter((message) => message.command === "book.asset.preview.result").length, resultCount);
+  for (const removedProtocol of ["asset.preview.request", "asset.preview.get", "asset.preview.result", "asset.preview.error"]) {
+    assert.equal(script.includes(removedProtocol), false, `Removed protocol remains: ${removedProtocol}`);
+  }
 });
 
 test("validation limits Book detail to Interior preflight while cover work is deferred", () => {
@@ -459,7 +450,7 @@ test("Diagnostics route requests and renders sanitized responsiveness events", (
   assert.match(content.innerHTML, /UI responsiveness/);
   assert.match(content.innerHTML, /Slow/);
   assert.match(content.innerHTML, /Active during stall/);
-  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.tasks", payload: [{ kind: "AssetPreview", state: "Running", subject: "Book 001/page.png", step: "preview.generate" }] } });
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.tasks", payload: [{ kind: "LibraryRefresh", state: "Running", subject: "Library", step: "discovery" }] } });
   assert.match(content.innerHTML, /Background workers/);
-  assert.match(content.innerHTML, /AssetPreview/);
+  assert.match(content.innerHTML, /LibraryRefresh/);
 });

@@ -5,15 +5,13 @@ namespace PrintableBook.Desktop.BackgroundTasks;
 internal enum BackgroundTaskLaneKind
 {
     Library,
-    Processing,
-    Preview
+    Processing
 }
 
 internal enum BackgroundTaskDuplicatePolicy
 {
     JoinByKind,
-    ReturnExisting,
-    JoinByKey
+    ReturnExisting
 }
 
 internal sealed record BackgroundTaskPolicy(
@@ -27,8 +25,7 @@ internal static class BackgroundTaskPolicies
         new Dictionary<BackgroundTaskKind, BackgroundTaskPolicy>
         {
             [BackgroundTaskKind.LibraryRefresh] = new(BackgroundTaskLaneKind.Library, 1, BackgroundTaskDuplicatePolicy.JoinByKind),
-            [BackgroundTaskKind.ProcessingSession] = new(BackgroundTaskLaneKind.Processing, 1, BackgroundTaskDuplicatePolicy.ReturnExisting),
-            [BackgroundTaskKind.AssetPreview] = new(BackgroundTaskLaneKind.Preview, 2, BackgroundTaskDuplicatePolicy.JoinByKey)
+            [BackgroundTaskKind.ProcessingSession] = new(BackgroundTaskLaneKind.Processing, 1, BackgroundTaskDuplicatePolicy.ReturnExisting)
         };
 
     internal static IReadOnlyDictionary<BackgroundTaskKind, BackgroundTaskPolicy> All => policies;

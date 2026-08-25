@@ -21,7 +21,6 @@ public sealed class ProcessingSessionTaskManagerIntegrationTests
         var services = new ServiceCollection()
             .AddKeyedSingleton<IBackgroundTaskWorker>(BackgroundTaskKind.LibraryRefresh, new UnusedWorker(BackgroundTaskKind.LibraryRefresh))
             .AddKeyedSingleton<IBackgroundTaskWorker>(BackgroundTaskKind.ProcessingSession, new ProcessingSessionWorker(new SnapshotProvider(CreateSnapshot()), application, new NoFrameResolver()))
-            .AddKeyedSingleton<IBackgroundTaskWorker>(BackgroundTaskKind.AssetPreview, new UnusedWorker(BackgroundTaskKind.AssetPreview))
             .BuildServiceProvider();
         using var manager = new BackgroundTaskManager(services, new NullDiagnostics());
 
