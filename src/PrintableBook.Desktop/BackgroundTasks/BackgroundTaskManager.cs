@@ -50,8 +50,8 @@ public sealed class BackgroundTaskManager(
             laneKind = policy.Lane;
         }
 
-        TryDispatch(laneKind);
         diagnostics.Record("task.queued", subject, kind.ToString());
+        TryDispatch(laneKind);
         return ValueTask.FromResult(GetSnapshot(entry.TaskId)!);
     }
 
