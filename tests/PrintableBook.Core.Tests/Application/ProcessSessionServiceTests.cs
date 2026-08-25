@@ -187,6 +187,39 @@ public sealed class ProcessSessionServiceTests
     }
 
     [Fact]
+    public async Task Terminal_cleanup_waits_for_an_in_progress_cancellation_callback_before_disposing_its_source()
+    {
+        var application = new RecordingPrintableBookApplication(observesCancellation: false);
+        var service = new ProcessSessionService(
+            new StaticSnapshotService(CreateSnapshot()),
+            application,
+            new NullBrandFrameResolver());
+        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
+        await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        var source = OwnedCancellation(service);
+        var callbackEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseCallback = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = source.Token.Register(() =>
+        {
+            callbackEntered.TrySetResult();
+            releaseCallback.Task.GetAwaiter().GetResult();
+        });
+
+        var cancellation = Task.Run(async () => await service.CancelAsync());
+        await callbackEntered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        application.Release.TrySetResult();
+        await WaitUntilAsync(() => ValueTask.FromResult(OwnedCancellationOrNull(service) is null));
+
+        Assert.True(source.Token.CanBeCanceled);
+        Assert.False(cancellation.IsCompleted);
+
+        releaseCallback.TrySetResult();
+        await cancellation.WaitAsync(TimeSpan.FromSeconds(2));
+        await WaitUntilAsync(() => ValueTask.FromResult(IsDisposed(source)));
+    }
+
+    [Fact]
     public async Task StartAsync_allows_a_new_session_after_terminal_cleanup()
     {
         var application = new RecordingPrintableBookApplication();
@@ -265,9 +298,26 @@ public sealed class ProcessSessionServiceTests
 
     private static void DisposeOwnedCancellation(ProcessSessionService service)
     {
-        var field = typeof(ProcessSessionService).GetField("cancellation", BindingFlags.Instance | BindingFlags.NonPublic);
-        var source = Assert.IsType<CancellationTokenSource>(field?.GetValue(service));
-        source.Dispose();
+        OwnedCancellation(service).Dispose();
+    }
+
+    private static CancellationTokenSource OwnedCancellation(ProcessSessionService service) =>
+        Assert.IsType<CancellationTokenSource>(OwnedCancellationOrNull(service));
+
+    private static CancellationTokenSource? OwnedCancellationOrNull(ProcessSessionService service) =>
+        typeof(ProcessSessionService).GetField("cancellation", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(service) as CancellationTokenSource;
+
+    private static bool IsDisposed(CancellationTokenSource source)
+    {
+        try
+        {
+            _ = source.Token;
+            return false;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
     }
 
     private sealed class StaticSnapshotService(ApplicationSnapshot snapshot) : IApplicationSnapshotService

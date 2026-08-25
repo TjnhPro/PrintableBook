@@ -24,6 +24,7 @@ public sealed class ProcessSessionService(
     IBrandFrameResolver brandFrameResolver) : IProcessSessionService
 {
     private readonly Lock sync = new();
+    private readonly Lock cancellationSync = new();
     private ProcessSessionSnapshot snapshot = new(false, false, null, null, null, []);
     private CancellationTokenSource? cancellation;
     private Task? executionTask;
@@ -226,29 +227,48 @@ public sealed class ProcessSessionService(
         }
         finally
         {
+            CancellationTokenSource? toDispose;
             lock (sync)
             {
-                cancellation?.Dispose();
+                toDispose = cancellation;
                 cancellation = null;
                 executionTask = null;
             }
+
+            DisposeCancellation(toDispose);
         }
     }
 
-    private static void RequestCancellation(CancellationTokenSource? source)
+    private void RequestCancellation(CancellationTokenSource? source)
     {
         if (source is null)
         {
             return;
         }
 
-        try
+        lock (cancellationSync)
         {
-            source.Cancel();
+            try
+            {
+                source.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Terminal cleanup won the race; there is nothing left to cancel.
+            }
         }
-        catch (ObjectDisposedException)
+    }
+
+    private void DisposeCancellation(CancellationTokenSource? source)
+    {
+        if (source is null)
         {
-            // Terminal cleanup won the race; there is nothing left to cancel.
+            return;
+        }
+
+        lock (cancellationSync)
+        {
+            source.Dispose();
         }
     }
 
