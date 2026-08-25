@@ -35,13 +35,15 @@ public sealed class DiskBackedInteriorPagePipeline(
         var framed = new FileReference(Path.Combine(pageCache, "framed.png"));
         var working = new FileReference(Path.Combine(pageCache, "working-page.png"));
         var finalPage = new FileReference(Path.Combine(processedInteriorDirectory, $"{request.PageId}.png"));
-        var cacheStampFile = Path.Combine(processedInteriorDirectory, $"{request.PageId}.input-stamp.json");
+        var cacheStampFile = Path.Combine(pageCache, "input-stamp.json");
+        var legacyCacheStampFile = Path.Combine(processedInteriorDirectory, $"{request.PageId}.input-stamp.json");
         var currentStep = "classification";
 
         try
         {
             Directory.CreateDirectory(processedInteriorDirectory);
             Directory.CreateDirectory(pageCache);
+            MigrateLegacyCacheStamp(legacyCacheStampFile, cacheStampFile);
             var currentStamp = CacheInputStamp.Create(request);
             var previousStamp = await TryReadCacheStampAsync(cacheStampFile, cancellationToken);
             var invalidation = previousStamp is null
@@ -192,6 +194,25 @@ public sealed class DiskBackedInteriorPagePipeline(
         {
             return null;
         }
+    }
+
+    private static void MigrateLegacyCacheStamp(string legacyStampFile, string cacheStampFile)
+    {
+        if (!File.Exists(legacyStampFile))
+        {
+            return;
+        }
+
+        if (File.Exists(cacheStampFile))
+        {
+            File.Delete(legacyStampFile);
+            return;
+        }
+
+        var cacheDirectory = Path.GetDirectoryName(cacheStampFile)
+            ?? throw new InvalidOperationException("The cache stamp must have a parent directory.");
+        Directory.CreateDirectory(cacheDirectory);
+        File.Move(legacyStampFile, cacheStampFile);
     }
 
     private static CacheInvalidationStage DetermineInvalidationStage(CacheInputStamp previous, CacheInputStamp current)

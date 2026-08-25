@@ -48,7 +48,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "prepared.png")));
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "framed.png")));
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "working-page.png")));
-        var stamp = await File.ReadAllTextAsync(Path.Combine(workspace.ProcessedDirectory.Value, "interior", "page-01.input-stamp.json"));
+        var stamp = await File.ReadAllTextAsync(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "input-stamp.json"));
         Assert.Contains(ArtworkPreparationAlgorithmVersion.Current, stamp, StringComparison.Ordinal);
         Assert.Contains(ClassificationAlgorithmVersion.Current, stamp, StringComparison.Ordinal);
         Assert.Contains("\"FrameMode\":\"auto\"", stamp, StringComparison.Ordinal);
@@ -56,6 +56,34 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         var finalInfo = await new MagickImageInspector().GetInfoAsync(result.FinalPage);
         Assert.Equal(new ImageSize(200, 200), finalInfo.Size);
         Assert.Equal(300, finalInfo.Density!.Value.Horizontal, precision: 2);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_migrates_a_legacy_processed_input_stamp_into_page_cache()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("legacy-stamp-source.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("legacy-stamp-book"), new DirectoryReference(Path.Combine(rootPath, "LegacyStampBook")));
+        var pipeline = CreatePipeline();
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200));
+
+        await pipeline.ProcessAsync(request);
+
+        var pageCache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
+        var newStamp = Path.Combine(pageCache, "input-stamp.json");
+        var legacyStamp = Path.Combine(workspace.ProcessedDirectory.Value, "interior", "page-01.input-stamp.json");
+        File.Move(newStamp, legacyStamp, overwrite: true);
+
+        var prepared = Path.Combine(pageCache, "prepared.png");
+        var retainedTime = DateTime.UtcNow.AddHours(-1);
+        File.SetLastWriteTimeUtc(prepared, retainedTime);
+
+        await pipeline.ProcessAsync(request);
+
+        Assert.True(File.Exists(newStamp));
+        Assert.False(File.Exists(legacyStamp));
+        Assert.Equal(retainedTime, File.GetLastWriteTimeUtc(prepared));
     }
 
     [Fact]
@@ -269,7 +297,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         await pipeline.ProcessAsync(request);
 
         var prepared = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "prepared.png");
-        var stamp = Path.Combine(workspace.ProcessedDirectory.Value, "interior", "page-01.input-stamp.json");
+        var stamp = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "input-stamp.json");
 
         await AssertRebuildsPreparedAsync(pipeline, request, prepared, async () =>
         {
@@ -514,7 +542,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         var prepared = Path.Combine(cache, "prepared.png");
         var framed = Path.Combine(cache, "framed.png");
         var working = Path.Combine(cache, "working-page.png");
-        var stamp = Path.Combine(workspace.ProcessedDirectory.Value, "interior", "page-01.input-stamp.json");
+        var stamp = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "input-stamp.json");
         var staleTime = DateTime.UtcNow.AddHours(-1);
         File.SetLastWriteTimeUtc(classification, staleTime);
         File.SetLastWriteTimeUtc(prepared, staleTime);
