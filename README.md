@@ -4,7 +4,7 @@ Printable Book is a Windows desktop application for preparing printable colourin
 
 ## Development status
 
-Phase 2 Core Processing MVP is complete on the `phase-2` branch. The repository now processes one or more Book folders through persistent workspaces, bounded per-page image processing, deterministic shuffle maps, real PNG/PDF output validation, atomic versioned publishing, and retry-safe disk cache reuse. Cover and Interior PDFs have independent physical page sizes; state, processed PNGs, intermediate cache, and other workspace diagnostics are retained after processing. Workspace cleanup is a future explicit user action. The WPF/WebView2 host remains a thin presentation boundary.
+Printable Book processes one or more local Book folders through persistent workspaces, bounded per-page image processing, deterministic shuffle maps, real PNG/PDF validation, and retry-safe disk cache reuse. New final PDFs are published directly to `sources/<Book>/Output/`; the previous global `outputs/run-*` layout is legacy-only. Cover and Interior PDFs have independent physical page sizes. The Books page provides a manual Clear Cache action: it only cleans Completed Books with verified recorded output, removes heavy intermediate rasters, and retains classification and input stamps for safe reprocessing.
 
 See [Phase 2 processing](docs/phase-2-core-processing.md), [image-engine.md](docs/image-engine.md), and [pdf-engine.md](docs/pdf-engine.md) for the implemented boundaries and engine decisions.
 

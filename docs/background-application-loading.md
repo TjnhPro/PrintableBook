@@ -12,8 +12,9 @@ The manager retains RAM-only task snapshots, typed result/view objects, cancella
 | --- | --- | --- | --- |
 | LibraryRefresh | Library | 1 | Join by kind |
 | ProcessingSession | Processing | 1 | Return existing |
+| CacheCleanup | Cleanup | 1 | Return existing |
 
-`app.refresh` and `process.start` return accepted task/session state; they never wait for their worker to finish. `process.get`, `task.get`, and `task.list` are RAM-only observation calls. Task runtime and task IDs are not persisted. Workspace state is persisted separately, and the first Library Refresh performs interrupted-workspace recovery after restart.
+`LibraryRefresh` and `ProcessingSession` may overlap. `CacheCleanup` conflicts with both and runs alone. `app.refresh`, `process.start`, and `cache.clear` return accepted task/session state; they never wait for their worker to finish. `process.get`, `task.get`, and `task.list` are RAM-only observation calls. Task runtime and task IDs are not persisted. Workspace state is persisted separately, and the first Library Refresh performs interrupted-workspace recovery after restart.
 
 `ProcessSessionService` and `ApplicationLoadCoordinator` are facades only. They do not own a `Task.Run`, semaphore, or per-operation cancellation source. The sole production scheduler for heavy Desktop-triggered work is `BackgroundTaskManager`. `DispatcherStallMonitor` is the independent watchdog exception.
 
@@ -29,6 +30,7 @@ New worker kinds require an independent user-visible start/cancel/observe lifecy
 | --- | --- |
 | `app.refresh` | LibraryRefresh task; result is fetched explicitly after completion |
 | `process.start` | ProcessingSession task; semantic `process.get/cancel` remain facade calls |
+| `cache.clear` / `cache.clear.result` | manual CacheCleanup task; typed result is fetched explicitly after completion |
 | `task.get/list/cancel` | RAM-only TaskManager observation/control |
 | `book.validate` | requests a fresh Library snapshot and is retained for the existing preflight flow |
 | settings | small local persistence mutation |
@@ -37,3 +39,9 @@ New worker kinds require an independent user-visible start/cancel/observe lifecy
 | diagnostics | bounded in-memory diagnostics/task data |
 
 The completed LibraryRefresh snapshot is the UI command authority for Book and Brand identity. If no completed snapshot is retained, a mutation command returns a safe `snapshot_unavailable` response rather than synchronously creating a refresh. `ProcessingSessionWorker` is the only consumer that deliberately requests a fresh snapshot, and it does so from its BackgroundTaskManager-owned worker execution.
+
+## Output and cache lifecycle
+
+New final PDFs are published directly to `sources/<Book>/Output/`. Only the latest Cover and Interior PDFs are retained there. A new process validates its temporary PDF before replacing the corresponding final file, so an older successful output survives a failed replacement. The former global `outputs/run-*` layout is legacy-only compatibility data.
+
+Clear Cache is a manual Books action. Only Completed Books whose recorded output files all still exist are eligible. It removes heavy intermediate rasters while preserving `classification.json` and `input-stamp.json`; failed, cancelled, and interrupted workspaces are untouched. Clear Cache never deletes source files, Book-local `Output`, or the recorded artifact files it checks for eligibility.
