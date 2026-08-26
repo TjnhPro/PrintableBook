@@ -973,6 +973,35 @@ test("Diagnostics Performance excludes zero-duration lifecycle noise", () => {
   assert.doesNotMatch(content.innerHTML, /Background workers/);
 });
 
+test("Diagnostics Book keeps a selected Book and only renders twelve meaningful logs", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("diagnostics");
+  const snapshot = diagnosticsSnapshot();
+  snapshot.bookSummaries[0].logs = [
+    { eventName: "", detail: "." },
+    ...Array.from({ length: 15 }, (_, index) => ({ timestamp: `2026-08-26T11:${String(index).padStart(2, "0")}:00Z`, eventName: `Log ${index + 1}`, detail: "Saved" }))
+  ];
+  snapshot.discovery.books.push({ id: { value: "Book Beta" }, name: "Book Beta" });
+  snapshot.bookSummaries.push({ bookId: { value: "Book Beta" }, workspaceStatus: "Completed", sourceFolders: [], logs: [] });
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+  const tab = { dataset: { action: "diagnostics-tab", diagnosticsTab: "book" } };
+  tab.closest = () => tab;
+  contentListeners.click({ target: tab });
+
+  assert.match(content.innerHTML, /data-action="diagnostic-book"/);
+  assert.match(content.innerHTML, /Workspace/);
+  assert.match(content.innerHTML, /Source folders/);
+  assert.match(content.innerHTML, /Recent logs/);
+  assert.match(content.innerHTML, /Log 15/);
+  assert.match(content.innerHTML, /Log 4/);
+  assert.doesNotMatch(content.innerHTML, /Log 3/);
+  assert.doesNotMatch(content.innerHTML, />\.<\/span>/);
+  assert.equal((content.innerHTML.match(/Log \d+/g) ?? []).length, 12);
+
+  contentListeners.change({ target: { dataset: { action: "diagnostic-book" }, value: "Book Beta" } });
+  assert.match(content.innerHTML, /Book Beta/);
+  assert.doesNotMatch(content.innerHTML, /Log 15/);
+});
+
 test("Diagnostics route requests and renders sanitized responsiveness events", () => {
   const { messageHandler, content, routeButtons, messages } = loadBridge("diagnostics");
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: {

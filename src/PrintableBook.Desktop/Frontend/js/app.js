@@ -529,9 +529,20 @@
     const latest = diagnosticLatestSlowEvent();
     return `<section role="tabpanel" data-diagnostics-panel="performance"><div class="diagnostic-detail-strip"><div><span>Slow operations</span><strong>${slow.length}</strong></div><div><span>Worst duration</span><strong>${diagnosticWorstDuration()} ms</strong></div><div><span>Latest slow operation</span><strong>${escapeHtml(latest ? valueFor(latest, "operation", "—") : "—")}</strong></div></div>${panel("UI responsiveness", `<div class="table-scroll"><table class="data-table"><thead><tr><th>Time</th><th>Severity</th><th>Kind</th><th>Operation</th><th>Duration</th><th>Subject</th><th>Active during stall</th></tr></thead><tbody>${diagnosticPerformanceRows()}</tbody></table></div>`)}</section>`;
   };
+  const diagnosticLogText = (log) => [String(valueFor(log, "eventName", "") ?? "").trim(), String(valueFor(log, "detail", "") ?? "").trim()].filter(Boolean).join(" · ");
+  const diagnosticMeaningfulLogs = (summary) => valueFor(summary, "logs", []).filter((log) => { const text = diagnosticLogText(log); return text && text !== "."; }).slice(-12).reverse();
+  const renderDiagnosticsBook = (book, summary) => {
+    const selectedId = state.selectedBookId || bookId(book);
+    const selector = `<label class="field diagnostic-book-field"><span>Book</span><select class="control diagnostic-select" data-action="diagnostic-book">${books().map((item) => `<option value="${escapeHtml(bookId(item))}" ${bookId(item) === selectedId ? "selected" : ""}>${escapeHtml(valueFor(item, "name", bookId(item)))}</option>`).join("")}</select></label>`;
+    if (!book || !summary) return `<section role="tabpanel" data-diagnostics-panel="book"><div class="diagnostic-book-toolbar">${selector}</div>${panel("Book diagnostics", "<p class=\"empty-copy\">Select a Book to inspect its workspace.</p>")}</section>`;
+    const folders = valueFor(summary, "sourceFolders", []);
+    const logs = diagnosticMeaningfulLogs(summary);
+    return `<section role="tabpanel" data-diagnostics-panel="book"><div class="diagnostic-book-toolbar"><div><strong>${escapeHtml(valueFor(book, "name", bookId(book)))}</strong><span>Workspace and source diagnostics</span></div>${selector}</div><div class="diagnostics-grid">${panel("Workspace", `<dl class="path-grid"><div><dt>Workspace state</dt><dd>${badge(workspaceStatus(summary))}</dd></div><div><dt>Current step</dt><dd>${escapeHtml(valueFor(summary, "currentStep", null) || "Not started")}</dd></div><div><dt>Last run</dt><dd>${dateTime(valueFor(summary, "lastRunAt", null))}</dd></div></dl>`)}${panel("Source folders", `<div class="table-scroll"><table class="data-table"><thead><tr><th>Folder</th><th>Status</th><th>Images</th></tr></thead><tbody>${folders.length ? folders.map((folder) => `<tr><td>${escapeHtml(valueFor(folder, "name", ""))}</td><td>${badge(valueFor(folder, "status", "Missing"))}</td><td>${valueFor(folder, "imageCount", 0)}</td></tr>`).join("") : "<tr><td colspan=\"3\" class=\"empty-row\">No source folders recorded.</td></tr>"}</tbody></table></div>`)}</div>${panel("Recent logs", logs.length ? `<ul class="log-list diagnostic-log-list">${logs.map((log) => `<li><time>${dateTime(valueFor(log, "timestamp", null))}</time><span>${escapeHtml(diagnosticLogText(log))}</span></li>`).join("")}</ul>` : "<p class=\"empty-copy\">No meaningful Book logs recorded.</p>", "mt-5")}</section>`;
+  };
   const renderDiagnosticsPanel = (book, summary) => {
     if (state.diagnosticsTab === "tasks") return renderDiagnosticsTasks();
     if (state.diagnosticsTab === "performance") return renderDiagnosticsPerformance();
+    if (state.diagnosticsTab === "book") return renderDiagnosticsBook(book, summary);
     if (state.diagnosticsTab === "summary") return renderDiagnosticsSummary(book, summary);
     return `<section role="tabpanel" data-diagnostics-panel="${state.diagnosticsTab}"><p class="empty-copy">${escapeHtml(state.diagnosticsTab)} diagnostics are loading.</p></section>`;
   };

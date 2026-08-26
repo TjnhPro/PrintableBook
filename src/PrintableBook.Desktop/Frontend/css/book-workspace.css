@@ -46,6 +46,8 @@
 @media (max-width:680px) { .diagnostic-health-grid,.diagnostic-recent-list li { grid-template-columns:1fr; } }
 .diagnostic-detail-strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:16px; }.diagnostic-detail-strip>div { display:grid; gap:4px; padding:12px 14px; border:1px solid var(--pb-border); border-radius:9px; background:var(--pb-surface); }.diagnostic-detail-strip span { color:var(--pb-muted); font-size:12px; }.table-scroll { overflow-x:auto; }
 @media (max-width:760px) { .diagnostic-detail-strip { grid-template-columns:1fr; } }
+.diagnostic-book-toolbar { display:flex; align-items:end; justify-content:space-between; gap:16px; margin-bottom:16px; padding:14px 16px; border:1px solid var(--pb-border); border-radius:10px; background:var(--pb-surface); }.diagnostic-book-toolbar>div:first-child { display:grid; gap:4px; }.diagnostic-book-toolbar>div:first-child span { color:var(--pb-muted); font-size:12px; }.diagnostic-book-field { min-width:280px; }
+@media (max-width:760px) { .diagnostic-book-toolbar { align-items:stretch; flex-direction:column; }.diagnostic-book-field { min-width:0; } }
 
 .book-list-preview {
   display: grid;
