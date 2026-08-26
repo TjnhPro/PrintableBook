@@ -150,6 +150,52 @@ public sealed class ApplicationSnapshotServiceTests
         Assert.Contains(summary.ValidationChecks, check => check.Code == "book.no_active_interior_pages");
     }
 
+    [Fact]
+    public async Task RefreshAsync_builds_book_summaries_with_concurrency_limited_to_four_and_keeps_discovery_order()
+    {
+        var scanner = new GatedScanner();
+        var refresh = new ApplicationSnapshotService(
+            new ManyBookDiscovery(8), new StubSettingsStore(), scanner, new StubStateStore(), new StubFileSystem())
+            .RefreshAsync()
+            .AsTask();
+
+        await scanner.FourScansEntered.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal(4, scanner.MaximumConcurrentScans);
+
+        scanner.Release();
+        var snapshot = await refresh;
+
+        Assert.Equal(Enumerable.Range(1, 8).Select(number => $"Book {number:D3}"), snapshot.BookSummaries.Select(summary => summary.BookId.Value));
+        Assert.InRange(scanner.MaximumConcurrentScans, 1, 4);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_propagates_a_book_summary_failure()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => new ApplicationSnapshotService(
+            new ManyBookDiscovery(2), new StubSettingsStore(), new ThrowingScanner(), new StubStateStore(), new StubFileSystem())
+            .RefreshAsync()
+            .AsTask());
+
+        Assert.Equal("scan failed", exception.Message);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_honors_cancellation_while_building_book_summaries()
+    {
+        var scanner = new GatedScanner();
+        using var cancellation = new CancellationTokenSource();
+        var refresh = new ApplicationSnapshotService(
+            new ManyBookDiscovery(8), new StubSettingsStore(), scanner, new StubStateStore(), new StubFileSystem())
+            .RefreshAsync(cancellation.Token)
+            .AsTask();
+
+        await scanner.FourScansEntered.WaitAsync(TimeSpan.FromSeconds(2));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => refresh);
+    }
+
     private sealed class StubDiscovery : IApplicationRootDiscovery
     {
         public int CallCount { get; private set; }
@@ -159,6 +205,22 @@ public sealed class ApplicationSnapshotServiceTests
             var paths = new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json"));
             var id = new BookId("Book A");
             return ValueTask.FromResult(new ApplicationDiscovery(paths, [new DiscoveredBrand("Brand A", new DirectoryReference("brands/Brand A"))], [new DiscoveredBook("Book A", id, new DirectoryReference("sources/Book A"), new BookWorkspace(id, new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("temp")))]));
+        }
+    }
+
+    private sealed class ManyBookDiscovery(int count) : IApplicationRootDiscovery
+    {
+        public ValueTask<ApplicationDiscovery> DiscoverAsync(CancellationToken cancellationToken = default)
+        {
+            var paths = new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json"));
+            var books = Enumerable.Range(1, count)
+                .Select(number =>
+                {
+                    var id = new BookId($"Book {number:D3}");
+                    return new DiscoveredBook(id.Value, id, new DirectoryReference($"sources/{id.Value}"), new BookWorkspace(id, new DirectoryReference($"work/{id.Value}"), new DirectoryReference($"processed/{id.Value}"), new DirectoryReference($"temp/{id.Value}")));
+                })
+                .ToArray();
+            return ValueTask.FromResult(new ApplicationDiscovery(paths, [], books));
         }
     }
 
@@ -200,6 +262,41 @@ public sealed class ApplicationSnapshotServiceTests
             ValueTask.FromResult(BookSourceScanResult.Succeeded(new BookSource([
                 new BookAsset("cover.png", BookAssetKind.Cover),
                 new BookAsset("page-1.png", BookAssetKind.Interior)])));
+    }
+
+    private sealed class GatedScanner : IBookSourceScanner
+    {
+        private readonly TaskCompletionSource fourScansEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int activeScans;
+
+        public Task FourScansEntered => fourScansEntered.Task;
+        public int MaximumConcurrentScans { get; private set; }
+
+        public async ValueTask<BookSourceScanResult> ScanAsync(BookId bookId, DirectoryReference bookDirectory, CancellationToken cancellationToken = default)
+        {
+            var active = Interlocked.Increment(ref activeScans);
+            MaximumConcurrentScans = Math.Max(MaximumConcurrentScans, active);
+            if (active == 4) fourScansEntered.TrySetResult();
+            try
+            {
+                await release.Task.WaitAsync(cancellationToken);
+                return BookSourceScanResult.Succeeded(new BookSource([
+                    new BookAsset(Path.Combine(bookDirectory.Value, "Book interior", "page-1.png"), BookAssetKind.Interior)]));
+            }
+            finally
+            {
+                Interlocked.Decrement(ref activeScans);
+            }
+        }
+
+        public void Release() => release.TrySetResult();
+    }
+
+    private sealed class ThrowingScanner : IBookSourceScanner
+    {
+        public ValueTask<BookSourceScanResult> ScanAsync(BookId bookId, DirectoryReference bookDirectory, CancellationToken cancellationToken = default) =>
+            ValueTask.FromException<BookSourceScanResult>(new InvalidOperationException("scan failed"));
     }
 
     private sealed class DirectReferenceScanner(string sourceReference) : IBookSourceScanner

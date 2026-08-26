@@ -42,6 +42,7 @@ public sealed class ApplicationSnapshotService(
     IPdfDocumentInspector? pdfDocumentInspector = null,
     IOperationDiagnostics? diagnostics = null) : IApplicationSnapshotService
 {
+    private const int MaximumBookSummaryConcurrency = 4;
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
 
     public async ValueTask<ApplicationSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
@@ -53,123 +54,132 @@ public sealed class ApplicationSnapshotService(
             discoverySnapshot = await discovery.DiscoverAsync(cancellationToken);
         }
         var settings = await settingsStore.LoadAsync(discoverySnapshot.Paths, cancellationToken);
-        var summaries = new List<BookDesktopSummary>(discoverySnapshot.Books.Count);
-        foreach (var book in discoverySnapshot.Books)
+        var summaries = new BookDesktopSummary?[discoverySnapshot.Books.Count];
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, discoverySnapshot.Books.Count),
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = MaximumBookSummaryConcurrency,
+                CancellationToken = cancellationToken
+            },
+            async (index, token) => summaries[index] = await BuildBookSummaryAsync(discoverySnapshot.Books[index], token));
+
+        return new ApplicationSnapshot(discoverySnapshot, settings, summaries.Select(summary => summary!).ToArray(), DateTimeOffset.UtcNow);
+    }
+
+    private async ValueTask<BookDesktopSummary> BuildBookSummaryAsync(DiscoveredBook book, CancellationToken cancellationToken)
+    {
+        BookSourceScanResult scan;
+        using (diagnostics.Begin("book.scan", book.Id.Value))
         {
-            BookSourceScanResult scan;
-            using (diagnostics.Begin("book.scan", book.Id.Value))
+            scan = await sourceScanner.ScanAsync(book.Id, book.Directory, cancellationToken);
+        }
+        var validation = scan.IsSuccess ? BookSourceValidator.Validate(scan.Source!) : null;
+        var source = validation?.Source;
+        var sourceFailure = scan.Failure ?? validation?.Failure;
+        var isSourceValid = scan.IsSuccess && validation!.IsSuccess;
+        var state = await stateStore.LoadAsync(book.Workspace, cancellationToken) ?? BookProcessingState.NotStarted(book.Id);
+        var coverCandidates = source?.GetAssets(BookAssetKind.Cover).Select(asset => asset.Reference).ToArray() ?? [];
+        var hasSelectedCover = coverCandidates.Length == 1 || coverCandidates.Any(candidate => string.Equals(candidate, state.SelectedCoverReference, StringComparison.OrdinalIgnoreCase));
+        var interiorDirectory = new DirectoryReference(Path.Combine(book.Workspace.ProcessedDirectory.Value, "interior"));
+        var interiorPages = new List<InteriorPageSummary>();
+        await foreach (var page in fileSystem.EnumerateFilesAsync(interiorDirectory, cancellationToken))
+        {
+            if (string.Equals(Path.GetExtension(page.Value), ".png", StringComparison.OrdinalIgnoreCase))
             {
-                scan = await sourceScanner.ScanAsync(book.Id, book.Directory, cancellationToken);
+                interiorPages.Add(new InteriorPageSummary(Path.GetFileNameWithoutExtension(page.Value), "Completed", page.Value));
             }
-            var validation = scan.IsSuccess ? BookSourceValidator.Validate(scan.Source!) : null;
-            var source = validation?.Source;
-            var sourceFailure = scan.Failure ?? validation?.Failure;
-            var isSourceValid = scan.IsSuccess && validation!.IsSuccess;
-            var state = await stateStore.LoadAsync(book.Workspace, cancellationToken) ?? BookProcessingState.NotStarted(book.Id);
-            var coverCandidates = source?.GetAssets(BookAssetKind.Cover).Select(asset => asset.Reference).ToArray() ?? [];
-            var hasSelectedCover = coverCandidates.Length == 1 || coverCandidates.Any(candidate => string.Equals(candidate, state.SelectedCoverReference, StringComparison.OrdinalIgnoreCase));
-            var interiorDirectory = new DirectoryReference(Path.Combine(book.Workspace.ProcessedDirectory.Value, "interior"));
-            var interiorPages = new List<InteriorPageSummary>();
-            await foreach (var page in fileSystem.EnumerateFilesAsync(interiorDirectory, cancellationToken))
-            {
-                if (string.Equals(Path.GetExtension(page.Value), ".png", StringComparison.OrdinalIgnoreCase))
-                {
-                    interiorPages.Add(new InteriorPageSummary(Path.GetFileNameWithoutExtension(page.Value), "Completed", page.Value));
-                }
-            }
-            var checks = new List<BookValidationCheck>();
-            if (isSourceValid)
-            {
-                checks.Add(new BookValidationCheck("book.interior_ready", "Interior source images were discovered.", true));
-            }
-            else
-            {
-                checks.Add(new BookValidationCheck(sourceFailure!.Code, sourceFailure.Message, false));
-            }
-            if (coverCandidates.Length == 0)
-            {
-                checks.Add(new BookValidationCheck(
-                    "book.cover_skipped",
-                    "Cover is unavailable and will be skipped for Interior-only processing.",
-                    true,
-                    true));
-            }
-            else if (coverCandidates.Length > 1)
-            {
-                checks.Add(new BookValidationCheck(
-                    "book.cover_selection_optional",
-                    hasSelectedCover ? "A cover candidate was selected." : "Cover selection is not required for Interior-only processing.",
-                    true,
-                    true));
-            }
-            var fullBookChecks = new List<BookValidationCheck>
+        }
+        var checks = new List<BookValidationCheck>();
+        if (isSourceValid)
+        {
+            checks.Add(new BookValidationCheck("book.interior_ready", "Interior source images were discovered.", true));
+        }
+        else
+        {
+            checks.Add(new BookValidationCheck(sourceFailure!.Code, sourceFailure.Message, false));
+        }
+        if (coverCandidates.Length == 0)
+        {
+            checks.Add(new BookValidationCheck(
+                "book.cover_skipped",
+                "Cover is unavailable and will be skipped for Interior-only processing.",
+                true,
+                true));
+        }
+        else if (coverCandidates.Length > 1)
+        {
+            checks.Add(new BookValidationCheck(
+                "book.cover_selection_optional",
+                hasSelectedCover ? "A cover candidate was selected." : "Cover selection is not required for Interior-only processing.",
+                true,
+                true));
+        }
+        var fullBookChecks = new List<BookValidationCheck>
             {
                 isSourceValid
                     ? new BookValidationCheck("book.interior_ready", "Interior source images were discovered.", true)
                     : new BookValidationCheck(sourceFailure!.Code, sourceFailure.Message, false)
             };
-            if (coverCandidates.Length == 0)
-            {
-                fullBookChecks.Add(new BookValidationCheck(
-                    "book.cover_required",
-                    "A Cover PNG is required before this Book can be exported as a full book.",
-                    false));
-            }
-            else if (coverCandidates.Length > 1 && !hasSelectedCover)
-            {
-                fullBookChecks.Add(new BookValidationCheck(
-                    "book.cover_selection_required",
-                    "Choose one Cover PNG before this Book can be exported as a full book.",
-                    false));
-            }
-            else
-            {
-                fullBookChecks.Add(new BookValidationCheck(
-                    "book.cover_ready",
-                    "A Cover PNG is selected for full-book output.",
-                    true));
-            }
-            var isReady = isSourceValid;
-            var sourcePages = source?.GetAssets(BookAssetKind.Interior)
-                .Select(asset =>
-                {
-                    var sourceFile = new FileReference(asset.Reference);
-                    var sourceKey = InteriorSourceKey.FromBookRoot(book.Directory, sourceFile);
-                    return new InteriorSourcePageSummary(asset.Reference, state.GetInteriorFrameMode(sourceKey), state.IsInteriorActive(sourceKey));
-                })
-                .ToArray() ?? [];
-            var activeInteriorSourcePageCount = sourcePages.Count(page => page.IsActive);
-            if (isSourceValid && activeInteriorSourcePageCount == 0)
-            {
-                isReady = false;
-                checks.Add(new BookValidationCheck("book.no_active_interior_pages", "Activate at least one Interior page before processing.", false));
-            }
-            var assetSummaries = DescribeAssets(book, source, state);
-            summaries.Add(new BookDesktopSummary(
-                book.Id,
-                isReady ? "Ready" : "Invalid",
-                checks,
-                state.Status,
-                state.CurrentStep,
-                state.Failure?.Message,
-                state.PublishedArtifactReferences ?? [],
-                interiorPages.OrderBy(page => page.PageId, StringComparer.Ordinal).ToArray(),
-                await stateStore.LoadLogsAsync(book.Workspace, cancellationToken),
-                source?.GetAssets(BookAssetKind.Interior).Count ?? 0,
-                await DiscoverSourceFoldersAsync(book.Directory, cancellationToken),
-                coverCandidates,
-                state.SelectedCoverReference,
-                state.UpdatedAt == DateTimeOffset.MinValue ? null : state.UpdatedAt,
-                sourcePages,
-                assetSummaries,
-                fullBookChecks,
-                await DescribeOutputsAsync(book.Id, state.PublishedArtifactReferences ?? [], cancellationToken),
-                FindRepresentativeCoverReference(book, source, state.SelectedCoverReference),
-                HasBackground: state.HasBackground,
-                ActiveInteriorSourcePageCount: activeInteriorSourcePageCount));
+        if (coverCandidates.Length == 0)
+        {
+            fullBookChecks.Add(new BookValidationCheck(
+                "book.cover_required",
+                "A Cover PNG is required before this Book can be exported as a full book.",
+                false));
         }
-
-        return new ApplicationSnapshot(discoverySnapshot, settings, summaries, DateTimeOffset.UtcNow);
+        else if (coverCandidates.Length > 1 && !hasSelectedCover)
+        {
+            fullBookChecks.Add(new BookValidationCheck(
+                "book.cover_selection_required",
+                "Choose one Cover PNG before this Book can be exported as a full book.",
+                false));
+        }
+        else
+        {
+            fullBookChecks.Add(new BookValidationCheck(
+                "book.cover_ready",
+                "A Cover PNG is selected for full-book output.",
+                true));
+        }
+        var isReady = isSourceValid;
+        var sourcePages = source?.GetAssets(BookAssetKind.Interior)
+            .Select(asset =>
+            {
+                var sourceFile = new FileReference(asset.Reference);
+                var sourceKey = InteriorSourceKey.FromBookRoot(book.Directory, sourceFile);
+                return new InteriorSourcePageSummary(asset.Reference, state.GetInteriorFrameMode(sourceKey), state.IsInteriorActive(sourceKey));
+            })
+            .ToArray() ?? [];
+        var activeInteriorSourcePageCount = sourcePages.Count(page => page.IsActive);
+        if (isSourceValid && activeInteriorSourcePageCount == 0)
+        {
+            isReady = false;
+            checks.Add(new BookValidationCheck("book.no_active_interior_pages", "Activate at least one Interior page before processing.", false));
+        }
+        var assetSummaries = DescribeAssets(book, source, state);
+        return new BookDesktopSummary(
+            book.Id,
+            isReady ? "Ready" : "Invalid",
+            checks,
+            state.Status,
+            state.CurrentStep,
+            state.Failure?.Message,
+            state.PublishedArtifactReferences ?? [],
+            interiorPages.OrderBy(page => page.PageId, StringComparer.Ordinal).ToArray(),
+            await stateStore.LoadLogsAsync(book.Workspace, cancellationToken),
+            source?.GetAssets(BookAssetKind.Interior).Count ?? 0,
+            await DiscoverSourceFoldersAsync(book.Directory, cancellationToken),
+            coverCandidates,
+            state.SelectedCoverReference,
+            state.UpdatedAt == DateTimeOffset.MinValue ? null : state.UpdatedAt,
+            sourcePages,
+            assetSummaries,
+            fullBookChecks,
+            await DescribeOutputsAsync(book.Id, state.PublishedArtifactReferences ?? [], cancellationToken),
+            FindRepresentativeCoverReference(book, source, state.SelectedCoverReference),
+            HasBackground: state.HasBackground,
+            ActiveInteriorSourcePageCount: activeInteriorSourcePageCount);
     }
 
     private static string? FindRepresentativeCoverReference(DiscoveredBook book, BookSource? source, string? selectedCoverReference)
