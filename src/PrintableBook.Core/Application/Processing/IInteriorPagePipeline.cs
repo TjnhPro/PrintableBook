@@ -29,7 +29,7 @@ public sealed record InteriorPagePipelineRequest
         Frame = frame;
         FrameMode = frameMode;
         ArtworkSourceNormalization = artworkSourceNormalization ?? ArtworkSourceNormalizationSettings.Default;
-        BorderLineDetection = borderLineDetection ?? BorderLineDetectionSettings.Default;
+        BorderLineDetection = borderLineDetection;
         ValidateGeometry();
     }
 
@@ -44,7 +44,7 @@ public sealed record InteriorPagePipelineRequest
     public FileReference? Frame { get; init; }
     public FrameMode FrameMode { get; init; }
     public ArtworkSourceNormalizationSettings ArtworkSourceNormalization { get; init; }
-    public BorderLineDetectionSettings BorderLineDetection { get; init; }
+    public BorderLineDetectionSettings? BorderLineDetection { get; init; }
 
     public void ValidateGeometry()
     {
