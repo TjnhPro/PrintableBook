@@ -668,7 +668,7 @@ test("PDF Library sorts by newest name and current PDF size", () => {
   assert.equal(firstBook(), "Book Alpha");
 });
 
-test("PDF Library output actions send a book-scoped command", () => {
+test("PDF Library Open PDF sends the exact Book artifact reference", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "output-1", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
   assert.match(content.innerHTML, /Book Alpha - Interior\.pdf/);
@@ -677,6 +677,24 @@ test("PDF Library output actions send a book-scoped command", () => {
   const open = { dataset: { action: "open-output", bookId: "Book Alpha", artifactReference }, closest: () => open };
   contentListeners.click({ target: open });
   assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.open", payload: { bookId: "Book Alpha", artifactReference } });
+});
+
+test("PDF Library Reveal in Explorer sends the exact Book artifact reference", () => {
+  const { messageHandler, contentListeners, messages } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "output-1", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
+  const artifactReference = "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Cover.pdf";
+  const reveal = { dataset: { action: "reveal-output", bookId: "Book Alpha", artifactReference }, closest: () => reveal };
+  contentListeners.click({ target: reveal });
+  assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.reveal", payload: { bookId: "Book Alpha", artifactReference } });
+});
+
+test("PDF Library Copy path sends the exact Book artifact reference", () => {
+  const { messageHandler, contentListeners, messages } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "output-1", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
+  const artifactReference = "D:\\PrintableBook\\sources\\Book Delta\\Output\\Book Delta - Interior.pdf";
+  const copy = { dataset: { action: "copy-output-path", bookId: "Book Delta", artifactReference }, closest: () => copy };
+  contentListeners.click({ target: copy });
+  assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.copy-path", payload: { bookId: "Book Delta", artifactReference } });
 });
 
 test("Diagnostics route requests and renders sanitized responsiveness events", () => {
