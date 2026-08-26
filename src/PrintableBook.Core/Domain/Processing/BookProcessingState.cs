@@ -20,7 +20,9 @@ public sealed record BookProcessingState(
     string? SelectedCoverReference = null,
     IReadOnlyDictionary<string, FrameMode>? InteriorFrameOverrides = null,
     bool HasBackground = false,
-    IReadOnlyList<string>? InactiveInteriorSourceKeys = null)
+    IReadOnlyList<string>? InactiveInteriorSourceKeys = null,
+    bool HasIntro = false,
+    IReadOnlyList<string>? SelectedIntroTemplateKeys = null)
 {
     public static BookProcessingState NotStarted(BookId bookId) => new(
         bookId,
@@ -152,6 +154,22 @@ public sealed record BookProcessingState(
     }
 
     public BookProcessingState SetHasBackground(bool enabled) => this with { HasBackground = enabled };
+
+    public BookProcessingState SetHasIntro(bool enabled) => this with { HasIntro = enabled };
+
+    public BookProcessingState SetIntroTemplateKeys(IEnumerable<string> templateKeys)
+    {
+        ArgumentNullException.ThrowIfNull(templateKeys);
+        var keys = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var templateKey in templateKeys)
+        {
+            var normalized = IntroTemplateSourceKey.Normalize(templateKey);
+            if (seen.Add(normalized)) keys.Add(normalized);
+        }
+
+        return this with { SelectedIntroTemplateKeys = keys.Count == 0 ? [] : keys };
+    }
 
     public bool IsInteriorActive(string sourceKey)
     {

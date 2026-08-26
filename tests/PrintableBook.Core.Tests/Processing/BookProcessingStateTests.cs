@@ -20,6 +20,34 @@ public sealed class BookProcessingStateTests
         Assert.True(BookProcessingState.NotStarted(new BookId("book")).SetHasBackground(true).HasBackground);
 
     [Fact]
+    public void Intro_defaults_to_automatic_selection_without_persisted_keys()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book"));
+
+        Assert.False(state.HasIntro);
+        Assert.Null(state.SelectedIntroTemplateKeys);
+    }
+
+    [Fact]
+    public void SetIntroTemplateKeys_normalizes_and_deduplicates_while_preserving_first_order()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book"))
+            .SetHasIntro(true)
+            .SetIntroTemplateKeys(["nested\\first.png", "SECOND.png", "nested/first.png"]);
+
+        Assert.True(state.HasIntro);
+        Assert.Equal(["nested/first.png", "SECOND.png"], state.SelectedIntroTemplateKeys);
+    }
+
+    [Fact]
+    public void SetIntroTemplateKeys_allows_an_explicit_empty_custom_selection()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book")).SetHasIntro(true).SetIntroTemplateKeys([]);
+
+        Assert.Empty(state.SelectedIntroTemplateKeys!);
+    }
+
+    [Fact]
     public void SetInteriorActive_stores_only_inactive_source_keys()
     {
         var state = BookProcessingState.NotStarted(new BookId("book")).SetInteriorActive("Book interior/b.png", false).SetInteriorActive("Book interior/a.png", false);
