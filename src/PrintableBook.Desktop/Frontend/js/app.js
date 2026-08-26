@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF outputs", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, bookInteriorDrafts: new Map(), bookInteriorSavePending: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processStartPending: false, lastTerminalRefreshSession: "", backgroundTasks: [], pendingCommands: new Map() };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, bookInteriorDrafts: new Map(), bookInteriorSavePending: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processStartPending: false, lastTerminalRefreshSession: "", backgroundTasks: [], pendingCommands: new Map() };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -12,6 +12,24 @@
   const summaries = () => valueFor(window.appSnapshot, "bookSummaries", []);
   const bookId = (book) => valueFor(valueFor(book, "id", {}), "value", valueFor(book, "name", ""));
   const summaryFor = (book) => summaries().find((summary) => valueFor(valueFor(summary, "bookId", {}), "value", "") === bookId(book));
+  const pdfLibraryBookName = (book, summary) => bookId(book) || valueFor(valueFor(summary, "bookId", {}), "value", "");
+  const pdfLibraryOutputSize = (summary) => valueFor(summary, "outputSummaries", []).reduce((total, output) => total + (Number(valueFor(output, "fileSizeBytes", 0)) || 0), 0);
+  const pdfLibraryGeneratedAt = (summary) => {
+    const outputTimes = valueFor(summary, "outputSummaries", []).map((output) => new Date(valueFor(output, "generatedAt", 0)).getTime()).filter((value) => Number.isFinite(value) && value > 0);
+    if (outputTimes.length) return Math.max(...outputTimes);
+    const lastRun = new Date(valueFor(summary, "lastRunAt", 0)).getTime();
+    return Number.isFinite(lastRun) ? lastRun : 0;
+  };
+  const pdfLibraryBooks = () => {
+    const items = books().map((book) => ({ book, summary: summaryFor(book) })).filter(({ summary }) => summary && workspaceStatus(summary) === "Completed" && valueFor(summary, "outputSummaries", []).length > 0);
+    const search = state.pdfLibrarySearch.trim().toLocaleLowerCase();
+    const filtered = search ? items.filter(({ book, summary }) => pdfLibraryBookName(book, summary).toLocaleLowerCase().includes(search)) : items;
+    return [...filtered].sort((left, right) => {
+      if (state.pdfLibrarySort === "name") return pdfLibraryBookName(left.book, left.summary).localeCompare(pdfLibraryBookName(right.book, right.summary), undefined, { sensitivity: "base" });
+      if (state.pdfLibrarySort === "size") return pdfLibraryOutputSize(right.summary) - pdfLibraryOutputSize(left.summary);
+      return pdfLibraryGeneratedAt(right.summary) - pdfLibraryGeneratedAt(left.summary);
+    });
+  };
   const displayStatus = (value) => typeof value === "number" ? ["Not started", "Running", "Failed", "Cancelled", "Completed", "Interrupted"][value] ?? "Unknown" : value;
   const frameModeValue = (value) => {
     if (typeof value === "number") return ["auto", "enabled", "disabled"][value] ?? "auto";
@@ -405,10 +423,9 @@
   };
 
   const renderOutputs = () => {
-    const outputs = summaries().flatMap((summary) => valueFor(summary, "outputSummaries", []).map((output) => ({ summary, output })));
-    const latest = [...outputs].sort((left, right) => new Date(valueFor(right.output, "generatedAt", 0)).getTime() - new Date(valueFor(left.output, "generatedAt", 0)).getTime()).slice(0, 2);
+    const library = pdfLibraryBooks();
     const actions = (summary, output) => `<div class="output-actions"><button class="button-primary" data-action="open-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Open PDF</button><button class="button-secondary" data-action="reveal-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Reveal in Explorer</button><button class="button-secondary" data-action="copy-output-path" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Copy path</button></div>`;
-    content.innerHTML = `<div class="page-header"><div><h1>Outputs</h1><p>Review the locally generated PDF deliverables before publishing.</p></div></div>${latest.length ? `<section class="output-review-grid">${latest.map(({ summary, output }) => `<article class="output-review-card"><div class="pdf-mark">PDF</div><div class="min-w-0"><div class="flex items-start justify-between gap-3"><h2>${escapeHtml(valueFor(output, "fileName", "PDF output"))}</h2>${badge(valueFor(output, "verificationStatus", "Available"))}</div><p>${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))} · ${dateTime(valueFor(output, "generatedAt", null))}</p><dl><div><dt>Pages</dt><dd>${valueFor(output, "pageCount", "—")}</dd></div><div><dt>Size</dt><dd>${valueFor(output, "widthInches", null) ? `${valueFor(output, "widthInches", 0)} × ${valueFor(output, "heightInches", 0)} in` : "—"}</dd></div><div><dt>File</dt><dd>${fileSize(valueFor(output, "fileSizeBytes", 0))}</dd></div></dl>${actions(summary, output)}</div></article>`).join("")}</section>` : panel("No PDF outputs yet", "<p class=\"empty-copy\">Run Interior Processing from a ready Book to create a local PDF for review.</p>")}${panel("Previous runs", `<table class="data-table"><thead><tr><th>Book</th><th>PDF</th><th>Verification</th><th>Generated</th><th>Actions</th></tr></thead><tbody>${outputs.length ? outputs.map(({ summary, output }) => `<tr><td>${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}</td><td>${escapeHtml(valueFor(output, "fileName", ""))}<br><small>${fileSize(valueFor(output, "fileSizeBytes", 0))}</small></td><td>${badge(valueFor(output, "verificationStatus", "Available"))}</td><td>${dateTime(valueFor(output, "generatedAt", null))}</td><td>${actions(summary, output)}</td></tr>`).join("") : "<tr><td colspan=\"5\" class=\"empty-row\">No history yet.</td></tr>"}</tbody></table>`, "mt-5")}`;
+    content.innerHTML = `<div class="page-header"><div><h1>Outputs</h1></div></div>${library.length ? `<section>${library.map(({ book, summary }) => `<article data-pdf-book-id="${escapeHtml(pdfLibraryBookName(book, summary))}"><h2>${escapeHtml(pdfLibraryBookName(book, summary))}</h2>${valueFor(summary, "outputSummaries", []).map((output) => `<div>${escapeHtml(valueFor(output, "fileName", "PDF output"))}${actions(summary, output)}</div>`).join("")}</article>`).join("")}</section>` : panel("No PDF outputs yet", "<p class=\"empty-copy\">No completed Books have current PDFs.</p>")}`;
   };
 
   const renderDiagnostics = () => {

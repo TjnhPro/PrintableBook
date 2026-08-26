@@ -70,6 +70,43 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   return { messageHandler, status, content, brandSelect, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages, browserWindow };
 }
 
+const pdfLibrarySnapshot = () => ({
+  discovery: {
+    brands: [],
+    books: [
+      { id: { value: "Book Alpha" }, name: "Book Alpha" },
+      { id: { value: "Book Beta" }, name: "Book Beta" },
+      { id: { value: "Book Gamma" }, name: "Book Gamma" },
+      { id: { value: "Book Delta" }, name: "Book Delta" }
+    ]
+  },
+  globalSettings: {},
+  bookSummaries: [
+    {
+      bookId: { value: "Book Alpha" }, workspaceStatus: "Completed", lastRunAt: "2026-08-25T10:00:00Z", interiorSourcePageCount: 40, activeInteriorSourcePageCount: 40,
+      validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      outputSummaries: [
+        { artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Interior.pdf", fileName: "Book Alpha - Interior.pdf", verificationStatus: "Verified", generatedAt: "2026-08-25T10:00:00Z", pageCount: 80, widthInches: 8.5, heightInches: 8.5, fileSizeBytes: 80 * 1024 * 1024 },
+        { artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Cover.pdf", fileName: "Book Alpha - Cover.pdf", verificationStatus: "Verified", generatedAt: "2026-08-25T10:00:00Z", pageCount: 1, widthInches: 17, heightInches: 11, fileSizeBytes: 12 * 1024 * 1024 }
+      ]
+    },
+    {
+      bookId: { value: "Book Beta" }, workspaceStatus: "Failed", lastRunAt: "2026-08-26T11:00:00Z", interiorSourcePageCount: 20, activeInteriorSourcePageCount: 20,
+      validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      outputSummaries: [{ artifactReference: "D:\\PrintableBook\\sources\\Book Beta\\Output\\Book Beta - Interior.pdf", fileName: "Book Beta - Interior.pdf", verificationStatus: "Available", generatedAt: "2026-08-24T10:00:00Z", pageCount: 20, widthInches: 8.5, heightInches: 8.5, fileSizeBytes: 25 * 1024 * 1024 }]
+    },
+    {
+      bookId: { value: "Book Gamma" }, workspaceStatus: "Completed", lastRunAt: "2026-08-26T12:00:00Z", interiorSourcePageCount: 30, activeInteriorSourcePageCount: 30,
+      validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], outputSummaries: []
+    },
+    {
+      bookId: { value: "Book Delta" }, workspaceStatus: "Completed", lastRunAt: "2026-08-26T13:00:00Z", interiorSourcePageCount: 24, activeInteriorSourcePageCount: 24,
+      validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      outputSummaries: [{ artifactReference: "D:\\PrintableBook\\sources\\Book Delta\\Output\\Book Delta - Interior.pdf", fileName: "Book Delta - Interior.pdf", verificationStatus: "Verified", generatedAt: "2026-08-26T13:00:00Z", pageCount: 48, widthInches: 8.5, heightInches: 8.5, fileSizeBytes: 42 * 1024 * 1024 }]
+    }
+  ]
+});
+
 test("bridge accepts the JSON response emitted by the .NET host", () => {
   const { messageHandler, status } = loadBridge();
 
@@ -541,19 +578,40 @@ test("validation limits Book detail to Interior preflight while cover work is de
   assert.doesNotMatch(content.innerHTML, /Cover is unavailable/);
 });
 
-test("output review shows verified PDF facts and only sends a book-scoped action", () => {
+test("PDF Library shows only Completed Books that currently have output", () => {
+  const { messageHandler, content } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
+
+  assert.match(content.innerHTML, /data-pdf-book-id="Book Alpha"/);
+  assert.match(content.innerHTML, /data-pdf-book-id="Book Delta"/);
+  assert.doesNotMatch(content.innerHTML, /data-pdf-book-id="Book Beta"/);
+  assert.doesNotMatch(content.innerHTML, /data-pdf-book-id="Book Gamma"/);
+});
+
+test("PDF Library groups current Cover and Interior PDFs under one Book", () => {
+  const { messageHandler, content } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
+
+  const alphaStart = content.innerHTML.indexOf("Book Alpha");
+  const deltaStart = content.innerHTML.indexOf("Book Delta");
+  const alphaMarkup = content.innerHTML.slice(alphaStart, deltaStart > alphaStart ? deltaStart : undefined);
+
+  assert.match(alphaMarkup, /Book Alpha - Interior\.pdf/);
+  assert.match(alphaMarkup, /Book Alpha - Cover\.pdf/);
+  assert.match(alphaMarkup, /Open PDF/);
+  assert.match(alphaMarkup, /Reveal in Explorer/);
+  assert.match(alphaMarkup, /Copy path/);
+});
+
+test("PDF Library output actions send a book-scoped command", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("outputs");
-  messageHandler({ data: { version: 1, id: "output-1", ok: true, command: "app.snapshot", payload: {
-    discovery: { brands: [], books: [] }, globalSettings: {},
-    bookSummaries: [{ bookId: { value: "Book 001" }, outputSummaries: [{ artifactReference: "D:/PrintableBook/outputs/Book-001-interior.pdf", fileName: "Book-001-interior.pdf", fileSizeBytes: 2200000, pageCount: 42, widthInches: 8.5, heightInches: 8.5, verificationStatus: "Verified", generatedAt: "2026-08-25T00:00:00Z" }] }]
-  } } });
-  assert.match(content.innerHTML, /Book-001-interior\.pdf/);
-  assert.match(content.innerHTML, /42/);
-  assert.match(content.innerHTML, /2\.1 MB/);
+  messageHandler({ data: { version: 1, id: "output-1", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
+  assert.match(content.innerHTML, /Book Alpha - Interior\.pdf/);
   assert.match(content.innerHTML, /Reveal in Explorer/);
-  const open = { dataset: { action: "open-output", bookId: "Book 001", artifactReference: "D:/PrintableBook/outputs/Book-001-interior.pdf" }, closest: () => open };
+  const artifactReference = "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Interior.pdf";
+  const open = { dataset: { action: "open-output", bookId: "Book Alpha", artifactReference }, closest: () => open };
   contentListeners.click({ target: open });
-  assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.open", payload: { bookId: "Book 001", artifactReference: "D:/PrintableBook/outputs/Book-001-interior.pdf" } });
+  assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.open", payload: { bookId: "Book Alpha", artifactReference } });
 });
 
 test("Diagnostics route requests and renders sanitized responsiveness events", () => {
