@@ -930,6 +930,24 @@ test("Diagnostics Summary shows compact health instead of large tables", () => {
   assert.doesNotMatch(content.innerHTML, /data-action="diagnostic-book"/);
 });
 
+test("Diagnostics Tasks retains only twenty worker rows", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("diagnostics");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: diagnosticsSnapshot() } });
+  messageHandler({ data: { version: 1, id: "tasks", ok: true, command: "background.tasks", payload: Array.from({ length: 25 }, (_, index) => ({ kind: `Worker ${index + 1}`, state: index === 0 ? "Running" : "Completed", subject: "Book Alpha", step: "Processing" })) } });
+  const target = { dataset: { action: "diagnostics-tab", diagnosticsTab: "tasks" } };
+  target.closest = () => target;
+  contentListeners.click({ target });
+
+  assert.match(content.innerHTML, /data-diagnostics-panel="tasks"/);
+  assert.match(content.innerHTML, /Background workers/);
+  assert.match(content.innerHTML, /Active/);
+  assert.match(content.innerHTML, /Retained/);
+  assert.match(content.innerHTML, /Worker 20/);
+  assert.doesNotMatch(content.innerHTML, /Worker 21/);
+  assert.doesNotMatch(content.innerHTML, /UI responsiveness/);
+  assert.doesNotMatch(content.innerHTML, /Recent logs/);
+});
+
 test("Diagnostics route requests and renders sanitized responsiveness events", () => {
   const { messageHandler, content, routeButtons, messages } = loadBridge("diagnostics");
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: {

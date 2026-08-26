@@ -516,9 +516,13 @@
     const bookTone = ["Failed", "Interrupted", "Cancelled"].includes(bookState) ? "bad" : bookState === "Running" ? "warn" : "good";
     return `<section role="tabpanel" data-diagnostics-panel="summary"><div class="diagnostic-health-grid">${renderDiagnosticHealthCard("Runtime", runtime.label, runtime.detail, runtime.tone)}${renderDiagnosticHealthCard("UI health", ui.label, ui.detail, ui.tone)}${renderDiagnosticHealthCard("Selected Book", bookState, bookName, bookTone)}${renderDiagnosticHealthCard("Source files", summary ? (missing.length ? `${missing.length} missing` : "All present") : "No Book selected", summary ? `${valueFor(summary, "sourceFolders", []).length} tracked folders` : "", missing.length ? "warn" : "good")}</div>${renderDiagnosticsAttention(diagnosticAttentionItems(summary))}${renderDiagnosticsRecentActivity(diagnosticRecentTasks())}</section>`;
   };
-  const renderDiagnosticsPanel = (book, summary) => state.diagnosticsTab === "summary"
-    ? renderDiagnosticsSummary(book, summary)
-    : `<section role="tabpanel" data-diagnostics-panel="${state.diagnosticsTab}"><p class="empty-copy">${escapeHtml(state.diagnosticsTab)} diagnostics are loading.</p></section>`;
+  const diagnosticTaskRows = () => state.backgroundTasks.slice(0, 20).map((task) => `<tr><td>${escapeHtml(valueFor(task, "kind", ""))}</td><td>${badge(valueFor(task, "state", "Unknown"))}</td><td>${escapeHtml(valueFor(task, "subject", "—"))}</td><td>${escapeHtml(valueFor(task, "step", "—"))}</td><td>${valueFor(task, "completed", "—")}/${valueFor(task, "total", "—")}</td><td>${dateTime(valueFor(task, "startedAt", null))}</td><td>${dateTime(valueFor(task, "finishedAt", null))}</td><td>${escapeHtml(valueFor(task, "errorMessage", "—"))}</td></tr>`).join("") || "<tr><td colspan=\"8\" class=\"empty-row\">No retained background tasks.</td></tr>";
+  const renderDiagnosticsTasks = () => `<section role="tabpanel" data-diagnostics-panel="tasks"><div class="diagnostic-detail-strip"><div><span>Active</span><strong>${diagnosticActiveTasks().length}</strong></div><div><span>Failed</span><strong>${diagnosticFailedTasks().length}</strong></div><div><span>Retained</span><strong>${state.backgroundTasks.length}</strong></div></div>${panel("Background workers", `<div class="table-scroll"><table class="data-table"><thead><tr><th>Kind</th><th>State</th><th>Subject</th><th>Step</th><th>Progress</th><th>Started</th><th>Finished</th><th>Error</th></tr></thead><tbody>${diagnosticTaskRows()}</tbody></table></div>`)}</section>`;
+  const renderDiagnosticsPanel = (book, summary) => {
+    if (state.diagnosticsTab === "tasks") return renderDiagnosticsTasks();
+    if (state.diagnosticsTab === "summary") return renderDiagnosticsSummary(book, summary);
+    return `<section role="tabpanel" data-diagnostics-panel="${state.diagnosticsTab}"><p class="empty-copy">${escapeHtml(state.diagnosticsTab)} diagnostics are loading.</p></section>`;
+  };
   const renderDiagnostics = () => {
     const book = selectedBook() ?? books()[0] ?? null;
     const summary = book ? summaryFor(book) : null;
