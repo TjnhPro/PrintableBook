@@ -47,7 +47,7 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
-    public void BookDetailUsesAnAccessibleDismissibleDrawer()
+    public void BookDetailUsesAnAccessibleDismissibleBottomSheet()
     {
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
         var layout = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css"));
@@ -56,8 +56,10 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("role=\"dialog\"", script, StringComparison.Ordinal);
         Assert.Contains("close-book-drawer", script, StringComparison.Ordinal);
         Assert.Contains("event.key !== \"Escape\"", script, StringComparison.Ordinal);
-        Assert.Contains("width:75vw", layout, StringComparison.Ordinal);
-        Assert.DoesNotContain("width:min(720px,52vw)", layout, StringComparison.Ordinal);
+        Assert.Contains("align-items:flex-end", layout, StringComparison.Ordinal);
+        Assert.Contains("height:min(75dvh,760px)", layout, StringComparison.Ordinal);
+        Assert.Contains("@keyframes pb-bottom-sheet-in", layout, StringComparison.Ordinal);
+        Assert.DoesNotContain("width:75vw", layout, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -81,16 +83,18 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
-    public void InteriorAssetsExposePerAssetFrameModeControlsWithoutABulkMutation()
+    public void InteriorSettingsExposeOnlyBackgroundAndPaginatedIntroControls()
     {
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
 
-        Assert.Contains("data-action=\"set-interior-active\"", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"set-book-background\"", script, StringComparison.Ordinal);
-        Assert.Contains("<span>Frame mode</span>", script, StringComparison.Ordinal);
-        Assert.Contains("data-action=\"set-interior-frame-mode\"", script, StringComparison.Ordinal);
-        Assert.Contains("data-source-reference", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("book.interior.frame-mode.batch", script, StringComparison.Ordinal);
+        Assert.Contains("tabButton(\"settings\", \"Interior settings\")", script, StringComparison.Ordinal);
+        Assert.Contains("const introPageSize = 6", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"intro-template-page\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("tabButton(\"validation\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("tabButton(\"processing\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("tabButton(\"outputs\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("tabButton(\"logs\"", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -98,9 +102,8 @@ public sealed class BookWorkspaceLayoutContractTests
     {
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
 
-        Assert.Contains("Interior-only preflight checks the source pages", script, StringComparison.Ordinal);
-        Assert.Contains("!valueFor(check, \"code\", \"\").startsWith(\"book.cover_\")", script, StringComparison.Ordinal);
-        Assert.Contains("Use Interior assets to review page previews", script, StringComparison.Ordinal);
+        Assert.Contains("Run Interior preflight", script, StringComparison.Ordinal);
+        Assert.Contains("Review the summary, then configure Brand background and Intro pages", script, StringComparison.Ordinal);
         Assert.DoesNotContain("Full-book preflight", script, StringComparison.Ordinal);
     }
 

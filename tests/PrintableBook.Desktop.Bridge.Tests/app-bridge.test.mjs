@@ -340,7 +340,7 @@ test("an initial refresh failure shows a retryable load failure panel", () => {
 test("phase 4 page markup includes the interior-only processing workflow", () => {
   const script = readFileSync(appScriptPath, "utf8");
 
-  for (const state of ["Selected queue", "Process Interior", "Published outputs", "Workspace logs", "Settings saved", "Brand settings", "Interior processing", "Current stage", "Elapsed"]) {
+  for (const state of ["Selected queue", "Process Interior", "Settings saved", "Brand settings", "Interior processing", "Current stage", "Elapsed", "Interior settings"]) {
     assert.match(script, new RegExp(state));
   }
   assert.match(script, /send\("settings\.save"/);
@@ -500,7 +500,7 @@ test("book filters render a recovered interrupted workspace without failing", ()
   assert.match(content.innerHTML, /Preflight/);
 });
 
-test("book detail renders frame mode truth and sends per-image overrides through the bridge", () => {
+test("book detail renders only the summary and paginated Interior settings", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   const snapshot = (frameMode) => ({
     discovery: {
@@ -524,24 +524,20 @@ test("book detail renders frame mode truth and sends per-image overrides through
 
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
-  const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
-  contentListeners.click({ target: assetsTab });
+  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
+  contentListeners.click({ target: settingsTab });
 
-  assert.match(content.innerHTML, /Interior assets/);
+  assert.match(content.innerHTML, /Interior settings/);
   assert.match(content.innerHTML, /Use Brand background/);
-  assert.match(content.innerHTML, /0 of 1 active/);
-  assert.match(content.innerHTML, /set-interior-active/);
-  assert.match(content.innerHTML, /is-inactive/);
-  assert.match(content.innerHTML, /Choose exactly which pages will be processed/);
-  assert.match(content.innerHTML, /option value="auto" selected/);
+  assert.match(content.innerHTML, /Intro pages/);
+  assert.match(content.innerHTML, /data-intro-total-pages/);
+  assert.doesNotMatch(content.innerHTML, /data-action="set-interior-active"/);
   const messageCountBeforeEdit = messages.length;
   contentListeners.change({ target: { dataset: { action: "set-book-background", bookId: "Book 001" }, checked: false } });
-  contentListeners.change({ target: { dataset: { action: "set-interior-active", bookId: "Book 001", sourceReference: "Book interior/page-001.png" }, checked: true } });
-  contentListeners.change({ target: { dataset: { action: "set-interior-frame-mode", bookId: "Book 001", sourceReference: "Book interior/page-001.png" }, value: "enabled" } });
   assert.equal(messages.length, messageCountBeforeEdit);
 
   messageHandler({ data: { version: 1, id: "book-2", ok: true, command: "app.snapshot", payload: snapshot(1) } });
-  assert.match(content.innerHTML, /option value="enabled" selected/);
+  assert.match(content.innerHTML, /Interior settings/);
 });
 
 test("Book Interior edits stay local until one explicit save request", () => {
@@ -559,13 +555,11 @@ test("Book Interior edits stay local until one explicit save request", () => {
   messageHandler({ data: { version: 1, id: "book-draft", ok: true, command: "app.snapshot", payload: snapshot } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
-  const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
-  contentListeners.click({ target: assetsTab });
+  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
+  contentListeners.click({ target: settingsTab });
   const messageCountBeforeEdit = messages.length;
 
   contentListeners.change({ target: { dataset: { action: "set-book-background", bookId: "Book 001" }, checked: true } });
-  contentListeners.change({ target: { dataset: { action: "set-interior-active", bookId: "Book 001", sourceReference: "Book interior/page-001.png" }, checked: false } });
-  contentListeners.change({ target: { dataset: { action: "set-interior-frame-mode", bookId: "Book 001", sourceReference: "Book interior/page-001.png" }, value: "enabled" } });
 
   assert.equal(messages.length, messageCountBeforeEdit, "editing must not refresh the Book drawer");
   assert.match(content.innerHTML, /data-action="save-book-interior-settings"/);
@@ -580,7 +574,7 @@ test("Book Interior edits stay local until one explicit save request", () => {
     payload: {
       bookId: "Book 001",
       hasBackground: true,
-      assets: [{ sourceReference: "Book interior/page-001.png", active: false, frameMode: "enabled" }]
+      assets: []
     }
   });
 });
@@ -600,8 +594,8 @@ test("Book detail configures an ordered custom Intro selection from Book interio
   } } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
-  const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
-  contentListeners.click({ target: assetsTab });
+  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
+  contentListeners.click({ target: settingsTab });
   assert.match(content.innerHTML, /Intro pages/);
   assert.match(content.innerHTML, /Automatic/);
 
@@ -609,11 +603,33 @@ test("Book detail configures an ordered custom Intro selection from Book interio
   const add = { dataset: { action: "intro-add-template", bookId: "Book 001", introSourceReference: "Book interior/page-003.png" }, closest: () => add };
   contentListeners.click({ target: add });
   assert.match(content.innerHTML, /Intro #1/);
-  assert.match(content.innerHTML, /data-custom-intro="true" disabled/);
   const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
   contentListeners.click({ target: save });
 
   assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", hasIntro: true, introSourceReferences: ["Book interior/page-003.png"], assets: [] });
+});
+
+test("Interior settings pages Intro templates six cards at a time", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("books");
+  const templates = Array.from({ length: 7 }, (_, index) => ({ key: `intro-${index + 1}.png`, fileName: `intro-${index + 1}.png`, localImageUrl: `file:///intro-${index + 1}.png` }));
+  messageHandler({ data: { version: 1, id: "intro-page", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [{ name: "Demo", introTemplateAssets: templates }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{ bookId: { value: "Book 001" }, hasIntro: false, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [] }]
+  } } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
+  contentListeners.click({ target: settingsTab });
+
+  assert.match(content.innerHTML, /intro-6\.png/);
+  assert.doesNotMatch(content.innerHTML, /intro-7\.png/);
+  assert.match(content.innerHTML, /1–6 of 7/);
+
+  const next = { dataset: { action: "intro-template-page", introTemplatePage: "next" }, closest: () => next };
+  contentListeners.click({ target: next });
+  assert.match(content.innerHTML, /intro-7\.png/);
+  assert.match(content.innerHTML, /Page 2 of 2/);
 });
 
 test("Adding to a persisted custom Intro submits asset source references instead of stored source keys", () => {
@@ -638,8 +654,8 @@ test("Adding to a persisted custom Intro submits asset source references instead
 
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
-  const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
-  contentListeners.click({ target: assetsTab });
+  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
+  contentListeners.click({ target: settingsTab });
   const add = { dataset: { action: "intro-add-template", bookId: "Book 001", introSourceReference: secondReference }, closest: () => add };
   contentListeners.click({ target: add });
   const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
@@ -660,8 +676,8 @@ test("Brand switching leaves custom Book interior Intro selection and readiness 
   } } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
-  const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
-  contentListeners.click({ target: assetsTab });
+  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
+  contentListeners.click({ target: settingsTab });
   assert.match(content.innerHTML, /Custom Book interior/);
   assert.match(content.innerHTML, /Intro #1/);
 
@@ -682,8 +698,8 @@ test("Automatic Intro template preview dimensions gate the current Brand readine
   } } });
   const open = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => open };
   contentListeners.click({ target: open });
-  const assets = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assets };
-  contentListeners.click({ target: assets });
+  const settings = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settings };
+  contentListeners.click({ target: settings });
   const messageCount = messages.length;
 
   contentListeners.load({ target: { matches: (selector) => selector === "img[data-local-image]", dataset: { introTemplateId: "Demo%00intro.png" }, naturalWidth: 1000, naturalHeight: 1000 } });
@@ -710,12 +726,10 @@ test("Books render direct Cover and Interior local image URLs and replace a fail
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
   assert.match(content.innerHTML, /src="file:\/\/\/D:\/Printable%20Book\/Cover%20%231%20%25\.png"/);
-  const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
-  contentListeners.click({ target: assetsTab });
-  assert.match(content.innerHTML, /Interior assets/);
-  assert.match(content.innerHTML, /page-001\.png/);
-  assert.match(content.innerHTML, /src="file:\/\/\/D:\/Printable%20Book/);
-  assert.match(content.innerHTML, /loading="lazy" decoding="async" data-local-image/);
+  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
+  contentListeners.click({ target: settingsTab });
+  assert.match(content.innerHTML, /Interior settings/);
+  assert.match(content.innerHTML, /Use Brand background/);
   assert.equal(messages.some((message) => message.command.includes("preview")), false);
 
   let fallback;
@@ -732,7 +746,7 @@ test("frontend source contains no removed asset-preview bridge protocol", () => 
   }
 });
 
-test("validation limits Book detail to Interior preflight while cover work is deferred", () => {
+test("Book detail keeps the Interior preflight action while cover work is deferred", () => {
   const { messageHandler, content, contentListeners } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-validation", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
@@ -746,10 +760,8 @@ test("validation limits Book detail to Interior preflight while cover work is de
 
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
-  const validationTab = { dataset: { action: "book-tab", bookTab: "validation" }, closest: () => validationTab };
-  contentListeners.click({ target: validationTab });
-  assert.match(content.innerHTML, /Interior-only preflight checks the source pages that will be processed/);
-  assert.match(content.innerHTML, /Interior source images were discovered/);
+  assert.match(content.innerHTML, /Run Interior preflight/);
+  assert.doesNotMatch(content.innerHTML, /data-book-tab="validation"/);
   assert.doesNotMatch(content.innerHTML, /Cover is unavailable/);
 });
 

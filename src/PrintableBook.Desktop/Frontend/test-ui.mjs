@@ -3,14 +3,12 @@ import { readFileSync } from "node:fs";
 const app = readFileSync(new URL("./js/app.js", import.meta.url), "utf8");
 const expected = [
   "Overview",
-  "Validation",
-  "Processing",
-  "Outputs",
-  "Logs",
+  "Interior settings",
   "book.interior.settings.save",
   "Save changes",
-  "Frame mode",
-  "No frame",
+  "Use Brand background",
+  "Intro pages",
+  "intro-template-page",
   "Process Interior",
   "Diagnostics",
   "Interrupted",
@@ -24,10 +22,7 @@ const expected = [
   ,"data-local-image"
   ,"width=\"256\" height=\"256\""
   ,"decoding=\"async\""
-  ,"Interior assets"
-  ,"Choose exactly which pages will be processed"
-  ,"filter-assets"
-  ,"Interior-only preflight checks the source pages"
+  ,"data-intro-total-pages"
   ,"Current stage"
   ,"process-status-strip"
   ,"Run needs review"

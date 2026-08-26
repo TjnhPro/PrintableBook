@@ -19,7 +19,7 @@ public sealed record BookProcessingState(
     IReadOnlyList<string>? PublishedArtifactReferences = null,
     string? SelectedCoverReference = null,
     IReadOnlyDictionary<string, FrameMode>? InteriorFrameOverrides = null,
-    bool HasBackground = false,
+    bool HasBackground = true,
     IReadOnlyList<string>? InactiveInteriorSourceKeys = null,
     bool HasIntro = false,
     IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null)

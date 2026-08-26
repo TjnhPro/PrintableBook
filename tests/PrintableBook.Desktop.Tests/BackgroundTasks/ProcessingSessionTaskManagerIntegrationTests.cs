@@ -57,7 +57,7 @@ public sealed class ProcessingSessionTaskManagerIntegrationTests
         return new DiscoveredBook(id, bookId, new DirectoryReference(id), new BookWorkspace(bookId, new DirectoryReference($"{id}/workspace"), new DirectoryReference($"{id}/processed"), new DirectoryReference($"{id}/temporary")));
     }
 
-    private static BookDesktopSummary Summary(BookId id) => new(id, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1);
+    private static BookDesktopSummary Summary(BookId id) => new(id, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1, HasBackground: false);
 
     private sealed class SnapshotProvider(ApplicationSnapshot snapshot) : IApplicationSnapshotProvider
     {

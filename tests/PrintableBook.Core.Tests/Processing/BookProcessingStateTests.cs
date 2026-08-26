@@ -7,10 +7,10 @@ namespace PrintableBook.Core.Tests.Processing;
 public sealed class BookProcessingStateTests
 {
     [Fact]
-    public void New_book_defaults_to_no_background_and_all_interior_active()
+    public void New_book_defaults_to_brand_background_and_all_interior_active()
     {
         var state = BookProcessingState.NotStarted(new BookId("book"));
-        Assert.False(state.HasBackground);
+        Assert.True(state.HasBackground);
         Assert.True(state.IsInteriorActive("Book interior/page.png"));
         Assert.Null(state.InactiveInteriorSourceKeys);
     }
