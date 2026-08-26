@@ -39,6 +39,10 @@ public sealed record InteriorPagePipelineRequest
         BorderLineDetection = borderLineDetection;
         ProcessingKind = processingKind;
         if (!Enum.IsDefined(processingKind)) throw new ArgumentOutOfRangeException(nameof(processingKind), processingKind, "Unsupported page processing kind.");
+        if (processingKind == InteriorPageProcessingKind.IntroTemplate && (frame is not null || frameMode != FrameMode.Disabled))
+        {
+            throw new ArgumentException("IntroTemplate pages must not apply a frame.", nameof(frameMode));
+        }
         ValidateGeometry();
     }
 
@@ -75,11 +79,14 @@ public sealed record InteriorPageProcessingResult(string PageId, FileReference S
 public sealed class InteriorPageProcessingException(
     string pageId,
     string step,
-    Exception innerException) : Exception($"Interior page '{pageId}' failed during {step}.", innerException)
+    Exception innerException,
+    InteriorPageProcessingKind processingKind = InteriorPageProcessingKind.Interior) : Exception($"Interior page '{pageId}' failed during {step}.", innerException)
 {
     public string PageId { get; } = pageId;
 
     public string Step { get; } = step;
+
+    public InteriorPageProcessingKind ProcessingKind { get; } = processingKind;
 }
 
 /// <summary>

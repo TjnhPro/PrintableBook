@@ -78,11 +78,13 @@ public sealed class DiskBackedInteriorPagePipeline(
                 await EnsureSizeAsync(normalized, new ImageSize(request.ArtworkSourceNormalization.NormalizedSourceSize, request.ArtworkSourceNormalization.NormalizedSourceSize), "Normalized source", cancellationToken);
             }
 
-            var classification = request.ProcessingKind == InteriorPageProcessingKind.IntroTemplate
-                ? CreateForcedCropArtClassification()
-                : invalidation is CacheInvalidationStage.Classification
-                    ? null
-                    : await TryReadClassificationAsync(classificationFile, cancellationToken);
+            var classification = invalidation is CacheInvalidationStage.Classification
+                ? null
+                : await TryReadClassificationAsync(classificationFile, cancellationToken);
+            if (request.ProcessingKind == InteriorPageProcessingKind.IntroTemplate && classification?.Type != ArtworkType.CropArt)
+            {
+                classification = null;
+            }
             if (classification is not null && await IsReadableAsync(finalPage, request.FinalPageSize, cancellationToken))
             {
                 return new InteriorPageProcessingResult(request.PageId, request.Source, finalPage);
@@ -118,8 +120,9 @@ public sealed class DiskBackedInteriorPagePipeline(
                 preparedArtwork = PreparedArtwork.FromCached(prepared, classification.Type);
             }
 
-            var shouldApplyFrame = ShouldApplyFrame(
-                request.Frame is not null && File.Exists(request.Frame.Value),
+            var frame = request.ProcessingKind == InteriorPageProcessingKind.IntroTemplate ? null : request.Frame;
+            var shouldApplyFrame = request.ProcessingKind != InteriorPageProcessingKind.IntroTemplate && ShouldApplyFrame(
+                frame is not null && File.Exists(frame.Value),
                 request.FrameMode,
                 preparedArtwork.AutoFrameRecommended);
             if (!await IsReadableAsync(framed, request.PreparedArtworkSize, cancellationToken) ||
@@ -127,7 +130,7 @@ public sealed class DiskBackedInteriorPagePipeline(
             {
                 DeleteDownstream(working, finalPage);
                 currentStep = "frame";
-                await frameProcessor.ApplyAsync(new FrameOverlayRequest(prepared, framed, request.Frame, shouldApplyFrame), cancellationToken);
+                await frameProcessor.ApplyAsync(new FrameOverlayRequest(prepared, framed, frame, shouldApplyFrame), cancellationToken);
                 await EnsureSizeAsync(framed, request.PreparedArtworkSize, "Framed artwork", cancellationToken);
             }
 
@@ -160,7 +163,7 @@ public sealed class DiskBackedInteriorPagePipeline(
         }
         catch (Exception exception)
         {
-            throw new InteriorPageProcessingException(request.PageId, currentStep, exception);
+            throw new InteriorPageProcessingException(request.PageId, currentStep, exception, request.ProcessingKind);
         }
     }
 

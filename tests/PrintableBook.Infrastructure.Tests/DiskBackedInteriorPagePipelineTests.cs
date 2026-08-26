@@ -75,7 +75,8 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
             processingKind: InteriorPageProcessingKind.IntroTemplate));
 
         Assert.StartsWith(Path.Combine(workspace.ProcessedDirectory.Value, "intro"), result.FinalPage.Value, StringComparison.OrdinalIgnoreCase);
-        Assert.False(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "intro-0001", "classification.json")));
+        var classification = await File.ReadAllTextAsync(Path.Combine(workspace.WorkingDirectory.Value, "cache", "intro-0001", "classification.json"));
+        Assert.Contains("cropart", classification, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -16,6 +16,15 @@ public sealed class InteriorPagePipelineRequestTests
     }
 
     [Fact]
+    public void Intro_template_request_rejects_every_frame_configuration()
+    {
+        var workspace = new BookWorkspace(new BookId("book"), new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("temp"));
+
+        Assert.Throws<ArgumentException>(() => new InteriorPagePipelineRequest(workspace, new FileReference("intro.png"), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), new FileReference("frame.png"), FrameMode.Disabled, processingKind: InteriorPageProcessingKind.IntroTemplate));
+        Assert.Throws<ArgumentException>(() => new InteriorPagePipelineRequest(workspace, new FileReference("intro.png"), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), null, FrameMode.Auto, processingKind: InteriorPageProcessingKind.IntroTemplate));
+    }
+
+    [Fact]
     public void Constructor_accepts_the_canonical_prepared_working_and_final_geometry()
     {
         var request = CreateRequest(new ImageSize(2270, 2270), new ImageSize(2550, 2550), new ImageSize(2588, 2625));
