@@ -70,15 +70,15 @@ public sealed class BookSelectionServicesTests
     }
 
     [Fact]
-    public async Task Book_interior_settings_save_persists_an_explicit_intro_mode_and_ordered_keys()
+    public async Task Book_interior_settings_save_persists_an_explicit_intro_mode_and_ordered_book_source_keys()
     {
         var store = new RecordingWorkspaceStateStore();
         var service = new BookInteriorSettingsService(store);
 
-        await service.SaveAsync(CreateBook(), new BookInteriorSettingsChange(null, [], true, ["nested\\second.png", "first.png"]));
+        await service.SaveAsync(CreateBook(), new BookInteriorSettingsChange(null, [], true, [new FileReference("sources/Book One/Book interior/page3.png"), new FileReference("sources/Book One/Book interior/page1.png")]));
 
         Assert.True(store.Saved!.HasIntro);
-        Assert.Equal(["nested/second.png", "first.png"], store.Saved.SelectedIntroTemplateKeys);
+        Assert.Equal(["Book interior/page3.png", "Book interior/page1.png"], store.Saved.SelectedIntroInteriorSourceKeys);
     }
 
     private static DiscoveredBook CreateBook()

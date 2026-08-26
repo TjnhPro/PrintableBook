@@ -25,27 +25,51 @@ public sealed class BookProcessingStateTests
         var state = BookProcessingState.NotStarted(new BookId("book"));
 
         Assert.False(state.HasIntro);
-        Assert.Null(state.SelectedIntroTemplateKeys);
+        Assert.Null(state.SelectedIntroInteriorSourceKeys);
     }
 
     [Fact]
-    public void SetIntroTemplateKeys_normalizes_and_deduplicates_while_preserving_first_order()
+    public void SetIntroInteriorSourceKeys_normalizes_and_preserves_explicit_order()
     {
         var state = BookProcessingState.NotStarted(new BookId("book"))
             .SetHasIntro(true)
-            .SetIntroTemplateKeys(["nested\\first.png", "SECOND.png", "nested/first.png"]);
+            .SetIntroInteriorSourceKeys(["Book interior\\page3.png", "Book interior/page1.png"]);
 
         Assert.True(state.HasIntro);
-        Assert.Equal(["nested/first.png", "SECOND.png"], state.SelectedIntroTemplateKeys);
+        Assert.Equal(["Book interior/page3.png", "Book interior/page1.png"], state.SelectedIntroInteriorSourceKeys);
     }
 
     [Fact]
-    public void SetIntroTemplateKeys_allows_an_explicit_empty_custom_selection()
+    public void SetIntroInteriorSourceKeys_allows_an_explicit_empty_custom_selection()
     {
-        var state = BookProcessingState.NotStarted(new BookId("book")).SetHasIntro(true).SetIntroTemplateKeys([]);
+        var state = BookProcessingState.NotStarted(new BookId("book")).SetHasIntro(true).SetIntroInteriorSourceKeys([]);
 
-        Assert.Empty(state.SelectedIntroTemplateKeys!);
+        Assert.Empty(state.SelectedIntroInteriorSourceKeys!);
     }
+
+    [Fact]
+    public void Switching_to_automatic_intro_keeps_the_previous_custom_book_keys_without_using_them()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book"))
+            .SetHasIntro(true)
+            .SetIntroInteriorSourceKeys(["Book interior/page3.png"])
+            .SetHasIntro(false);
+
+        Assert.False(state.HasIntro);
+        Assert.Equal(["Book interior/page3.png"], state.SelectedIntroInteriorSourceKeys);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("../page.png")]
+    [InlineData("Book interior/../page.png")]
+    [InlineData("C:\\outside.png")]
+    public void SetIntroInteriorSourceKeys_rejects_nonportable_source_keys(string sourceKey) =>
+        Assert.Throws<ArgumentException>(() => BookProcessingState.NotStarted(new BookId("book")).SetIntroInteriorSourceKeys([sourceKey]));
+
+    [Fact]
+    public void SetIntroInteriorSourceKeys_rejects_case_insensitive_duplicates() =>
+        Assert.Throws<ArgumentException>(() => BookProcessingState.NotStarted(new BookId("book")).SetIntroInteriorSourceKeys(["Book interior/page.png", "book INTERIOR/PAGE.png"]));
 
     [Fact]
     public void SetInteriorActive_stores_only_inactive_source_keys()

@@ -261,45 +261,28 @@ internal sealed class WebViewBridgeRouter(
                         hasIntro = introElement.GetBoolean();
                     }
 
-                    IReadOnlyList<string>? introTemplateKeys = null;
-                    if (settingsPayload.TryGetProperty("introTemplateKeys", out var introKeysElement))
+                    IReadOnlyList<PrintableBook.Core.Abstractions.FileReference>? introInteriorSources = null;
+                    if (settingsPayload.TryGetProperty("introSourceReferences", out var introSourcesElement))
                     {
-                        if (introKeysElement.ValueKind != JsonValueKind.Array)
+                        if (introSourcesElement.ValueKind != JsonValueKind.Array)
                         {
                             return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
                         }
 
-                        if (!settingsPayload.TryGetProperty("brandName", out var brandNameElement) || string.IsNullOrWhiteSpace(brandNameElement.GetString()))
-                        {
-                            return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
-                        }
-
-                        var brand = snapshot.Discovery.Brands.FirstOrDefault(item => string.Equals(item.Name, brandNameElement.GetString(), StringComparison.Ordinal));
-                        if (brand is null)
-                        {
-                            return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
-                        }
-
-                        var available = new HashSet<string>((brand.IntroTemplateAssets ?? []).Select(asset => asset.Key), StringComparer.OrdinalIgnoreCase);
-                        var keys = new List<string>();
+                        var sources = new List<PrintableBook.Core.Abstractions.FileReference>();
                         var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                        foreach (var keyElement in introKeysElement.EnumerateArray())
+                        foreach (var sourceElement in introSourcesElement.EnumerateArray())
                         {
-                            if (keyElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(keyElement.GetString()))
+                            if (sourceElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(sourceElement.GetString()) || !unique.Add(sourceElement.GetString()!))
                             {
                                 return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
                             }
 
-                            string key;
-                            try { key = IntroTemplateSourceKey.Normalize(keyElement.GetString()!); }
-                            catch (ArgumentException) { return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings"); }
-                            if (!unique.Add(key) || !available.Contains(key))
-                            {
-                                return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
-                            }
-                            keys.Add(key);
+                            var source = summary.InteriorSourcePages?.FirstOrDefault(item => string.Equals(item.SourceReference, sourceElement.GetString(), StringComparison.OrdinalIgnoreCase));
+                            if (source is null) return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                            sources.Add(new PrintableBook.Core.Abstractions.FileReference(source.SourceReference));
                         }
-                        introTemplateKeys = keys;
+                        introInteriorSources = sources;
                     }
 
                     var changes = new List<InteriorAssetSettingsChange>();
@@ -352,14 +335,14 @@ internal sealed class WebViewBridgeRouter(
                         }
                     }
 
-                    if (hasBackground is null && hasIntro is null && introTemplateKeys is null && changes.Count == 0)
+                    if (hasBackground is null && hasIntro is null && introInteriorSources is null && changes.Count == 0)
                     {
                         return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
                     }
 
                     try
                     {
-                        await bookInteriorSettingsService.SaveAsync(book, new BookInteriorSettingsChange(hasBackground, changes, hasIntro, introTemplateKeys), cancellationToken);
+                        await bookInteriorSettingsService.SaveAsync(book, new BookInteriorSettingsChange(hasBackground, changes, hasIntro, introInteriorSources), cancellationToken);
                     }
                     catch (ArgumentException)
                     {

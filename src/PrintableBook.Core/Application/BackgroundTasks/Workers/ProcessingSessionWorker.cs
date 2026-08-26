@@ -52,24 +52,54 @@ public sealed class ProcessingSessionWorker(
 
         var summaries = snapshot.BookSummaries.ToDictionary(summary => summary.BookId.Value, StringComparer.Ordinal);
         var introTemplatePagesByBook = new Dictionary<string, IReadOnlyList<FileReference>>(StringComparer.Ordinal);
+        var customIntroFromBookInteriorByBook = new Dictionary<string, bool>(StringComparer.Ordinal);
         var validatedIntroSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var book in books)
         {
             var summary = summaries[book.Id.Value];
-            var selection = IntroTemplateSelectionResolver.Resolve(summary.HasIntro, summary.SelectedIntroTemplateKeys, brand.IntroTemplateAssets);
-            if (!selection.IsSuccess)
+            IReadOnlyList<FileReference> pages;
+            if (summary.HasIntro)
             {
-                var code = selection.Failure!.Code switch
+                var selectedKeys = summary.SelectedIntroInteriorSourceKeys ?? [];
+                if (selectedKeys.Count == 0)
                 {
-                    "intro.selection_required" => "process_intro_selection_required",
-                    "intro.selection_missing" => "process_intro_selection_missing",
-                    "intro.template_empty" => "process_intro_template_empty",
-                    _ => "process_intro_template_invalid"
-                };
-                Fail(request, context, code, selection.Failure.Message, book.Id);
-            }
+                    Fail(request, context, "process_intro_selection_required", "Choose at least one Book interior image for the custom Intro.", book.Id);
+                }
 
-            var pages = selection.Assets.Select(asset => new FileReference(asset.SourceReference)).ToArray();
+                var interiorByKey = (summary.InteriorSourcePages ?? [])
+                    .ToDictionary(
+                        page => page.SourceKey ?? InteriorSourceKey.FromBookRoot(book.Directory, new FileReference(page.SourceReference)),
+                        page => new FileReference(page.SourceReference),
+                        StringComparer.OrdinalIgnoreCase);
+                var resolved = new List<FileReference>(selectedKeys.Count);
+                foreach (var key in selectedKeys)
+                {
+                    if (!interiorByKey.TryGetValue(key, out var page))
+                    {
+                        Fail(request, context, "process_intro_selection_missing", "A selected custom Intro source is no longer available in Book interior.", book.Id);
+                    }
+                    resolved.Add(page!);
+                }
+
+                pages = resolved;
+                customIntroFromBookInteriorByBook[book.Id.Value] = true;
+            }
+            else
+            {
+                var selection = IntroTemplateSelectionResolver.Resolve(brand.IntroTemplateAssets);
+                if (!selection.IsSuccess)
+                {
+                    var code = selection.Failure!.Code switch
+                    {
+                        "intro.template_empty" => "process_intro_template_empty",
+                        _ => "process_intro_template_invalid"
+                    };
+                    Fail(request, context, code, selection.Failure.Message, book.Id);
+                }
+
+                pages = selection.Assets.Select(asset => new FileReference(asset.SourceReference)).ToArray();
+                customIntroFromBookInteriorByBook[book.Id.Value] = false;
+            }
             foreach (var page in pages)
             {
                 if (!validatedIntroSources.Add(page.Value)) continue;
@@ -155,7 +185,8 @@ public sealed class ProcessingSessionWorker(
             BackgroundPage: summaries[book.Id.Value].HasBackground ? background : null,
             ArtworkSourceNormalization: settings.EffectiveArtworkSourceNormalization,
             BorderLineDetection: settings.EffectiveBorderLineDetection,
-            IntroTemplatePages: introTemplatePagesByBook[book.Id.Value])).ToArray());
+            IntroTemplatePages: introTemplatePagesByBook[book.Id.Value],
+            CustomIntroFromBookInterior: customIntroFromBookInteriorByBook[book.Id.Value])).ToArray());
 
         void Report(BookProcessingProgress progress)
         {

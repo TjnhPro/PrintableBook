@@ -22,7 +22,7 @@ public sealed record BookProcessingState(
     bool HasBackground = false,
     IReadOnlyList<string>? InactiveInteriorSourceKeys = null,
     bool HasIntro = false,
-    IReadOnlyList<string>? SelectedIntroTemplateKeys = null)
+    IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null)
 {
     public static BookProcessingState NotStarted(BookId bookId) => new(
         bookId,
@@ -157,18 +157,19 @@ public sealed record BookProcessingState(
 
     public BookProcessingState SetHasIntro(bool enabled) => this with { HasIntro = enabled };
 
-    public BookProcessingState SetIntroTemplateKeys(IEnumerable<string> templateKeys)
+    public BookProcessingState SetIntroInteriorSourceKeys(IEnumerable<string> sourceKeys)
     {
-        ArgumentNullException.ThrowIfNull(templateKeys);
+        ArgumentNullException.ThrowIfNull(sourceKeys);
         var keys = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var templateKey in templateKeys)
+        foreach (var sourceKey in sourceKeys)
         {
-            var normalized = IntroTemplateSourceKey.Normalize(templateKey);
-            if (seen.Add(normalized)) keys.Add(normalized);
+            var normalized = InteriorSourceKey.Normalize(sourceKey);
+            if (!seen.Add(normalized)) throw new ArgumentException("Custom Intro source keys cannot contain duplicates.", nameof(sourceKeys));
+            keys.Add(normalized);
         }
 
-        return this with { SelectedIntroTemplateKeys = keys.Count == 0 ? [] : keys };
+        return this with { SelectedIntroInteriorSourceKeys = keys.Count == 0 ? [] : keys };
     }
 
     public bool IsInteriorActive(string sourceKey)

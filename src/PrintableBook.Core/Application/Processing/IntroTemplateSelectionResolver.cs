@@ -10,13 +10,11 @@ public sealed record IntroTemplateSelectionResult(IReadOnlyList<DiscoveredIntroT
 }
 
 /// <summary>
-/// Resolves a persisted Book choice against the Brand that is active for this run.
+/// Resolves the automatic Brand IntroTemplate sequence for the active processing run.
 /// </summary>
 public static class IntroTemplateSelectionResolver
 {
     public static IntroTemplateSelectionResult Resolve(
-        bool hasIntro,
-        IReadOnlyList<string>? selectedTemplateKeys,
         IReadOnlyList<DiscoveredIntroTemplateAsset>? availableAssets)
     {
         var eligible = (availableAssets ?? [])
@@ -25,40 +23,9 @@ public static class IntroTemplateSelectionResolver
             .ThenBy(asset => asset.Key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        if (!hasIntro)
-        {
-            return eligible.Length == 0
-                ? Failed("intro.template_empty", "The active Brand does not contain a supported IntroTemplate image.")
-                : new IntroTemplateSelectionResult(eligible, null);
-        }
-
-        if (selectedTemplateKeys is null || selectedTemplateKeys.Count == 0)
-        {
-            return Failed("intro.selection_required", "Choose at least one IntroTemplate image for the custom Intro selection.");
-        }
-
-        var byKey = eligible.ToDictionary(asset => asset.Key, StringComparer.OrdinalIgnoreCase);
-        var selected = new List<DiscoveredIntroTemplateAsset>(selectedTemplateKeys.Count);
-        foreach (var key in selectedTemplateKeys)
-        {
-            string normalized;
-            try
-            {
-                normalized = IntroTemplateSourceKey.Normalize(key);
-            }
-            catch (ArgumentException)
-            {
-                return Failed("intro.selection_missing", "A selected IntroTemplate image is no longer available from the active Brand.");
-            }
-
-            if (!byKey.TryGetValue(normalized, out var asset))
-            {
-                return Failed("intro.selection_missing", "A selected IntroTemplate image is no longer available from the active Brand.");
-            }
-            selected.Add(asset);
-        }
-
-        return new IntroTemplateSelectionResult(selected, null);
+        return eligible.Length == 0
+            ? Failed("intro.template_empty", "The active Brand does not contain a supported IntroTemplate image.")
+            : new IntroTemplateSelectionResult(eligible, null);
     }
 
     private static IntroTemplateSelectionResult Failed(string code, string message) =>

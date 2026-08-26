@@ -450,33 +450,47 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
-    public async Task Book_interior_settings_save_persists_an_ordered_intro_selection_authorized_by_the_selected_brand()
+    public async Task Book_interior_settings_save_persists_an_ordered_intro_selection_authorized_by_the_book_interior()
     {
         var settings = new StubBookInteriorSettingsService();
-        var snapshot = CreateSnapshot() with
-        {
-            Discovery = CreateSnapshot().Discovery with
-            {
-                Brands = [new DiscoveredBrand("Brand One", new DirectoryReference("brands/Brand One"), IntroTemplateAssets: [
-                    new DiscoveredIntroTemplateAsset("first.png", "brands/Brand One/IntroTemplate/first.png", "first.png", "file:///first.png"),
-                    new DiscoveredIntroTemplateAsset("second.png", "brands/Brand One/IntroTemplate/second.png", "second.png", "file:///second.png")])]
-            }
-        };
-        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)), bookInteriorSettingsService: settings);
+        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())), bookInteriorSettingsService: settings);
 
-        var response = await router.HandleAsync("""{"version":1,"id":"save","command":"book.interior.settings.save","payload":{"bookId":"Book One","brandName":"Brand One","hasIntro":true,"introTemplateKeys":["second.png","first.png"]}}""");
+        var response = await router.HandleAsync("""{"version":1,"id":"save","command":"book.interior.settings.save","payload":{"bookId":"Book One","hasIntro":true,"introSourceReferences":["Book interior/page-002.png","Book interior/page-001.png"]}}""");
 
         Assert.True(response.Ok);
         Assert.True(settings.Batch!.HasIntro);
-        Assert.Equal(["second.png", "first.png"], settings.Batch.IntroTemplateKeys);
+        Assert.Equal(["Book interior/page-002.png", "Book interior/page-001.png"], settings.Batch.IntroInteriorSources!.Select(source => source.Value));
     }
 
     [Fact]
-    public async Task Book_interior_settings_save_rejects_intro_keys_not_authorized_by_the_brand()
+    public async Task Book_interior_settings_save_rejects_intro_sources_not_authorized_by_the_book_interior()
     {
         var router = new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(CreateSnapshot())), bookInteriorSettingsService: new StubBookInteriorSettingsService());
 
-        var response = await router.HandleAsync("""{"version":1,"id":"save","command":"book.interior.settings.save","payload":{"bookId":"Book One","brandName":"Brand One","introTemplateKeys":["missing.png"]}}""");
+        var response = await router.HandleAsync("""{"version":1,"id":"save","command":"book.interior.settings.save","payload":{"bookId":"Book One","introSourceReferences":["brands/Brand One/IntroTemplate/intro.png"]}}""");
+
+        Assert.Equal("invalid_book_interior_settings", response.Error);
+    }
+
+    [Fact]
+    public async Task Book_interior_settings_save_accepts_an_empty_custom_intro_selection_for_readiness_feedback()
+    {
+        var settings = new StubBookInteriorSettingsService();
+        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())), bookInteriorSettingsService: settings);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"save","command":"book.interior.settings.save","payload":{"bookId":"Book One","hasIntro":true,"introSourceReferences":[]}}""");
+
+        Assert.True(response.Ok);
+        Assert.True(settings.Batch!.HasIntro);
+        Assert.Empty(settings.Batch.IntroInteriorSources!);
+    }
+
+    [Fact]
+    public async Task Book_interior_settings_save_rejects_duplicate_custom_intro_sources_case_insensitively()
+    {
+        var router = new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(CreateSnapshot())), bookInteriorSettingsService: new StubBookInteriorSettingsService());
+
+        var response = await router.HandleAsync("""{"version":1,"id":"save","command":"book.interior.settings.save","payload":{"bookId":"Book One","hasIntro":true,"introSourceReferences":["Book interior/page-001.png","BOOK INTERIOR/PAGE-001.PNG"]}}""");
 
         Assert.Equal("invalid_book_interior_settings", response.Error);
     }
@@ -906,7 +920,11 @@ public sealed class BridgeMessageContractTests
         return new ApplicationSnapshot(
             new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [new DiscoveredBrand("Brand One", new DirectoryReference("brands/Brand One"))], [book]),
             GlobalSettings.Default,
-            [new BookDesktopSummary(id, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1, CoverCandidates: ["cover-a.png"], InteriorSourcePages: [new InteriorSourcePageSummary("Book interior/page-001.png", FrameMode.Auto)])],
+            [new BookDesktopSummary(id, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 2, CoverCandidates: ["cover-a.png"], InteriorSourcePages:
+            [
+                new InteriorSourcePageSummary("Book interior/page-001.png", FrameMode.Auto, SourceKey: "Book interior/page-001.png"),
+                new InteriorSourcePageSummary("Book interior/page-002.png", FrameMode.Auto, SourceKey: "Book interior/page-002.png")
+            ])],
             DateTimeOffset.UnixEpoch);
     }
 }

@@ -25,7 +25,8 @@ public sealed record PrintableBookProcessingCommand(
     FileReference? BackgroundPage = null,
     ArtworkSourceNormalizationSettings? ArtworkSourceNormalization = null,
     BorderLineDetectionSettings? BorderLineDetection = null,
-    IReadOnlyList<FileReference>? IntroTemplatePages = null)
+    IReadOnlyList<FileReference>? IntroTemplatePages = null,
+    bool CustomIntroFromBookInterior = false)
 {
     public ArtworkSourceNormalizationSettings EffectiveArtworkSourceNormalization => ArtworkSourceNormalization ?? ArtworkSourceNormalizationSettings.Default;
     public BorderLineDetectionSettings EffectiveBorderLineDetection => BorderLineDetection ?? BorderLineDetectionSettings.Default;

@@ -74,7 +74,25 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                         $"page-{index + 1:D4}");
                 })
                 .ToArray();
-            var activeInteriorSources = interiorSources
+            var customIntroKeys = command.CustomIntroFromBookInterior
+                ? command.EffectiveIntroTemplatePages
+                    .Select(page => InteriorSourceKey.FromBookRoot(command.BookDirectory, page))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                : [];
+            if (command.CustomIntroFromBookInterior && customIntroKeys.Count == 0)
+            {
+                throw new BookProcessingFailureException("scan", new ProcessingFailure("process_intro_selection_required", "Choose at least one Book interior image before processing a custom Intro selection."));
+            }
+            if (command.CustomIntroFromBookInterior &&
+                (customIntroKeys.Count != command.EffectiveIntroTemplatePages.Count || customIntroKeys.Any(key => interiorSources.All(source => !string.Equals(source.SourceKey, key, StringComparison.OrdinalIgnoreCase)))))
+            {
+                throw new BookProcessingFailureException("scan", new ProcessingFailure("process_intro_selection_missing", "A selected custom Intro source is no longer available in Book interior."));
+            }
+
+            var normalInteriorSources = interiorSources
+                .Where(item => !customIntroKeys.Contains(item.SourceKey))
+                .ToArray();
+            var activeInteriorSources = normalInteriorSources
                 .Where(item => priorState?.IsInteriorActive(item.SourceKey) ?? true)
                 .ToArray();
             if (activeInteriorSources.Length == 0)
@@ -283,6 +301,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             command.InteriorPdfPageSize.WidthInches, command.InteriorPdfPageSize.HeightInches,
             command.MaximumPageConcurrency, command.ArtworkDetectionThreshold.Value,
             command.Frame?.Value, command.Mode,
+            command.CustomIntroFromBookInterior ? "CustomBookInterior" : "AutoBrand",
             string.Join(';', command.EffectiveIntroTemplatePages.Select(page => page.Value)));
 
     private static BookAsset SelectCover(BookSource source, FileReference? selectedCover)

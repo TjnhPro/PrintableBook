@@ -153,15 +153,62 @@ public sealed class ApplicationSnapshotServiceTests
     [Fact]
     public async Task RefreshAsync_marks_an_empty_custom_intro_selection_as_needing_review()
     {
-        var state = BookProcessingState.NotStarted(new BookId("Book A")).SetHasIntro(true).SetIntroTemplateKeys([]);
+        var state = BookProcessingState.NotStarted(new BookId("Book A")).SetHasIntro(true).SetIntroInteriorSourceKeys([]);
         var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new StubScanner(), new StubStateStore(explicitState: state), new StubFileSystem()).RefreshAsync();
 
         var summary = Assert.Single(snapshot.BookSummaries);
         Assert.True(summary.HasIntro);
-        Assert.Empty(summary.SelectedIntroTemplateKeys!);
+        Assert.Empty(summary.SelectedIntroInteriorSourceKeys!);
         Assert.Equal("Needs review", summary.ValidationStatus);
         Assert.Contains(summary.ValidationChecks, check => check.Code == "book.intro_selection_required" && !check.IsSuccess);
         Assert.Contains(summary.FullBookValidationChecks!, check => check.Code == "book.intro_selection_required" && !check.IsSuccess);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_validates_a_custom_intro_against_book_interior_even_when_it_is_inactive()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("Book A"))
+            .SetHasIntro(true)
+            .SetIntroInteriorSourceKeys(["Book interior/page-1.png"])
+            .SetInteriorActive("Book interior/page-1.png", false);
+
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new TwoInteriorScanner(), new StubStateStore(explicitState: state), new StubFileSystem()).RefreshAsync();
+
+        var summary = Assert.Single(snapshot.BookSummaries);
+        Assert.Equal("Ready", summary.ValidationStatus);
+        Assert.Equal(1, summary.ActiveInteriorSourcePageCount);
+        Assert.DoesNotContain(summary.ValidationChecks, check => check.Code.StartsWith("book.intro_selection", StringComparison.Ordinal));
+        Assert.False(Assert.Single(summary.InteriorSourcePages!, page => page.SourceKey == "Book interior/page-1.png").IsActive);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_marks_a_missing_custom_book_interior_source_as_needing_review()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("Book A"))
+            .SetHasIntro(true)
+            .SetIntroInteriorSourceKeys(["Book interior/missing.png"]);
+
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new TwoInteriorScanner(), new StubStateStore(explicitState: state), new StubFileSystem()).RefreshAsync();
+
+        var summary = Assert.Single(snapshot.BookSummaries);
+        Assert.Equal("Needs review", summary.ValidationStatus);
+        Assert.Contains(summary.ValidationChecks, check => check.Code == "book.intro_selection_missing" && !check.IsSuccess);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_requires_an_active_normal_interior_after_custom_intro_pages_are_excluded()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("Book A"))
+            .SetHasIntro(true)
+            .SetIntroInteriorSourceKeys(["Book interior/page-1.png"])
+            .SetInteriorActive("Book interior/page-2.png", false);
+
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new TwoInteriorScanner(), new StubStateStore(explicitState: state), new StubFileSystem()).RefreshAsync();
+
+        var summary = Assert.Single(snapshot.BookSummaries);
+        Assert.Equal("Invalid", summary.ValidationStatus);
+        Assert.Equal(0, summary.ActiveInteriorSourcePageCount);
+        Assert.Contains(summary.ValidationChecks, check => check.Code == "book.no_active_interior_pages" && !check.IsSuccess);
     }
 
     [Fact]
@@ -279,6 +326,14 @@ public sealed class ApplicationSnapshotServiceTests
             ValueTask.FromResult(BookSourceScanResult.Succeeded(new BookSource([
                 new BookAsset("cover.png", BookAssetKind.Cover),
                 new BookAsset("page-1.png", BookAssetKind.Interior)])));
+    }
+
+    private sealed class TwoInteriorScanner : IBookSourceScanner
+    {
+        public ValueTask<BookSourceScanResult> ScanAsync(BookId bookId, DirectoryReference bookDirectory, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(BookSourceScanResult.Succeeded(new BookSource([
+                new BookAsset(Path.Combine(bookDirectory.Value, "Book interior", "page-1.png"), BookAssetKind.Interior),
+                new BookAsset(Path.Combine(bookDirectory.Value, "Book interior", "page-2.png"), BookAssetKind.Interior)])));
     }
 
     private sealed class GatedScanner : IBookSourceScanner

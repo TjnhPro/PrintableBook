@@ -187,25 +187,17 @@ public sealed class ProcessingSessionWorkerTests
     }
 
     [Fact]
-    public async Task Resolves_custom_intro_pages_in_the_saved_order()
+    public async Task Resolves_custom_book_interior_intro_pages_in_the_saved_order()
     {
         var initial = Snapshot();
         var summary = initial.BookSummaries[0] with
         {
             HasIntro = true,
-            SelectedIntroTemplateKeys = ["intro-02.png", "intro-01.png"]
-        };
-        var brand = Brand() with
-        {
-            IntroTemplateAssets =
-            [
-                new DiscoveredIntroTemplateAsset("intro-01.png", Path.Combine("brand", "IntroTemplate", "intro-01.png"), "intro-01.png", "file:///intro-01.png"),
-                new DiscoveredIntroTemplateAsset("intro-02.png", Path.Combine("brand", "IntroTemplate", "intro-02.png"), "intro-02.png", "file:///intro-02.png")
-            ]
+            SelectedIntroInteriorSourceKeys = ["Book interior/page-002.png", "Book interior/page-001.png"]
         };
         var application = new Application();
         IBackgroundTaskWorker worker = new ProcessingSessionWorker(
-            new Provider(initial with { Discovery = initial.Discovery with { Brands = [brand] }, BookSummaries = [summary] }),
+            new Provider(initial with { BookSummaries = [summary] }),
             application,
             new FrameResolver(),
             new FileSystem(),
@@ -215,19 +207,20 @@ public sealed class ProcessingSessionWorkerTests
 
         Assert.Equal(
             [
-                new FileReference(Path.Combine("brand", "IntroTemplate", "intro-02.png")),
-                new FileReference(Path.Combine("brand", "IntroTemplate", "intro-01.png"))
+                new FileReference(Path.Combine("book-one", "Book interior", "page-002.png")),
+                new FileReference(Path.Combine("book-one", "Book interior", "page-001.png"))
             ],
             Assert.Single(application.Request!.Books).EffectiveIntroTemplatePages);
+        Assert.True(Assert.Single(application.Request.Books).CustomIntroFromBookInterior);
     }
 
     [Theory]
     [InlineData(true, null, "process_intro_selection_required")]
-    [InlineData(true, new[] { "missing.png" }, "process_intro_selection_missing")]
+    [InlineData(true, new[] { "Book interior/missing.png" }, "process_intro_selection_missing")]
     public async Task Rejects_invalid_custom_intro_selection(bool hasIntro, string[]? keys, string expectedCode)
     {
         var initial = Snapshot();
-        var summary = initial.BookSummaries[0] with { HasIntro = hasIntro, SelectedIntroTemplateKeys = keys };
+        var summary = initial.BookSummaries[0] with { HasIntro = hasIntro, SelectedIntroInteriorSourceKeys = keys };
         IBackgroundTaskWorker worker = new ProcessingSessionWorker(
             new Provider(initial with { BookSummaries = [summary] }),
             new Application(),
@@ -248,7 +241,12 @@ public sealed class ProcessingSessionWorkerTests
         return new ApplicationSnapshot(
             new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [Brand()], [book]),
             settings ?? GlobalSettings.Default,
-            [new BookDesktopSummary(bookId, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1, HasBackground: hasBackground)],
+            [new BookDesktopSummary(bookId, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 3, HasBackground: hasBackground, InteriorSourcePages:
+            [
+                new InteriorSourcePageSummary(Path.Combine("book-one", "Book interior", "page-001.png"), FrameMode.Auto, SourceKey: "Book interior/page-001.png"),
+                new InteriorSourcePageSummary(Path.Combine("book-one", "Book interior", "page-002.png"), FrameMode.Auto, SourceKey: "Book interior/page-002.png"),
+                new InteriorSourcePageSummary(Path.Combine("book-one", "Book interior", "page-003.png"), FrameMode.Auto, SourceKey: "Book interior/page-003.png")
+            ])],
             DateTimeOffset.UtcNow);
     }
 
@@ -293,7 +291,7 @@ public sealed class ProcessingSessionWorkerTests
     private sealed class FileSystem(bool exists = false) : IFileSystem
     {
         public int Calls { get; private set; }
-        public ValueTask<bool> FileExistsAsync(FileReference file, CancellationToken cancellationToken = default) { Calls++; return ValueTask.FromResult(exists || file.Value.Contains("IntroTemplate", StringComparison.OrdinalIgnoreCase)); }
+        public ValueTask<bool> FileExistsAsync(FileReference file, CancellationToken cancellationToken = default) { Calls++; return ValueTask.FromResult(exists || file.Value.Contains("IntroTemplate", StringComparison.OrdinalIgnoreCase) || file.Value.Contains("Book interior", StringComparison.OrdinalIgnoreCase)); }
         public ValueTask<bool> DirectoryExistsAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
         public ValueTask CreateDirectoryAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public async IAsyncEnumerable<DirectoryReference> EnumerateDirectoriesAsync(DirectoryReference directory, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) { await Task.CompletedTask; yield break; }
@@ -313,7 +311,7 @@ public sealed class ProcessingSessionWorkerTests
         public ValueTask<ImageSize> GetSizeAsync(FileReference image, CancellationToken cancellationToken = default)
         {
             Calls++;
-            if (image.Value.Contains("IntroTemplate", StringComparison.OrdinalIgnoreCase)) return ValueTask.FromResult(new ImageSize(1024, 1024));
+            if (image.Value.Contains("IntroTemplate", StringComparison.OrdinalIgnoreCase) || image.Value.Contains("Book interior", StringComparison.OrdinalIgnoreCase)) return ValueTask.FromResult(new ImageSize(1024, 1024));
             if (exception is not null) throw exception;
             return ValueTask.FromResult(size ?? new ImageSize(GlobalSettings.Default.FinalPageWidth, GlobalSettings.Default.FinalPageHeight));
         }

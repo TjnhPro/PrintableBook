@@ -10,7 +10,7 @@ namespace PrintableBook.Core.Application.Desktop;
 
 public sealed record BookValidationCheck(string Code, string Message, bool IsSuccess, bool IsWarning = false);
 public sealed record InteriorPageSummary(string PageId, string Status, string FinalPagePath);
-public sealed record InteriorSourcePageSummary(string SourceReference, FrameMode FrameMode, bool IsActive = true);
+public sealed record InteriorSourcePageSummary(string SourceReference, FrameMode FrameMode, bool IsActive = true, string? SourceKey = null);
 public sealed record BookFolderSummary(string Name, string Status, int FileCount, int ImageCount);
 public sealed record BookAssetSummary(string SourceReference, string RelativePath, string FileName, string Folder, string Kind, int? Width, int? Height, FrameMode FrameMode, string LocalImageUrl, bool IsActive = true);
 public sealed record BookOutputSummary(string ArtifactReference, string FileName, long FileSizeBytes, int? PageCount, double? WidthInches, double? HeightInches, string VerificationStatus, DateTimeOffset? GeneratedAt);
@@ -20,7 +20,7 @@ public interface ILocalOutputActionService
     ValueTask RevealAsync(FileReference file, CancellationToken cancellationToken = default);
     ValueTask CopyPathAsync(FileReference file, CancellationToken cancellationToken = default);
 }
-public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = false, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroTemplateKeys = null);
+public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = false, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null);
 public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt);
 
 public interface IApplicationSnapshotService
@@ -118,7 +118,24 @@ public sealed class ApplicationSnapshotService(
                 true,
                 true));
         }
-        var needsIntroSelection = state.HasIntro && (state.SelectedIntroTemplateKeys is null || state.SelectedIntroTemplateKeys.Count == 0);
+        var sourcePages = source?.GetAssets(BookAssetKind.Interior)
+            .Select(asset =>
+            {
+                var sourceFile = new FileReference(asset.Reference);
+                var sourceKey = InteriorSourceKey.FromBookRoot(book.Directory, sourceFile);
+                return new InteriorSourcePageSummary(asset.Reference, state.GetInteriorFrameMode(sourceKey), state.IsInteriorActive(sourceKey), sourceKey);
+            })
+            .ToArray() ?? [];
+        var selectedIntroKeys = state.SelectedIntroInteriorSourceKeys ?? [];
+        var introKeys = state.HasIntro
+            ? new HashSet<string>(selectedIntroKeys, StringComparer.OrdinalIgnoreCase)
+            : [];
+        var missingIntroKeys = state.HasIntro && selectedIntroKeys.Any(key => !sourcePages.Any(page => string.Equals(page.SourceKey, key, StringComparison.OrdinalIgnoreCase)));
+        var needsIntroSelection = state.HasIntro && (selectedIntroKeys.Count == 0 || missingIntroKeys);
+        var introCheck = new BookValidationCheck(
+            missingIntroKeys ? "book.intro_selection_missing" : "book.intro_selection_required",
+            missingIntroKeys ? "A selected custom Intro source is no longer available in Book interior." : "Choose at least one Book interior image before processing a custom Intro selection.",
+            false);
         var fullBookChecks = new List<BookValidationCheck>
             {
                 isSourceValid
@@ -148,18 +165,11 @@ public sealed class ApplicationSnapshotService(
         }
         if (needsIntroSelection)
         {
-            fullBookChecks.Add(new BookValidationCheck("book.intro_selection_required", "Choose at least one IntroTemplate image before processing a custom Intro selection.", false));
+            fullBookChecks.Add(introCheck);
         }
         var isReady = isSourceValid;
-        var sourcePages = source?.GetAssets(BookAssetKind.Interior)
-            .Select(asset =>
-            {
-                var sourceFile = new FileReference(asset.Reference);
-                var sourceKey = InteriorSourceKey.FromBookRoot(book.Directory, sourceFile);
-                return new InteriorSourcePageSummary(asset.Reference, state.GetInteriorFrameMode(sourceKey), state.IsInteriorActive(sourceKey));
-            })
-            .ToArray() ?? [];
-        var activeInteriorSourcePageCount = sourcePages.Count(page => page.IsActive);
+        var normalInteriorPages = sourcePages.Where(page => !introKeys.Contains(page.SourceKey!)).ToArray();
+        var activeInteriorSourcePageCount = normalInteriorPages.Count(page => page.IsActive);
         if (isSourceValid && activeInteriorSourcePageCount == 0)
         {
             isReady = false;
@@ -167,7 +177,7 @@ public sealed class ApplicationSnapshotService(
         }
         if (needsIntroSelection)
         {
-            checks.Add(new BookValidationCheck("book.intro_selection_required", "Choose at least one IntroTemplate image before processing a custom Intro selection.", false));
+            checks.Add(introCheck);
         }
         var assetSummaries = DescribeAssets(book, source, state);
         return new BookDesktopSummary(
@@ -193,7 +203,7 @@ public sealed class ApplicationSnapshotService(
             HasBackground: state.HasBackground,
             ActiveInteriorSourcePageCount: activeInteriorSourcePageCount,
             HasIntro: state.HasIntro,
-            SelectedIntroTemplateKeys: state.SelectedIntroTemplateKeys);
+            SelectedIntroInteriorSourceKeys: state.SelectedIntroInteriorSourceKeys);
     }
 
     private static string? FindRepresentativeCoverReference(DiscoveredBook book, BookSource? source, string? selectedCoverReference)

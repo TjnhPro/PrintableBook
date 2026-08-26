@@ -78,13 +78,13 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
     public async Task Clear_cache_retains_custom_intro_selection_and_rebuilds_intro_artifacts()
     {
         var fixture = await CreateProcessedBookAsync("intro-cleanup-book");
-        var intro = new FileReference(Path.Combine(rootPath, "intro-template.png"));
+        var intro = new FileReference(Path.Combine(fixture.BookDirectory.Value, "Book interior", "page-01.png"));
         await WriteIntroAsync(intro.Value);
         var stateStore = new JsonBookWorkspaceStateStore(new PhysicalFileSystem());
         await stateStore.SaveAsync(fixture.Workspace, BookProcessingState.NotStarted(fixture.Command.BookId)
             .SetHasIntro(true)
-            .SetIntroTemplateKeys(["intro-template.png"]));
-        var command = fixture.Command with { IntroTemplatePages = [intro] };
+            .SetIntroInteriorSourceKeys(["Book interior/page-01.png"]));
+        var command = fixture.Command with { IntroTemplatePages = [intro], CustomIntroFromBookInterior = true };
 
         Assert.Equal(BookProcessingStatus.Completed, (await fixture.Processor.ProcessBookAsync(command)).Status);
         var introCache = Path.Combine(fixture.Workspace.WorkingDirectory.Value, "cache", "intro-0001");
@@ -97,13 +97,16 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
 
         var retained = await stateStore.LoadAsync(fixture.Workspace);
         Assert.True(retained!.HasIntro);
-        Assert.Equal(["intro-template.png"], retained.SelectedIntroTemplateKeys);
+        Assert.Equal(["Book interior/page-01.png"], retained.SelectedIntroInteriorSourceKeys);
         Assert.False(File.Exists(Path.Combine(introCache, "normalized-source.png")));
         Assert.False(File.Exists(Path.Combine(introCache, "prepared.png")));
         Assert.False(File.Exists(introFinal));
 
         Assert.Equal(BookProcessingStatus.Completed, (await fixture.Processor.ProcessBookAsync(command)).Status);
         Assert.True(File.Exists(introFinal));
+        var shuffle = await new JsonInteriorShuffleStore(new PhysicalFileSystem()).LoadAsync(fixture.Workspace);
+        Assert.DoesNotContain(shuffle!.Entries, entry => entry.Page == intro);
+        Assert.Contains(shuffle.Entries, entry => entry.Page.Value.EndsWith(Path.Combine("Book interior", "page-02.png"), StringComparison.Ordinal));
     }
 
     [Fact]
@@ -145,6 +148,7 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, bookId));
         await WriteInteriorAsync(Path.Combine(bookDirectory.Value, "Book interior", "page-01.png"), 40, 20);
+        await WriteInteriorAsync(Path.Combine(bookDirectory.Value, "Book interior", "page-02.png"), 20, 40);
         var fileSystem = new PhysicalFileSystem();
         var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
