@@ -424,8 +424,24 @@
 
   const renderOutputs = () => {
     const library = pdfLibraryBooks();
+    const eligibleTotal = books().map((book) => summaryFor(book)).filter((summary) => summary && workspaceStatus(summary) === "Completed" && valueFor(summary, "outputSummaries", []).length > 0).length;
     const actions = (summary, output) => `<div class="output-actions"><button class="button-primary" data-action="open-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Open PDF</button><button class="button-secondary" data-action="reveal-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Reveal in Explorer</button><button class="button-secondary" data-action="copy-output-path" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Copy path</button></div>`;
-    content.innerHTML = `<div class="page-header"><div><h1>Outputs</h1></div></div>${library.length ? `<section>${library.map(({ book, summary }) => `<article data-pdf-book-id="${escapeHtml(pdfLibraryBookName(book, summary))}"><h2>${escapeHtml(pdfLibraryBookName(book, summary))}</h2>${valueFor(summary, "outputSummaries", []).map((output) => `<div>${escapeHtml(valueFor(output, "fileName", "PDF output"))}${actions(summary, output)}</div>`).join("")}</article>`).join("")}</section>` : panel("No PDF outputs yet", "<p class=\"empty-copy\">No completed Books have current PDFs.</p>")}`;
+    const outputRow = (summary, output) => {
+      const pageCount = valueFor(output, "pageCount", "—");
+      const dimensions = valueFor(output, "widthInches", null) ? `${valueFor(output, "widthInches", 0)} × ${valueFor(output, "heightInches", 0)} in` : "—";
+      return `<li class="pdf-library-file"><div class="pdf-library-file-mark">PDF</div><div class="pdf-library-file-copy"><div class="pdf-library-file-title"><strong>${escapeHtml(valueFor(output, "fileName", "PDF output"))}</strong>${badge(valueFor(output, "verificationStatus", "Available"))}</div><small>${escapeHtml(String(pageCount))} pages · ${escapeHtml(dimensions)} · ${fileSize(valueFor(output, "fileSizeBytes", 0))}</small>${actions(summary, output)}</div></li>`;
+    };
+    const bookCard = ({ book, summary }) => {
+      const name = pdfLibraryBookName(book, summary);
+      const outputs = valueFor(summary, "outputSummaries", []);
+      const totalBytes = pdfLibraryOutputSize(summary);
+      const generatedAt = pdfLibraryGeneratedAt(summary);
+      return `<article class="pdf-library-book" data-pdf-book-id="${escapeHtml(name)}"><header class="pdf-library-book-header"><div><div class="pdf-library-title-row"><h2>${escapeHtml(name)}</h2><span class="status-badge status-good">PDF ready</span></div><p>${outputs.length} ${outputs.length === 1 ? "PDF" : "PDFs"} · ${fileSize(totalBytes)} · ${dateTime(generatedAt ? new Date(generatedAt).toISOString() : null)}</p></div></header><ul class="pdf-library-files">${outputs.map((output) => outputRow(summary, output)).join("")}</ul></article>`;
+    };
+    const empty = eligibleTotal === 0
+      ? `<section class="pdf-library-empty"><strong>No completed PDFs yet.</strong><p>Process a Book to make its final PDF appear here.</p></section>`
+      : `<section class="pdf-library-empty"><strong>No PDF Books match your search.</strong><p>Try a different Book name.</p></section>`;
+    content.innerHTML = `<div class="page-header"><div><h1>PDF Library</h1><p>Completed Books with local PDF output.</p></div></div>${library.length ? `<section class="pdf-library-grid">${library.map(bookCard).join("")}</section>` : empty}`;
   };
 
   const renderDiagnostics = () => {

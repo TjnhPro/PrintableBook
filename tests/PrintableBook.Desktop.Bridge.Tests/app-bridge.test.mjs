@@ -603,6 +603,26 @@ test("PDF Library groups current Cover and Interior PDFs under one Book", () => 
   assert.match(alphaMarkup, /Copy path/);
 });
 
+test("PDF Library uses Book-centric copy and removes run history language", () => {
+  const { messageHandler, content } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
+
+  assert.match(content.innerHTML, /PDF Library/);
+  assert.match(content.innerHTML, /Completed Books with local PDF output/);
+  assert.doesNotMatch(content.innerHTML, /Latest outputs/i);
+  assert.doesNotMatch(content.innerHTML, /Previous runs/i);
+  assert.doesNotMatch(content.innerHTML, /before publishing/i);
+});
+
+test("PDF Library renders one top-level card per eligible Book", () => {
+  const { messageHandler, content } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
+
+  assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 2);
+  assert.match(content.innerHTML, /data-pdf-book-id="Book Alpha"/);
+  assert.match(content.innerHTML, /data-pdf-book-id="Book Delta"/);
+});
+
 test("PDF Library output actions send a book-scoped command", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "output-1", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
