@@ -516,7 +516,7 @@ test("book filters render a recovered interrupted workspace without failing", ()
   assert.match(content.innerHTML, /Preflight/);
 });
 
-test("book detail renders only the summary and paginated Interior settings", () => {
+test("Book detail separates paginated Interior settings from the Interior artwork workspace", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   const snapshot = (frameMode) => ({
     discovery: {
@@ -552,8 +552,14 @@ test("book detail renders only the summary and paginated Interior settings", () 
   contentListeners.change({ target: { dataset: { action: "set-book-background", bookId: "Book 001" }, checked: false } });
   assert.equal(messages.length, messageCountBeforeEdit);
 
+  const artworkTab = { dataset: { action: "book-tab", bookTab: "artwork" }, closest: () => artworkTab };
+  contentListeners.click({ target: artworkTab });
+  assert.match(content.innerHTML, /Interior artwork/);
+  assert.match(content.innerHTML, /data-action="set-interior-active"/);
+  assert.doesNotMatch(content.innerHTML, /Use Brand background/);
+
   messageHandler({ data: { version: 1, id: "book-2", ok: true, command: "app.snapshot", payload: snapshot(1) } });
-  assert.match(content.innerHTML, /Interior settings/);
+  assert.match(content.innerHTML, /Interior artwork/);
 });
 
 test("Book Interior edits stay local until one explicit save request", () => {

@@ -89,6 +89,7 @@ public sealed class BookWorkspaceLayoutContractTests
 
         Assert.Contains("data-action=\"set-book-background\"", script, StringComparison.Ordinal);
         Assert.Contains("tabButton(\"settings\", \"Interior settings\")", script, StringComparison.Ordinal);
+        Assert.Contains("tabButton(\"artwork\", \"Interior artwork\")", script, StringComparison.Ordinal);
         Assert.Contains("const introPageSize = 6", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"intro-template-page\"", script, StringComparison.Ordinal);
         Assert.Contains("const refreshIntroTemplateWorkspace", script, StringComparison.Ordinal);

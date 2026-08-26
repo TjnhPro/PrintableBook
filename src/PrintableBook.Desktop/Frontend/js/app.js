@@ -329,8 +329,10 @@
     const readiness = processingReadiness(book, summary);
     const body = state.selectedBookTab === "settings"
       ? `<section class="interior-settings"><section class="asset-background-setting"><div><h3>Brand background</h3><p>Insert the selected Brand background after every active Interior page.</p></div><label class="asset-background-toggle"><input type="checkbox" data-action="set-book-background" data-book-id="${escapeHtml(bookId(book))}" ${effectiveBackground(book, summary) ? "checked" : ""} ${processIsActive() || state.bookInteriorSavePending ? "disabled" : ""}> Use Brand background</label></section>${renderIntroTemplateWorkspace(book, summary)}</section>`
-      : `<section class="book-overview"><div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Interior preflight</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div><p class="panel-note">Review the summary, then configure Brand background and Intro pages in Interior settings.</p></section>`;
-    return `<div class="book-heading"><div><h2>${escapeHtml(valueFor(book, "name", ""))}</h2><p>Interior-only production workspace</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs">${tabButton("overview", "Overview")}${tabButton("settings", "Interior settings")}</nav><div class="tab-body">${body}</div>`;
+      : state.selectedBookTab === "artwork"
+        ? renderFolderAssetWorkspace(book, summary)
+        : `<section class="book-overview"><div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Interior preflight</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div><p class="panel-note">Review the summary, then configure Brand background and Intro pages in Interior settings.</p></section>`;
+    return `<div class="book-heading"><div><h2>${escapeHtml(valueFor(book, "name", ""))}</h2><p>Interior-only production workspace</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs">${tabButton("overview", "Overview")}${tabButton("settings", "Interior settings")}${tabButton("artwork", "Interior artwork")}</nav><div class="tab-body">${body}</div>`;
   };
 
   const renderIntroTemplateWorkspace = (book, summary) => {
@@ -733,7 +735,7 @@
       state.selectedBookIds.add(state.selectedBookId);
       render("process");
     }
-    if (action === "book-tab") { state.selectedBookTab = target.dataset.bookTab === "settings" ? "settings" : "overview"; render("books", false); }
+    if (action === "book-tab") { state.selectedBookTab = ["settings", "artwork"].includes(target.dataset.bookTab) ? target.dataset.bookTab : "overview"; render("books", false); }
     if (action === "select-asset") { state.selectedAssetReference = target.dataset.sourceReference; render("books", false); }
     if (action === "asset-view") { state.assetView = target.dataset.assetView; render("books", false); }
     if (action === "asset-folder") { state.assetFolder = target.dataset.assetFolder; render("books", false); }
