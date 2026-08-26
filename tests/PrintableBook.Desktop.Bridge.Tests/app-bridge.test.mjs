@@ -454,6 +454,22 @@ test("a new active snapshot replaces the terminal process session display", () =
   assert.doesNotMatch(content.innerHTML, /Last session/);
 });
 
+test("a delayed process status response cannot replace a newly started session", () => {
+  const { messageHandler, content } = loadBridge("process");
+
+  messageHandler({ data: { version: 1, id: "process-start", ok: true, command: "process.snapshot", payload: {
+    isActive: true, isCancelling: false, startedAt: "2026-08-26T12:00:01Z", currentStep: "Preparing",
+    queue: [{ bookId: { value: "Book new" }, status: "Running", detail: "Preparing" }]
+  } } });
+  messageHandler({ data: { version: 1, id: "process-get-stale", ok: true, command: "process.snapshot", payload: {
+    isActive: false, isCancelling: false, startedAt: "2026-08-26T11:00:00Z", currentStep: "Completed",
+    queue: [{ bookId: { value: "Book previous" }, status: "Completed", detail: null }]
+  } } });
+
+  assert.match(content.innerHTML, /Book new/);
+  assert.doesNotMatch(content.innerHTML, /Book previous/);
+});
+
 test("a mixed terminal queue retains the most severe terminal step", () => {
   const { messageHandler, content } = loadBridge("process");
   messageHandler({ data: { version: 1, id: "process-mixed", ok: true, command: "process.snapshot", payload: {

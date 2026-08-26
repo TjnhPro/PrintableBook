@@ -85,6 +85,16 @@
   const currentRoute = () => document.querySelector(".nav-item-active")?.dataset.route ?? "books";
   const applicationIsLoading = () => state.applicationLoadState === "loading" || state.applicationLoadState === "refreshing";
   const processIsActive = () => valueFor(window.processSnapshot, "isActive", false) || valueFor(window.processSnapshot, "isCancelling", false);
+  const processStartedAt = (snapshot) => {
+    const value = valueFor(snapshot, "startedAt", "");
+    const time = value ? new Date(value).getTime() : Number.NaN;
+    return Number.isFinite(time) ? time : null;
+  };
+  const isStaleProcessSnapshot = (snapshot) => {
+    const current = processStartedAt(window.processSnapshot);
+    const incoming = processStartedAt(snapshot);
+    return current !== null && incoming !== null && incoming < current;
+  };
   const cacheCleanupBlocked = () => applicationIsLoading() || processIsActive() || state.cacheCleanupActive;
   const updateGlobalRefreshControl = () => {
     const refreshButton = document.getElementById("refresh-button");
@@ -866,7 +876,9 @@
       render("configuration", false);
       status.textContent = "Settings saved";
     } else if (ok && command === "process.snapshot") {
-      window.processSnapshot = valueFor(response, "payload", {});
+      const snapshot = valueFor(response, "payload", {});
+      if (isStaleProcessSnapshot(snapshot)) return;
+      window.processSnapshot = snapshot;
       state.processStartPending = false;
       const startedAt = valueFor(window.processSnapshot, "startedAt", "");
       const terminal = !valueFor(window.processSnapshot, "isActive", false) && !valueFor(window.processSnapshot, "isCancelling", false);
