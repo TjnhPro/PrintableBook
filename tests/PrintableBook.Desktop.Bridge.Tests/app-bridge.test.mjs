@@ -571,6 +571,7 @@ test("Book detail separates paginated Interior settings from the Interior artwor
   assert.match(content.innerHTML, /No frame/);
   assert.match(content.innerHTML, /data-action="toggle-artwork-selection"/);
   assert.match(content.innerHTML, /aria-pressed="false"/);
+  assert.match(content.innerHTML, /data-action="asset-frame-mode"/);
   assert.doesNotMatch(content.innerHTML, /data-action="set-interior-active"/);
   assert.doesNotMatch(content.innerHTML, /data-action="set-interior-frame-mode"/);
   assert.doesNotMatch(content.innerHTML, /Use Brand background/);
@@ -578,6 +579,15 @@ test("Book detail separates paginated Interior settings from the Interior artwor
   const activeOnly = { dataset: { action: "asset-status", assetStatus: "Active" }, closest: () => activeOnly };
   contentListeners.click({ target: activeOnly });
   assert.match(content.innerHTML, /No artwork matches this view/);
+
+  const allStatuses = { dataset: { action: "asset-status", assetStatus: "All" }, closest: () => allStatuses };
+  contentListeners.click({ target: allStatuses });
+  const frameOnly = { dataset: { action: "asset-frame-mode", assetFrameMode: "enabled" }, closest: () => frameOnly };
+  contentListeners.click({ target: frameOnly });
+  assert.match(content.innerHTML, /No artwork matches this view/);
+  const autoFrame = { dataset: { action: "asset-frame-mode", assetFrameMode: "auto" }, closest: () => autoFrame };
+  contentListeners.click({ target: autoFrame });
+  assert.match(content.innerHTML, /page-001\.png/);
 
   messageHandler({ data: { version: 1, id: "book-2", ok: true, command: "app.snapshot", payload: snapshot(1) } });
   assert.match(content.innerHTML, /Interior artwork/);
@@ -702,6 +712,37 @@ test("Book Interior edits stay local until one explicit save request", () => {
       assets: []
     }
   });
+});
+
+test("Saving Book Interior settings accepts the refreshed snapshot without redrawing the open drawer", () => {
+  const { messageHandler, status, content, contentListeners, messages, getFullRenderCount } = loadBridge("books");
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      interiorSourcePageCount: 1, activeInteriorSourcePageCount: 1, hasBackground: true,
+      assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto", isActive: true }]
+    }]
+  };
+
+  messageHandler({ data: { version: 1, id: "book-save-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
+  contentListeners.click({ target: settingsTab });
+  contentListeners.change({ target: { dataset: { action: "set-book-background", bookId: "Book 001" }, checked: false } });
+  const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
+  contentListeners.click({ target: save });
+  const rendersBeforeRefreshResult = getFullRenderCount();
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { kind: "LibraryRefresh", taskId: "save-refresh", state: "Completed" } } });
+  assert.equal(messages.at(-1).command, "app.refresh.result");
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: snapshot } });
+
+  assert.equal(getFullRenderCount(), rendersBeforeRefreshResult);
+  assert.equal(status.textContent, "Interior changes saved");
+  assert.match(content.innerHTML, /Book detail/);
 });
 
 test("Book detail configures an ordered custom Intro selection from Book interior", () => {
