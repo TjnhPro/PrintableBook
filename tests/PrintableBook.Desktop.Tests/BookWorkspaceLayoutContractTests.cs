@@ -83,11 +83,15 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("toggle-all-artwork", script, StringComparison.Ordinal);
         Assert.Contains("apply-artwork-bulk", script, StringComparison.Ordinal);
         Assert.Contains("refreshInteriorArtworkWorkspace", script, StringComparison.Ordinal);
+        Assert.Contains("aria-pressed=\"${selected}\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-action=\"set-interior-active\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-action=\"set-interior-frame-mode\"", script, StringComparison.Ordinal);
         Assert.Contains("--pb-asset-preview: 1 / 1", layout, StringComparison.Ordinal);
         Assert.Contains(".book-drawer-body:has(.tab-body-artwork)", layout, StringComparison.Ordinal);
         Assert.Contains("overflow-y:auto", layout, StringComparison.Ordinal);
         Assert.Contains("grid-template-columns:repeat(6,minmax(0,1fr))", layout, StringComparison.Ordinal);
         Assert.Contains(".interior-artwork-card.is-selected", layout, StringComparison.Ordinal);
+        Assert.Contains("button.interior-artwork-card:focus-visible", layout, StringComparison.Ordinal);
     }
 
     [Fact]

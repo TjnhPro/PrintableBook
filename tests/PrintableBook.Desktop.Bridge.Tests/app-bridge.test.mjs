@@ -569,7 +569,10 @@ test("Book detail separates paginated Interior settings from the Interior artwor
   assert.match(content.innerHTML, /interior-artwork-grid-scroll/);
   assert.match(content.innerHTML, /Inactive/);
   assert.match(content.innerHTML, /No frame/);
-  assert.match(content.innerHTML, /data-action="set-interior-active"/);
+  assert.match(content.innerHTML, /data-action="toggle-artwork-selection"/);
+  assert.match(content.innerHTML, /aria-pressed="false"/);
+  assert.doesNotMatch(content.innerHTML, /data-action="set-interior-active"/);
+  assert.doesNotMatch(content.innerHTML, /data-action="set-interior-frame-mode"/);
   assert.doesNotMatch(content.innerHTML, /Use Brand background/);
 
   const activeOnly = { dataset: { action: "asset-status", assetStatus: "Active" }, closest: () => activeOnly };
@@ -603,7 +606,7 @@ test("Interior artwork applies a bulk draft to selected cards without redrawing 
   const fullRendersBeforeEdit = getFullRenderCount();
   const bridgeMessagesBeforeEdit = messages.length;
 
-  const selectFirst = { dataset: { action: "toggle-artwork-selection", sourceReference: "Book interior/page-001.png" }, checked: true, closest: () => selectFirst };
+  const selectFirst = { dataset: { action: "toggle-artwork-selection", sourceReference: "Book interior/page-001.png" }, closest: () => selectFirst };
   contentListeners.click({ target: selectFirst });
   assert.equal(getFullRenderCount(), fullRendersBeforeEdit);
   assert.equal(getArtworkWorkspaceRenderCount(), 1);
