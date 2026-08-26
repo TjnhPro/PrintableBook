@@ -75,11 +75,6 @@ public sealed class InteriorSharedPipelineCertificationTests : IAsyncLifetime
             Assert.Equal(preparedHash, framedHash);
         }
 
-        if (expectedType == ArtworkType.BorderArt)
-        {
-            Assert.Equal((byte)255, prepared.GetPixels().GetPixel(0, 0)[0]);
-        }
-
         if (expectedType == ArtworkType.FullArt)
         {
             AssertContainsBlue(prepared, 70, 70, 140, 140);
@@ -89,6 +84,31 @@ public sealed class InteriorSharedPipelineCertificationTests : IAsyncLifetime
         Assert.Equal(framed.GetPixels().GetPixel(0, 0)[0], working.GetPixels().GetPixel(140, 140)[0]);
         Assert.Equal((byte)255, final.GetPixels().GetPixel(158, 177)[0]);
         Assert.Equal(framed.GetPixels().GetPixel(0, 0)[0], final.GetPixels().GetPixel(159, 177)[0]);
+    }
+
+    [Theory]
+    [InlineData(1024)]
+    [InlineData(2048)]
+    public async Task ProcessAsync_certifies_representative_border_art_through_the_canonical_source(int sourceSize)
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = Path.Combine(rootPath, $"border-art-{sourceSize}.png");
+        WriteRepresentativeBorderArt(source, sourceSize);
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId($"border-art-{sourceSize}"), new DirectoryReference(Path.Combine(rootPath, $"BorderArt-{sourceSize}")));
+        var request = new InteriorPagePipelineRequest(
+            workspace, new FileReference(source), "page-01", new ArtworkDetectionThreshold(20), PreparedSize, WorkingSize,
+            FinalSize, new ImageDensity(300, 300), null, FrameMode.Disabled,
+            new ArtworkSourceNormalizationSettings(2048), BorderLineDetectionSettings.Default);
+
+        var result = await CreatePipeline().ProcessAsync(request);
+        var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
+
+        Assert.Equal(new ImageSize(2048, 2048), (await new MagickImageInspector().GetInfoAsync(new FileReference(Path.Combine(cache, "normalized-source.png")))).Size);
+        using var classification = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(cache, "classification.json")));
+        Assert.Equal("borderart", classification.RootElement.GetProperty("Type").GetString());
+        await AssertSizeAsync(Path.Combine(cache, "prepared.png"), PreparedSize);
+        await AssertSizeAsync(result.FinalPage.Value, FinalSize);
     }
 
     private static DiskBackedInteriorPagePipeline CreatePipeline() => new(
@@ -134,6 +154,17 @@ public sealed class InteriorSharedPipelineCertificationTests : IAsyncLifetime
         image.Write(path);
     }
 
+    private static void WriteRepresentativeBorderArt(string path, int size)
+    {
+        using var image = new MagickImage(MagickColors.White, (uint)size, (uint)size);
+        var pixels = image.GetPixels();
+        var inset = size / 20;
+        var lineWidth = Math.Max(2, size / 512);
+        PaintOutline(pixels, inset, inset, size - (2 * inset), size - (2 * inset), [0, 0, 0], lineWidth);
+        Fill(pixels, size / 3, size / 3, size / 4, size / 4, [0, 0, 0]);
+        image.Write(path);
+    }
+
     private static void WriteFrame(string path)
     {
         using var image = new MagickImage(MagickColors.Transparent, 2270, 2270);
@@ -168,6 +199,14 @@ public sealed class InteriorSharedPipelineCertificationTests : IAsyncLifetime
         {
             pixels.SetPixel(left, y, color);
             pixels.SetPixel(right, y, color);
+        }
+    }
+
+    private static void PaintOutline(IPixelCollection<byte> pixels, int left, int top, int right, int bottom, byte[] color, int width)
+    {
+        for (var offset = 0; offset < width; offset++)
+        {
+            PaintOutline(pixels, left + offset, top + offset, right - offset, bottom - offset, color);
         }
     }
 
