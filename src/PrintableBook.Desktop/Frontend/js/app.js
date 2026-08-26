@@ -176,6 +176,11 @@
     return draft ?? null;
   };
   const clearInteriorDraft = (id) => state.bookInteriorDrafts.delete(id);
+  const clearArtworkBulkSelection = () => {
+    state.selectedArtworkReferences.clear();
+    state.assetBulkActive = "unchanged";
+    state.assetBulkFrameMode = "unchanged";
+  };
   const hasInteriorDraft = (id) => {
     const draft = interiorDraftFor(id);
     return Boolean(draft && (draft.hasBackground !== undefined || draft.hasIntro !== undefined || draft.introSourceReferences !== undefined || draft.assets.size));
@@ -723,7 +728,7 @@
     if (action === "select-brand") { state.selectedBrand = target.dataset.brandName; if (brandSelect) brandSelect.value = state.selectedBrand; render("brands"); }
     if (action === "load-brand-settings") send("brand.settings.get", { brandName: state.selectedBrand });
     if (action === "save-brand-settings") send("brand.settings.save", { brandName: state.selectedBrand, json: state.brandSettings });
-    if (action === "select-book") { state.selectedBookId = target.dataset.bookId; state.selectedBookTab = "overview"; state.selectedAssetReference = ""; state.selectedArtworkReferences.clear(); state.assetBulkActive = "unchanged"; state.assetBulkFrameMode = "unchanged"; state.introTemplatePage = 1; state.bookDrawerScrollTop = 0; state.artworkGridScrollTop = 0; state.bookDrawerOpen = true; state.drawerFocusTitle = true; render("books", false); }
+    if (action === "select-book") { state.selectedBookId = target.dataset.bookId; state.selectedBookTab = "overview"; state.selectedAssetReference = ""; clearArtworkBulkSelection(); state.introTemplatePage = 1; state.bookDrawerScrollTop = 0; state.artworkGridScrollTop = 0; state.bookDrawerOpen = true; state.drawerFocusTitle = true; render("books", false); }
     if (action === "close-book-drawer") closeBookDrawer();
     if (action === "save-book-interior-settings" && !state.bookInteriorSavePending) {
       const payload = interiorSavePayload(target.dataset.bookId);
@@ -892,6 +897,7 @@
         state.bookInteriorSaveTaskId = valueFor(valueFor(response, "payload", {}), "taskId", "");
         state.bookInteriorSavePending = false;
         clearInteriorDraft(state.selectedBookId);
+        clearArtworkBulkSelection();
         status.textContent = "Interior changes saved";
         updateInteriorSaveUi();
       }
@@ -912,7 +918,8 @@
       if (brandSelect) brandSelect.innerHTML = allBrands.length ? allBrands.map((brand) => `<option>${escapeHtml(valueFor(brand, "name", ""))}</option>`).join("") : "<option>No brands</option>";
       if (brandSelect) brandSelect.value = state.selectedBrand;
       if (preserveBookDrawer) {
-        updateInteriorSaveUi();
+        if (state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();
+        else updateInteriorSaveUi();
         status.textContent = "Interior changes saved";
       } else {
         render(document.querySelector(".nav-item-active")?.dataset.route ?? "books", false);

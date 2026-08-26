@@ -596,7 +596,7 @@ test("Book detail separates paginated Interior settings from the Interior artwor
   assert.match(content.innerHTML, /Interior artwork/);
 });
 
-test("Interior artwork applies a bulk draft to selected cards without redrawing the Book drawer", () => {
+test("Interior artwork clears saved bulk selection without redrawing the Book drawer", () => {
   const { messageHandler, content, contentListeners, messages, getFullRenderCount, getArtworkWorkspaceRenderCount } = loadBridge("books");
   const snapshot = {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
@@ -640,6 +640,19 @@ test("Interior artwork applies a bulk draft to selected cards without redrawing 
   const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
   contentListeners.click({ target: save });
   assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", assets: [{ sourceReference: "Book interior/page-001.png", active: false, frameMode: "disabled" }] });
+
+  const artworkRendersBeforeSavedSnapshot = getArtworkWorkspaceRenderCount();
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { kind: "LibraryRefresh", taskId: "save-refresh", state: "Completed" } } });
+  const savedSnapshot = structuredClone(snapshot);
+  savedSnapshot.bookSummaries[0].assets[0].isActive = false;
+  savedSnapshot.bookSummaries[0].assets[0].frameMode = "disabled";
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: savedSnapshot } });
+
+  assert.equal(getFullRenderCount(), fullRendersBeforeEdit);
+  assert.equal(getArtworkWorkspaceRenderCount(), artworkRendersBeforeSavedSnapshot + 1);
+  assert.match(content.innerHTML, /class="interior-artwork-card is-inactive " data-action="toggle-artwork-selection" data-source-reference="Book interior\/page-001\.png" aria-pressed="false"/);
+  assert.match(content.innerHTML, /Apply to 0 selected/);
+  assert.match(content.innerHTML, /<option value="unchanged" selected>No change<\/option>/);
 });
 
 test("Interior artwork hides custom Intro pages and batches only remaining artwork", () => {
