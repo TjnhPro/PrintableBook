@@ -17,10 +17,12 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   const status = { textContent: "" };
   const contentListeners = {};
   const documentListeners = {};
+  const searchInput = { focused: false, selection: null, focus() { this.focused = true; }, setSelectionRange(start, end) { this.selection = [start, end]; } };
   const content = {
     innerHTML: "",
     addEventListener: (eventName, handler) => { contentListeners[eventName] = handler; },
-    insertAdjacentHTML: (_position, markup) => { content.innerHTML += markup; }
+    insertAdjacentHTML: (_position, markup) => { content.innerHTML += markup; },
+    querySelector: (selector) => selector === '[data-action="pdf-library-search"]' ? searchInput : null
   };
   const brandSelect = { innerHTML: "", value: "", addEventListener: () => { } };
   const brandSettingsEditor = { dataset: { brandSettings: "" }, value: "{}" };
@@ -67,7 +69,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSelect, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages, browserWindow };
+  return { messageHandler, status, content, brandSelect, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages, browserWindow, searchInput };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -621,6 +623,42 @@ test("PDF Library renders one top-level card per eligible Book", () => {
   assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 2);
   assert.match(content.innerHTML, /data-pdf-book-id="Book Alpha"/);
   assert.match(content.innerHTML, /data-pdf-book-id="Book Delta"/);
+});
+
+test("PDF Library search filters by Book name", () => {
+  const { messageHandler, content, contentListeners, messages, searchInput } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
+  const messageCount = messages.length;
+
+  contentListeners.input({ target: { dataset: { action: "pdf-library-search" }, value: "Delta", selectionStart: 5 } });
+
+  assert.doesNotMatch(content.innerHTML, /data-pdf-book-id="Book Alpha"/);
+  assert.match(content.innerHTML, /data-pdf-book-id="Book Delta"/);
+  assert.equal(searchInput.focused, true);
+  assert.deepEqual(searchInput.selection, [5, 5]);
+  assert.equal(messages.length, messageCount);
+});
+
+test("PDF Library search has a distinct no-match empty state", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
+
+  contentListeners.input({ target: { dataset: { action: "pdf-library-search" }, value: "Does not exist" } });
+
+  assert.match(content.innerHTML, /No PDF Books match your search/);
+  assert.doesNotMatch(content.innerHTML, /No completed PDFs yet/);
+});
+
+test("PDF Library sorts by newest name and current PDF size", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
+  const firstBook = () => content.innerHTML.match(/data-pdf-book-id="([^"]+)"/)?.[1] ?? "";
+
+  assert.equal(firstBook(), "Book Delta");
+  contentListeners.change({ target: { dataset: { action: "pdf-library-sort" }, value: "name" } });
+  assert.equal(firstBook(), "Book Alpha");
+  contentListeners.change({ target: { dataset: { action: "pdf-library-sort" }, value: "size" } });
+  assert.equal(firstBook(), "Book Alpha");
 });
 
 test("PDF Library output actions send a book-scoped command", () => {
