@@ -64,7 +64,10 @@ public sealed class ApplicationSnapshotService(
             },
             async (index, token) => summaries[index] = await BuildBookSummaryAsync(discoverySnapshot.Books[index], token));
 
-        return new ApplicationSnapshot(discoverySnapshot, settings, summaries.Select(summary => summary!).ToArray(), DateTimeOffset.UtcNow);
+        var completedSummaries = summaries
+            .Select(summary => summary ?? throw new InvalidOperationException("Book summary was not produced."))
+            .ToArray();
+        return new ApplicationSnapshot(discoverySnapshot, settings, completedSummaries, DateTimeOffset.UtcNow);
     }
 
     private async ValueTask<BookDesktopSummary> BuildBookSummaryAsync(DiscoveredBook book, CancellationToken cancellationToken)

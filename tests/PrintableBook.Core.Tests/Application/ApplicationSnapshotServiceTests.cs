@@ -160,9 +160,12 @@ public sealed class ApplicationSnapshotServiceTests
             .AsTask();
 
         await scanner.FourScansEntered.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Equal(4, scanner.Started);
         Assert.Equal(4, scanner.MaximumConcurrentScans);
 
-        scanner.Release();
+        scanner.ReleaseAllButFirstBook();
+        await scanner.LaterBookStarted.WaitAsync(TimeSpan.FromSeconds(2));
+        scanner.ReleaseFirstBook();
         var snapshot = await refresh;
 
         Assert.Equal(Enumerable.Range(1, 8).Select(number => $"Book {number:D3}"), snapshot.BookSummaries.Select(summary => summary.BookId.Value));
@@ -268,19 +271,30 @@ public sealed class ApplicationSnapshotServiceTests
     {
         private readonly TaskCompletionSource fourScansEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource releaseFirstBook = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource laterBookStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int activeScans;
+        private int started;
 
         public Task FourScansEntered => fourScansEntered.Task;
+        public Task LaterBookStarted => laterBookStarted.Task;
+        public int Started => Volatile.Read(ref started);
         public int MaximumConcurrentScans { get; private set; }
 
         public async ValueTask<BookSourceScanResult> ScanAsync(BookId bookId, DirectoryReference bookDirectory, CancellationToken cancellationToken = default)
         {
+            var scanNumber = Interlocked.Increment(ref started);
+            if (scanNumber >= 5) laterBookStarted.TrySetResult();
             var active = Interlocked.Increment(ref activeScans);
             MaximumConcurrentScans = Math.Max(MaximumConcurrentScans, active);
             if (active == 4) fourScansEntered.TrySetResult();
             try
             {
                 await release.Task.WaitAsync(cancellationToken);
+                if (string.Equals(bookId.Value, "Book 001", StringComparison.Ordinal))
+                {
+                    await releaseFirstBook.Task.WaitAsync(cancellationToken);
+                }
                 return BookSourceScanResult.Succeeded(new BookSource([
                     new BookAsset(Path.Combine(bookDirectory.Value, "Book interior", "page-1.png"), BookAssetKind.Interior)]));
             }
@@ -290,7 +304,8 @@ public sealed class ApplicationSnapshotServiceTests
             }
         }
 
-        public void Release() => release.TrySetResult();
+        public void ReleaseAllButFirstBook() => release.TrySetResult();
+        public void ReleaseFirstBook() => releaseFirstBook.TrySetResult();
     }
 
     private sealed class ThrowingScanner : IBookSourceScanner
