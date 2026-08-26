@@ -973,10 +973,22 @@ test("Diagnostics Performance excludes zero-duration lifecycle noise", () => {
   assert.doesNotMatch(content.innerHTML, /Background workers/);
 });
 
+test("Diagnostics Performance shows an empty duration when there are no slow operations", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("diagnostics");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: diagnosticsSnapshot() } });
+  const target = { dataset: { action: "diagnostics-tab", diagnosticsTab: "performance" } };
+  target.closest = () => target;
+  contentListeners.click({ target });
+
+  assert.match(content.innerHTML, /Worst duration[\s\S]*?>—</);
+  assert.match(content.innerHTML, /No meaningful UI performance operations recorded/);
+});
+
 test("Diagnostics Book keeps a selected Book and only renders twelve meaningful logs", () => {
   const { messageHandler, content, contentListeners } = loadBridge("diagnostics");
   const snapshot = diagnosticsSnapshot();
   snapshot.bookSummaries[0].logs = [
+    { eventName: "", detail: "" },
     { eventName: "", detail: "." },
     ...Array.from({ length: 15 }, (_, index) => ({ timestamp: `2026-08-26T11:${String(index).padStart(2, "0")}:00Z`, eventName: `Log ${index + 1}`, detail: "Saved" }))
   ];
