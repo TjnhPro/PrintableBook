@@ -23,7 +23,7 @@ public sealed class ArtworkClassifier : IArtworkClassifier
         ArgumentNullException.ThrowIfNull(request);
 
         var borderLine = await borderLineDetector.DetectAsync(
-            new BorderLineDetectionRequest(request.Source, request.Threshold),
+            new BorderLineDetectionRequest(request.Source, request.Threshold, request.EffectiveBorderLineDetection),
             cancellationToken);
 
         if (borderLine.HasBorder)

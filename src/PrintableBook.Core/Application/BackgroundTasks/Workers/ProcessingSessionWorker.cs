@@ -102,7 +102,9 @@ public sealed class ProcessingSessionWorker(
             null,
             SelectedCover: string.IsNullOrWhiteSpace(summaries[book.Id.Value].SelectedCoverReference) ? null : new FileReference(summaries[book.Id.Value].SelectedCoverReference!),
             Mode: request.Mode,
-            BackgroundPage: summaries[book.Id.Value].HasBackground ? background : null)).ToArray());
+            BackgroundPage: summaries[book.Id.Value].HasBackground ? background : null,
+            ArtworkSourceNormalization: settings.EffectiveArtworkSourceNormalization,
+            BorderLineDetection: settings.EffectiveBorderLineDetection)).ToArray());
 
         void Report(BookProcessingProgress progress)
         {

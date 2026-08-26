@@ -8,6 +8,7 @@ namespace PrintableBook.Infrastructure.Processing;
 /// Orchestrates the classified interior workflow through disk-backed, independently readable stages.
 /// </summary>
 public sealed class DiskBackedInteriorPagePipeline(
+    IArtworkSourceNormalizer artworkSourceNormalizer,
     IArtworkClassifier artworkClassifier,
     IArtworkPreparationService artworkPreparationService,
     IFrameProcessor frameProcessor,
@@ -15,7 +16,18 @@ public sealed class DiskBackedInteriorPagePipeline(
     IFinalInteriorPageProcessor finalPageProcessor,
     IImageInspector imageInspector) : IInteriorPagePipeline
 {
-    private const string CacheStampSchemaVersion = "interior-page-cache-v1";
+    private const string CacheStampSchemaVersion = "interior-page-cache-v2";
+
+    public DiskBackedInteriorPagePipeline(
+        IArtworkClassifier artworkClassifier,
+        IArtworkPreparationService artworkPreparationService,
+        IFrameProcessor frameProcessor,
+        IWorkingPageProcessor workingPageProcessor,
+        IFinalInteriorPageProcessor finalPageProcessor,
+        IImageInspector imageInspector)
+        : this(new Imaging.MagickArtworkSourceNormalizer(), artworkClassifier, artworkPreparationService, frameProcessor, workingPageProcessor, finalPageProcessor, imageInspector)
+    {
+    }
 
     public async ValueTask<InteriorPageProcessingResult> ProcessAsync(
         InteriorPagePipelineRequest request,
@@ -31,6 +43,7 @@ public sealed class DiskBackedInteriorPagePipeline(
         var pageCache = Path.Combine(request.Workspace.WorkingDirectory.Value, "cache", request.PageId);
         var processedInteriorDirectory = Path.Combine(request.Workspace.ProcessedDirectory.Value, "interior");
         var classificationFile = Path.Combine(pageCache, "classification.json");
+        var normalized = new FileReference(Path.Combine(pageCache, "normalized-source.png"));
         var prepared = new FileReference(Path.Combine(pageCache, "prepared.png"));
         var framed = new FileReference(Path.Combine(pageCache, "framed.png"));
         var working = new FileReference(Path.Combine(pageCache, "working-page.png"));
@@ -51,8 +64,17 @@ public sealed class DiskBackedInteriorPagePipeline(
                 : DetermineInvalidationStage(previousStamp, currentStamp);
             if (invalidation is not CacheInvalidationStage.None)
             {
-                ApplyInvalidation(invalidation, classificationFile, prepared, framed, working, finalPage);
+                ApplyInvalidation(invalidation, normalized, classificationFile, prepared, framed, working, finalPage);
                 await File.WriteAllTextAsync(cacheStampFile, JsonSerializer.Serialize(currentStamp), cancellationToken);
+            }
+
+            if (!await IsReadableAsync(normalized, new ImageSize(request.ArtworkSourceNormalization.NormalizedSourceSize, request.ArtworkSourceNormalization.NormalizedSourceSize), cancellationToken))
+            {
+                DeleteDownstream(prepared, framed, working, finalPage);
+                currentStep = "normalization";
+                await artworkSourceNormalizer.NormalizeAsync(new ArtworkSourceNormalizationRequest(
+                    request.Source, normalized, new ImageSize(request.ArtworkSourceNormalization.NormalizedSourceSize, request.ArtworkSourceNormalization.NormalizedSourceSize)), cancellationToken);
+                await EnsureSizeAsync(normalized, new ImageSize(request.ArtworkSourceNormalization.NormalizedSourceSize, request.ArtworkSourceNormalization.NormalizedSourceSize), "Normalized source", cancellationToken);
             }
 
             var classification = invalidation is CacheInvalidationStage.Classification
@@ -68,7 +90,7 @@ public sealed class DiskBackedInteriorPagePipeline(
                 DeleteDownstream(prepared, framed, working, finalPage);
                 currentStep = "classification";
                 classification = await artworkClassifier.ClassifyAsync(
-                    new ArtworkClassificationRequest(request.Source, request.ArtworkDetectionThreshold), cancellationToken);
+                    new ArtworkClassificationRequest(normalized, request.ArtworkDetectionThreshold, request.BorderLineDetection), cancellationToken);
                 await WriteClassificationAsync(classificationFile, classification, cancellationToken);
             }
 
@@ -78,7 +100,7 @@ public sealed class DiskBackedInteriorPagePipeline(
                 DeleteDownstream(framed, working, finalPage);
                 currentStep = "preparation";
                 preparedArtwork = await artworkPreparationService.PrepareAsync(new ArtworkPreparationRequest(
-                    request.Source,
+                    normalized,
                     prepared,
                     classification,
                     request.ArtworkDetectionThreshold,
@@ -230,6 +252,9 @@ public sealed class DiskBackedInteriorPagePipeline(
         previous.SourceLength == current.SourceLength &&
         previous.SourceLastWriteUtcTicks == current.SourceLastWriteUtcTicks &&
         previous.ArtworkDetectionThreshold == current.ArtworkDetectionThreshold &&
+        previous.NormalizedSourceSize == current.NormalizedSourceSize &&
+        string.Equals(previous.NormalizationAlgorithmVersion, current.NormalizationAlgorithmVersion, StringComparison.Ordinal) &&
+        string.Equals(previous.BorderLineAlgorithmVersion, current.BorderLineAlgorithmVersion, StringComparison.Ordinal) &&
         string.Equals(previous.ClassificationAlgorithmVersion, current.ClassificationAlgorithmVersion, StringComparison.Ordinal);
 
     private static bool PreparationCompatible(CacheInputStamp previous, CacheInputStamp current) =>
@@ -255,6 +280,7 @@ public sealed class DiskBackedInteriorPagePipeline(
 
     private static void ApplyInvalidation(
         CacheInvalidationStage stage,
+        FileReference normalized,
         string classificationFile,
         FileReference prepared,
         FileReference framed,
@@ -278,6 +304,7 @@ public sealed class DiskBackedInteriorPagePipeline(
                 DeleteDownstream(prepared, framed, working, finalPage);
                 break;
             case CacheInvalidationStage.Classification:
+                DeleteIfPresent(normalized);
                 DeleteIfPresent(classificationFile);
                 DeleteDownstream(prepared, framed, working, finalPage);
                 break;
@@ -376,7 +403,10 @@ public sealed class DiskBackedInteriorPagePipeline(
         long FrameLength,
         long FrameLastWriteUtcTicks,
         string FrameMode,
-        string SchemaVersion)
+            int NormalizedSourceSize,
+            string NormalizationAlgorithmVersion,
+            string BorderLineAlgorithmVersion,
+            string SchemaVersion)
     {
         private static readonly string[] requiredProperties =
         [
@@ -398,6 +428,9 @@ public sealed class DiskBackedInteriorPagePipeline(
             nameof(FrameLength),
             nameof(FrameLastWriteUtcTicks),
             nameof(FrameMode),
+            nameof(NormalizedSourceSize),
+            nameof(NormalizationAlgorithmVersion),
+            nameof(BorderLineAlgorithmVersion),
             nameof(SchemaVersion)
         ];
 
@@ -432,6 +465,9 @@ public sealed class DiskBackedInteriorPagePipeline(
                 frame?.Exists == true ? frame.Length : 0,
                 frame?.Exists == true ? frame.LastWriteTimeUtc.Ticks : 0,
                 ToCanonicalFrameMode(request.FrameMode),
+                request.ArtworkSourceNormalization.NormalizedSourceSize,
+                ArtworkSourceNormalizationAlgorithmVersion.Current,
+                global::PrintableBook.Core.Application.Processing.BorderLineAlgorithmVersion.Current,
                 CacheStampSchemaVersion);
         }
 

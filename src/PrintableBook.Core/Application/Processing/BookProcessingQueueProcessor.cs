@@ -22,7 +22,13 @@ public sealed record PrintableBookProcessingCommand(
     int? ShuffleSeed,
     FileReference? SelectedCover = null,
     BookProcessingMode Mode = BookProcessingMode.FullBook,
-    FileReference? BackgroundPage = null);
+    FileReference? BackgroundPage = null,
+    ArtworkSourceNormalizationSettings? ArtworkSourceNormalization = null,
+    BorderLineDetectionSettings? BorderLineDetection = null)
+{
+    public ArtworkSourceNormalizationSettings EffectiveArtworkSourceNormalization => ArtworkSourceNormalization ?? ArtworkSourceNormalizationSettings.Default;
+    public BorderLineDetectionSettings EffectiveBorderLineDetection => BorderLineDetection ?? BorderLineDetectionSettings.Default;
+}
 
 public sealed record BookProcessingQueueRequest(IReadOnlyList<PrintableBookProcessingCommand> Books);
 

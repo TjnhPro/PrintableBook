@@ -7,4 +7,8 @@ namespace PrintableBook.Core.Application.Processing;
 /// </summary>
 public sealed record BorderLineDetectionRequest(
     FileReference Source,
-    ArtworkDetectionThreshold Threshold);
+    ArtworkDetectionThreshold Threshold,
+    BorderLineDetectionSettings? Settings = null)
+{
+    public BorderLineDetectionSettings EffectiveSettings => Settings ?? BorderLineDetectionSettings.Default;
+}

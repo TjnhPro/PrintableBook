@@ -14,7 +14,9 @@ public sealed record InteriorPagePipelineRequest
         ImageSize finalPageSize,
         ImageDensity targetDensity,
         FileReference? frame,
-        FrameMode frameMode)
+        FrameMode frameMode,
+        ArtworkSourceNormalizationSettings? artworkSourceNormalization = null,
+        BorderLineDetectionSettings? borderLineDetection = null)
     {
         Workspace = workspace;
         Source = source;
@@ -26,6 +28,8 @@ public sealed record InteriorPagePipelineRequest
         TargetDensity = targetDensity;
         Frame = frame;
         FrameMode = frameMode;
+        ArtworkSourceNormalization = artworkSourceNormalization ?? ArtworkSourceNormalizationSettings.Default;
+        BorderLineDetection = borderLineDetection ?? BorderLineDetectionSettings.Default;
         ValidateGeometry();
     }
 
@@ -39,6 +43,8 @@ public sealed record InteriorPagePipelineRequest
     public ImageDensity TargetDensity { get; init; }
     public FileReference? Frame { get; init; }
     public FrameMode FrameMode { get; init; }
+    public ArtworkSourceNormalizationSettings ArtworkSourceNormalization { get; init; }
+    public BorderLineDetectionSettings BorderLineDetection { get; init; }
 
     public void ValidateGeometry()
     {
