@@ -117,6 +117,29 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessAsync_defensively_ignores_a_frame_in_a_mutated_intro_request()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = Path.Combine(rootPath, "framed-intro.png");
+        var frame = await CreateRedFrameAsync("intro-frame.png", new ImageSize(200, 200));
+        using (var image = new MagickImage(MagickColors.White, 1024, 1024))
+        {
+            image.GetPixels().SetPixel(100, 100, [0, 0, 0]);
+            image.Write(source);
+        }
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(new BookId("framed-intro"), new DirectoryReference(Path.Combine(rootPath, "FramedIntro")));
+        var legalIntroRequest = new InteriorPagePipelineRequest(
+            workspace, new FileReference(source), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(200, 200), new ImageSize(200, 200), new ImageSize(200, 200), new ImageDensity(300, 300), null, FrameMode.Disabled,
+            processingKind: InteriorPageProcessingKind.IntroTemplate);
+
+        await CreatePipeline().ProcessAsync(legalIntroRequest with { Frame = new FileReference(frame), FrameMode = FrameMode.Enabled });
+
+        using var framed = new MagickImage(Path.Combine(workspace.WorkingDirectory.Value, "cache", "intro-0001", "framed.png"));
+        var corner = framed.GetPixels().GetPixel(0, 0);
+        Assert.False(corner[0] == 255 && corner[1] == 0 && corner[2] == 0, "IntroTemplate output must not use the supplied red frame.");
+    }
+
+    [Fact]
     public async Task ProcessAsync_migrates_a_legacy_processed_input_stamp_into_page_cache()
     {
         Directory.CreateDirectory(rootPath);
