@@ -1002,6 +1002,39 @@ test("Diagnostics Book keeps a selected Book and only renders twelve meaningful 
   assert.doesNotMatch(content.innerHTML, /Log 15/);
 });
 
+test("Diagnostics refresh uses the existing bridge protocol from every tab and preserves local context", () => {
+  for (const tabName of ["summary", "tasks", "performance", "book"]) {
+    const { messageHandler, content, contentListeners, messages } = loadBridge("diagnostics");
+    messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: diagnosticsSnapshot() } });
+    if (tabName !== "summary") {
+      const tab = { dataset: { action: "diagnostics-tab", diagnosticsTab: tabName } };
+      tab.closest = () => tab;
+      contentListeners.click({ target: tab });
+    }
+    const refresh = { dataset: { action: "refresh-diagnostics" } };
+    refresh.closest = () => refresh;
+    const messageCount = messages.length;
+    contentListeners.click({ target: refresh });
+    assert.deepEqual(messages.slice(messageCount).map((message) => message.command), ["diagnostics.get", "task.list"]);
+    messageHandler({ data: { version: 1, id: "diagnostics", ok: true, command: "diagnostics.snapshot", payload: [] } });
+    messageHandler({ data: { version: 1, id: "tasks", ok: true, command: "background.tasks", payload: [] } });
+    assert.match(content.innerHTML, new RegExp(`data-diagnostics-panel="${tabName}"`));
+  }
+
+  const { messageHandler, content, contentListeners } = loadBridge("diagnostics");
+  const snapshot = diagnosticsSnapshot();
+  snapshot.discovery.books.push({ id: { value: "Book Beta" }, name: "Book Beta" });
+  snapshot.bookSummaries.push({ bookId: { value: "Book Beta" }, workspaceStatus: "Completed", sourceFolders: [], logs: [] });
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+  const bookTab = { dataset: { action: "diagnostics-tab", diagnosticsTab: "book" } };
+  bookTab.closest = () => bookTab;
+  contentListeners.click({ target: bookTab });
+  contentListeners.change({ target: { dataset: { action: "diagnostic-book" }, value: "Book Beta" } });
+  messageHandler({ data: { version: 1, id: "diagnostics", ok: true, command: "diagnostics.snapshot", payload: [] } });
+  assert.match(content.innerHTML, /data-diagnostics-panel="book"/);
+  assert.match(content.innerHTML, /value="Book Beta" selected/);
+});
+
 test("Diagnostics route requests and renders sanitized responsiveness events", () => {
   const { messageHandler, content, routeButtons, messages } = loadBridge("diagnostics");
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: {
