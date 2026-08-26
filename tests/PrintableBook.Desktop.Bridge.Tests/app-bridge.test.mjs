@@ -21,7 +21,9 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   let contentMarkup = "";
   let fullRenderCount = 0;
   let introWorkspaceRenderCount = 0;
+  let artworkWorkspaceRenderCount = 0;
   const introPaginationFocus = { action: "", focus() { this.action = "focused"; } };
+  const artworkGrid = { scrollTop: 0 };
   const content = {
     get innerHTML() { return contentMarkup; },
     set innerHTML(markup) { fullRenderCount += 1; contentMarkup = markup; },
@@ -33,6 +35,13 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     set outerHTML(markup) {
       introWorkspaceRenderCount += 1;
       contentMarkup = contentMarkup.replace(/<section class="intro-template-workspace">[\s\S]*?<\/section>/, markup);
+    }
+  };
+  const artworkWorkspace = {
+    querySelector: (selector) => selector === ".interior-artwork-grid-scroll" ? artworkGrid : null,
+    set outerHTML(markup) {
+      artworkWorkspaceRenderCount += 1;
+      contentMarkup = contentMarkup.replace(/<section class="interior-artwork-workspace">[\s\S]*?<\/section>/, markup);
     }
   };
   const brandSelectListeners = {};
@@ -77,6 +86,8 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
       querySelector: (selector) => {
         if (selector === "[data-brand-settings]") return brandSettingsEditor;
         if (selector === ".intro-template-workspace" && contentMarkup.includes('class="intro-template-workspace"')) return introWorkspace;
+        if (selector === ".interior-artwork-workspace" && contentMarkup.includes('class="interior-artwork-workspace"')) return artworkWorkspace;
+        if (selector === ".interior-artwork-grid-scroll" && contentMarkup.includes('class="interior-artwork-grid-scroll"')) return artworkGrid;
         if (selector.startsWith('[data-action="intro-template-page"]')) return introPaginationFocus;
         return selector === ".nav-item-active" && activeRoute ? { dataset: { route: activeRoute } } : null;
       },
@@ -86,7 +97,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSelect, brandSelectListeners, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages, browserWindow, searchInput, getFullRenderCount: () => fullRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, brandSelect, brandSelectListeners, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages, browserWindow, searchInput, getFullRenderCount: () => fullRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -567,6 +578,52 @@ test("Book detail separates paginated Interior settings from the Interior artwor
 
   messageHandler({ data: { version: 1, id: "book-2", ok: true, command: "app.snapshot", payload: snapshot(1) } });
   assert.match(content.innerHTML, /Interior artwork/);
+});
+
+test("Interior artwork applies a bulk draft to selected cards without redrawing the Book drawer", () => {
+  const { messageHandler, content, contentListeners, messages, getFullRenderCount, getArtworkWorkspaceRenderCount } = loadBridge("books");
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      interiorSourcePageCount: 2, activeInteriorSourcePageCount: 2,
+      assets: [
+        { sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto", isActive: true },
+        { sourceReference: "Book interior/page-002.png", relativePath: "Book interior/page-002.png", fileName: "page-002.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto", isActive: true }
+      ]
+    }]
+  };
+
+  messageHandler({ data: { version: 1, id: "artwork-1", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const artworkTab = { dataset: { action: "book-tab", bookTab: "artwork" }, closest: () => artworkTab };
+  contentListeners.click({ target: artworkTab });
+  const fullRendersBeforeEdit = getFullRenderCount();
+  const bridgeMessagesBeforeEdit = messages.length;
+
+  const selectFirst = { dataset: { action: "toggle-artwork-selection", sourceReference: "Book interior/page-001.png" }, checked: true, closest: () => selectFirst };
+  contentListeners.click({ target: selectFirst });
+  assert.equal(getFullRenderCount(), fullRendersBeforeEdit);
+  assert.equal(getArtworkWorkspaceRenderCount(), 1);
+  assert.match(content.innerHTML, /Apply to 1 selected/);
+  assert.match(content.innerHTML, /is-selected/);
+
+  contentListeners.change({ target: { dataset: { action: "set-artwork-bulk-active" }, value: "inactive" } });
+  contentListeners.change({ target: { dataset: { action: "set-artwork-bulk-frame-mode" }, value: "disabled" } });
+  const apply = { dataset: { action: "apply-artwork-bulk" }, closest: () => apply };
+  contentListeners.click({ target: apply });
+
+  assert.equal(getFullRenderCount(), fullRendersBeforeEdit);
+  assert.match(content.innerHTML, /<strong>1<\/strong> active/);
+  assert.match(content.innerHTML, /Inactive/);
+  assert.match(content.innerHTML, /No frame/);
+  assert.equal(messages.length, bridgeMessagesBeforeEdit);
+
+  const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
+  contentListeners.click({ target: save });
+  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", assets: [{ sourceReference: "Book interior/page-001.png", active: false, frameMode: "disabled" }] });
 });
 
 test("Book Interior edits stay local until one explicit save request", () => {
