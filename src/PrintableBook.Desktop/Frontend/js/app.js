@@ -489,6 +489,7 @@
     const slow = diagnosticSlowEvents().length;
     return slow ? { label: "Needs review", tone: "warn", detail: `${slow} slow operation${slow === 1 ? "" : "s"}` } : { label: "Healthy", tone: "good", detail: "No slow operations" };
   };
+  const diagnosticLatestSlowEvent = () => [...diagnosticSlowEvents()].sort((left, right) => new Date(valueFor(right, "timestamp", 0)).getTime() - new Date(valueFor(left, "timestamp", 0)).getTime())[0] ?? null;
   const diagnosticAttentionItems = (summary) => {
     const items = [];
     const failed = diagnosticFailedTasks();
@@ -518,8 +519,19 @@
   };
   const diagnosticTaskRows = () => state.backgroundTasks.slice(0, 20).map((task) => `<tr><td>${escapeHtml(valueFor(task, "kind", ""))}</td><td>${badge(valueFor(task, "state", "Unknown"))}</td><td>${escapeHtml(valueFor(task, "subject", "—"))}</td><td>${escapeHtml(valueFor(task, "step", "—"))}</td><td>${valueFor(task, "completed", "—")}/${valueFor(task, "total", "—")}</td><td>${dateTime(valueFor(task, "startedAt", null))}</td><td>${dateTime(valueFor(task, "finishedAt", null))}</td><td>${escapeHtml(valueFor(task, "errorMessage", "—"))}</td></tr>`).join("") || "<tr><td colspan=\"8\" class=\"empty-row\">No retained background tasks.</td></tr>";
   const renderDiagnosticsTasks = () => `<section role="tabpanel" data-diagnostics-panel="tasks"><div class="diagnostic-detail-strip"><div><span>Active</span><strong>${diagnosticActiveTasks().length}</strong></div><div><span>Failed</span><strong>${diagnosticFailedTasks().length}</strong></div><div><span>Retained</span><strong>${state.backgroundTasks.length}</strong></div></div>${panel("Background workers", `<div class="table-scroll"><table class="data-table"><thead><tr><th>Kind</th><th>State</th><th>Subject</th><th>Step</th><th>Progress</th><th>Started</th><th>Finished</th><th>Error</th></tr></thead><tbody>${diagnosticTaskRows()}</tbody></table></div>`)}</section>`;
+  const diagnosticPerformanceRows = () => {
+    const events = diagnosticPerformanceEvents();
+    if (!events.length) return "<tr><td colspan=\"7\" class=\"empty-row\">No meaningful UI performance operations recorded.</td></tr>";
+    return events.map((item) => `<tr><td>${dateTime(valueFor(item, "timestamp", null))}</td><td>${escapeHtml(valueFor(item, "severity", "Info"))}</td><td>${escapeHtml(valueFor(item, "kind", "operation"))}</td><td>${escapeHtml(valueFor(item, "operation", ""))}</td><td>${Number(valueFor(item, "durationMilliseconds", 0)) || 0} ms</td><td>${escapeHtml(valueFor(item, "subject", "—") || "—")}</td><td>${escapeHtml(valueFor(item, "activeOperations", []).join(", ") || "—")}</td></tr>`).join("");
+  };
+  const renderDiagnosticsPerformance = () => {
+    const slow = diagnosticSlowEvents();
+    const latest = diagnosticLatestSlowEvent();
+    return `<section role="tabpanel" data-diagnostics-panel="performance"><div class="diagnostic-detail-strip"><div><span>Slow operations</span><strong>${slow.length}</strong></div><div><span>Worst duration</span><strong>${diagnosticWorstDuration()} ms</strong></div><div><span>Latest slow operation</span><strong>${escapeHtml(latest ? valueFor(latest, "operation", "—") : "—")}</strong></div></div>${panel("UI responsiveness", `<div class="table-scroll"><table class="data-table"><thead><tr><th>Time</th><th>Severity</th><th>Kind</th><th>Operation</th><th>Duration</th><th>Subject</th><th>Active during stall</th></tr></thead><tbody>${diagnosticPerformanceRows()}</tbody></table></div>`)}</section>`;
+  };
   const renderDiagnosticsPanel = (book, summary) => {
     if (state.diagnosticsTab === "tasks") return renderDiagnosticsTasks();
+    if (state.diagnosticsTab === "performance") return renderDiagnosticsPerformance();
     if (state.diagnosticsTab === "summary") return renderDiagnosticsSummary(book, summary);
     return `<section role="tabpanel" data-diagnostics-panel="${state.diagnosticsTab}"><p class="empty-copy">${escapeHtml(state.diagnosticsTab)} diagnostics are loading.</p></section>`;
   };

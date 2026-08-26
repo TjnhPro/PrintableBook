@@ -948,6 +948,31 @@ test("Diagnostics Tasks retains only twenty worker rows", () => {
   assert.doesNotMatch(content.innerHTML, /Recent logs/);
 });
 
+test("Diagnostics Performance excludes zero-duration lifecycle noise", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("diagnostics");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: diagnosticsSnapshot() } });
+  messageHandler({ data: { version: 1, id: "diagnostics", ok: true, command: "diagnostics.snapshot", payload: [
+    { timestamp: "2026-08-26T11:21:00Z", severity: 0, operation: "task.queued", durationMilliseconds: 0 },
+    { timestamp: "2026-08-26T11:21:10Z", severity: 0, operation: "task.started", durationMilliseconds: 0 },
+    { timestamp: "2026-08-26T11:21:20Z", severity: 2, operation: "snapshot.refresh", durationMilliseconds: 4510 },
+    { timestamp: "2026-08-26T11:21:30Z", severity: 2, operation: "worker.LibraryRefresh", durationMilliseconds: 4576 },
+    { timestamp: "2026-08-26T11:21:40Z", severity: 0, operation: "task.completed", durationMilliseconds: 0 }
+  ] } });
+  const target = { dataset: { action: "diagnostics-tab", diagnosticsTab: "performance" } };
+  target.closest = () => target;
+  contentListeners.click({ target });
+
+  assert.match(content.innerHTML, /Slow operations[\s\S]*?>2</);
+  assert.match(content.innerHTML, /Worst duration[\s\S]*?>4576 ms</);
+  assert.match(content.innerHTML, /Latest slow operation[\s\S]*?>worker\.LibraryRefresh</);
+  assert.match(content.innerHTML, /snapshot\.refresh/);
+  assert.match(content.innerHTML, /worker\.LibraryRefresh/);
+  assert.doesNotMatch(content.innerHTML, /task\.queued/);
+  assert.doesNotMatch(content.innerHTML, /task\.started/);
+  assert.doesNotMatch(content.innerHTML, /task\.completed/);
+  assert.doesNotMatch(content.innerHTML, /Background workers/);
+});
+
 test("Diagnostics route requests and renders sanitized responsiveness events", () => {
   const { messageHandler, content, routeButtons, messages } = loadBridge("diagnostics");
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: {
