@@ -84,6 +84,22 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     "Activate at least one Interior page before processing."));
             }
 
+            var introRequests = command.EffectiveIntroTemplatePages
+                .Select((sourceFile, index) => new InteriorPagePipelineRequest(
+                    workspace,
+                    sourceFile,
+                    $"intro-{index + 1:D4}",
+                    command.ArtworkDetectionThreshold,
+                    command.PreparedArtworkSize,
+                    command.WorkingPageSize,
+                    command.FinalPageSize,
+                    command.TargetInteriorDensity,
+                    null,
+                    FrameMode.Disabled,
+                    command.ArtworkSourceNormalization,
+                    command.BorderLineDetection,
+                    InteriorPageProcessingKind.IntroTemplate))
+                .ToArray();
             var interiorRequests = activeInteriorSources
                 .Select(item => new InteriorPagePipelineRequest(
                     workspace,
@@ -99,14 +115,26 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     command.ArtworkSourceNormalization,
                     command.BorderLineDetection))
                 .ToArray();
-            state = await BeginStepAsync(state, "interior-pages", cancellationToken);
             await using var concurrencyController = BookPageConcurrencyController.Create(command.MaximumPageConcurrency);
-            var pageResults = await new BoundedInteriorPageBatchProcessor(interiorPagePipeline)
-                .ProcessAsync(
-                    interiorRequests,
+            var pageBatchProcessor = new BoundedInteriorPageBatchProcessor(interiorPagePipeline);
+            IReadOnlyList<InteriorPageProcessingResult> introResults = [];
+            if (introRequests.Length > 0)
+            {
+                state = await BeginStepAsync(state, "intro-pages", cancellationToken);
+                introResults = await pageBatchProcessor.ProcessAsync(
+                    introRequests,
                     concurrencyController,
-                    (completed, total) => progress?.Invoke(new BookProcessingProgress(command.BookId, BookProcessingStatus.Running, "interior-pages", completed, total)),
+                    (completed, total) => progress?.Invoke(new BookProcessingProgress(command.BookId, BookProcessingStatus.Running, "intro-pages", completed, total)),
                     cancellationToken);
+                state = await CompleteStepAsync(state, "intro-pages", cancellationToken);
+            }
+
+            state = await BeginStepAsync(state, "interior-pages", cancellationToken);
+            var pageResults = await pageBatchProcessor.ProcessAsync(
+                interiorRequests,
+                concurrencyController,
+                (completed, total) => progress?.Invoke(new BookProcessingProgress(command.BookId, BookProcessingStatus.Running, "interior-pages", completed, total)),
+                cancellationToken);
             state = await CompleteStepAsync(state, "interior-pages", cancellationToken);
 
             state = await BeginStepAsync(state, "shuffle", cancellationToken);
@@ -130,9 +158,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             state = await BeginStepAsync(state, "assembly", cancellationToken);
             var assembly = await bookAssembler.AssembleAsync(new OrderedBookAssemblyRequest(
                 workspace,
-                command.Mode == BookProcessingMode.InteriorOnly
-                    ? []
-                    : source.GetAssets(BookAssetKind.Intro).Select(asset => new FileReference(asset.Reference)).ToArray(),
+                introResults.Select(result => result.FinalPage).ToArray(),
                 pageResults,
                 shuffleMap!,
                 command.FinalPageSize,
@@ -205,8 +231,9 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         }
         catch (InteriorPageProcessingException failure)
         {
-            var processingFailure = new ProcessingFailure("interior.page_failed", failure.Message);
-            state = state.Fail("interior-pages", processingFailure, DateTimeOffset.UtcNow);
+            var isIntro = failure.ProcessingKind == InteriorPageProcessingKind.IntroTemplate;
+            var processingFailure = new ProcessingFailure(isIntro ? "intro.page_failed" : "interior.page_failed", failure.Message);
+            state = state.Fail(isIntro ? "intro-pages" : "interior-pages", processingFailure, DateTimeOffset.UtcNow);
             await stateStore.SaveErrorAsync(workspace, processingFailure, CancellationToken.None);
             await PersistStateAsync(state, "book.failed", processingFailure.Message, CancellationToken.None);
             return new BookProcessingQueueBookResult(command.BookId, BookProcessingStatus.Failed, processingFailure, null);
@@ -255,7 +282,8 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             command.CoverPdfPageSize.WidthInches, command.CoverPdfPageSize.HeightInches,
             command.InteriorPdfPageSize.WidthInches, command.InteriorPdfPageSize.HeightInches,
             command.MaximumPageConcurrency, command.ArtworkDetectionThreshold.Value,
-            command.Frame?.Value, command.Mode);
+            command.Frame?.Value, command.Mode,
+            string.Join(';', command.EffectiveIntroTemplatePages.Select(page => page.Value)));
 
     private static BookAsset SelectCover(BookSource source, FileReference? selectedCover)
     {
