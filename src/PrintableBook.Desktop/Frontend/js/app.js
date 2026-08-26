@@ -9,6 +9,8 @@
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
   const discovery = () => valueFor(window.appSnapshot, "discovery", {});
   const books = () => valueFor(discovery(), "books", []);
+  const brands = () => valueFor(discovery(), "brands", []);
+  const activeBrand = () => brands().find((brand) => valueFor(brand, "name", "") === (state.selectedBrand || brandSelect?.value || "")) ?? null;
   const summaries = () => valueFor(window.appSnapshot, "bookSummaries", []);
   const bookId = (book) => valueFor(valueFor(book, "id", {}), "value", valueFor(book, "name", ""));
   const summaryFor = (book) => summaries().find((summary) => valueFor(valueFor(summary, "bookId", {}), "value", "") === bookId(book));
@@ -164,7 +166,7 @@
   const clearInteriorDraft = (id) => state.bookInteriorDrafts.delete(id);
   const hasInteriorDraft = (id) => {
     const draft = interiorDraftFor(id);
-    return Boolean(draft && (draft.hasBackground !== undefined || draft.assets.size));
+    return Boolean(draft && (draft.hasBackground !== undefined || draft.hasIntro !== undefined || draft.introTemplateKeys !== undefined || draft.assets.size));
   };
   const effectiveBackground = (book, summary) => {
     const draft = interiorDraftFor(bookId(book));
@@ -177,7 +179,7 @@
       frameMode: change?.frameMode ?? frameModeValue(valueFor(asset, "frameMode", "auto"))
     };
   };
-  const trimEmptyInteriorDraft = (id, draft) => { if (draft.hasBackground === undefined && draft.assets.size === 0) clearInteriorDraft(id); };
+  const trimEmptyInteriorDraft = (id, draft) => { if (draft.hasBackground === undefined && draft.hasIntro === undefined && draft.introTemplateKeys === undefined && draft.assets.size === 0) clearInteriorDraft(id); };
   const stageBackgroundChange = (book, summary, enabled) => {
     const id = bookId(book);
     const draft = interiorDraftFor(id, true);
@@ -195,11 +197,28 @@
     if (change.active === undefined && change.frameMode === undefined) draft.assets.delete(reference); else draft.assets.set(reference, change);
     trimEmptyInteriorDraft(id, draft);
   };
+  const effectiveIntro = (book, summary) => {
+    const draft = interiorDraftFor(bookId(book));
+    return {
+      hasIntro: draft?.hasIntro ?? valueFor(summary, "hasIntro", false),
+      keys: draft?.introTemplateKeys ?? valueFor(summary, "selectedIntroTemplateKeys", []) ?? []
+    };
+  };
+  const sameKeys = (left, right) => left.length === right.length && left.every((key, index) => key.toLowerCase() === String(right[index] ?? "").toLowerCase());
+  const stageIntroChange = (book, summary, hasIntro, keys) => {
+    const id = bookId(book);
+    const draft = interiorDraftFor(id, true);
+    const originalHasIntro = valueFor(summary, "hasIntro", false);
+    const originalKeys = valueFor(summary, "selectedIntroTemplateKeys", []) ?? [];
+    if (hasIntro === originalHasIntro) delete draft.hasIntro; else draft.hasIntro = hasIntro;
+    if (sameKeys(keys, originalKeys)) delete draft.introTemplateKeys; else draft.introTemplateKeys = [...keys];
+    trimEmptyInteriorDraft(id, draft);
+  };
   const interiorSavePayload = (id) => {
     const draft = interiorDraftFor(id);
     if (!draft) return null;
     const assets = [...draft.assets].map(([sourceReference, change]) => ({ sourceReference, ...(change.active !== undefined ? { active: change.active } : {}), ...(change.frameMode !== undefined ? { frameMode: change.frameMode } : {}) }));
-    return { bookId: id, ...(draft.hasBackground !== undefined ? { hasBackground: draft.hasBackground } : {}), assets };
+    return { bookId: id, ...(draft.hasBackground !== undefined ? { hasBackground: draft.hasBackground } : {}), ...(draft.hasIntro !== undefined ? { hasIntro: draft.hasIntro } : {}), ...(draft.introTemplateKeys !== undefined ? { brandName: state.selectedBrand || brandSelect?.value || "", introTemplateKeys: draft.introTemplateKeys } : {}), assets };
   };
   const updateInteriorSaveUi = () => {
     const id = state.selectedBookId;
@@ -207,7 +226,7 @@
     const controlsDisabled = processIsActive() || state.bookInteriorSavePending;
     const save = document.querySelector('[data-action="save-book-interior-settings"]');
     if (save) { save.disabled = !dirty || controlsDisabled; save.setAttribute("aria-busy", String(state.bookInteriorSavePending)); save.textContent = state.bookInteriorSavePending ? "Saving…" : "Save changes"; }
-    document.querySelectorAll('[data-action="set-book-background"], [data-action="set-interior-active"], [data-action="set-interior-frame-mode"]').forEach((control) => { control.disabled = controlsDisabled; });
+    document.querySelectorAll('[data-action="set-book-background"], [data-action="set-interior-active"], [data-action="set-interior-frame-mode"], [data-action="set-intro-mode"], [data-action="intro-add-template"], [data-action="intro-remove-template"], [data-action="intro-move-template"]').forEach((control) => { control.disabled = controlsDisabled; });
     const indicator = document.querySelector("[data-book-interior-unsaved]");
     if (indicator) indicator.hidden = !dirty;
   };
@@ -265,7 +284,7 @@
     if (state.selectedBookTab === "overview") {
       body = `<section class="book-overview"><div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Interior preflight</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div><p class="panel-note">Use Interior assets to review page previews and choose a frame mode per page.</p></section>`;
     }
-    if (state.selectedBookTab === "assets") body = `<section class="asset-background-setting"><label class="asset-background-toggle"><input type="checkbox" data-action="set-book-background" data-book-id="${escapeHtml(bookId(book))}" ${effectiveBackground(book, summary) ? "checked" : ""} ${processIsActive() || state.bookInteriorSavePending ? "disabled" : ""}> Use Brand background</label><span>Insert the selected Brand background after every active Interior page.</span></section>${renderFolderAssetWorkspace(book, summary)}`;
+    if (state.selectedBookTab === "assets") body = `${renderIntroTemplateWorkspace(book, summary)}<section class="asset-background-setting"><label class="asset-background-toggle"><input type="checkbox" data-action="set-book-background" data-book-id="${escapeHtml(bookId(book))}" ${effectiveBackground(book, summary) ? "checked" : ""} ${processIsActive() || state.bookInteriorSavePending ? "disabled" : ""}> Use Brand background</label><span>Insert the selected Brand background after every active Interior page.</span></section>${renderFolderAssetWorkspace(book, summary)}`;
     if (state.selectedBookTab === "assets" && !body) {
       const matchingAssets = assets.filter((asset) => `${valueFor(asset, "fileName", "")} ${valueFor(asset, "relativePath", "")} ${valueFor(asset, "kind", "")}`.toLowerCase().includes(state.assetFilter.toLowerCase()));
       if (!matchingAssets.some((asset) => valueFor(asset, "sourceReference", "") === state.selectedAssetReference)) state.selectedAssetReference = valueFor(matchingAssets[0], "sourceReference", "");
@@ -303,6 +322,24 @@
     if (state.selectedBookTab === "outputs") body = panel("Published outputs", artifacts.length ? `<ul class="artifact-list">${artifacts.map((artifact) => `<li>${escapeHtml(String(artifact).split(/[\\/]/).pop())}</li>`).join("")}</ul>` : "<p class=\"empty-copy\">No published output yet.</p>");
     if (state.selectedBookTab === "logs") body = panel("Workspace logs", logs.length ? `<table class="data-table"><thead><tr><th>Time</th><th>Event</th><th>Detail</th></tr></thead><tbody>${logs.map((log) => `<tr><td>${dateTime(valueFor(log, "timestamp", null))}</td><td>${escapeHtml(valueFor(log, "eventName", ""))}</td><td>${escapeHtml(valueFor(log, "detail", ""))}</td></tr>`).join("")}</tbody></table>` : "<p class=\"empty-copy\">No workspace log entries yet.</p>");
     return `<div class="book-heading"><div><h2>${escapeHtml(valueFor(book, "name", ""))}</h2><p>Interior-only production workspace</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book">Process Interior</button></div></div><nav class="detail-tabs">${tabButton("overview", "Overview")}${tabButton("assets", `Interior assets (${assets.filter((asset) => valueFor(asset, "kind", "") === "Interior").length})`)}${tabButton("validation", "Validation")}${tabButton("processing", "Processing")}${tabButton("outputs", "Outputs")}${tabButton("logs", "Logs")}</nav><div class="tab-body">${body}</div>`;
+  };
+
+  const renderIntroTemplateWorkspace = (book, summary) => {
+    const brand = activeBrand();
+    const allTemplates = valueFor(brand, "introTemplateAssets", []) ?? [];
+    const templates = allTemplates.filter((asset) => /\.(png|jpe?g)$/i.test(valueFor(asset, "fileName", "")));
+    const selection = effectiveIntro(book, summary);
+    const byKey = new Map(templates.map((asset) => [String(valueFor(asset, "key", "")).toLowerCase(), asset]));
+    const selected = selection.keys.map((key) => byKey.get(String(key).toLowerCase())).filter(Boolean);
+    const available = templates.filter((asset) => !selection.keys.some((key) => String(key).toLowerCase() === String(valueFor(asset, "key", "")).toLowerCase()));
+    const disabled = processIsActive() || state.bookInteriorSavePending;
+    const selectedTile = (asset, index) => {
+      const key = valueFor(asset, "key", "");
+      return `<article class="intro-template-tile"><span class="intro-template-preview">${localImageMarkup(asset, `Intro template ${valueFor(asset, "fileName", "")}`, "Image unavailable")}</span><strong title="${escapeHtml(valueFor(asset, "fileName", ""))}">${escapeHtml(valueFor(asset, "fileName", ""))}</strong><div class="intro-template-actions"><button class="button-secondary" data-action="intro-move-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-index="${index}" data-intro-direction="up" aria-label="Move ${escapeHtml(valueFor(asset, "fileName", ""))} earlier" ${index === 0 || disabled ? "disabled" : ""}>Earlier</button><button class="button-secondary" data-action="intro-move-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-index="${index}" data-intro-direction="down" aria-label="Move ${escapeHtml(valueFor(asset, "fileName", ""))} later" ${index === selected.length - 1 || disabled ? "disabled" : ""}>Later</button><button class="button-secondary" data-action="intro-remove-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-key="${escapeHtml(key)}" ${disabled ? "disabled" : ""}>Remove</button></div></article>`;
+    };
+    const availableOption = (asset) => `<button class="intro-template-add" data-action="intro-add-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-key="${escapeHtml(valueFor(asset, "key", ""))}" ${disabled ? "disabled" : ""}>${localImageMarkup(asset, `Available template ${valueFor(asset, "fileName", "")}`, "Image unavailable")}<span>${escapeHtml(valueFor(asset, "fileName", ""))}</span><small>Add</small></button>`;
+    const brandCopy = brand ? `${escapeHtml(valueFor(brand, "name", ""))} · ${templates.length} eligible local template${templates.length === 1 ? "" : "s"}` : "Choose a Brand in the header to see local templates.";
+    return `<section class="intro-template-workspace"><div class="intro-template-heading"><div><h3>Intro template pages</h3><p>${brandCopy}</p></div><span class="status-badge ${selection.hasIntro ? "status-warn" : "status-muted"}">${selection.hasIntro ? "Custom order" : "Automatic"}</span></div><fieldset class="intro-mode-choice" ${disabled ? "disabled" : ""}><legend>Intro source</legend><label><input type="radio" name="intro-mode" data-action="set-intro-mode" data-book-id="${escapeHtml(bookId(book))}" value="auto" ${selection.hasIntro ? "" : "checked"}> Automatic <small>Use every eligible template in filename order.</small></label><label><input type="radio" name="intro-mode" data-action="set-intro-mode" data-book-id="${escapeHtml(bookId(book))}" value="custom" ${selection.hasIntro ? "checked" : ""}> Custom <small>Select exact pages and their print order.</small></label></fieldset>${selection.hasIntro ? `<div class="intro-template-selection"><div><h4>Selected order</h4><p>${selected.length ? "Intro pages process before Interior pages." : "Add at least one template to make this Book ready."}</p></div><div class="intro-template-grid">${selected.length ? selected.map(selectedTile).join("") : "<p class=\"empty-copy\">No Intro templates selected.</p>"}</div>${available.length ? `<div class="intro-template-available"><h4>Add available template</h4><div class="intro-template-add-grid">${available.map(availableOption).join("")}</div></div>` : ""}</div>` : `<p class="panel-note">Automatic mode is non-destructive: custom choices stay saved and are reused when you switch back to Custom.</p>`}</section>`;
   };
 
   const renderFolderAssetWorkspace = (book, summary) => {
@@ -614,6 +651,24 @@
         send("book.interior.settings.save", payload);
       }
     }
+    if (action === "intro-add-template" || action === "intro-remove-template" || action === "intro-move-template") {
+      const book = books().find((item) => bookId(item) === target.dataset.bookId);
+      if (book) {
+        const summary = summaryFor(book);
+        const current = effectiveIntro(book, summary);
+        let keys = [...current.keys];
+        if (action === "intro-add-template") keys.push(target.dataset.introKey);
+        if (action === "intro-remove-template") keys = keys.filter((key) => key.toLowerCase() !== target.dataset.introKey.toLowerCase());
+        if (action === "intro-move-template") {
+          const index = Number(target.dataset.introIndex);
+          const next = target.dataset.introDirection === "up" ? index - 1 : index + 1;
+          if (Number.isInteger(index) && next >= 0 && next < keys.length) [keys[index], keys[next]] = [keys[next], keys[index]];
+        }
+        stageIntroChange(book, summary, true, keys);
+        status.textContent = "Unsaved Intro and Interior changes";
+        render("books", false);
+      }
+    }
     if (action === "queue-book") { const id = target.dataset.bookId; if (target.checked) state.selectedBookIds.add(id); else state.selectedBookIds.delete(id); }
     if (action === "queue-selected-book") { if (state.selectedBookId) state.selectedBookIds.add(state.selectedBookId); render("process"); }
     if (action === "book-tab") { state.selectedBookTab = target.dataset.bookTab; render("books", false); }
@@ -651,6 +706,16 @@
     if (event.target.dataset.action === "set-book-background") {
       const book = books().find((item) => bookId(item) === event.target.dataset.bookId);
       if (book) { stageBackgroundChange(book, summaryFor(book), event.target.checked); status.textContent = "Unsaved Interior changes"; updateInteriorSaveUi(); }
+    }
+    if (event.target.dataset.action === "set-intro-mode") {
+      const book = books().find((item) => bookId(item) === event.target.dataset.bookId);
+      if (book) {
+        const summary = summaryFor(book);
+        const current = effectiveIntro(book, summary);
+        stageIntroChange(book, summary, event.target.value === "custom", current.keys);
+        status.textContent = "Unsaved Intro and Interior changes";
+        render("books", false);
+      }
     }
     if (event.target.dataset.action === "set-interior-active" || event.target.dataset.action === "set-interior-frame-mode") {
       const book = books().find((item) => bookId(item) === event.target.dataset.bookId);

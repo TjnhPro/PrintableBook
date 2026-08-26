@@ -568,6 +568,32 @@ test("Book Interior edits stay local until one explicit save request", () => {
   });
 });
 
+test("Book detail configures an ordered custom Intro template selection from the active Brand", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "intro-draft", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [{ name: "Demo", introTemplateAssets: [
+      { key: "first.png", fileName: "first.png", sourceReference: "brand/IntroTemplate/first.png", localImageUrl: "file:///first.png" },
+      { key: "second.png", fileName: "second.png", sourceReference: "brand/IntroTemplate/second.png", localImageUrl: "file:///second.png" }
+    ] }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{ bookId: { value: "Book 001" }, hasIntro: false, selectedIntroTemplateKeys: [], validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [] }]
+  } } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
+  contentListeners.click({ target: assetsTab });
+  assert.match(content.innerHTML, /Intro template pages/);
+  assert.match(content.innerHTML, /Automatic/);
+
+  contentListeners.change({ target: { dataset: { action: "set-intro-mode", bookId: "Book 001" }, value: "custom" } });
+  const add = { dataset: { action: "intro-add-template", bookId: "Book 001", introKey: "second.png" }, closest: () => add };
+  contentListeners.click({ target: add });
+  const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
+  contentListeners.click({ target: save });
+
+  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", hasIntro: true, brandName: "Demo", introTemplateKeys: ["second.png"], assets: [] });
+});
+
 test("Books render direct Cover and Interior local image URLs and replace a failed image locally", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-asset", ok: true, command: "app.snapshot", payload: {
