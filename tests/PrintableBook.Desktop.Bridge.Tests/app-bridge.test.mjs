@@ -18,11 +18,22 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   const contentListeners = {};
   const documentListeners = {};
   const searchInput = { focused: false, selection: null, focus() { this.focused = true; }, setSelectionRange(start, end) { this.selection = [start, end]; } };
+  let contentMarkup = "";
+  let fullRenderCount = 0;
+  let introWorkspaceRenderCount = 0;
+  const introPaginationFocus = { action: "", focus() { this.action = "focused"; } };
   const content = {
-    innerHTML: "",
+    get innerHTML() { return contentMarkup; },
+    set innerHTML(markup) { fullRenderCount += 1; contentMarkup = markup; },
     addEventListener: (eventName, handler) => { contentListeners[eventName] = handler; },
-    insertAdjacentHTML: (_position, markup) => { content.innerHTML += markup; },
+    insertAdjacentHTML: (_position, markup) => { contentMarkup += markup; },
     querySelector: (selector) => selector === '[data-action="pdf-library-search"]' ? searchInput : null
+  };
+  const introWorkspace = {
+    set outerHTML(markup) {
+      introWorkspaceRenderCount += 1;
+      contentMarkup = contentMarkup.replace(/<section class="intro-template-workspace">[\s\S]*?<\/section>/, markup);
+    }
   };
   const brandSelectListeners = {};
   const brandSelect = { innerHTML: "", value: "", addEventListener: (eventName, handler) => { brandSelectListeners[eventName] = handler; } };
@@ -63,14 +74,19 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
       getElementById: (id) => ({ "bridge-status": status, "app-content": content, "brand-select": brandSelect, "refresh-button": refreshButton }[id]),
       createElement: (tagName) => ({ tagName, className: "", textContent: "", attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } }),
       querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : [],
-      querySelector: (selector) => selector === "[data-brand-settings]" ? brandSettingsEditor : selector === ".nav-item-active" && activeRoute ? { dataset: { route: activeRoute } } : null,
+      querySelector: (selector) => {
+        if (selector === "[data-brand-settings]") return brandSettingsEditor;
+        if (selector === ".intro-template-workspace" && contentMarkup.includes('class="intro-template-workspace"')) return introWorkspace;
+        if (selector.startsWith('[data-action="intro-template-page"]')) return introPaginationFocus;
+        return selector === ".nav-item-active" && activeRoute ? { dataset: { route: activeRoute } } : null;
+      },
       addEventListener: (eventName, handler) => { documentListeners[eventName] = handler; }
     },
     window: browserWindow,
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSelect, brandSelectListeners, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages, browserWindow, searchInput };
+  return { messageHandler, status, content, brandSelect, brandSelectListeners, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages, browserWindow, searchInput, getFullRenderCount: () => fullRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -609,8 +625,8 @@ test("Book detail configures an ordered custom Intro selection from Book interio
   assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", hasIntro: true, introSourceReferences: ["Book interior/page-003.png"], assets: [] });
 });
 
-test("Interior settings pages Intro templates six cards at a time", () => {
-  const { messageHandler, content, contentListeners } = loadBridge("books");
+test("Interior settings pages Intro templates without redrawing the Book drawer", () => {
+  const { messageHandler, content, contentListeners, getFullRenderCount, getIntroWorkspaceRenderCount, introPaginationFocus } = loadBridge("books");
   const templates = Array.from({ length: 7 }, (_, index) => ({ key: `intro-${index + 1}.png`, fileName: `intro-${index + 1}.png`, localImageUrl: `file:///intro-${index + 1}.png` }));
   messageHandler({ data: { version: 1, id: "intro-page", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Demo", introTemplateAssets: templates }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
@@ -627,9 +643,13 @@ test("Interior settings pages Intro templates six cards at a time", () => {
   assert.match(content.innerHTML, /1–6 of 7/);
 
   const next = { dataset: { action: "intro-template-page", introTemplatePage: "next" }, closest: () => next };
+  const fullRendersBeforeNext = getFullRenderCount();
   contentListeners.click({ target: next });
   assert.match(content.innerHTML, /intro-7\.png/);
   assert.match(content.innerHTML, /Page 2 of 2/);
+  assert.equal(getIntroWorkspaceRenderCount(), 1);
+  assert.equal(getFullRenderCount(), fullRendersBeforeNext);
+  assert.equal(introPaginationFocus.action, "focused");
 });
 
 test("Adding to a persisted custom Intro submits asset source references instead of stored source keys", () => {

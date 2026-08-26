@@ -57,7 +57,7 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("close-book-drawer", script, StringComparison.Ordinal);
         Assert.Contains("event.key !== \"Escape\"", script, StringComparison.Ordinal);
         Assert.Contains("align-items:flex-end", layout, StringComparison.Ordinal);
-        Assert.Contains("height:min(75dvh,760px)", layout, StringComparison.Ordinal);
+        Assert.Contains("height:100dvh", layout, StringComparison.Ordinal);
         Assert.Contains("@keyframes pb-bottom-sheet-in", layout, StringComparison.Ordinal);
         Assert.DoesNotContain("width:75vw", layout, StringComparison.Ordinal);
     }
@@ -91,6 +91,8 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("tabButton(\"settings\", \"Interior settings\")", script, StringComparison.Ordinal);
         Assert.Contains("const introPageSize = 6", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"intro-template-page\"", script, StringComparison.Ordinal);
+        Assert.Contains("const refreshIntroTemplateWorkspace", script, StringComparison.Ordinal);
+        Assert.Contains("workspace.outerHTML = renderIntroTemplateWorkspace", script, StringComparison.Ordinal);
         Assert.DoesNotContain("tabButton(\"validation\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain("tabButton(\"processing\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain("tabButton(\"outputs\"", script, StringComparison.Ordinal);
