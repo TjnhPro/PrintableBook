@@ -708,6 +708,20 @@ test("PDF Library shows the existing fallback when a representative cover is una
   assert.match(content.innerHTML, /Cover unavailable/);
 });
 
+test("PDF Library switches between Grid and List without changing page size", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: manyPdfLibrarySnapshot(13) } });
+
+  assert.match(content.innerHTML, /pdf-library-grid/);
+  assert.match(content.innerHTML, /data-pdf-library-view="grid"/);
+  assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 12);
+  const list = { dataset: { action: "pdf-library-view", pdfLibraryView: "list" }, closest: () => list };
+  contentListeners.click({ target: list });
+  assert.match(content.innerHTML, /pdf-library-list/);
+  assert.match(content.innerHTML, /aria-pressed="true"[^>]*>List</);
+  assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 12);
+});
+
 test("PDF Library search filters by Book name", () => {
   const { messageHandler, content, contentListeners, messages, searchInput } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
