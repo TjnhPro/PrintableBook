@@ -57,10 +57,11 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
         try
         {
             activeSearchDepth = activeSettings.Pass1SearchDepth;
-            var first = MeasurePass(request, cancellationToken);
-            if (first.Detection.HasBorder) return first;
+            var first = MeasurePass(request, 1, cancellationToken);
+            if (first.Detection.HasBorder) return new BorderLineMeasurement(first.ImageSize, first.Detection, first, null, 1);
             activeSearchDepth = activeSettings.Pass2SearchDepth;
-            return MeasurePass(request, cancellationToken);
+            var second = MeasurePass(request, 2, cancellationToken);
+            return new BorderLineMeasurement(second.ImageSize, second.Detection, first, second, second.Detection.HasBorder ? 2 : null);
         }
         finally
         {
@@ -69,8 +70,9 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
         }
     }
 
-    private static BorderLineMeasurement MeasurePass(
+    private static BorderLinePassMeasurement MeasurePass(
         BorderLineDetectionRequest request,
+        int passNumber,
         CancellationToken cancellationToken)
     {
 
@@ -103,7 +105,10 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
             ? BorderLineDetectionResult.NoBorder()
             : CreateDetection(selected, imageWidth, imageHeight);
 
-        return new BorderLineMeasurement(
+        return new BorderLinePassMeasurement(
+            passNumber,
+            SearchDepth,
+            CornerSearchSize,
             new ImageSize(imageWidth, imageHeight),
             detection,
             left,

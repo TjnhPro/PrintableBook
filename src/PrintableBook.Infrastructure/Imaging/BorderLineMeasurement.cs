@@ -4,9 +4,28 @@ using PrintableBook.Core.Application.Processing;
 namespace PrintableBook.Infrastructure.Imaging;
 
 /// <summary>
-/// Diagnostic evidence produced by the V2 outer-frame detector. It remains an Infrastructure concern.
+/// Diagnostic evidence produced by the V3 two-pass outer-frame detector. It remains an Infrastructure concern.
 /// </summary>
 public sealed record BorderLineMeasurement(
+    ImageSize ImageSize,
+    BorderLineDetectionResult Detection,
+    BorderLinePassMeasurement Pass1,
+    BorderLinePassMeasurement? Pass2,
+    int? SelectedPass)
+{
+    private BorderLinePassMeasurement Selected => SelectedPass == 2 ? Pass2! : Pass1;
+    public BorderTrackSideMeasurement Left => Selected.Left;
+    public BorderTrackSideMeasurement Right => Selected.Right;
+    public BorderTrackSideMeasurement Top => Selected.Top;
+    public BorderTrackSideMeasurement Bottom => Selected.Bottom;
+    public IReadOnlyList<BorderFrameCandidate> FrameCandidates => Selected.FrameCandidates;
+    public IReadOnlyList<BorderCornerEvidence> CornerEvidence => Selected.CornerEvidence;
+}
+
+public sealed record BorderLinePassMeasurement(
+    int PassNumber,
+    int SearchDepth,
+    int CornerSearchSize,
     ImageSize ImageSize,
     BorderLineDetectionResult Detection,
     BorderTrackSideMeasurement Left,
