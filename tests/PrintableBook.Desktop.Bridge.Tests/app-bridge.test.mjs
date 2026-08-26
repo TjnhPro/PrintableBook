@@ -752,6 +752,43 @@ test("PDF Library List uses bounded thumbnails and verbose output actions", () =
   assert.match(css, /\.pdf-library-book-list \.pdf-library-book-preview \{ width:96px;/);
 });
 
+test("PDF Library keeps paging local, preserves it across view changes, and opens an artifact from page two", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: manyPdfLibrarySnapshot(25) } });
+  const messageCount = messages.length;
+  const click = (action, dataset = {}) => {
+    const target = { dataset: { action, ...dataset }, closest: () => target };
+    contentListeners.click({ target });
+  };
+
+  click("pdf-library-page", { pdfLibraryPage: "next" });
+  click("pdf-library-view", { pdfLibraryView: "list" });
+  assert.match(content.innerHTML, /Page 2 of 3/);
+  assert.match(content.innerHTML, /pdf-library-list/);
+  assert.equal(messages.length, messageCount);
+
+  const artifactReference = "D:\\PrintableBook\\sources\\Book 13\\Output\\Book 13 - Interior.pdf";
+  click("open-output", { bookId: "Book 13", artifactReference });
+  assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.open", payload: { bookId: "Book 13", artifactReference } });
+});
+
+test("PDF Library resets and clamps pagination when sorting, filtering, or refreshing changes its result set", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: manyPdfLibrarySnapshot(25) } });
+  const messageCount = messages.length;
+  const last = { dataset: { action: "pdf-library-page", pdfLibraryPage: "last" }, closest: () => last };
+  contentListeners.click({ target: last });
+  assert.match(content.innerHTML, /Page 3 of 3/);
+
+  contentListeners.change({ target: { dataset: { action: "pdf-library-sort" }, value: "name" } });
+  assert.match(content.innerHTML, /Page 1 of 3/);
+  contentListeners.click({ target: last });
+  messageHandler({ data: { version: 1, id: "smaller", ok: true, command: "app.snapshot", payload: manyPdfLibrarySnapshot(10) } });
+  assert.match(content.innerHTML, /Page 1 of 1/);
+  assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 10);
+  assert.equal(messages.length, messageCount);
+});
+
 test("PDF Library search filters by Book name", () => {
   const { messageHandler, content, contentListeners, messages, searchInput } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
