@@ -473,6 +473,71 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Interior_settings_save_is_rejected_when_process_start_wins_the_transition_gate()
+    {
+        var process = new GatedProcessSessionService();
+        var settings = new GatedBookInteriorSettingsService();
+        var router = CreateGatedRouter(process, settings);
+
+        var start = router.HandleAsync(ProcessStartRequest()).AsTask();
+        await process.StartEntered.Task;
+        var mutation = router.HandleAsync(InteriorSettingsSaveRequest()).AsTask();
+        Assert.False(mutation.IsCompleted);
+
+        process.AllowStart.TrySetResult(null);
+        Assert.True((await start).Ok);
+        var response = await mutation;
+
+        Assert.Equal("processing_active", response.Error);
+        Assert.Equal(0, settings.SaveCalls);
+    }
+
+    [Fact]
+    public async Task Process_start_waits_for_an_inflight_interior_settings_save()
+    {
+        var process = new GatedProcessSessionService(pauseStart: false);
+        var settings = new GatedBookInteriorSettingsService(pauseSave: true);
+        var router = CreateGatedRouter(process, settings);
+
+        var mutation = router.HandleAsync(InteriorSettingsSaveRequest()).AsTask();
+        await settings.SaveEntered.Task;
+        var start = router.HandleAsync(ProcessStartRequest()).AsTask();
+        Assert.False(start.IsCompleted);
+
+        settings.AllowSave.TrySetResult(null);
+        Assert.True((await mutation).Ok);
+        Assert.True((await start).Ok);
+        Assert.Equal(1, settings.SaveCalls);
+    }
+
+    [Fact]
+    public async Task Process_start_releases_the_transition_gate_before_a_following_interior_mutation()
+    {
+        var process = new GatedProcessSessionService(pauseStart: false);
+        var settings = new GatedBookInteriorSettingsService();
+        var router = CreateGatedRouter(process, settings);
+
+        Assert.True((await router.HandleAsync(ProcessStartRequest())).Ok);
+        var mutation = await router.HandleAsync(InteriorSettingsSaveRequest());
+
+        Assert.Equal("processing_active", mutation.Error);
+        Assert.Equal(0, settings.SaveCalls);
+    }
+
+    [Fact]
+    public async Task Process_cancel_is_not_blocked_by_the_transition_gate()
+    {
+        var gate = new ProcessingMutationGate();
+        var process = new GatedProcessSessionService(pauseStart: false);
+        var router = new WebViewBridgeRouter(processSessionService: process, processingMutationGate: gate);
+
+        await using var held = await gate.EnterAsync();
+        var response = await router.HandleAsync("""{"version":1,"id":"cancel","command":"process.cancel"}""");
+
+        Assert.True(response.Ok);
+    }
+
+    [Fact]
     public async Task ProcessStatusIsProvidedByTheCSharpSessionOwner()
     {
         var id = new BookId("Book One");
@@ -520,6 +585,15 @@ public sealed class BridgeMessageContractTests
         Assert.Same(cancelling, cancelled.Payload);
         Assert.True(((ProcessSessionSnapshot)cancelled.Payload!).IsCancelling);
     }
+
+    private static WebViewBridgeRouter CreateGatedRouter(GatedProcessSessionService process, GatedBookInteriorSettingsService settings) =>
+        new(new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())), processSessionService: process, bookInteriorSettingsService: settings);
+
+    private static string ProcessStartRequest() =>
+        """{"version":1,"id":"start","command":"process.start","payload":{"bookIds":["Book One"],"brandName":"Brand","mode":"interior-only"}}""";
+
+    private static string InteriorSettingsSaveRequest() =>
+        """{"version":1,"id":"save","command":"book.interior.settings.save","payload":{"bookId":"Book One","assets":[{"sourceReference":"Book interior/page-001.png","active":false}]}}""";
 
     private sealed class StubSnapshotService(ApplicationSnapshot snapshot) : IApplicationSnapshotService
     {
@@ -741,6 +815,50 @@ public sealed class BridgeMessageContractTests
         public ValueTask SetHasBackgroundAsync(DiscoveredBook book, bool enabled, CancellationToken cancellationToken = default) { Background = (book.Id.Value, enabled); return ValueTask.CompletedTask; }
         public ValueTask SetActiveAsync(DiscoveredBook book, FileReference source, bool isActive, CancellationToken cancellationToken = default) { Active = (book.Id.Value, source.Value, isActive); return ValueTask.CompletedTask; }
         public ValueTask SaveAsync(DiscoveredBook book, BookInteriorSettingsChange change, CancellationToken cancellationToken = default) { Batch = change; return ValueTask.CompletedTask; }
+    }
+
+    private sealed class GatedProcessSessionService(bool pauseStart = true) : IProcessSessionService
+    {
+        private bool active;
+        public TaskCompletionSource<object?> StartEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<object?> AllowStart { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(Snapshot());
+
+        public async ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default)
+        {
+            active = true;
+            StartEntered.TrySetResult(null);
+            if (pauseStart) await AllowStart.Task.WaitAsync(cancellationToken);
+            return Snapshot();
+        }
+
+        public ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default)
+        {
+            active = false;
+            return ValueTask.FromResult(Snapshot());
+        }
+
+        public ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
+
+        private ProcessSessionSnapshot Snapshot() => new(active, false, "Brand", new BookId("Book One"), active ? "Running" : null, []);
+    }
+
+    private sealed class GatedBookInteriorSettingsService(bool pauseSave = false) : IBookInteriorSettingsService
+    {
+        public int SaveCalls { get; private set; }
+        public TaskCompletionSource<object?> SaveEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<object?> AllowSave { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ValueTask SetHasBackgroundAsync(DiscoveredBook book, bool enabled, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask SetActiveAsync(DiscoveredBook book, FileReference source, bool isActive, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+
+        public async ValueTask SaveAsync(DiscoveredBook book, BookInteriorSettingsChange change, CancellationToken cancellationToken = default)
+        {
+            SaveCalls++;
+            SaveEntered.TrySetResult(null);
+            if (pauseSave) await AllowSave.Task.WaitAsync(cancellationToken);
+        }
     }
 
     private sealed class ThrowingInteriorFrameModeService : IInteriorFrameModeService
