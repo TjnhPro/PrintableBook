@@ -267,14 +267,17 @@ public sealed class BorderLineLocalCorpusTests
         public ImageRectangle ToBorderBounds(uint rawWidth, uint rawHeight, int canonicalSize)
         {
             var left = Scale(Left, rawWidth, canonicalSize);
-            var right = Scale(Right, rawWidth, canonicalSize);
+            var right = ScaleInclusiveEnd(Right, rawWidth, canonicalSize);
             var top = Scale(Top, rawHeight, canonicalSize);
-            var bottom = Scale(Bottom, rawHeight, canonicalSize);
+            var bottom = ScaleInclusiveEnd(Bottom, rawHeight, canonicalSize);
             return new(new ImagePoint(left, top), new ImageSize(right - left + 1, bottom - top + 1));
         }
 
         private static int Scale(int coordinate, uint rawSize, int canonicalSize) =>
             (int)Math.Round(coordinate * canonicalSize / (double)rawSize, MidpointRounding.AwayFromZero);
+
+        private static int ScaleInclusiveEnd(int coordinate, uint rawSize, int canonicalSize) =>
+            (int)Math.Ceiling((coordinate + 1) * canonicalSize / (double)rawSize) - 1;
     }
 
     private static string? WriteDebugOverlay(
