@@ -426,6 +426,17 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.True(Array.FindIndex(entries, entry => entry.Event == "step.started" && entry.Step == "intro-pages") < Array.FindIndex(entries, entry => entry.Event == "step.started" && entry.Step == "interior-pages"));
         var shuffle = (await shuffleStore.LoadAsync(workspace))!;
         Assert.DoesNotContain(shuffle.Entries, entry => entry.Page == introOne || entry.Page == introTwo);
+
+        var fullBook = await processor.ProcessBookAsync(command with { Mode = BookProcessingMode.FullBook });
+        Assert.Equal(BookProcessingStatus.Completed, fullBook.Status);
+        using (var fullInteriorPdf = PdfReader.Open(fullBook.PublishedOutputs!.InteriorPdf.Value))
+        {
+            Assert.Equal(8, fullInteriorPdf.Pages.Count);
+        }
+
+        var shuffleBeforeIntroOrderChange = (await shuffleStore.LoadAsync(workspace))!;
+        Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command with { IntroTemplatePages = [introOne, introTwo] })).Status);
+        Assert.Equal(shuffleBeforeIntroOrderChange.Entries, (await shuffleStore.LoadAsync(workspace))!.Entries);
     }
 
     [Fact]
