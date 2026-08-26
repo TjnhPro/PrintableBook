@@ -103,7 +103,8 @@
 .pdf-library-result-count { margin-left:auto; padding-bottom:8px; color:var(--pb-muted); font-size:13px; }
 .pdf-library-book-grid { display:grid; grid-template-rows:auto auto minmax(0,1fr); min-width:0; height:100%; }
 .pdf-library-book-grid .pdf-library-book-header { padding:12px 14px; }
-.pdf-library-book-grid .pdf-library-title-row { min-width:0; flex-wrap:nowrap; }
+.pdf-library-book-grid .pdf-library-book-header > div { width:100%; min-width:0; }
+.pdf-library-book-grid .pdf-library-title-row { display:grid; grid-template-columns:minmax(0,1fr) auto; min-width:0; flex-wrap:nowrap; }
 .pdf-library-book-grid .pdf-library-title-row h2 { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .pdf-library-book-grid .pdf-library-title-row .status-badge { flex:0 0 auto; }
 .pdf-library-book-grid .pdf-library-files { align-content:start; }

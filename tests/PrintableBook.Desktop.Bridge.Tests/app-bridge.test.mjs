@@ -741,6 +741,8 @@ test("PDF Library Grid uses compact Book cards and the documented desktop column
   assert.match(css, /repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(css, /\.pdf-library-grid \{ display:grid; grid-template-columns:repeat\(3,minmax\(0,1fr\)\); grid-auto-rows:1fr;/);
   assert.match(css, /\.pdf-library-book-grid \{ display:grid; grid-template-rows:auto auto minmax\(0,1fr\); min-width:0; height:100%;/);
+  assert.match(css, /\.pdf-library-book-grid \.pdf-library-book-header > div \{ width:100%; min-width:0;/);
+  assert.match(css, /\.pdf-library-book-grid \.pdf-library-title-row \{ display:grid; grid-template-columns:minmax\(0,1fr\) auto; min-width:0;/);
   assert.match(css, /\.pdf-library-book-grid \.pdf-library-title-row h2 \{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;/);
   assert.match(css, /@media \(min-width:1450px\) \{ \.pdf-library-grid \{ grid-template-columns:repeat\(4,/);
 });
