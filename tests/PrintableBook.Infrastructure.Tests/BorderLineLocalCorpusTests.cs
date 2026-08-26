@@ -28,9 +28,12 @@ public sealed class BorderLineLocalCorpusTests
         var expectedBorderFrames = LoadExpectedBorderFrames(corpusDirectory);
         var resultsDirectory = Path.Combine(corpusDirectory, "results");
         var debugDirectory = Path.Combine(resultsDirectory, "debug");
+        var normalizedDirectory = Path.Combine(resultsDirectory, "normalized");
         Directory.CreateDirectory(resultsDirectory);
         Directory.CreateDirectory(debugDirectory);
+        Directory.CreateDirectory(normalizedDirectory);
         var detector = new MagickBorderLineDetector();
+        var normalizer = new MagickArtworkSourceNormalizer();
         var results = new List<BorderLineCorpusResult>();
         var reviewedInputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -75,15 +78,19 @@ public sealed class BorderLineLocalCorpusTests
                         continue;
                     }
 
-                    expectedBorderBounds = reviewedFrame.ToBorderBounds();
+                    using var raw = new MagickImage(input);
+                    expectedBorderBounds = reviewedFrame.ToBorderBounds(raw.Width, raw.Height, 2048);
                 }
 
                 var stopwatch = Stopwatch.StartNew();
                 try
                 {
+                    var canonical = Path.Combine(normalizedDirectory, $"{Path.GetFileNameWithoutExtension(input)}.{Guid.NewGuid():N}.png");
+                    await normalizer.NormalizeAsync(new ArtworkSourceNormalizationRequest(
+                        new FileReference(input), new FileReference(canonical), new ImageSize(2048, 2048)));
                     var measurement = await detector.MeasureAsync(new BorderLineDetectionRequest(
-                        new FileReference(input), new ArtworkDetectionThreshold(20)));
-                    var debugImage = WriteDebugOverlay(category.Name, input, debugDirectory, measurement.Detection);
+                        new FileReference(canonical), new ArtworkDetectionThreshold(20), BorderLineDetectionSettings.Default));
+                    var debugImage = WriteDebugOverlay(category.Name, canonical, debugDirectory, measurement.Detection);
                     stopwatch.Stop();
                     results.Add(BorderLineCorpusResult.Completed(
                         category.Name,
@@ -115,12 +122,15 @@ public sealed class BorderLineLocalCorpusTests
                 $"Reviewed outer-frame geometry exists for '{relativeInput}', but no matching borderart input was found."));
         }
 
-        var reportPath = Path.Combine(resultsDirectory, "borderline-v2-measurement-report.json");
+        var reportPath = Path.Combine(resultsDirectory, "borderline-v3-measurement-report.json");
         await File.WriteAllTextAsync(reportPath, JsonSerializer.Serialize(new
         {
             generatedUtc = DateTimeOffset.UtcNow,
             threshold = 20,
-            detectorVersion = "V2-segmented-outer-frame",
+            normalizationVersion = ArtworkSourceNormalizationAlgorithmVersion.Current,
+            detectorVersion = BorderLineAlgorithmVersion.Current,
+            canonicalSize = 2048,
+            settings = BorderLineDetectionSettings.Default,
             corpusDirectory,
             total = results.Count,
             passed = results.Count(result => result.Status == "PASS"),
@@ -254,8 +264,17 @@ public sealed class BorderLineLocalCorpusTests
 
     private sealed record ReviewedOuterFrame(int Left, int Right, int Top, int Bottom)
     {
-        public ImageRectangle ToBorderBounds() =>
-            new(new ImagePoint(Left, Top), new ImageSize(Right - Left + 1, Bottom - Top + 1));
+        public ImageRectangle ToBorderBounds(uint rawWidth, uint rawHeight, int canonicalSize)
+        {
+            var left = Scale(Left, rawWidth, canonicalSize);
+            var right = Scale(Right, rawWidth, canonicalSize);
+            var top = Scale(Top, rawHeight, canonicalSize);
+            var bottom = Scale(Bottom, rawHeight, canonicalSize);
+            return new(new ImagePoint(left, top), new ImageSize(right - left + 1, bottom - top + 1));
+        }
+
+        private static int Scale(int coordinate, uint rawSize, int canonicalSize) =>
+            (int)Math.Round(coordinate * canonicalSize / (double)rawSize, MidpointRounding.AwayFromZero);
     }
 
     private static string? WriteDebugOverlay(
