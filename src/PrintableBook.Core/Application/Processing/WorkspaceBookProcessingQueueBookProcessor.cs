@@ -39,8 +39,14 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 throw new BookProcessingFailureException("scan", scan.Failure!);
             }
 
+            var validation = BookSourceValidator.Validate(scan.Source!);
+            if (!validation.IsSuccess)
+            {
+                throw new BookProcessingFailureException("scan", validation.Failure!);
+            }
+
             state = await CompleteStepAsync(state, "scan", cancellationToken);
-            var source = scan.Source!;
+            var source = validation.Source;
             string? cover = null;
             if (command.Mode == BookProcessingMode.InteriorOnly)
             {

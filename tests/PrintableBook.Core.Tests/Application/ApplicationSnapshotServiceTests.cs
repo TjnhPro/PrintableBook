@@ -49,6 +49,18 @@ public sealed class ApplicationSnapshotServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_marks_a_book_invalid_when_discovery_only_found_unsupported_interior_files()
+    {
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(), new StubSettingsStore(), new UnsupportedInteriorScanner(), new StubStateStore(), new StubFileSystem(), new StubBookStorageMaintenance(0)).RefreshAsync();
+
+        var summary = Assert.Single(snapshot.BookSummaries);
+        Assert.Equal("Invalid", summary.ValidationStatus);
+        Assert.Contains(summary.ValidationChecks, check => check.Code == "book.interior_empty" && !check.IsSuccess);
+        Assert.Empty(summary.Assets!);
+    }
+
+    [Fact]
     public async Task RefreshAsync_requires_an_explicit_cover_selection_for_full_book_validation_when_multiple_covers_exist()
     {
         var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new MultipleCoverScanner(), new StubStateStore(), new StubFileSystem(), new StubBookStorageMaintenance(0)).RefreshAsync();
@@ -208,6 +220,13 @@ public sealed class ApplicationSnapshotServiceTests
         public ValueTask<BookSourceScanResult> ScanAsync(BookId bookId, DirectoryReference bookDirectory, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(BookSourceScanResult.Succeeded(new BookSource([
                 new BookAsset("page-1.jpg", BookAssetKind.Interior)])));
+    }
+
+    private sealed class UnsupportedInteriorScanner : IBookSourceScanner
+    {
+        public ValueTask<BookSourceScanResult> ScanAsync(BookId bookId, DirectoryReference bookDirectory, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(BookSourceScanResult.Succeeded(new BookSource([
+                new BookAsset("notes.txt", BookAssetKind.Interior)])));
     }
 
     private sealed class BookCoverScanner : IBookSourceScanner

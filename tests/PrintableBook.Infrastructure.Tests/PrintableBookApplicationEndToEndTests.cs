@@ -167,6 +167,33 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessBookAsync_rejects_an_unsupported_only_interior_after_discovery()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "UnsupportedInteriorBook"));
+        var interiorDirectory = Path.Combine(bookDirectory.Value, "Book interior");
+        Directory.CreateDirectory(interiorDirectory);
+        await File.WriteAllTextAsync(Path.Combine(interiorDirectory, "notes.txt"), "not an image");
+
+        var fileSystem = new PhysicalFileSystem();
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem),
+            new PhysicalBookWorkspaceFactory(fileSystem),
+            new JsonBookWorkspaceStateStore(fileSystem),
+            new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem),
+            CreatePagePipeline(),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new MagickPrintableBookPdfExporter(),
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+        var command = CreateCommand("unsupported-interior-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
+
+        var result = await processor.ProcessBookAsync(command);
+
+        Assert.Equal(BookProcessingStatus.Failed, result.Status);
+        Assert.Equal("book.interior_empty", result.Failure!.Code);
+    }
+
+    [Fact]
     public async Task ProcessBooksAsync_rejects_a_coverless_book_in_full_book_mode()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "CoverlessFullBook"));

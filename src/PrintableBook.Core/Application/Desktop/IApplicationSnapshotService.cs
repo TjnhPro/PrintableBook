@@ -64,8 +64,12 @@ public sealed class ApplicationSnapshotService(
             {
                 scan = await sourceScanner.ScanAsync(book.Id, book.Directory, cancellationToken);
             }
+            var validation = scan.IsSuccess ? BookSourceValidator.Validate(scan.Source!) : null;
+            var source = validation?.Source;
+            var sourceFailure = scan.Failure ?? validation?.Failure;
+            var isSourceValid = scan.IsSuccess && validation!.IsSuccess;
             var state = await stateStore.LoadAsync(book.Workspace, cancellationToken) ?? BookProcessingState.NotStarted(book.Id);
-            var coverCandidates = scan.Source?.GetAssets(BookAssetKind.Cover).Select(asset => asset.Reference).ToArray() ?? [];
+            var coverCandidates = source?.GetAssets(BookAssetKind.Cover).Select(asset => asset.Reference).ToArray() ?? [];
             var hasSelectedCover = coverCandidates.Length == 1 || coverCandidates.Any(candidate => string.Equals(candidate, state.SelectedCoverReference, StringComparison.OrdinalIgnoreCase));
             var interiorDirectory = new DirectoryReference(Path.Combine(book.Workspace.ProcessedDirectory.Value, "interior"));
             var interiorPages = new List<InteriorPageSummary>();
@@ -77,13 +81,13 @@ public sealed class ApplicationSnapshotService(
                 }
             }
             var checks = new List<BookValidationCheck>();
-            if (scan.IsSuccess)
+            if (isSourceValid)
             {
                 checks.Add(new BookValidationCheck("book.interior_ready", "Interior source images were discovered.", true));
             }
             else
             {
-                checks.Add(new BookValidationCheck(scan.Failure!.Code, scan.Failure.Message, false));
+                checks.Add(new BookValidationCheck(sourceFailure!.Code, sourceFailure.Message, false));
             }
             if (coverCandidates.Length == 0)
             {
@@ -103,9 +107,9 @@ public sealed class ApplicationSnapshotService(
             }
             var fullBookChecks = new List<BookValidationCheck>
             {
-                scan.IsSuccess
+                isSourceValid
                     ? new BookValidationCheck("book.interior_ready", "Interior source images were discovered.", true)
-                    : new BookValidationCheck(scan.Failure!.Code, scan.Failure.Message, false)
+                    : new BookValidationCheck(sourceFailure!.Code, sourceFailure.Message, false)
             };
             if (coverCandidates.Length == 0)
             {
@@ -128,8 +132,8 @@ public sealed class ApplicationSnapshotService(
                     "A Cover PNG is selected for full-book output.",
                     true));
             }
-            var isReady = scan.IsSuccess;
-            var sourcePages = scan.Source?.GetAssets(BookAssetKind.Interior)
+            var isReady = isSourceValid;
+            var sourcePages = source?.GetAssets(BookAssetKind.Interior)
                 .Select(asset =>
                 {
                     var sourceFile = new FileReference(asset.Reference);
@@ -138,12 +142,12 @@ public sealed class ApplicationSnapshotService(
                 })
                 .ToArray() ?? [];
             var activeInteriorSourcePageCount = sourcePages.Count(page => page.IsActive);
-            if (scan.IsSuccess && activeInteriorSourcePageCount == 0)
+            if (isSourceValid && activeInteriorSourcePageCount == 0)
             {
                 isReady = false;
                 checks.Add(new BookValidationCheck("book.no_active_interior_pages", "Activate at least one Interior page before processing.", false));
             }
-            var assetSummaries = await DescribeAssetsAsync(book, scan.Source, state, cancellationToken);
+            var assetSummaries = await DescribeAssetsAsync(book, source, state, cancellationToken);
             var folderSizeBytes = await storageMaintenance.GetBookSizeBytesAsync(book.Directory, cancellationToken);
             summaries.Add(new BookDesktopSummary(
                 book.Id,
@@ -155,7 +159,7 @@ public sealed class ApplicationSnapshotService(
                 state.PublishedArtifactReferences ?? [],
                 interiorPages.OrderBy(page => page.PageId, StringComparer.Ordinal).ToArray(),
                 await stateStore.LoadLogsAsync(book.Workspace, cancellationToken),
-                scan.Source?.GetAssets(BookAssetKind.Interior).Count ?? 0,
+                source?.GetAssets(BookAssetKind.Interior).Count ?? 0,
                 await DiscoverSourceFoldersAsync(book.Directory, cancellationToken),
                 coverCandidates,
                 state.SelectedCoverReference,
@@ -164,7 +168,7 @@ public sealed class ApplicationSnapshotService(
                 assetSummaries,
                 fullBookChecks,
                 await DescribeOutputsAsync(book.Id, state.PublishedArtifactReferences ?? [], cancellationToken),
-                FindRepresentativeCoverReference(book, scan.Source, state.SelectedCoverReference),
+                FindRepresentativeCoverReference(book, source, state.SelectedCoverReference),
                 FolderSizeBytes: folderSizeBytes,
                 HasBackground: state.HasBackground,
                 ActiveInteriorSourcePageCount: activeInteriorSourcePageCount));
