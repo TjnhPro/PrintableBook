@@ -615,6 +615,27 @@ test("Brand switching refreshes Intro readiness without mutating the saved custo
   brandSelectListeners.change();
 
   assert.match(content.innerHTML, /selected Intro template is missing from the current Brand/);
+  assert.match(content.innerHTML, /status-badge status-muted">Needs review/);
+});
+
+test("Intro template preview dimensions gate the current Brand readiness without sending a bridge request", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "intro-dimensions", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [{ name: "Demo", introTemplateAssets: [{ key: "intro.png", fileName: "intro.png", localImageUrl: "file:///intro.png" }] }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Ready", hasIntro: true, selectedIntroTemplateKeys: ["intro.png"], validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [] }]
+  } } });
+  const open = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => open };
+  contentListeners.click({ target: open });
+  const assets = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assets };
+  contentListeners.click({ target: assets });
+  const messageCount = messages.length;
+
+  contentListeners.load({ target: { matches: (selector) => selector === "img[data-local-image]", dataset: { introTemplateId: "Demo%00intro.png" }, naturalWidth: 1000, naturalHeight: 1000 } });
+
+  assert.match(content.innerHTML, /must be 1024 × 1024 or 2048 × 2048 pixels/);
+  assert.match(content.innerHTML, /Needs review/);
+  assert.equal(messages.length, messageCount);
 });
 
 test("Books render direct Cover and Interior local image URLs and replace a failed image locally", () => {

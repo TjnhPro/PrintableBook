@@ -118,6 +118,7 @@ public sealed class ApplicationSnapshotService(
                 true,
                 true));
         }
+        var needsIntroSelection = state.HasIntro && (state.SelectedIntroTemplateKeys is null || state.SelectedIntroTemplateKeys.Count == 0);
         var fullBookChecks = new List<BookValidationCheck>
             {
                 isSourceValid
@@ -145,6 +146,10 @@ public sealed class ApplicationSnapshotService(
                 "A Cover PNG is selected for full-book output.",
                 true));
         }
+        if (needsIntroSelection)
+        {
+            fullBookChecks.Add(new BookValidationCheck("book.intro_selection_required", "Choose at least one IntroTemplate image before processing a custom Intro selection.", false));
+        }
         var isReady = isSourceValid;
         var sourcePages = source?.GetAssets(BookAssetKind.Interior)
             .Select(asset =>
@@ -160,15 +165,14 @@ public sealed class ApplicationSnapshotService(
             isReady = false;
             checks.Add(new BookValidationCheck("book.no_active_interior_pages", "Activate at least one Interior page before processing.", false));
         }
-        if (state.HasIntro && (state.SelectedIntroTemplateKeys is null || state.SelectedIntroTemplateKeys.Count == 0))
+        if (needsIntroSelection)
         {
-            isReady = false;
             checks.Add(new BookValidationCheck("book.intro_selection_required", "Choose at least one IntroTemplate image before processing a custom Intro selection.", false));
         }
         var assetSummaries = DescribeAssets(book, source, state);
         return new BookDesktopSummary(
             book.Id,
-            isReady ? "Ready" : "Invalid",
+            !isReady ? "Invalid" : needsIntroSelection ? "Needs review" : "Ready",
             checks,
             state.Status,
             state.CurrentStep,

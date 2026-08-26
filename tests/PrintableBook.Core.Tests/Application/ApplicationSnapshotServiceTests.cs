@@ -159,8 +159,9 @@ public sealed class ApplicationSnapshotServiceTests
         var summary = Assert.Single(snapshot.BookSummaries);
         Assert.True(summary.HasIntro);
         Assert.Empty(summary.SelectedIntroTemplateKeys!);
-        Assert.Equal("Invalid", summary.ValidationStatus);
+        Assert.Equal("Needs review", summary.ValidationStatus);
         Assert.Contains(summary.ValidationChecks, check => check.Code == "book.intro_selection_required" && !check.IsSuccess);
+        Assert.Contains(summary.FullBookValidationChecks!, check => check.Code == "book.intro_selection_required" && !check.IsSuccess);
     }
 
     [Fact]

@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, bookInteriorDrafts: new Map(), bookInteriorSavePending: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map() };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), bookInteriorSavePending: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map() };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -41,12 +41,13 @@
     return ["auto", "enabled", "disabled"].includes(normalized) ? normalized : "auto";
   };
   const workspaceStatus = (summary) => displayStatus(valueFor(summary, "workspaceStatus", "Not started"));
-  const productionStatus = (summary) => {
+  const productionStatus = (summary, book = null) => {
     const workspace = workspaceStatus(summary);
     const validation = valueFor(summary, "validationStatus", "Needs review");
     const outputs = valueFor(summary, "outputSummaries", []);
     if (workspace === "Failed" || validation === "Invalid") return "Failed";
     if (workspace === "Running") return "Processing";
+    if (book && !introReadiness(book, summary).ready) return "Needs review";
     if (outputs.some((output) => ["Verified", "Available"].includes(valueFor(output, "verificationStatus", "")))) return "PDF ready";
     return validation === "Ready" ? "Ready" : "Needs review";
   };
@@ -204,6 +205,8 @@
       keys: draft?.introTemplateKeys ?? valueFor(summary, "selectedIntroTemplateKeys", []) ?? []
     };
   };
+  const introTemplateAssetId = (asset) => encodeURIComponent(`${valueFor(activeBrand(), "name", "")}\u0000${valueFor(asset, "key", "")}`);
+  const isSupportedIntroTemplateSize = (width, height) => (width === 1024 && height === 1024) || (width === 2048 && height === 2048);
   const introReadiness = (book, summary) => {
     const brand = activeBrand();
     if (!brand) return { ready: false, reason: "Choose a Brand before processing Intro templates." };
@@ -213,6 +216,8 @@
     if (selection.hasIntro && !selection.keys.length) return { ready: false, reason: "Custom Intro mode needs at least one selected template." };
     const keys = new Set(templates.map((asset) => String(valueFor(asset, "key", "")).toLowerCase()));
     if (selection.hasIntro && selection.keys.some((key) => !keys.has(String(key).toLowerCase()))) return { ready: false, reason: "A selected Intro template is missing from the current Brand." };
+    const effectiveTemplates = selection.hasIntro ? selection.keys.map((key) => templates.find((asset) => String(valueFor(asset, "key", "")).toLowerCase() === String(key).toLowerCase())) : templates;
+    if (effectiveTemplates.some((asset) => state.introTemplateDimensions.get(introTemplateAssetId(asset))?.valid === false)) return { ready: false, reason: "An effective Intro template is unreadable or must be 1024 × 1024 or 2048 × 2048 pixels." };
     return { ready: true, reason: "" };
   };
   const processingReadiness = (book, summary) => {
@@ -250,6 +255,12 @@
     const url = valueFor(asset, "localImageUrl", "");
     return url
       ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="256" height="256" loading="lazy" decoding="async" data-local-image data-image-fallback="${escapeHtml(fallback)}">`
+      : `<span class="book-preview-fallback" aria-label="${escapeHtml(fallback)}">${escapeHtml(fallback)}</span>`;
+  };
+  const introTemplateImageMarkup = (asset, alt, fallback = "Image unavailable") => {
+    const url = valueFor(asset, "localImageUrl", "");
+    return url
+      ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="256" height="256" loading="lazy" decoding="async" data-local-image data-intro-template-id="${escapeHtml(introTemplateAssetId(asset))}" data-image-fallback="${escapeHtml(fallback)}">`
       : `<span class="book-preview-fallback" aria-label="${escapeHtml(fallback)}">${escapeHtml(fallback)}</span>`;
   };
   const bookThumbnailMarkup = (book, summary, fallback = "Preview unavailable") => {
@@ -353,9 +364,9 @@
     const readiness = introReadiness(book, summary);
     const selectedTile = (asset, index) => {
       const key = valueFor(asset, "key", "");
-      return `<article class="intro-template-tile"><span class="intro-template-preview">${localImageMarkup(asset, `Intro template ${valueFor(asset, "fileName", "")}`, "Image unavailable")}</span><strong title="${escapeHtml(valueFor(asset, "fileName", ""))}">${escapeHtml(valueFor(asset, "fileName", ""))}</strong><div class="intro-template-actions"><button class="button-secondary" data-action="intro-move-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-index="${index}" data-intro-direction="up" aria-label="Move ${escapeHtml(valueFor(asset, "fileName", ""))} earlier" ${index === 0 || disabled ? "disabled" : ""}>Earlier</button><button class="button-secondary" data-action="intro-move-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-index="${index}" data-intro-direction="down" aria-label="Move ${escapeHtml(valueFor(asset, "fileName", ""))} later" ${index === selected.length - 1 || disabled ? "disabled" : ""}>Later</button><button class="button-secondary" data-action="intro-remove-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-key="${escapeHtml(key)}" ${disabled ? "disabled" : ""}>Remove</button></div></article>`;
+      return `<article class="intro-template-tile"><span class="intro-template-preview">${introTemplateImageMarkup(asset, `Intro template ${valueFor(asset, "fileName", "")}`)}</span><strong title="${escapeHtml(valueFor(asset, "fileName", ""))}">${escapeHtml(valueFor(asset, "fileName", ""))}</strong><div class="intro-template-actions"><button class="button-secondary" data-action="intro-move-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-index="${index}" data-intro-direction="up" aria-label="Move ${escapeHtml(valueFor(asset, "fileName", ""))} earlier" ${index === 0 || disabled ? "disabled" : ""}>Earlier</button><button class="button-secondary" data-action="intro-move-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-index="${index}" data-intro-direction="down" aria-label="Move ${escapeHtml(valueFor(asset, "fileName", ""))} later" ${index === selected.length - 1 || disabled ? "disabled" : ""}>Later</button><button class="button-secondary" data-action="intro-remove-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-key="${escapeHtml(key)}" ${disabled ? "disabled" : ""}>Remove</button></div></article>`;
     };
-    const availableOption = (asset) => `<button class="intro-template-add" data-action="intro-add-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-key="${escapeHtml(valueFor(asset, "key", ""))}" ${disabled ? "disabled" : ""}>${localImageMarkup(asset, `Available template ${valueFor(asset, "fileName", "")}`, "Image unavailable")}<span>${escapeHtml(valueFor(asset, "fileName", ""))}</span><small>Add</small></button>`;
+    const availableOption = (asset) => `<button class="intro-template-add" data-action="intro-add-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-key="${escapeHtml(valueFor(asset, "key", ""))}" ${disabled ? "disabled" : ""}>${introTemplateImageMarkup(asset, `Available template ${valueFor(asset, "fileName", "")}`)}<span>${escapeHtml(valueFor(asset, "fileName", ""))}</span><small>Add</small></button>`;
     const brandCopy = brand ? `${escapeHtml(valueFor(brand, "name", ""))} · ${templates.length} eligible local template${templates.length === 1 ? "" : "s"}` : "Choose a Brand in the header to see local templates.";
     return `<section class="intro-template-workspace"><div class="intro-template-heading"><div><h3>Intro template pages</h3><p>${brandCopy}</p></div><span class="status-badge ${selection.hasIntro ? "status-warn" : "status-muted"}">${selection.hasIntro ? "Custom order" : "Automatic"}</span></div><p class="${readiness.ready ? "panel-note" : "intro-template-warning"}" role="${readiness.ready ? "status" : "alert"}">${readiness.ready ? "Ready for backend size validation during processing." : escapeHtml(readiness.reason)}</p><fieldset class="intro-mode-choice" ${disabled ? "disabled" : ""}><legend>Intro source</legend><label><input type="radio" name="intro-mode" data-action="set-intro-mode" data-book-id="${escapeHtml(bookId(book))}" value="auto" ${selection.hasIntro ? "" : "checked"}> Automatic <small>Use every eligible template in filename order.</small></label><label><input type="radio" name="intro-mode" data-action="set-intro-mode" data-book-id="${escapeHtml(bookId(book))}" value="custom" ${selection.hasIntro ? "checked" : ""}> Custom <small>Select exact pages and their print order.</small></label></fieldset>${selection.hasIntro ? `<div class="intro-template-selection"><div><h4>Selected order</h4><p>${selected.length ? "Intro pages process before Interior pages." : "Add at least one template to make this Book ready."}</p></div><div class="intro-template-grid">${selected.length ? selected.map(selectedTile).join("") : "<p class=\"empty-copy\">No Intro templates selected.</p>"}</div>${available.length ? `<div class="intro-template-available"><h4>Add available template</h4><div class="intro-template-add-grid">${available.map(availableOption).join("")}</div></div>` : ""}</div>` : `<p class="panel-note">Automatic mode is non-destructive: custom choices stay saved and are reused when you switch back to Custom.</p>`}</section>`;
   };
@@ -389,7 +400,7 @@
     const cover = assetForReference(summary, valueFor(summary, "representativeCoverReference", ""));
     const dirty = hasInteriorDraft(bookId(book));
     const saveDisabled = !dirty || processIsActive() || state.bookInteriorSavePending;
-    return `<div class="book-drawer-layer"><section class="book-drawer" role="dialog" aria-labelledby="book-drawer-title"><header class="book-drawer-header"><span class="book-drawer-preview">${localImageMarkup(cover, `Cover for ${valueFor(book, "name", "")}`)}</span><div><p class="eyebrow">Book detail</p><h2 id="book-drawer-title" tabindex="-1">${escapeHtml(valueFor(book, "name", ""))}</h2><div>${badge(productionStatus(summary))} ${badge(bookFrameState(summary))}</div></div><div class="book-drawer-actions"><span data-book-interior-unsaved role="status" ${dirty ? "" : "hidden"}>Unsaved changes</span><button class="button-primary" data-action="save-book-interior-settings" data-book-id="${escapeHtml(bookId(book))}" ${saveDisabled ? "disabled" : ""} aria-busy="${state.bookInteriorSavePending}">${state.bookInteriorSavePending ? "Saving…" : "Save changes"}</button><button class="button-secondary" data-action="close-book-drawer" aria-label="Close Book detail">Close</button></div></header><div class="book-drawer-body">${renderBookTabs(book, summary)}</div></section></div>`;
+    return `<div class="book-drawer-layer"><section class="book-drawer" role="dialog" aria-labelledby="book-drawer-title"><header class="book-drawer-header"><span class="book-drawer-preview">${localImageMarkup(cover, `Cover for ${valueFor(book, "name", "")}`)}</span><div><p class="eyebrow">Book detail</p><h2 id="book-drawer-title" tabindex="-1">${escapeHtml(valueFor(book, "name", ""))}</h2><div>${badge(productionStatus(summary, book))} ${badge(bookFrameState(summary))}</div></div><div class="book-drawer-actions"><span data-book-interior-unsaved role="status" ${dirty ? "" : "hidden"}>Unsaved changes</span><button class="button-primary" data-action="save-book-interior-settings" data-book-id="${escapeHtml(bookId(book))}" ${saveDisabled ? "disabled" : ""} aria-busy="${state.bookInteriorSavePending}">${state.bookInteriorSavePending ? "Saving…" : "Save changes"}</button><button class="button-secondary" data-action="close-book-drawer" aria-label="Close Book detail">Close</button></div></header><div class="book-drawer-body">${renderBookTabs(book, summary)}</div></section></div>`;
   };
 
   const renderBooks = () => {
@@ -402,11 +413,11 @@
     }
     const allBooks = books();
     const statuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
-    const statusCounts = statuses.map((name) => ({ name, count: name === "All" ? allBooks.length : allBooks.filter((book) => productionStatus(summaryFor(book)) === name).length }));
+    const statusCounts = statuses.map((name) => ({ name, count: name === "All" ? allBooks.length : allBooks.filter((book) => productionStatus(summaryFor(book), book) === name).length }));
     const filtered = allBooks.filter((book) => {
       const summary = summaryFor(book);
       return valueFor(book, "name", "").toLowerCase().includes(state.bookFilter.toLowerCase()) &&
-        (state.bookStatus === "All" || productionStatus(summary) === state.bookStatus) &&
+        (state.bookStatus === "All" || productionStatus(summary, book) === state.bookStatus) &&
         (state.bookFrameFilter === "Any" || bookFrameState(summary) === state.bookFrameFilter);
     }).sort((left, right) => {
       const leftSummary = summaryFor(left);
@@ -426,7 +437,8 @@
       const total = valueFor(itemSummary, "interiorSourcePageCount", 0);
       const interiorAssets = assetsFor(itemSummary).filter((asset) => valueFor(asset, "kind", "") === "Interior");
       const active = interiorAssets.length ? interiorAssets.filter((asset) => effectiveInteriorAsset(item, asset).isActive).length : valueFor(itemSummary, "activeInteriorSourcePageCount", total);
-      return `<article class="book-card ${id === state.selectedBookId ? "selected" : ""}"><button type="button" class="book-card-main" data-action="select-book" data-book-id="${escapeHtml(id)}" aria-label="Open ${escapeHtml(valueFor(item, "name", ""))}"><span class="book-card-preview">${thumbnail}</span><span class="book-card-copy"><strong title="${escapeHtml(valueFor(item, "name", ""))}">${escapeHtml(valueFor(item, "name", ""))}</strong><small>${active} / ${total} Interior active</small><span>${badge(productionStatus(itemSummary))} ${badge(bookFrameState(itemSummary))}</span></span></button><footer><label><input type="checkbox" aria-label="Queue ${escapeHtml(valueFor(item, "name", ""))}" data-action="queue-book" data-book-id="${escapeHtml(id)}" ${state.selectedBookIds.has(id) ? "checked" : ""}> Queue</label><button class="button-secondary book-card-action" data-action="select-book" data-book-id="${escapeHtml(id)}">${productionStatus(itemSummary) === "Ready" ? "Review files" : productionStatus(itemSummary) === "Processing" ? "View process" : "Preflight"}</button></footer></article>`;
+      const status = productionStatus(itemSummary, item);
+      return `<article class="book-card ${id === state.selectedBookId ? "selected" : ""}"><button type="button" class="book-card-main" data-action="select-book" data-book-id="${escapeHtml(id)}" aria-label="Open ${escapeHtml(valueFor(item, "name", ""))}"><span class="book-card-preview">${thumbnail}</span><span class="book-card-copy"><strong title="${escapeHtml(valueFor(item, "name", ""))}">${escapeHtml(valueFor(item, "name", ""))}</strong><small>${active} / ${total} Interior active</small><span>${badge(status)} ${badge(bookFrameState(itemSummary))}</span></span></button><footer><label><input type="checkbox" aria-label="Queue ${escapeHtml(valueFor(item, "name", ""))}" data-action="queue-book" data-book-id="${escapeHtml(id)}" ${state.selectedBookIds.has(id) ? "checked" : ""}> Queue</label><button class="button-secondary book-card-action" data-action="select-book" data-book-id="${escapeHtml(id)}">${status === "Ready" ? "Review files" : status === "Processing" ? "View process" : "Preflight"}</button></footer></article>`;
     };
     const start = filtered.length ? (state.bookPage - 1) * pageSize + 1 : 0;
     const end = Math.min(state.bookPage * pageSize, filtered.length);
@@ -768,11 +780,24 @@
   content.addEventListener("error", (event) => {
     const image = event.target;
     if (!image?.matches?.("img[data-local-image]")) return;
+    if (image.dataset.introTemplateId) {
+      state.introTemplateDimensions.set(image.dataset.introTemplateId, { valid: false });
+    }
     const fallback = document.createElement("span");
     fallback.className = "book-preview-fallback";
     fallback.setAttribute("aria-label", image.dataset.imageFallback || "Image unavailable");
     fallback.textContent = image.dataset.imageFallback || "Image unavailable";
     image.replaceWith(fallback);
+    if (image.dataset.introTemplateId && state.bookDrawerOpen && state.selectedBookTab === "assets") render("books", false);
+  }, true);
+  content.addEventListener("load", (event) => {
+    const image = event.target;
+    if (!image?.matches?.("img[data-local-image]") || !image.dataset.introTemplateId) return;
+    const valid = isSupportedIntroTemplateSize(image.naturalWidth, image.naturalHeight);
+    const previous = state.introTemplateDimensions.get(image.dataset.introTemplateId);
+    if (previous?.valid === valid && previous.width === image.naturalWidth && previous.height === image.naturalHeight) return;
+    state.introTemplateDimensions.set(image.dataset.introTemplateId, { valid, width: image.naturalWidth, height: image.naturalHeight });
+    if (state.bookDrawerOpen && state.selectedBookTab === "assets") render("books", false);
   }, true);
   window.chrome.webview.addEventListener("message", (event) => {
     const response = typeof event.data === "string" ? JSON.parse(event.data) : event.data;

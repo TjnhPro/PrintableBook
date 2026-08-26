@@ -434,12 +434,12 @@ public sealed class DiskBackedInteriorPagePipeline(
         long FrameLength,
         long FrameLastWriteUtcTicks,
         string FrameMode,
-            int NormalizedSourceSize,
-            string NormalizationAlgorithmVersion,
+        int NormalizedSourceSize,
+        string NormalizationAlgorithmVersion,
         string BorderLineAlgorithmVersion,
-            string BorderLineSettingsFingerprint,
-            string ProcessingKind,
-            string SchemaVersion)
+        string BorderLineSettingsFingerprint,
+        string ProcessingKind,
+        string SchemaVersion)
     {
         private static readonly string[] requiredProperties =
         [
