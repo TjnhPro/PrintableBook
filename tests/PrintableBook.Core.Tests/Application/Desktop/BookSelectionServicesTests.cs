@@ -69,6 +69,18 @@ public sealed class BookSelectionServicesTests
         Assert.Equal(FrameMode.Enabled, store.Saved.GetInteriorFrameMode("Book interior/page-001.png"));
     }
 
+    [Fact]
+    public async Task Book_interior_settings_save_persists_an_explicit_intro_mode_and_ordered_keys()
+    {
+        var store = new RecordingWorkspaceStateStore();
+        var service = new BookInteriorSettingsService(store);
+
+        await service.SaveAsync(CreateBook(), new BookInteriorSettingsChange(null, [], true, ["nested\\second.png", "first.png"]));
+
+        Assert.True(store.Saved!.HasIntro);
+        Assert.Equal(["nested/second.png", "first.png"], store.Saved.SelectedIntroTemplateKeys);
+    }
+
     private static DiscoveredBook CreateBook()
     {
         var id = new BookId("book-one");
