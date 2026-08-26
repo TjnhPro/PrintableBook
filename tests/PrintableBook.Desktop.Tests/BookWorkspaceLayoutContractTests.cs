@@ -29,7 +29,8 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("Needs review", script, StringComparison.Ordinal);
         Assert.Contains("PDF ready", script, StringComparison.Ordinal);
         Assert.Contains("book-grid", script, StringComparison.Ordinal);
-        Assert.Contains("localImageMarkup(cover, `Cover for ${valueFor(item, \"name\", \"\")}`)", script, StringComparison.Ordinal);
+        Assert.Contains("const bookThumbnailMarkup", script, StringComparison.Ordinal);
+        Assert.Contains("const thumbnail = bookThumbnailMarkup(item, itemSummary)", script, StringComparison.Ordinal);
         Assert.Contains("role=\"status\"", script, StringComparison.Ordinal);
         Assert.Contains(".book-secondary-filters { align-items:flex-end", File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css")), StringComparison.Ordinal);
     }
