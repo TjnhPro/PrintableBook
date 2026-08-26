@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map() };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetStatus: "All", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map() };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -332,7 +332,7 @@
       : state.selectedBookTab === "artwork"
         ? renderFolderAssetWorkspace(book, summary)
         : `<section class="book-overview"><div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Interior preflight</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div><p class="panel-note">Review the summary, then configure Brand background and Intro pages in Interior settings.</p></section>`;
-    return `<div class="book-heading"><div><h2>${escapeHtml(valueFor(book, "name", ""))}</h2><p>Interior-only production workspace</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs">${tabButton("overview", "Overview")}${tabButton("settings", "Interior settings")}${tabButton("artwork", "Interior artwork")}</nav><div class="tab-body">${body}</div>`;
+    return `<div class="book-heading"><div><h2>${escapeHtml(valueFor(book, "name", ""))}</h2><p>Interior-only production workspace</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs">${tabButton("overview", "Overview")}${tabButton("settings", "Interior settings")}${tabButton("artwork", "Interior artwork")}</nav><div class="tab-body ${state.selectedBookTab === "artwork" ? "tab-body-artwork" : ""}">${body}</div>`;
   };
 
   const renderIntroTemplateWorkspace = (book, summary) => {
@@ -387,8 +387,8 @@
     const folderFor = (asset) => sourceFolderNames.find((name) => valueFor(asset, "relativePath", "").replaceAll("\\", "/").toLowerCase().startsWith(`${name.toLowerCase()}/`)) ?? valueFor(asset, "folder", "Other");
     const folderNames = [...new Set(allAssets.map(folderFor))].sort((left, right) => left.localeCompare(right));
     if (state.assetFolder !== "All folders" && !folderNames.includes(state.assetFolder)) state.assetFolder = "All folders";
-    const matching = allAssets.filter((asset) => `${valueFor(asset, "fileName", "")} ${valueFor(asset, "relativePath", "")}`.toLowerCase().includes(state.assetFilter.toLowerCase()) && (state.assetFolder === "All folders" || folderFor(asset) === state.assetFolder));
-    const matchingFolderNames = folderNames.filter((name) => matching.some((asset) => folderFor(asset) === name));
+    const matchesStatus = (asset) => state.assetStatus === "All" || (state.assetStatus === "Active" ? effectiveInteriorAsset(book, asset).isActive : !effectiveInteriorAsset(book, asset).isActive);
+    const matching = allAssets.filter((asset) => `${valueFor(asset, "fileName", "")} ${valueFor(asset, "relativePath", "")}`.toLowerCase().includes(state.assetFilter.toLowerCase()) && (state.assetFolder === "All folders" || folderFor(asset) === state.assetFolder) && matchesStatus(asset));
     const tile = (asset) => {
       const settings = effectiveInteriorAsset(book, asset);
       const mode = settings.frameMode;
@@ -399,14 +399,13 @@
       const selectedAsIntro = introIndex >= 0;
       const disabled = processIsActive() || state.bookInteriorSavePending || selectedAsIntro ? "disabled" : "";
       const customIntro = selectedAsIntro ? 'data-custom-intro="true"' : "";
-      return `<article class="folder-asset-item ${active ? "" : "is-inactive"} ${selectedAsIntro ? "is-custom-intro" : ""}" data-source-reference="${escapeHtml(reference)}"><div class="folder-asset-tile"><span class="folder-asset-preview">${localImageMarkup(asset, `Preview of ${valueFor(asset, "fileName", "asset")}`, "Image unavailable")}</span><strong title="${escapeHtml(valueFor(asset, "fileName", "Unnamed asset"))}">${escapeHtml(valueFor(asset, "fileName", "Unnamed asset"))}</strong><small>${escapeHtml(assetDimensions(asset))}</small>${selectedAsIntro ? `<span class="asset-intro-badge">Intro #${introIndex + 1}</span>` : ""}<label class="asset-active-toggle"><input type="checkbox" data-action="set-interior-active" data-book-id="${escapeHtml(bookId(book))}" data-source-reference="${escapeHtml(reference)}" ${active ? "checked" : ""} ${customIntro} ${disabled}> Active</label><div class="asset-frame-review"><label><span>Frame mode</span><select class="control h-8" data-action="set-interior-frame-mode" data-book-id="${escapeHtml(bookId(book))}" data-source-reference="${escapeHtml(reference)}" ${customIntro} ${disabled}><option value="auto" ${mode === "auto" ? "selected" : ""}>Auto</option><option value="enabled" ${mode === "enabled" ? "selected" : ""}>Frame</option><option value="disabled" ${mode === "disabled" ? "selected" : ""}>No frame</option></select></label></div></div></article>`;
-    };
-    const group = (name) => {
-      const items = matching.filter((asset) => folderFor(asset) === name);
-      return `<section class="asset-folder-group"><header><div><h3>${escapeHtml(name)}</h3><span>${items.length} Interior page(s)</span></div></header>${items.length ? `<div class="folder-asset-grid">${items.map(tile).join("")}</div>` : ""}</section>`;
+      const statusBadge = active ? `<span class="status-badge status-good">Active</span>` : `<span class="status-badge status-bad">Inactive</span>`;
+      const frameBadge = `<span class="artwork-frame-badge artwork-frame-${escapeHtml(mode)}">${mode === "enabled" ? "Frame" : mode === "disabled" ? "No frame" : "Auto"}</span>`;
+      return `<article class="interior-artwork-card ${active ? "is-active" : "is-inactive"} ${selectedAsIntro ? "is-custom-intro" : ""}" data-source-reference="${escapeHtml(reference)}"><span class="interior-artwork-preview">${localImageMarkup(asset, `Preview of ${valueFor(asset, "fileName", "asset")}`, "Image unavailable")}</span><div class="interior-artwork-copy"><strong title="${escapeHtml(valueFor(asset, "fileName", "Unnamed asset"))}">${escapeHtml(valueFor(asset, "fileName", "Unnamed asset"))}</strong><small title="${escapeHtml(folderFor(asset))}">${escapeHtml(folderFor(asset))} · ${escapeHtml(assetDimensions(asset))}</small><div class="interior-artwork-badges">${statusBadge}${frameBadge}${selectedAsIntro ? `<span class="asset-intro-badge">Intro #${introIndex + 1} · Locked</span>` : ""}</div></div><div class="interior-artwork-controls"><label class="asset-active-toggle"><input type="checkbox" data-action="set-interior-active" data-book-id="${escapeHtml(bookId(book))}" data-source-reference="${escapeHtml(reference)}" ${active ? "checked" : ""} ${customIntro} ${disabled}> Active</label><label class="asset-frame-review"><span>Frame mode</span><select class="control h-8" data-action="set-interior-frame-mode" data-book-id="${escapeHtml(bookId(book))}" data-source-reference="${escapeHtml(reference)}" ${customIntro} ${disabled}><option value="auto" ${mode === "auto" ? "selected" : ""}>Auto</option><option value="enabled" ${mode === "enabled" ? "selected" : ""}>Frame</option><option value="disabled" ${mode === "disabled" ? "selected" : ""}>No frame</option></select></label></div></article>`;
     };
     const activeCount = allAssets.filter((asset) => effectiveInteriorAsset(book, asset).isActive).length;
-    return `<section class="folder-asset-workspace"><div class="asset-browser-toolbar"><div><h3 class="panel-title">Interior assets</h3><p class="panel-note">Choose exactly which pages will be processed and set a frame mode for each active page.</p></div></div><div class="asset-folder-filter" role="group" aria-label="Interior asset folder filters"><button class="${state.assetFolder === "All folders" ? "active" : ""}" data-action="asset-folder" data-asset-folder="All folders" aria-pressed="${state.assetFolder === "All folders"}">All Interior (${allAssets.length})</button>${folderNames.map((name) => `<button class="${state.assetFolder === name ? "active" : ""}" data-action="asset-folder" data-asset-folder="${escapeHtml(name)}" aria-pressed="${state.assetFolder === name}">${escapeHtml(name)} (${allAssets.filter((asset) => folderFor(asset) === name).length})</button>`).join("")}</div><label class="field asset-search-field"><span>Search Interior assets</span><input class="control" data-action="filter-assets" value="${escapeHtml(state.assetFilter)}" placeholder="File name or source-relative path"></label><p class="asset-result-count" role="status">${matching.length} shown · ${activeCount} of ${allAssets.length} active</p><div class="folder-asset-layout"><div class="folder-asset-groups">${matching.length ? matchingFolderNames.map(group).join("") : "<p class=\"empty-copy\">No Interior pages match this search.</p>"}</div></div></section>`;
+    const inactiveCount = allAssets.length - activeCount;
+    return `<section class="interior-artwork-workspace"><header class="interior-artwork-heading"><div><h3>Interior artwork</h3><p>Review every local page, then control whether it is processed and which frame mode it uses.</p></div><p class="interior-artwork-count" role="status"><strong>${allAssets.length}</strong> artwork · <strong>${activeCount}</strong> active · <strong>${inactiveCount}</strong> inactive</p></header><div class="interior-artwork-filters"><label class="field asset-search-field"><span>Search artwork</span><input class="control" data-action="filter-assets" value="${escapeHtml(state.assetFilter)}" placeholder="File name or folder"></label><div class="asset-folder-filter" role="group" aria-label="Interior artwork folder filters"><button class="${state.assetFolder === "All folders" ? "active" : ""}" data-action="asset-folder" data-asset-folder="All folders" aria-pressed="${state.assetFolder === "All folders"}">All folders</button>${folderNames.map((name) => `<button class="${state.assetFolder === name ? "active" : ""}" data-action="asset-folder" data-asset-folder="${escapeHtml(name)}" aria-pressed="${state.assetFolder === name}">${escapeHtml(name)}</button>`).join("")}</div><div class="asset-status-filter" role="group" aria-label="Interior artwork status filters">${["All", "Active", "Inactive"].map((name) => `<button class="${state.assetStatus === name ? "active" : ""}" data-action="asset-status" data-asset-status="${name}" aria-pressed="${state.assetStatus === name}">${name}</button>`).join("")}</div></div><p class="asset-result-count" role="status" aria-atomic="true">${matching.length} artwork shown</p><div class="interior-artwork-grid-scroll"><div class="interior-artwork-grid">${matching.length ? matching.map(tile).join("") : "<p class=\"empty-copy interior-artwork-empty\">No artwork matches this view.</p>"}</div></div></section>`;
   };
 
   const renderBookDrawer = (book, summary) => {
@@ -420,6 +419,8 @@
   const renderBooks = () => {
     const existingDrawerBody = document.querySelector(".book-drawer-body");
     if (existingDrawerBody && Number.isFinite(existingDrawerBody.scrollTop)) state.bookDrawerScrollTop = existingDrawerBody.scrollTop;
+    const existingArtworkGrid = document.querySelector(".interior-artwork-grid-scroll");
+    if (existingArtworkGrid && Number.isFinite(existingArtworkGrid.scrollTop)) state.artworkGridScrollTop = existingArtworkGrid.scrollTop;
     const activeElement = document.activeElement;
     if (activeElement?.dataset.action === "filter-assets") {
       state.assetSearchFocused = true;
@@ -468,6 +469,8 @@
     }
     const drawerBody = document.querySelector(".book-drawer-body");
     if (drawerBody && Number.isFinite(state.bookDrawerScrollTop)) drawerBody.scrollTop = state.bookDrawerScrollTop;
+    const artworkGrid = document.querySelector(".interior-artwork-grid-scroll");
+    if (artworkGrid && Number.isFinite(state.artworkGridScrollTop)) artworkGrid.scrollTop = state.artworkGridScrollTop;
     if (state.assetSearchFocused) {
       const search = document.querySelector("[data-action=\"filter-assets\"]");
       if (search) {
@@ -690,7 +693,7 @@
     if (action === "select-brand") { state.selectedBrand = target.dataset.brandName; if (brandSelect) brandSelect.value = state.selectedBrand; render("brands"); }
     if (action === "load-brand-settings") send("brand.settings.get", { brandName: state.selectedBrand });
     if (action === "save-brand-settings") send("brand.settings.save", { brandName: state.selectedBrand, json: state.brandSettings });
-    if (action === "select-book") { state.selectedBookId = target.dataset.bookId; state.selectedBookTab = "overview"; state.selectedAssetReference = ""; state.introTemplatePage = 1; state.bookDrawerScrollTop = 0; state.bookDrawerOpen = true; state.drawerFocusTitle = true; render("books", false); }
+    if (action === "select-book") { state.selectedBookId = target.dataset.bookId; state.selectedBookTab = "overview"; state.selectedAssetReference = ""; state.introTemplatePage = 1; state.bookDrawerScrollTop = 0; state.artworkGridScrollTop = 0; state.bookDrawerOpen = true; state.drawerFocusTitle = true; render("books", false); }
     if (action === "close-book-drawer") closeBookDrawer();
     if (action === "save-book-interior-settings" && !state.bookInteriorSavePending) {
       const payload = interiorSavePayload(target.dataset.bookId);
@@ -738,7 +741,8 @@
     if (action === "book-tab") { state.selectedBookTab = ["settings", "artwork"].includes(target.dataset.bookTab) ? target.dataset.bookTab : "overview"; render("books", false); }
     if (action === "select-asset") { state.selectedAssetReference = target.dataset.sourceReference; render("books", false); }
     if (action === "asset-view") { state.assetView = target.dataset.assetView; render("books", false); }
-    if (action === "asset-folder") { state.assetFolder = target.dataset.assetFolder; render("books", false); }
+    if (action === "asset-folder") { state.assetFolder = target.dataset.assetFolder; state.artworkGridScrollTop = 0; render("books", false); }
+    if (action === "asset-status") { state.assetStatus = ["Active", "Inactive"].includes(target.dataset.assetStatus) ? target.dataset.assetStatus : "All"; state.artworkGridScrollTop = 0; render("books", false); }
     if (action === "book-status") { state.bookStatus = target.dataset.bookStatus; state.bookPage = 1; render("books", false); }
     if (action === "book-view") { state.bookView = target.dataset.bookView; render("books", false); }
     if (action === "clear-cache" && !cacheCleanupBlocked()) {
@@ -765,7 +769,7 @@
   });
   content.addEventListener("input", (event) => {
     if (event.target.dataset.action === "filter-books") { state.bookFilter = event.target.value; state.bookPage = 1; render("books", false); }
-    if (event.target.dataset.action === "filter-assets") { state.assetFilter = event.target.value; render("books", false); }
+    if (event.target.dataset.action === "filter-assets") { state.assetFilter = event.target.value; state.artworkGridScrollTop = 0; render("books", false); }
     if (event.target.dataset.action === "pdf-library-search") { state.pdfLibrarySearch = event.target.value; state.pdfLibraryPage = 1; state.pdfLibrarySearchFocused = true; state.pdfLibrarySearchCaret = event.target.selectionStart ?? event.target.value.length; render("outputs", false); }
     if (event.target.dataset.brandSettings !== undefined) state.brandSettings = event.target.value;
   });

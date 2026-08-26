@@ -63,7 +63,7 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
-    public void AssetWorkspaceGroupsKnownFoldersAndLetsTheBrowserLoadLocalImages()
+    public void InteriorArtworkWorkspaceUsesAnIndependentlyScrollableStatusGrid()
     {
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
         var layout = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css"));
@@ -73,13 +73,16 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("content.addEventListener(\"error" , script, StringComparison.Ordinal);
         Assert.DoesNotContain("queueVisible" + "AssetPreviews", script, StringComparison.Ordinal);
         Assert.DoesNotContain("book.asset" + ".preview", script, StringComparison.Ordinal);
-        Assert.Contains("asset-folder-group", script, StringComparison.Ordinal);
-        Assert.Contains("Choose exactly which pages will be processed", script, StringComparison.Ordinal);
+        Assert.Contains("interior-artwork-grid-scroll", script, StringComparison.Ordinal);
+        Assert.Contains("Review every local page", script, StringComparison.Ordinal);
+        Assert.Contains("asset-status", script, StringComparison.Ordinal);
+        Assert.Contains("artworkGridScrollTop", script, StringComparison.Ordinal);
         Assert.Contains("assetSearchFocused", script, StringComparison.Ordinal);
         Assert.Contains("search.setSelectionRange", script, StringComparison.Ordinal);
         Assert.Contains("--pb-asset-preview: 1 / 1", layout, StringComparison.Ordinal);
-        Assert.Contains("grid-template-columns:repeat(3,minmax(0,1fr))", layout, StringComparison.Ordinal);
-        Assert.Contains("@media (min-width:1280px)", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-drawer-body:has(.tab-body-artwork)", layout, StringComparison.Ordinal);
+        Assert.Contains("overflow-y:auto", layout, StringComparison.Ordinal);
+        Assert.Contains("grid-template-columns:repeat(6,minmax(0,1fr))", layout, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -555,8 +555,15 @@ test("Book detail separates paginated Interior settings from the Interior artwor
   const artworkTab = { dataset: { action: "book-tab", bookTab: "artwork" }, closest: () => artworkTab };
   contentListeners.click({ target: artworkTab });
   assert.match(content.innerHTML, /Interior artwork/);
+  assert.match(content.innerHTML, /interior-artwork-grid-scroll/);
+  assert.match(content.innerHTML, /Inactive/);
+  assert.match(content.innerHTML, /No frame/);
   assert.match(content.innerHTML, /data-action="set-interior-active"/);
   assert.doesNotMatch(content.innerHTML, /Use Brand background/);
+
+  const activeOnly = { dataset: { action: "asset-status", assetStatus: "Active" }, closest: () => activeOnly };
+  contentListeners.click({ target: activeOnly });
+  assert.match(content.innerHTML, /No artwork matches this view/);
 
   messageHandler({ data: { version: 1, id: "book-2", ok: true, command: "app.snapshot", payload: snapshot(1) } });
   assert.match(content.innerHTML, /Interior artwork/);
