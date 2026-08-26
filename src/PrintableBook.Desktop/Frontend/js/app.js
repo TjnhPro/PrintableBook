@@ -20,8 +20,9 @@
     const lastRun = new Date(valueFor(summary, "lastRunAt", 0)).getTime();
     return Number.isFinite(lastRun) ? lastRun : 0;
   };
+  const eligiblePdfLibraryBooks = () => books().map((book) => ({ book, summary: summaryFor(book) })).filter(({ summary }) => summary && workspaceStatus(summary) === "Completed" && valueFor(summary, "outputSummaries", []).length > 0);
   const pdfLibraryBooks = () => {
-    const items = books().map((book) => ({ book, summary: summaryFor(book) })).filter(({ summary }) => summary && workspaceStatus(summary) === "Completed" && valueFor(summary, "outputSummaries", []).length > 0);
+    const items = eligiblePdfLibraryBooks();
     const search = state.pdfLibrarySearch.trim().toLocaleLowerCase();
     const filtered = search ? items.filter(({ book, summary }) => pdfLibraryBookName(book, summary).toLocaleLowerCase().includes(search)) : items;
     return [...filtered].sort((left, right) => {
@@ -424,7 +425,7 @@
 
   const renderOutputs = () => {
     const library = pdfLibraryBooks();
-    const eligibleTotal = books().map((book) => summaryFor(book)).filter((summary) => summary && workspaceStatus(summary) === "Completed" && valueFor(summary, "outputSummaries", []).length > 0).length;
+    const eligibleTotal = eligiblePdfLibraryBooks().length;
     const actions = (summary, output) => `<div class="output-actions"><button class="button-primary" data-action="open-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Open PDF</button><button class="button-secondary" data-action="reveal-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Reveal in Explorer</button><button class="button-secondary" data-action="copy-output-path" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Copy path</button></div>`;
     const outputRow = (summary, output) => {
       const pageCount = valueFor(output, "pageCount", "—");
