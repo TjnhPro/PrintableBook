@@ -29,6 +29,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IGlobalSettingsStore, JsonGlobalSettingsStore>();
         services.AddSingleton<IBrandSettingsStore, JsonBrandSettingsStore>();
         services.AddSingleton<IImageInspector, MagickImageInspector>();
+        services.AddSingleton<IArtworkSourceNormalizer, MagickArtworkSourceNormalizer>();
         services.AddSingleton<IBorderLineDetector, MagickBorderLineDetector>();
         services.AddSingleton<IBorderPixelDetector, MagickBorderPixelDetector>();
         services.AddSingleton<IBorderBoundsCropProcessor, MagickBorderBoundsCropProcessor>();
