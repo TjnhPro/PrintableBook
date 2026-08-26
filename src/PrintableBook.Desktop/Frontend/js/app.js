@@ -471,15 +471,58 @@
     return `<nav class="diagnostics-tabs" role="tablist" aria-label="Diagnostics views">${tabs.map(([value, label]) => `<button type="button" role="tab" class="${state.diagnosticsTab === value ? "active" : ""}" data-action="diagnostics-tab" data-diagnostics-tab="${value}" aria-selected="${state.diagnosticsTab === value}">${label}</button>`).join("")}</nav>`;
   };
 
+  const diagnosticActiveTasks = () => state.backgroundTasks.filter((task) => ["Queued", "Running", "Cancelling"].includes(valueFor(task, "state", "")));
+  const diagnosticFailedTasks = () => state.backgroundTasks.filter((task) => valueFor(task, "state", "") === "Failed");
+  const diagnosticEvents = () => valueFor(window, "uiDiagnostics", []);
+  const diagnosticPerformanceEvents = () => diagnosticEvents().filter((item) => (Number(valueFor(item, "durationMilliseconds", 0)) || 0) > 0 || (Number(valueFor(item, "severity", 0)) || 0) > 0);
+  const diagnosticSlowEvents = () => diagnosticPerformanceEvents().filter((item) => (Number(valueFor(item, "severity", 0)) || 0) > 0);
+  const diagnosticWorstDuration = () => diagnosticSlowEvents().reduce((worst, item) => Math.max(worst, Number(valueFor(item, "durationMilliseconds", 0)) || 0), 0);
+  const diagnosticMissingFolders = (summary) => valueFor(summary, "sourceFolders", []).filter((folder) => valueFor(folder, "status", "Missing") !== "Present");
+  const diagnosticRuntimeHealth = () => {
+    const failed = diagnosticFailedTasks().length;
+    const active = diagnosticActiveTasks().length;
+    if (failed) return { label: "Needs attention", tone: "bad", detail: `${failed} failed task${failed === 1 ? "" : "s"}` };
+    if (active) return { label: "Active", tone: "warn", detail: `${active} task${active === 1 ? "" : "s"} running` };
+    return { label: "Healthy", tone: "good", detail: "No failed tasks" };
+  };
+  const diagnosticUiHealth = () => {
+    const slow = diagnosticSlowEvents().length;
+    return slow ? { label: "Needs review", tone: "warn", detail: `${slow} slow operation${slow === 1 ? "" : "s"}` } : { label: "Healthy", tone: "good", detail: "No slow operations" };
+  };
+  const diagnosticAttentionItems = (summary) => {
+    const items = [];
+    const failed = diagnosticFailedTasks();
+    if (failed.length) items.push({ tone: "bad", title: `${failed.length} failed background task${failed.length === 1 ? "" : "s"}`, detail: "Open Tasks for details." });
+    const slow = diagnosticSlowEvents();
+    if (slow.length) items.push({ tone: "warn", title: `${slow.length} slow UI operation${slow.length === 1 ? "" : "s"}`, detail: `Worst ${diagnosticWorstDuration()} ms.` });
+    if (summary) {
+      const workspace = workspaceStatus(summary);
+      if (["Failed", "Interrupted", "Cancelled"].includes(workspace)) items.push({ tone: "bad", title: `Selected Book is ${workspace}`, detail: "Open Book diagnostics for workspace details." });
+      const missing = diagnosticMissingFolders(summary);
+      if (missing.length) items.push({ tone: "warn", title: `${missing.length} source folder${missing.length === 1 ? "" : "s"} unavailable`, detail: missing.map((folder) => valueFor(folder, "name", "Unknown folder")).join(", ") });
+    }
+    return items;
+  };
+  const diagnosticRecentTasks = () => [...state.backgroundTasks].sort((left, right) => new Date(valueFor(right, "finishedAt", null) ?? valueFor(right, "startedAt", 0)).getTime() - new Date(valueFor(left, "finishedAt", null) ?? valueFor(left, "startedAt", 0)).getTime()).slice(0, 5);
+  const renderDiagnosticHealthCard = (title, value, detail, tone) => `<article class="diagnostic-health-card"><span>${escapeHtml(title)}</span><strong class="diagnostic-health-${tone}">${escapeHtml(value)}</strong><small>${escapeHtml(detail)}</small></article>`;
+  const renderDiagnosticsAttention = (items) => `<section class="panel diagnostic-attention"><h2 class="panel-title">Needs attention</h2>${items.length ? `<ul class="diagnostic-attention-list">${items.map((item) => `<li class="diagnostic-attention-${item.tone}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></li>`).join("")}</ul>` : "<p class=\"empty-copy\">No diagnostic issues detected.</p>"}</section>`;
+  const renderDiagnosticsRecentActivity = (tasks) => `<section class="panel diagnostic-recent"><h2 class="panel-title">Recent activity</h2>${tasks.length ? `<ul class="diagnostic-recent-list">${tasks.map((task) => `<li><strong>${escapeHtml(valueFor(task, "kind", "Task"))}</strong>${badge(valueFor(task, "state", "Unknown"))}<span>${escapeHtml(valueFor(task, "subject", "—"))}</span><time>${dateTime(valueFor(task, "finishedAt", null) ?? valueFor(task, "startedAt", null))}</time></li>`).join("")}</ul>` : "<p class=\"empty-copy\">No retained background activity.</p>"}</section>`;
+  const renderDiagnosticsSummary = (book, summary) => {
+    const runtime = diagnosticRuntimeHealth();
+    const ui = diagnosticUiHealth();
+    const missing = summary ? diagnosticMissingFolders(summary) : [];
+    const bookName = book ? valueFor(book, "name", bookId(book)) : "No Book selected";
+    const bookState = summary ? workspaceStatus(summary) : "Not selected";
+    const bookTone = ["Failed", "Interrupted", "Cancelled"].includes(bookState) ? "bad" : bookState === "Running" ? "warn" : "good";
+    return `<section role="tabpanel" data-diagnostics-panel="summary"><div class="diagnostic-health-grid">${renderDiagnosticHealthCard("Runtime", runtime.label, runtime.detail, runtime.tone)}${renderDiagnosticHealthCard("UI health", ui.label, ui.detail, ui.tone)}${renderDiagnosticHealthCard("Selected Book", bookState, bookName, bookTone)}${renderDiagnosticHealthCard("Source files", summary ? (missing.length ? `${missing.length} missing` : "All present") : "No Book selected", summary ? `${valueFor(summary, "sourceFolders", []).length} tracked folders` : "", missing.length ? "warn" : "good")}</div>${renderDiagnosticsAttention(diagnosticAttentionItems(summary))}${renderDiagnosticsRecentActivity(diagnosticRecentTasks())}</section>`;
+  };
+  const renderDiagnosticsPanel = (book, summary) => state.diagnosticsTab === "summary"
+    ? renderDiagnosticsSummary(book, summary)
+    : `<section role="tabpanel" data-diagnostics-panel="${state.diagnosticsTab}"><p class="empty-copy">${escapeHtml(state.diagnosticsTab)} diagnostics are loading.</p></section>`;
   const renderDiagnostics = () => {
-    const book = selectedBook();
+    const book = selectedBook() ?? books()[0] ?? null;
     const summary = book ? summaryFor(book) : null;
-    const folders = valueFor(summary, "sourceFolders", []);
-    const logs = valueFor(summary, "logs", []);
-    const events = valueFor(window, "uiDiagnostics", []);
-    const eventRows = events.length ? events.map((item) => `<tr><td>${dateTime(valueFor(item, "timestamp", null))}</td><td>${escapeHtml(valueFor(item, "severity", "Info"))}</td><td>${escapeHtml(valueFor(item, "kind", "operation"))}</td><td>${escapeHtml(valueFor(item, "operation", ""))}</td><td>${valueFor(item, "durationMilliseconds", 0)} ms</td><td>${escapeHtml(valueFor(item, "subject", "—"))}</td><td>${escapeHtml(valueFor(item, "activeOperations", []).join(", ") || "—")}</td></tr>`).join("") : "<tr><td colspan=\"7\" class=\"empty-row\">No slow UI operations recorded.</td></tr>";
-    const taskRows = state.backgroundTasks.slice(0, 20).map((task) => `<tr><td>${escapeHtml(valueFor(task, "kind", ""))}</td><td>${escapeHtml(valueFor(task, "state", ""))}</td><td>${escapeHtml(valueFor(task, "subject", "—"))}</td><td>${escapeHtml(valueFor(task, "step", "—"))}</td><td>${valueFor(task, "completed", "—")}/${valueFor(task, "total", "—")}</td><td>${dateTime(valueFor(task, "startedAt", null))}</td><td>${dateTime(valueFor(task, "finishedAt", null))}</td><td>${escapeHtml(valueFor(task, "errorMessage", "—"))}</td></tr>`).join("") || "<tr><td colspan=\"8\" class=\"empty-row\">No retained background tasks.</td></tr>";
-    content.innerHTML = `<div class="page-header"><div><h1>Diagnostics</h1><p>Inspect application health and Book workspace details.</p></div><div class="page-actions"><button class="button-secondary" data-action="refresh-diagnostics">Refresh diagnostics</button></div></div>${renderDiagnosticsTabs()}<section role="tabpanel" data-diagnostics-panel="${state.diagnosticsTab}">${panel("Background workers", `<table class="data-table"><thead><tr><th>Kind</th><th>State</th><th>Subject</th><th>Step</th><th>Progress</th><th>Started</th><th>Finished</th><th>Error</th></tr></thead><tbody>${taskRows}</tbody></table>`)}${panel("UI responsiveness", `<table class="data-table"><thead><tr><th>Time</th><th>Severity</th><th>Kind</th><th>Operation</th><th>Duration</th><th>Subject</th><th>Active during stall</th></tr></thead><tbody>${eventRows}</tbody></table>`)}<div class="diagnostics-grid">${panel("Workspace info", book ? `<dl class="path-grid"><div><dt>Workspace state</dt><dd>${badge(workspaceStatus(summary))}</dd></div><div><dt>Current step</dt><dd>${escapeHtml(valueFor(summary, "currentStep", "Not started"))}</dd></div><div><dt>Last run</dt><dd>${dateTime(valueFor(summary, "lastRunAt", null))}</dd></div></dl>` : "<p class=\"empty-copy\">No Book selected.</p>")}${panel("Files", `<table class="data-table"><thead><tr><th>Folder</th><th>Status</th><th>Images</th></tr></thead><tbody>${folders.map((folder) => `<tr><td>${escapeHtml(valueFor(folder, "name", ""))}</td><td>${badge(valueFor(folder, "status", "Missing"))}</td><td>${valueFor(folder, "imageCount", 0)}</td></tr>`).join("")}</tbody></table>`)}</div>${panel("Latest log", logs.length ? `<ul class="log-list">${logs.slice(-12).reverse().map((log) => `<li><time>${dateTime(valueFor(log, "timestamp", null))}</time><span>${escapeHtml(valueFor(log, "eventName", ""))} · ${escapeHtml(valueFor(log, "detail", ""))}</span></li>`).join("")}</ul>` : "<p class=\"empty-copy\">No logs for this Book.</p>", "mt-5")}</section>`;
+    content.innerHTML = `<div class="page-header"><div><h1>Diagnostics</h1><p>Inspect application health and Book workspace details.</p></div><div class="page-actions"><button class="button-secondary" data-action="refresh-diagnostics">Refresh diagnostics</button></div></div>${renderDiagnosticsTabs()}${renderDiagnosticsPanel(book, summary)}`;
   };
 
   const render = (route, requestProcess = true) => {

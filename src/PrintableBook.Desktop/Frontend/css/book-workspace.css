@@ -38,6 +38,13 @@
 .detail-tabs { overflow-x: auto; scrollbar-width: thin; }
 .detail-path, .book-heading p, .artifact-list { overflow-wrap: anywhere; word-break: normal; }
 
+.diagnostics-tabs { display:flex; width:fit-content; max-width:100%; gap:4px; margin:16px 0 20px; padding:4px; overflow-x:auto; border:1px solid var(--pb-border); border-radius:10px; background:var(--pb-surface-muted); }
+.diagnostics-tabs button { min-height:34px; padding:7px 14px; border:0; border-radius:7px; background:transparent; color:var(--pb-muted); font:inherit; cursor:pointer; }.diagnostics-tabs button.active { background:var(--pb-surface); color:var(--pb-ink); box-shadow:0 1px 2px rgb(24 32 51 / .08); }
+.diagnostic-health-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }.diagnostic-health-card { display:grid; min-width:0; gap:5px; padding:15px; border:1px solid var(--pb-border); border-radius:10px; background:var(--pb-surface); }.diagnostic-health-card>span,.diagnostic-health-card small { color:var(--pb-muted); font-size:12px; }.diagnostic-health-card strong { font-size:17px; }.diagnostic-health-good { color:var(--pb-success); }.diagnostic-health-warn { color:var(--pb-warning); }.diagnostic-health-bad { color:var(--pb-danger); }
+.diagnostic-attention,.diagnostic-recent { margin-top:16px; }.diagnostic-attention-list,.diagnostic-recent-list { display:grid; gap:8px; }.diagnostic-attention-list li { display:grid; gap:3px; padding:10px 12px; border-radius:8px; background:var(--pb-surface-muted); }.diagnostic-attention-bad { border-left:3px solid var(--pb-danger); }.diagnostic-attention-warn { border-left:3px solid var(--pb-warning); }.diagnostic-attention-list span,.diagnostic-recent-list time { color:var(--pb-muted); font-size:12px; }.diagnostic-recent-list li { display:grid; grid-template-columns:minmax(120px,.8fr) auto minmax(120px,1fr) auto; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--pb-border); }
+@media (max-width:1050px) { .diagnostic-health-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:680px) { .diagnostic-health-grid,.diagnostic-recent-list li { grid-template-columns:1fr; } }
+
 .book-list-preview {
   display: grid;
   flex: 0 0 64px;

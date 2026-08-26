@@ -913,6 +913,23 @@ test("Diagnostics tab switching is local and sends no bridge message", () => {
   assert.equal(messages.length, count);
 });
 
+test("Diagnostics Summary shows compact health instead of large tables", () => {
+  const { messageHandler, content, browserWindow } = loadBridge("diagnostics");
+  browserWindow.uiDiagnostics = [{ timestamp: "2026-08-26T11:21:30Z", severity: 2, kind: "operation", operation: "snapshot.refresh", durationMilliseconds: 4510, subject: null, activeOperations: [] }];
+
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: diagnosticsSnapshot() } });
+
+  assert.match(content.innerHTML, /Runtime/);
+  assert.match(content.innerHTML, /UI health/);
+  assert.match(content.innerHTML, /Selected Book/);
+  assert.match(content.innerHTML, /Source files/);
+  assert.match(content.innerHTML, /Book Alpha/);
+  assert.match(content.innerHTML, /1 source folder unavailable/);
+  assert.doesNotMatch(content.innerHTML, /Background workers/);
+  assert.doesNotMatch(content.innerHTML, /UI responsiveness/);
+  assert.doesNotMatch(content.innerHTML, /data-action="diagnostic-book"/);
+});
+
 test("Diagnostics route requests and renders sanitized responsiveness events", () => {
   const { messageHandler, content, routeButtons, messages } = loadBridge("diagnostics");
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: {
@@ -921,10 +938,7 @@ test("Diagnostics route requests and renders sanitized responsiveness events", (
   routeButtons.find((button) => button.dataset.route === "diagnostics").listeners.click();
   assert.deepEqual(messages.slice(-2).map((message) => message.command), ["diagnostics.get", "task.list"]);
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "diagnostics.snapshot", payload: [{ timestamp: "2026-08-25T00:00:00Z", severity: "Slow", kind: "dispatcher.stall", operation: "dispatcher", durationMilliseconds: 300, subject: null, activeOperations: ["book.scan (Book 001)"] }] } });
-  assert.match(content.innerHTML, /UI responsiveness/);
-  assert.match(content.innerHTML, /Slow/);
-  assert.match(content.innerHTML, /Active during stall/);
+  assert.equal(content.innerHTML.includes("UI responsiveness"), false);
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.tasks", payload: [{ kind: "LibraryRefresh", state: "Running", subject: "Library", step: "discovery" }] } });
-  assert.match(content.innerHTML, /Background workers/);
-  assert.match(content.innerHTML, /LibraryRefresh/);
+  assert.match(content.innerHTML, /Active/);
 });
