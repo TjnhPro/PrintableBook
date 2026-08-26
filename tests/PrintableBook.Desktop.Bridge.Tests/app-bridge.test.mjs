@@ -629,7 +629,7 @@ test("Interior artwork applies a bulk draft to selected cards without redrawing 
   assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", assets: [{ sourceReference: "Book interior/page-001.png", active: false, frameMode: "disabled" }] });
 });
 
-test("Interior artwork bulk selection excludes pages locked as custom Intro", () => {
+test("Interior artwork hides custom Intro pages and batches only remaining artwork", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   const snapshot = {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
@@ -649,7 +649,9 @@ test("Interior artwork bulk selection excludes pages locked as custom Intro", ()
   contentListeners.click({ target: openBook });
   const artworkTab = { dataset: { action: "book-tab", bookTab: "artwork" }, closest: () => artworkTab };
   contentListeners.click({ target: artworkTab });
-  assert.match(content.innerHTML, /Intro #1 · Locked/);
+  assert.doesNotMatch(content.innerHTML, /page-001\.png/);
+  assert.doesNotMatch(content.innerHTML, /Intro #1 · Locked/);
+  assert.match(content.innerHTML, /page-002\.png/);
   assert.match(content.innerHTML, /Select all 1 shown/);
 
   const selectAll = { dataset: { action: "toggle-all-artwork" }, checked: true, closest: () => selectAll };

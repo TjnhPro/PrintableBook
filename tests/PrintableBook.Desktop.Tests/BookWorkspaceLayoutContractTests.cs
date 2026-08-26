@@ -74,7 +74,7 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.DoesNotContain("queueVisible" + "AssetPreviews", script, StringComparison.Ordinal);
         Assert.DoesNotContain("book.asset" + ".preview", script, StringComparison.Ordinal);
         Assert.Contains("interior-artwork-grid-scroll", script, StringComparison.Ordinal);
-        Assert.Contains("Review every local page", script, StringComparison.Ordinal);
+        Assert.Contains("Review every available Book interior page", script, StringComparison.Ordinal);
         Assert.Contains("asset-status", script, StringComparison.Ordinal);
         Assert.Contains("artworkGridScrollTop", script, StringComparison.Ordinal);
         Assert.Contains("assetSearchFocused", script, StringComparison.Ordinal);
