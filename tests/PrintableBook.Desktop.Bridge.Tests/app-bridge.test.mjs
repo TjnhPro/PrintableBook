@@ -626,6 +626,40 @@ test("Interior artwork applies a bulk draft to selected cards without redrawing 
   assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", assets: [{ sourceReference: "Book interior/page-001.png", active: false, frameMode: "disabled" }] });
 });
 
+test("Interior artwork bulk selection excludes pages locked as custom Intro", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, workspaceStatus: "Not started", hasIntro: true, selectedIntroInteriorSourceKeys: ["Book interior/page-001.png"], validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      interiorSourcePageCount: 2, activeInteriorSourcePageCount: 2,
+      assets: [
+        { sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", frameMode: "auto", isActive: true },
+        { sourceReference: "Book interior/page-002.png", relativePath: "Book interior/page-002.png", fileName: "page-002.png", folder: "Book interior", kind: "Interior", frameMode: "auto", isActive: true }
+      ]
+    }]
+  };
+
+  messageHandler({ data: { version: 1, id: "artwork-locked", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const artworkTab = { dataset: { action: "book-tab", bookTab: "artwork" }, closest: () => artworkTab };
+  contentListeners.click({ target: artworkTab });
+  assert.match(content.innerHTML, /Intro #1 · Locked/);
+  assert.match(content.innerHTML, /Select all 1 shown/);
+
+  const selectAll = { dataset: { action: "toggle-all-artwork" }, checked: true, closest: () => selectAll };
+  contentListeners.click({ target: selectAll });
+  contentListeners.change({ target: { dataset: { action: "set-artwork-bulk-active" }, value: "inactive" } });
+  const apply = { dataset: { action: "apply-artwork-bulk" }, closest: () => apply };
+  contentListeners.click({ target: apply });
+  const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
+  contentListeners.click({ target: save });
+
+  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", assets: [{ sourceReference: "Book interior/page-002.png", active: false }] });
+});
+
 test("Book Interior edits stay local until one explicit save request", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   const snapshot = {
