@@ -713,7 +713,7 @@
         }
         stageIntroChange(book, summary, true, sourceReferences);
         status.textContent = "Unsaved Intro and Interior changes";
-        render("books", false);
+        refreshIntroTemplateWorkspace();
       }
     }
     if (action === "intro-template-page") {
@@ -781,7 +781,7 @@
         stageIntroChange(book, summary, event.target.value === "custom", current.sourceReferences);
         state.introTemplatePage = 1;
         status.textContent = "Unsaved Intro and Interior changes";
-        render("books", false);
+        refreshIntroTemplateWorkspace();
       }
     }
     if (event.target.dataset.action === "set-interior-active" || event.target.dataset.action === "set-interior-frame-mode") {

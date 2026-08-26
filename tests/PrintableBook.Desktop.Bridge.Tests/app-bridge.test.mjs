@@ -596,7 +596,7 @@ test("Book Interior edits stay local until one explicit save request", () => {
 });
 
 test("Book detail configures an ordered custom Intro selection from Book interior", () => {
-  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+  const { messageHandler, content, contentListeners, messages, getFullRenderCount, getIntroWorkspaceRenderCount } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "intro-draft", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Demo", introTemplateAssets: [
       { key: "first.png", fileName: "first.png", sourceReference: "brand/IntroTemplate/first.png", localImageUrl: "file:///first.png" },
@@ -615,10 +615,16 @@ test("Book detail configures an ordered custom Intro selection from Book interio
   assert.match(content.innerHTML, /Intro pages/);
   assert.match(content.innerHTML, /Automatic/);
 
+  const fullRendersBeforeModeChange = getFullRenderCount();
   contentListeners.change({ target: { dataset: { action: "set-intro-mode", bookId: "Book 001" }, value: "custom" } });
+  assert.equal(getIntroWorkspaceRenderCount(), 1);
+  assert.equal(getFullRenderCount(), fullRendersBeforeModeChange);
   const add = { dataset: { action: "intro-add-template", bookId: "Book 001", introSourceReference: "Book interior/page-003.png" }, closest: () => add };
+  const fullRendersBeforeAdd = getFullRenderCount();
   contentListeners.click({ target: add });
   assert.match(content.innerHTML, /Intro #1/);
+  assert.equal(getIntroWorkspaceRenderCount(), 2);
+  assert.equal(getFullRenderCount(), fullRendersBeforeAdd);
   const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
   contentListeners.click({ target: save });
 
