@@ -41,7 +41,6 @@ public sealed class ApplicationSnapshotService(
     IBookWorkspaceStateStore stateStore,
     IFileSystem fileSystem,
     IBookStorageMaintenance storageMaintenance,
-    IImageInspector? imageInspector = null,
     IPdfDocumentInspector? pdfDocumentInspector = null,
     IOperationDiagnostics? diagnostics = null) : IApplicationSnapshotService
 {
@@ -147,7 +146,7 @@ public sealed class ApplicationSnapshotService(
                 isReady = false;
                 checks.Add(new BookValidationCheck("book.no_active_interior_pages", "Activate at least one Interior page before processing.", false));
             }
-            var assetSummaries = await DescribeAssetsAsync(book, source, state, cancellationToken);
+            var assetSummaries = DescribeAssets(book, source, state);
             var folderSizeBytes = await storageMaintenance.GetBookSizeBytesAsync(book.Directory, cancellationToken);
             summaries.Add(new BookDesktopSummary(
                 book.Id,
@@ -193,26 +192,14 @@ public sealed class ApplicationSnapshotService(
             .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
             .StartsWith($"Book cover{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
 
-    private async ValueTask<IReadOnlyList<BookAssetSummary>> DescribeAssetsAsync(DiscoveredBook book, BookSource? source, BookProcessingState state, CancellationToken cancellationToken)
+    private static IReadOnlyList<BookAssetSummary> DescribeAssets(DiscoveredBook book, BookSource? source, BookProcessingState state)
     {
         if (source is null) return [];
         var summaries = new List<BookAssetSummary>(source.Assets.Count);
         foreach (var asset in source.Assets)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             var file = new FileReference(asset.Reference);
             var relativePath = Path.GetRelativePath(book.Directory.Value, asset.Reference);
-            ImageInfo? info = null;
-            try
-            {
-                if (imageInspector is not null)
-                {
-                    using var inspection = diagnostics.Begin("image.inspect", $"{book.Id.Value}/{relativePath.Replace('\\', '/')}");
-                    info = await imageInspector.GetInfoAsync(file, cancellationToken);
-                }
-            }
-            catch (Exception) when (asset.Kind != BookAssetKind.Interior) { }
-            catch (Exception) { }
             var folder = Path.GetDirectoryName(relativePath) ?? string.Empty;
             var sourceKey = asset.Kind == BookAssetKind.Interior ? InteriorSourceKey.FromBookRoot(book.Directory, file) : null;
             summaries.Add(new BookAssetSummary(
@@ -221,8 +208,8 @@ public sealed class ApplicationSnapshotService(
                 Path.GetFileName(asset.Reference),
                 folder,
                 asset.Kind.ToString(),
-                info?.Size.Width,
-                info?.Size.Height,
+                null,
+                null,
                 sourceKey is null ? FrameMode.Auto : state.GetInteriorFrameMode(sourceKey),
                 ToLocalImageUrl(asset.Reference),
                 sourceKey is null || state.IsInteriorActive(sourceKey)));

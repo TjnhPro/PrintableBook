@@ -97,6 +97,22 @@ public sealed class ApplicationSnapshotServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_keeps_asset_dimensions_unavailable_without_inspecting_source_images()
+    {
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(),
+            new StubSettingsStore(),
+            new DirectReferenceScanner(Path.Combine("sources", "Book A", "Book interior", "page-001.png")),
+            new StubStateStore(),
+            new StubFileSystem(),
+            new StubBookStorageMaintenance(0)).RefreshAsync();
+
+        var asset = Assert.Single(Assert.Single(snapshot.BookSummaries).Assets!);
+        Assert.Null(asset.Width);
+        Assert.Null(asset.Height);
+    }
+
+    [Fact]
     public async Task RefreshAsync_uses_an_available_cover_folder_asset_when_book_cover_is_not_present()
     {
         var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new CoverFolderScanner(), new StubStateStore(), new StubFileSystem(), new StubBookStorageMaintenance(0)).RefreshAsync();
