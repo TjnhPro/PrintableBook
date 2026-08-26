@@ -879,6 +879,9 @@ test("PDF Library Grid uses compact Book cards and the documented desktop column
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: manyPdfLibrarySnapshot(4) } });
   const css = readFileSync(join(process.cwd(), "src", "PrintableBook.Desktop", "Frontend", "css", "book-workspace.css"), "utf8");
 
+  assert.match(content.innerHTML, /pdf-library-page/);
+  assert.match(content.innerHTML, /pdf-library-grid-scroll/);
+  assert.match(content.innerHTML, /pdf-library-file-status/);
   assert.match(content.innerHTML, /pdf-library-grid/);
   assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 4);
   assert.equal(content.innerHTML.match(/pdf-library-book-preview/g)?.length ?? 0, 4);
@@ -891,6 +894,9 @@ test("PDF Library Grid uses compact Book cards and the documented desktop column
   assert.match(css, /\.pdf-library-book-grid \.pdf-library-book-header > div \{ width:100%; min-width:0;/);
   assert.match(css, /\.pdf-library-book-grid \.pdf-library-title-row \{ display:grid; grid-template-columns:minmax\(0,1fr\) auto; min-width:0;/);
   assert.match(css, /\.pdf-library-book-grid \.pdf-library-title-row h2 \{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;/);
+  assert.match(css, /\.pdf-library-grid-scroll \{ min-height:0; overflow-y:auto;/);
+  assert.match(css, /\.pdf-library-file-title \{ display:grid; grid-template-columns:minmax\(0,1fr\) auto;/);
+  assert.match(css, /\.pdf-library-book-grid \.pdf-library-file-copy \{ grid-template-rows:20px 18px 32px;/);
   assert.match(css, /@media \(min-width:1450px\) \{ \.pdf-library-grid \{ grid-template-columns:repeat\(4,/);
 });
 
