@@ -23,9 +23,11 @@ public sealed class PhysicalBookStorageMaintenance : IBookStorageMaintenance
         {
             var cacheRoot = Path.Combine(workspace.WorkingDirectory.Value, "cache");
             var processedInterior = Path.Combine(workspace.ProcessedDirectory.Value, "interior");
+            var processedIntro = Path.Combine(workspace.ProcessedDirectory.Value, "intro");
             MigrateLegacyStamps(cacheRoot, processedInterior, cancellationToken);
             DeletePageCacheArtifacts(cacheRoot, ref freedBytes, cancellationToken);
             DeleteDirectoryContents(processedInterior, ref freedBytes, cancellationToken);
+            DeleteDirectoryContents(processedIntro, ref freedBytes, cancellationToken);
             DeleteDirectoryContents(workspace.TemporaryOutputDirectory.Value, ref freedBytes, cancellationToken);
             return ValueTask.FromResult(freedBytes);
         }

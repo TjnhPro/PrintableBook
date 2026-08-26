@@ -7,6 +7,19 @@ namespace PrintableBook.Infrastructure.Tests;
 
 public sealed class PhysicalBookStorageMaintenanceTests : IAsyncLifetime
 {
+    [Fact]
+    public async Task ClearHeavyProcessingCacheAsync_removes_processed_intro_rasters()
+    {
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(new BookId("intro"), new DirectoryReference(Path.Combine(rootPath, "Intro")));
+        var intro = Path.Combine(workspace.ProcessedDirectory.Value, "intro", "intro-0001.png");
+        await File.WriteAllBytesAsync(intro, [1, 2, 3]);
+
+        var freed = await new PhysicalBookStorageMaintenance().ClearHeavyProcessingCacheAsync(workspace);
+
+        Assert.Equal(3, freed);
+        Assert.False(File.Exists(intro));
+    }
+
     private readonly string rootPath = Path.Combine(Path.GetTempPath(), $"PrintableBook.StorageMaintenance.{Guid.NewGuid():N}");
 
     [Fact]
