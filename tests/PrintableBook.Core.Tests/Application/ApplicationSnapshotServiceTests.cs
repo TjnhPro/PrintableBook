@@ -151,6 +151,19 @@ public sealed class ApplicationSnapshotServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_marks_an_empty_custom_intro_selection_as_needing_review()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("Book A")).SetHasIntro(true).SetIntroTemplateKeys([]);
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new StubScanner(), new StubStateStore(explicitState: state), new StubFileSystem()).RefreshAsync();
+
+        var summary = Assert.Single(snapshot.BookSummaries);
+        Assert.True(summary.HasIntro);
+        Assert.Empty(summary.SelectedIntroTemplateKeys!);
+        Assert.Equal("Invalid", summary.ValidationStatus);
+        Assert.Contains(summary.ValidationChecks, check => check.Code == "book.intro_selection_required" && !check.IsSuccess);
+    }
+
+    [Fact]
     public async Task RefreshAsync_builds_book_summaries_with_concurrency_limited_to_four_and_keeps_discovery_order()
     {
         var scanner = new GatedScanner();
