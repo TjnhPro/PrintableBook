@@ -110,7 +110,7 @@
 .pdf-library-book-grid .output-actions button { min-height:32px; padding:6px 10px; font-size:12px; }
 .pdf-library-list { display:grid; gap:10px; margin-top:20px; }
 .pdf-library-book-list { display:grid; grid-template-columns:96px minmax(180px,.8fr) minmax(0,1.7fr); align-items:stretch; }
-.pdf-library-book-list .pdf-library-book-preview { width:96px; min-height:96px; aspect-ratio:auto; border-right:1px solid var(--pb-border); }
+.pdf-library-book-list .pdf-library-book-preview { width:96px; height:100%; min-height:96px; aspect-ratio:auto; border-right:1px solid var(--pb-border); }
 .pdf-library-book-list .pdf-library-book-header { border-bottom:0; border-right:1px solid var(--pb-border); }
 .pdf-library-book-list .pdf-library-files { align-content:center; }
 .pdf-library-book-list .pdf-library-file { grid-template-columns:minmax(0,1fr); padding:10px 14px; }

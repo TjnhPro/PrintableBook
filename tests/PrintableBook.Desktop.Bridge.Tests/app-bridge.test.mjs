@@ -673,6 +673,11 @@ test("PDF Library pagination navigates locally", () => {
   assert.match(content.innerHTML, /25–25 of 25/);
   assert.match(content.innerHTML, /Page 3 of 3/);
   assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 1);
+  navigate("previous");
+  assert.match(content.innerHTML, /Page 2 of 3/);
+  navigate("first");
+  assert.match(content.innerHTML, /1–12 of 25/);
+  assert.match(content.innerHTML, /Page 1 of 3/);
   assert.equal(messages.length, messageCount);
 });
 
@@ -749,7 +754,7 @@ test("PDF Library List uses bounded thumbnails and verbose output actions", () =
   assert.match(content.innerHTML, /Reveal in Explorer/);
   assert.match(content.innerHTML, /Copy path/);
   assert.match(css, /\.pdf-library-book-list \{ display:grid; grid-template-columns:96px/);
-  assert.match(css, /\.pdf-library-book-list \.pdf-library-book-preview \{ width:96px;/);
+  assert.match(css, /\.pdf-library-book-list \.pdf-library-book-preview \{ width:96px; height:100%;/);
 });
 
 test("PDF Library keeps paging local, preserves it across view changes, and opens an artifact from page two", () => {
