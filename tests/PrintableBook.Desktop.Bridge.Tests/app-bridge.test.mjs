@@ -737,6 +737,21 @@ test("PDF Library Grid uses compact Book cards and the documented desktop column
   assert.match(css, /@media \(min-width:1450px\) \{ \.pdf-library-grid \{ grid-template-columns:repeat\(4,/);
 });
 
+test("PDF Library List uses bounded thumbnails and verbose output actions", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: manyPdfLibrarySnapshot(2) } });
+  const list = { dataset: { action: "pdf-library-view", pdfLibraryView: "list" }, closest: () => list };
+  contentListeners.click({ target: list });
+  const css = readFileSync(join(process.cwd(), "src", "PrintableBook.Desktop", "Frontend", "css", "book-workspace.css"), "utf8");
+
+  assert.match(content.innerHTML, /pdf-library-list/);
+  assert.match(content.innerHTML, /Open PDF/);
+  assert.match(content.innerHTML, /Reveal in Explorer/);
+  assert.match(content.innerHTML, /Copy path/);
+  assert.match(css, /\.pdf-library-book-list \{ display:grid; grid-template-columns:96px/);
+  assert.match(css, /\.pdf-library-book-list \.pdf-library-book-preview \{ width:96px;/);
+});
+
 test("PDF Library search filters by Book name", () => {
   const { messageHandler, content, contentListeners, messages, searchInput } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
