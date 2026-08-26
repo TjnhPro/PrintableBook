@@ -239,6 +239,7 @@ public sealed class DiskBackedInteriorPagePipeline(
 
     private static CacheInvalidationStage DetermineInvalidationStage(CacheInputStamp previous, CacheInputStamp current)
     {
+        if (!NormalizedSourceCompatible(previous, current)) return CacheInvalidationStage.NormalizedSource;
         if (!ClassificationCompatible(previous, current)) return CacheInvalidationStage.Classification;
         if (!PreparationCompatible(previous, current)) return CacheInvalidationStage.Preparation;
         if (!FrameCompatible(previous, current)) return CacheInvalidationStage.Frame;
@@ -247,14 +248,17 @@ public sealed class DiskBackedInteriorPagePipeline(
         return CacheInvalidationStage.None;
     }
 
-    private static bool ClassificationCompatible(CacheInputStamp previous, CacheInputStamp current) =>
+    private static bool NormalizedSourceCompatible(CacheInputStamp previous, CacheInputStamp current) =>
         string.Equals(previous.SourcePath, current.SourcePath, StringComparison.OrdinalIgnoreCase) &&
         previous.SourceLength == current.SourceLength &&
         previous.SourceLastWriteUtcTicks == current.SourceLastWriteUtcTicks &&
-        previous.ArtworkDetectionThreshold == current.ArtworkDetectionThreshold &&
         previous.NormalizedSourceSize == current.NormalizedSourceSize &&
-        string.Equals(previous.NormalizationAlgorithmVersion, current.NormalizationAlgorithmVersion, StringComparison.Ordinal) &&
+        string.Equals(previous.NormalizationAlgorithmVersion, current.NormalizationAlgorithmVersion, StringComparison.Ordinal);
+
+    private static bool ClassificationCompatible(CacheInputStamp previous, CacheInputStamp current) =>
+        previous.ArtworkDetectionThreshold == current.ArtworkDetectionThreshold &&
         string.Equals(previous.BorderLineAlgorithmVersion, current.BorderLineAlgorithmVersion, StringComparison.Ordinal) &&
+        string.Equals(previous.BorderLineSettingsFingerprint, current.BorderLineSettingsFingerprint, StringComparison.Ordinal) &&
         string.Equals(previous.ClassificationAlgorithmVersion, current.ClassificationAlgorithmVersion, StringComparison.Ordinal);
 
     private static bool PreparationCompatible(CacheInputStamp previous, CacheInputStamp current) =>
@@ -304,6 +308,10 @@ public sealed class DiskBackedInteriorPagePipeline(
                 DeleteDownstream(prepared, framed, working, finalPage);
                 break;
             case CacheInvalidationStage.Classification:
+                DeleteIfPresent(classificationFile);
+                DeleteDownstream(prepared, framed, working, finalPage);
+                break;
+            case CacheInvalidationStage.NormalizedSource:
                 DeleteIfPresent(normalized);
                 DeleteIfPresent(classificationFile);
                 DeleteDownstream(prepared, framed, working, finalPage);
@@ -381,7 +389,8 @@ public sealed class DiskBackedInteriorPagePipeline(
         Working,
         Frame,
         Preparation,
-        Classification
+        Classification,
+        NormalizedSource
     }
 
     private sealed record CacheInputStamp(
@@ -406,6 +415,7 @@ public sealed class DiskBackedInteriorPagePipeline(
             int NormalizedSourceSize,
             string NormalizationAlgorithmVersion,
             string BorderLineAlgorithmVersion,
+            string BorderLineSettingsFingerprint,
             string SchemaVersion)
     {
         private static readonly string[] requiredProperties =
@@ -431,6 +441,7 @@ public sealed class DiskBackedInteriorPagePipeline(
             nameof(NormalizedSourceSize),
             nameof(NormalizationAlgorithmVersion),
             nameof(BorderLineAlgorithmVersion),
+            nameof(BorderLineSettingsFingerprint),
             nameof(SchemaVersion)
         ];
 
@@ -468,6 +479,7 @@ public sealed class DiskBackedInteriorPagePipeline(
                 request.ArtworkSourceNormalization.NormalizedSourceSize,
                 ArtworkSourceNormalizationAlgorithmVersion.Current,
                 global::PrintableBook.Core.Application.Processing.BorderLineAlgorithmVersion.Current,
+                JsonSerializer.Serialize(request.BorderLineDetection ?? BorderLineDetectionSettings.Default),
                 CacheStampSchemaVersion);
         }
 

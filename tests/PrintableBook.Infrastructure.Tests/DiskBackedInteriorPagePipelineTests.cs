@@ -556,7 +556,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         else if (string.Equals(invalidStamp, "incompatible-schema", StringComparison.Ordinal))
         {
             var contents = await File.ReadAllTextAsync(stamp);
-            await File.WriteAllTextAsync(stamp, contents.Replace("interior-page-cache-v1", "incompatible-schema", StringComparison.Ordinal));
+            await File.WriteAllTextAsync(stamp, contents.Replace("interior-page-cache-v2", "incompatible-schema", StringComparison.Ordinal));
         }
         else if (string.Equals(invalidStamp, "numeric-frame-mode", StringComparison.Ordinal))
         {
