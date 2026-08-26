@@ -626,9 +626,9 @@ test("PDF Library groups current Cover and Interior PDFs under one Book", () => 
 
   assert.match(alphaMarkup, /Book Alpha - Interior\.pdf/);
   assert.match(alphaMarkup, /Book Alpha - Cover\.pdf/);
-  assert.match(alphaMarkup, /Open PDF/);
-  assert.match(alphaMarkup, /Reveal in Explorer/);
-  assert.match(alphaMarkup, /Copy path/);
+  assert.match(alphaMarkup, />Open</);
+  assert.match(alphaMarkup, />Reveal</);
+  assert.match(alphaMarkup, />Copy</);
 });
 
 test("PDF Library uses Book-centric copy and removes run history language", () => {
@@ -722,6 +722,21 @@ test("PDF Library switches between Grid and List without changing page size", ()
   assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 12);
 });
 
+test("PDF Library Grid uses compact Book cards and the documented desktop columns", () => {
+  const { messageHandler, content } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: manyPdfLibrarySnapshot(4) } });
+  const css = readFileSync(join(process.cwd(), "src", "PrintableBook.Desktop", "Frontend", "css", "book-workspace.css"), "utf8");
+
+  assert.match(content.innerHTML, /pdf-library-grid/);
+  assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 4);
+  assert.equal(content.innerHTML.match(/pdf-library-book-preview/g)?.length ?? 0, 4);
+  assert.match(content.innerHTML, />Open</);
+  assert.match(content.innerHTML, />Reveal</);
+  assert.match(content.innerHTML, />Copy</);
+  assert.match(css, /repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(css, /@media \(min-width:1450px\) \{ \.pdf-library-grid \{ grid-template-columns:repeat\(4,/);
+});
+
 test("PDF Library search filters by Book name", () => {
   const { messageHandler, content, contentListeners, messages, searchInput } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
@@ -762,7 +777,7 @@ test("PDF Library Open PDF sends the exact Book artifact reference", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "output-1", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
   assert.match(content.innerHTML, /Book Alpha - Interior\.pdf/);
-  assert.match(content.innerHTML, /Reveal in Explorer/);
+  assert.match(content.innerHTML, />Reveal</);
   const artifactReference = "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Interior.pdf";
   const open = { dataset: { action: "open-output", bookId: "Book Alpha", artifactReference }, closest: () => open };
   contentListeners.click({ target: open });
