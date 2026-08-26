@@ -572,6 +572,10 @@ test("Book detail separates paginated Interior settings from the Interior artwor
   assert.match(content.innerHTML, /data-action="toggle-artwork-selection"/);
   assert.match(content.innerHTML, /aria-pressed="false"/);
   assert.match(content.innerHTML, /data-action="asset-frame-mode"/);
+  assert.doesNotMatch(content.innerHTML, /All folders/);
+  assert.doesNotMatch(content.innerHTML, /data-action="asset-folder"/);
+  assert.doesNotMatch(content.innerHTML, /data-action="clear-artwork-selection"/);
+  assert.doesNotMatch(content.innerHTML, /Select artwork to apply/);
   assert.doesNotMatch(content.innerHTML, /data-action="set-interior-active"/);
   assert.doesNotMatch(content.innerHTML, /data-action="set-interior-frame-mode"/);
   assert.doesNotMatch(content.innerHTML, /Use Brand background/);
@@ -580,8 +584,7 @@ test("Book detail separates paginated Interior settings from the Interior artwor
   contentListeners.click({ target: activeOnly });
   assert.match(content.innerHTML, /No artwork matches this view/);
 
-  const allStatuses = { dataset: { action: "asset-status", assetStatus: "All" }, closest: () => allStatuses };
-  contentListeners.click({ target: allStatuses });
+  contentListeners.click({ target: activeOnly });
   const frameOnly = { dataset: { action: "asset-frame-mode", assetFrameMode: "enabled" }, closest: () => frameOnly };
   contentListeners.click({ target: frameOnly });
   assert.match(content.innerHTML, /No artwork matches this view/);
