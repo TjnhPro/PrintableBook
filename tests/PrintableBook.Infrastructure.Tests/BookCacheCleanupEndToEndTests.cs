@@ -75,6 +75,38 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Clear_cache_retains_custom_intro_selection_and_rebuilds_intro_artifacts()
+    {
+        var fixture = await CreateProcessedBookAsync("intro-cleanup-book");
+        var intro = new FileReference(Path.Combine(rootPath, "intro-template.png"));
+        await WriteIntroAsync(intro.Value);
+        var stateStore = new JsonBookWorkspaceStateStore(new PhysicalFileSystem());
+        await stateStore.SaveAsync(fixture.Workspace, BookProcessingState.NotStarted(fixture.Command.BookId)
+            .SetHasIntro(true)
+            .SetIntroTemplateKeys(["intro-template.png"]));
+        var command = fixture.Command with { IntroTemplatePages = [intro] };
+
+        Assert.Equal(BookProcessingStatus.Completed, (await fixture.Processor.ProcessBookAsync(command)).Status);
+        var introCache = Path.Combine(fixture.Workspace.WorkingDirectory.Value, "cache", "intro-0001");
+        var introFinal = Path.Combine(fixture.Workspace.ProcessedDirectory.Value, "intro", "intro-0001.png");
+        Assert.True(File.Exists(Path.Combine(introCache, "normalized-source.png")));
+        Assert.True(File.Exists(Path.Combine(introCache, "prepared.png")));
+        Assert.True(File.Exists(introFinal));
+
+        await new PhysicalBookStorageMaintenance().ClearHeavyProcessingCacheAsync(fixture.Workspace);
+
+        var retained = await stateStore.LoadAsync(fixture.Workspace);
+        Assert.True(retained!.HasIntro);
+        Assert.Equal(["intro-template.png"], retained.SelectedIntroTemplateKeys);
+        Assert.False(File.Exists(Path.Combine(introCache, "normalized-source.png")));
+        Assert.False(File.Exists(Path.Combine(introCache, "prepared.png")));
+        Assert.False(File.Exists(introFinal));
+
+        Assert.Equal(BookProcessingStatus.Completed, (await fixture.Processor.ProcessBookAsync(command)).Status);
+        Assert.True(File.Exists(introFinal));
+    }
+
+    [Fact]
     public async Task Legacy_completed_workspace_cleanup_preserves_legacy_output_and_migrates_stamp()
     {
         var bookId = new BookId("legacy-book");
@@ -151,6 +183,15 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
         image.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
         image.GetPixels().SetPixel(firstX, firstY, [0, 0, 0]);
         image.GetPixels().SetPixel(259, 279, [0, 0, 0]);
+        image.Write(path);
+        return Task.CompletedTask;
+    }
+
+    private static Task WriteIntroAsync(string path)
+    {
+        using var image = new MagickImage(MagickColors.White, 1024, 1024);
+        image.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
+        image.GetPixels().SetPixel(100, 100, [0, 0, 0]);
         image.Write(path);
         return Task.CompletedTask;
     }
