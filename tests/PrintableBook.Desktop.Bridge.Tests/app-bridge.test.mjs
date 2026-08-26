@@ -135,6 +135,13 @@ test("webview shell exposes every top-level desktop route", () => {
   assert.match(page, /id="app-content"/);
 });
 
+test("desktop navigation names the outputs route PDF Library", () => {
+  const page = readFileSync(join(process.cwd(), "src", "PrintableBook.Desktop", "Frontend", "index.html"), "utf8");
+
+  assert.match(page, /data-route="outputs"[^>]*>[\s\S]*?<span>PDF Library<\/span>/);
+  assert.doesNotMatch(page, /data-route="outputs"[^>]*>[\s\S]*?<span>Outputs<\/span>/);
+});
+
 test("snapshot rendering opens the Book Library and keeps discovery and brand data in the bridge response", () => {
   const { messageHandler, status, content, brandSelect, messages } = loadBridge();
 
