@@ -14,7 +14,7 @@ public sealed class OrderedBookAssembler(IFileSystem fileSystem, IImageInspector
 
         foreach (var introPage in request.IntroPages)
         {
-            await ValidateReadableAsync(introPage, cancellationToken);
+            await ValidateInteriorPageAsync(introPage, request.ExpectedInteriorSize, cancellationToken);
         }
 
         var finalPagesBySource = request.InteriorPages.ToDictionary(page => page.Source, page => page.FinalPage);
@@ -31,7 +31,12 @@ public sealed class OrderedBookAssembler(IFileSystem fileSystem, IImageInspector
             .OrderBy(entry => entry.OutputIndex)
             .Select(entry => finalPagesBySource[entry.Page])
             .ToArray();
-        var orderedPages = new List<FileReference>(request.IntroPages);
+        var orderedPages = new List<FileReference>();
+        foreach (var intro in request.IntroPages)
+        {
+            orderedPages.Add(intro);
+            if (request.BackgroundPage is not null) orderedPages.Add(request.BackgroundPage);
+        }
         foreach (var artwork in orderedInteriors)
         {
             orderedPages.Add(artwork);

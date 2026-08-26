@@ -49,7 +49,8 @@ public sealed class OrderedBookAssemblerTests : IAsyncLifetime
         var fileSystem = new PhysicalFileSystem();
         var workspace = await new PhysicalBookWorkspaceFactory(fileSystem).CreateAsync(
             new BookId("book-background"), new DirectoryReference(Path.Combine(rootPath, "Book")));
-        var intro = await CreatePngAsync("intro-background.png");
+        var introOne = await CreatePngAsync("intro-background-one.png");
+        var introTwo = await CreatePngAsync("intro-background-two.png");
         var sourceOne = new FileReference("source-one.png");
         var sourceTwo = new FileReference("source-two.png");
         var finalOne = await CreatePngAsync("final-one.png");
@@ -58,10 +59,10 @@ public sealed class OrderedBookAssemblerTests : IAsyncLifetime
         var map = new InteriorShuffleMap([new InteriorShuffleEntry(sourceOne, 2), new InteriorShuffleEntry(sourceTwo, 1)], 7);
 
         var assembly = await new OrderedBookAssembler(fileSystem, new MagickImageInspector()).AssembleAsync(new OrderedBookAssemblyRequest(
-            workspace, [intro], [new InteriorPageProcessingResult("one", sourceOne, finalOne), new InteriorPageProcessingResult("two", sourceTwo, finalTwo)],
+            workspace, [introOne, introTwo], [new InteriorPageProcessingResult("one", sourceOne, finalOne), new InteriorPageProcessingResult("two", sourceTwo, finalTwo)],
             map, new ImageSize(100, 100), background));
 
-        Assert.Equal([intro, finalTwo, background, finalOne, background], assembly.OrderedPages);
+        Assert.Equal([introOne, background, introTwo, background, finalTwo, background, finalOne, background], assembly.OrderedPages);
     }
 
     [Fact]
