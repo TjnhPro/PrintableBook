@@ -43,7 +43,9 @@ public sealed class ProcessingSessionTaskManagerIntegrationTests
         var first = CreateBook("book-one");
         var second = CreateBook("book-two");
         return new ApplicationSnapshot(
-            new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [new DiscoveredBrand("Brand", new DirectoryReference("brand"))], [first, second]),
+            new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")),
+                [new DiscoveredBrand("Brand", new DirectoryReference("brand"), IntroTemplateAssets: [new DiscoveredIntroTemplateAsset("intro.png", "brand/IntroTemplate/intro.png", "intro.png", "file:///intro.png")])],
+                [first, second]),
             GlobalSettings.Default,
             [Summary(first.Id), Summary(second.Id)],
             DateTimeOffset.UtcNow);
@@ -69,7 +71,7 @@ public sealed class ProcessingSessionTaskManagerIntegrationTests
 
     private sealed class NoFileSystem : IFileSystem
     {
-        public ValueTask<bool> FileExistsAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
+        public ValueTask<bool> FileExistsAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult(file.Value.Contains("IntroTemplate", StringComparison.OrdinalIgnoreCase));
         public ValueTask<bool> DirectoryExistsAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
         public ValueTask CreateDirectoryAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public async IAsyncEnumerable<DirectoryReference> EnumerateDirectoriesAsync(DirectoryReference directory, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) { await Task.CompletedTask; yield break; }
@@ -84,7 +86,7 @@ public sealed class ProcessingSessionTaskManagerIntegrationTests
 
     private sealed class NoImageInspector : IImageInspector
     {
-        public ValueTask<ImageSize> GetSizeAsync(FileReference image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<ImageSize> GetSizeAsync(FileReference image, CancellationToken cancellationToken = default) => ValueTask.FromResult(new ImageSize(1024, 1024));
         public ValueTask<ImageInfo> GetInfoAsync(FileReference image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
