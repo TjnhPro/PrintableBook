@@ -9,22 +9,27 @@ namespace PrintableBook.Infrastructure.Imaging;
 /// </summary>
 public sealed class MagickBorderLineDetector : IBorderLineDetector
 {
-    private const int SearchDepth = 100;
-    private const int SearchBandSize = SearchDepth + 1;
-    private const int SegmentCount = 8;
-    private const double CornerExclusionRatio = 0.10;
-    private const int CornerSearchSize = 120;
-    private const int CornerLineTolerance = 8;
-    private const int MinimumCompatibleCorners = 3;
-    private const int TrackDepthTolerance = 3;
+    [ThreadStatic] private static BorderLineDetectionSettings? activeSettings;
+    [ThreadStatic] private static int activeSearchDepth;
+    private static readonly BorderLineDetectionSettings LegacyStandaloneSettings = new(
+        100, 100, 20, 3, 8, 12, 8, 0.10, 3, 0.35, 0.55, 0.70, 6, 2);
+    private static BorderLineDetectionSettings Settings => activeSettings ?? BorderLineDetectionSettings.Default;
+    private static int SearchDepth => activeSearchDepth == 0 ? Settings.Pass1SearchDepth : activeSearchDepth;
+    private static int SearchBandSize => SearchDepth + 1;
+    private static int SegmentCount => Settings.SegmentCount;
+    private static double CornerExclusionRatio => Settings.CornerExclusionRatio;
+    private static int CornerSearchSize => SearchDepth + Settings.CornerSearchPadding;
+    private static int CornerLineTolerance => Settings.CornerLineTolerance;
+    private static int MinimumCompatibleCorners => Settings.MinimumCompatibleCorners;
+    private static int TrackDepthTolerance => Settings.TrackDepthTolerance;
     private const byte MinimumOpaqueAlpha = 128;
 
-    private const double MinimumSegmentSupportRatio = 0.35;
-    private const double MinimumSideSupportRatio = 0.55;
-    private const double MinimumSpanRatio = 0.70;
-    private const int MinimumSupportedSegments = 6;
-    private const int MaximumDepthSpread = 12;
-    private const int MaximumMissingSegmentRun = 2;
+    private static double MinimumSegmentSupportRatio => Settings.MinimumSegmentSupportRatio;
+    private static double MinimumSideSupportRatio => Settings.MinimumSideSupportRatio;
+    private static double MinimumSpanRatio => Settings.MinimumSpanRatio;
+    private static int MinimumSupportedSegments => Settings.MinimumSupportedSegments;
+    private static int MaximumDepthSpread => Settings.MaximumDepthSpread;
+    private static int MaximumMissingSegmentRun => Settings.MaximumMissingSegmentRun;
 
     public ValueTask<BorderLineDetectionResult> DetectAsync(
         BorderLineDetectionRequest request,
@@ -45,6 +50,29 @@ public sealed class MagickBorderLineDetector : IBorderLineDetector
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
+
+        var previousSettings = activeSettings;
+        var previousDepth = activeSearchDepth;
+        activeSettings = request.Settings ?? LegacyStandaloneSettings;
+        try
+        {
+            activeSearchDepth = activeSettings.Pass1SearchDepth;
+            var first = MeasurePass(request, cancellationToken);
+            if (first.Detection.HasBorder) return first;
+            activeSearchDepth = activeSettings.Pass2SearchDepth;
+            return MeasurePass(request, cancellationToken);
+        }
+        finally
+        {
+            activeSettings = previousSettings;
+            activeSearchDepth = previousDepth;
+        }
+    }
+
+    private static BorderLineMeasurement MeasurePass(
+        BorderLineDetectionRequest request,
+        CancellationToken cancellationToken)
+    {
 
         using var image = new MagickImage(request.Source.Value);
         using var pixels = image.GetPixels();
