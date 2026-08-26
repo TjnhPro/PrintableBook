@@ -33,19 +33,11 @@ public sealed class BookSourceScanner(IFileSystem fileSystem) : IBookSourceScann
 
             await foreach (var file in fileSystem.EnumerateFilesAsync(sourceDirectory, cancellationToken))
             {
-                if (BookSourceLayout.IsSupportedImage(file.Value))
-                {
-                    assets.Add(new BookAsset(file.Value, kind));
-                }
+                assets.Add(new BookAsset(file.Value, kind));
             }
         }
 
         var source = new BookSource(assets.OrderBy(asset => asset.Reference, StringComparer.OrdinalIgnoreCase));
-        if (source.GetAssets(BookAssetKind.Interior).Count == 0)
-        {
-            return BookSourceScanResult.Failed(new ProcessingFailure("book.interior_empty", "The book does not contain any readable interior images."), source);
-        }
-
         return BookSourceScanResult.Succeeded(source);
     }
 }

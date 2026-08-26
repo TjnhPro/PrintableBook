@@ -1,4 +1,3 @@
-using ImageMagick;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Scanning;
 using PrintableBook.Core.Domain.Books;
@@ -13,30 +12,30 @@ public sealed class BookSourceScannerTests : IAsyncLifetime
     private readonly PhysicalFileSystem fileSystem = new();
 
     [Fact]
-    public async Task ScanAsync_classifies_real_pngs_in_all_supported_groups_and_orders_interior_deterministically()
+    public async Task ScanAsync_discovers_all_files_without_validating_extensions()
     {
-        await CreatePngAsync("Cover", "cover.PNG");
-        await CreatePngAsync("Intro", "intro-02.png");
-        await CreatePngAsync("Intro", "intro-01.PNG");
-        await CreatePngAsync("Interior", "page-02.PNG");
-        await CreatePngAsync("Interior", "page-01.png");
+        await CreateFileAsync("Cover", "cover.PNG");
+        await CreateFileAsync("Intro", "intro-02.png");
+        await CreateFileAsync("Intro", "intro-01.PNG");
+        await CreateFileAsync("Interior", "page-02.PNG");
+        await CreateFileAsync("Interior", "page-01.png");
         await CreateFileAsync("Interior", "notes.txt");
-        await CreatePngAsync("Colored", "preview.PNG");
+        await CreateFileAsync("Colored", "preview.PNG");
 
         var result = await CreateScanner().ScanAsync(new BookId("book-one"), new DirectoryReference(rootPath));
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(["page-01.png", "page-02.PNG"], result.Source!.GetAssets(BookAssetKind.Interior).Select(asset => Path.GetFileName(asset.Reference)));
+        Assert.Equal(["notes.txt", "page-01.png", "page-02.PNG"], result.Source!.GetAssets(BookAssetKind.Interior).Select(asset => Path.GetFileName(asset.Reference)));
         Assert.Single(result.Source.GetAssets(BookAssetKind.Cover));
         Assert.Equal(["intro-01.PNG", "intro-02.png"], result.Source.GetAssets(BookAssetKind.Intro).Select(asset => Path.GetFileName(asset.Reference)));
         Assert.Single(result.Source.GetAssets(BookAssetKind.Colored));
-        Assert.Equal(6, result.Source.Assets.Count);
+        Assert.Equal(7, result.Source.Assets.Count);
     }
 
     [Fact]
     public async Task ScanAsync_accepts_empty_optional_groups_and_keeps_a_corrupt_png_as_an_interior_asset_for_downstream_validation()
     {
-        await CreatePngAsync("Cover", "cover.png");
+        await CreateFileAsync("Cover", "cover.png");
         await CreateFileAsync("Interior", "corrupt.PNG");
         await fileSystem.CreateDirectoryAsync(new DirectoryReference(Path.Combine(rootPath, "Intro")));
         await fileSystem.CreateDirectoryAsync(new DirectoryReference(Path.Combine(rootPath, "Colored")));
@@ -52,10 +51,10 @@ public sealed class BookSourceScannerTests : IAsyncLifetime
     [Fact]
     public async Task ScanAsync_handles_a_large_interior_corpus_without_duplicates()
     {
-        await CreatePngAsync("Cover", "cover.png");
+        await CreateFileAsync("Cover", "cover.png");
         for (var index = 1; index <= 90; index++)
         {
-            await CreatePngAsync("Interior", $"page-{index:D4}.png");
+            await CreateFileAsync("Interior", $"page-{index:D4}.png");
         }
 
         var result = await CreateScanner().ScanAsync(new BookId("book-one"), new DirectoryReference(rootPath));
@@ -81,25 +80,25 @@ public sealed class BookSourceScannerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ScanAsync_returns_a_structured_failure_when_interior_is_empty()
+    public async Task ScanAsync_succeeds_when_interior_folder_is_empty()
     {
         await CreateFileAsync("Cover", "cover.png");
         await fileSystem.CreateDirectoryAsync(new DirectoryReference(Path.Combine(rootPath, "Interior")));
 
         var result = await CreateScanner().ScanAsync(new BookId("book-one"), new DirectoryReference(rootPath));
 
-        Assert.False(result.IsSuccess);
-        Assert.Equal("book.interior_empty", result.Failure!.Code);
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Source!.GetAssets(BookAssetKind.Interior));
     }
 
     [Fact]
     public async Task ScanAsync_supports_the_discovered_book_folder_layout_and_jpeg_interiors()
     {
-        await CreatePngAsync("Source cover", "page-001.png");
-        await CreatePngAsync("Source cover", "page-002.png");
-        await CreateJpegAsync("Book interior", "page-001.jpg");
-        await CreateJpegAsync("Book interior", "page-002.jpeg");
-        await CreateJpegAsync("Book colored", "page-001.jpg");
+        await CreateFileAsync("Source cover", "page-001.png");
+        await CreateFileAsync("Source cover", "page-002.png");
+        await CreateFileAsync("Book interior", "page-001.jpg");
+        await CreateFileAsync("Book interior", "page-002.jpeg");
+        await CreateFileAsync("Book colored", "page-001.jpg");
 
         var result = await CreateScanner().ScanAsync(new BookId("book-one"), new DirectoryReference(rootPath));
 
@@ -130,23 +129,4 @@ public sealed class BookSourceScannerTests : IAsyncLifetime
         await fileSystem.WriteTextAtomicallyAsync(new FileReference(Path.Combine(directory, name)), "fixture");
     }
 
-    private Task CreatePngAsync(string group, string name)
-    {
-        var directory = Path.Combine(rootPath, group);
-        Directory.CreateDirectory(directory);
-        using var image = new MagickImage(MagickColors.White, 12, 12);
-        image.GetPixels().SetPixel(6, 6, [0, 0, 0]);
-        image.Write(Path.Combine(directory, name));
-        return Task.CompletedTask;
-    }
-
-    private Task CreateJpegAsync(string group, string name)
-    {
-        var directory = Path.Combine(rootPath, group);
-        Directory.CreateDirectory(directory);
-        using var image = new MagickImage(MagickColors.White, 12, 12);
-        image.Format = MagickFormat.Jpeg;
-        image.Write(Path.Combine(directory, name));
-        return Task.CompletedTask;
-    }
 }
