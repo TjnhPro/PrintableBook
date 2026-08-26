@@ -208,16 +208,16 @@ test("snapshot rendering opens the Book Library and keeps discovery and brand da
   assert.doesNotMatch(content.innerHTML, /Paths \(Read Only\)/);
 });
 
-test("Books display the total local folder size with the Interior page count", () => {
+test("Books display the active Interior page count without local folder size", () => {
   const { messageHandler, content } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-size", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
-    bookSummaries: [{ bookId: { value: "Book 001" }, interiorSourcePageCount: 22, folderSizeBytes: 1610612736, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [] }]
+    bookSummaries: [{ bookId: { value: "Book 001" }, interiorSourcePageCount: 22, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [] }]
   } } });
 
-  assert.match(content.innerHTML, /22 \/ 22 Interior active · 1\.5 GB/);
-  assert.match(readFileSync(appScriptPath, "utf8"), /Math\.round\(value \/ 1024\)/);
+  assert.match(content.innerHTML, /22 \/ 22 Interior active/);
+  assert.doesNotMatch(content.innerHTML, /Interior active ·/);
 });
 
 test("books toolbar starts one confirmed cache cleanup and polls it", () => {

@@ -175,7 +175,6 @@ public sealed class CacheCleanupWorkerTests
         public Dictionary<string, Exception> Failures { get; } = [];
         public List<string> Calls { get; } = [];
         public int MaximumConcurrentCalls { get; private set; }
-        public ValueTask<long> GetBookSizeBytesAsync(DirectoryReference bookDirectory, CancellationToken cancellationToken = default) => ValueTask.FromResult(0L);
         public async ValueTask<long> ClearHeavyProcessingCacheAsync(BookWorkspace workspace, CancellationToken cancellationToken = default)
         {
             var active = Interlocked.Increment(ref activeCalls);

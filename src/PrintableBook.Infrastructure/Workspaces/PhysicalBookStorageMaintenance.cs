@@ -12,15 +12,6 @@ public sealed class PhysicalBookStorageMaintenance : IBookStorageMaintenance
         "input-stamp.json"
     };
 
-    public ValueTask<long> GetBookSizeBytesAsync(
-        DirectoryReference bookDirectory,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(bookDirectory);
-        cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult(GetDirectorySize(bookDirectory.Value, cancellationToken));
-    }
-
     public ValueTask<long> ClearHeavyProcessingCacheAsync(
         BookWorkspace workspace,
         CancellationToken cancellationToken = default)
@@ -46,49 +37,6 @@ public sealed class PhysicalBookStorageMaintenance : IBookStorageMaintenance
         {
             throw new BookStorageCleanupException(freedBytes, exception);
         }
-    }
-
-    private static long GetDirectorySize(string root, CancellationToken cancellationToken)
-    {
-        if (!Directory.Exists(root) || IsReparsePoint(root)) return 0;
-        long total = 0;
-        var pending = new Stack<string>();
-        pending.Push(root);
-        while (pending.Count > 0)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var directory = pending.Pop();
-            IEnumerable<string> files;
-            IEnumerable<string> directories;
-            try
-            {
-                files = Directory.EnumerateFiles(directory).ToArray();
-                directories = Directory.EnumerateDirectories(directory).ToArray();
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
-            {
-                continue;
-            }
-
-            foreach (var file in files)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                try { total = checked(total + new FileInfo(file).Length); }
-                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FileNotFoundException) { }
-            }
-
-            foreach (var child in directories)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                try
-                {
-                    if (!IsReparsePoint(child)) pending.Push(child);
-                }
-                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or FileNotFoundException or DirectoryNotFoundException) { }
-            }
-        }
-
-        return total;
     }
 
     private static void MigrateLegacyStamps(string cacheRoot, string processedInterior, CancellationToken cancellationToken)

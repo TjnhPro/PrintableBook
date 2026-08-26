@@ -4,10 +4,6 @@ namespace PrintableBook.Core.Application.Storage;
 
 public interface IBookStorageMaintenance
 {
-    ValueTask<long> GetBookSizeBytesAsync(
-        DirectoryReference bookDirectory,
-        CancellationToken cancellationToken = default);
-
     ValueTask<long> ClearHeavyProcessingCacheAsync(
         BookWorkspace workspace,
         CancellationToken cancellationToken = default);

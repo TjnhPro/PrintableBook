@@ -5,7 +5,6 @@ using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Diagnostics;
-using PrintableBook.Core.Application.Storage;
 
 namespace PrintableBook.Core.Application.Desktop;
 
@@ -21,7 +20,7 @@ public interface ILocalOutputActionService
     ValueTask RevealAsync(FileReference file, CancellationToken cancellationToken = default);
     ValueTask CopyPathAsync(FileReference file, CancellationToken cancellationToken = default);
 }
-public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, long FolderSizeBytes = 0, bool HasBackground = false, int ActiveInteriorSourcePageCount = 0);
+public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = false, int ActiveInteriorSourcePageCount = 0);
 public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt);
 
 public interface IApplicationSnapshotService
@@ -40,7 +39,6 @@ public sealed class ApplicationSnapshotService(
     IBookSourceScanner sourceScanner,
     IBookWorkspaceStateStore stateStore,
     IFileSystem fileSystem,
-    IBookStorageMaintenance storageMaintenance,
     IPdfDocumentInspector? pdfDocumentInspector = null,
     IOperationDiagnostics? diagnostics = null) : IApplicationSnapshotService
 {
@@ -147,7 +145,6 @@ public sealed class ApplicationSnapshotService(
                 checks.Add(new BookValidationCheck("book.no_active_interior_pages", "Activate at least one Interior page before processing.", false));
             }
             var assetSummaries = DescribeAssets(book, source, state);
-            var folderSizeBytes = await storageMaintenance.GetBookSizeBytesAsync(book.Directory, cancellationToken);
             summaries.Add(new BookDesktopSummary(
                 book.Id,
                 isReady ? "Ready" : "Invalid",
@@ -168,7 +165,6 @@ public sealed class ApplicationSnapshotService(
                 fullBookChecks,
                 await DescribeOutputsAsync(book.Id, state.PublishedArtifactReferences ?? [], cancellationToken),
                 FindRepresentativeCoverReference(book, source, state.SelectedCoverReference),
-                FolderSizeBytes: folderSizeBytes,
                 HasBackground: state.HasBackground,
                 ActiveInteriorSourcePageCount: activeInteriorSourcePageCount));
         }

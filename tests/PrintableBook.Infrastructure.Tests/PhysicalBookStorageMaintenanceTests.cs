@@ -10,19 +10,6 @@ public sealed class PhysicalBookStorageMaintenanceTests : IAsyncLifetime
     private readonly string rootPath = Path.Combine(Path.GetTempPath(), $"PrintableBook.StorageMaintenance.{Guid.NewGuid():N}");
 
     [Fact]
-    public async Task GetBookSizeBytesAsync_counts_the_whole_book_tree()
-    {
-        var book = Path.Combine(rootPath, "Book");
-        await WriteBytesAsync(Path.Combine(book, "Book interior", "source.png"), 11);
-        await WriteBytesAsync(Path.Combine(book, ".workspace", "cache", "page-0001", "prepared.png"), 13);
-        await WriteBytesAsync(Path.Combine(book, "Output", "Book - Interior.pdf"), 17);
-
-        var bytes = await new PhysicalBookStorageMaintenance().GetBookSizeBytesAsync(new DirectoryReference(book));
-
-        Assert.Equal(41, bytes);
-    }
-
-    [Fact]
     public async Task ClearHeavyProcessingCacheAsync_keeps_metadata_state_sources_and_output()
     {
         var workspace = await CreateWorkspaceAsync("Book");
