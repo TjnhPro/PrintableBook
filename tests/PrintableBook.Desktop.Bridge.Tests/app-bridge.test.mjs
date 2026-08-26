@@ -20,6 +20,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   const searchInput = { focused: false, selection: null, focus() { this.focused = true; }, setSelectionRange(start, end) { this.selection = [start, end]; } };
   let contentMarkup = "";
   let fullRenderCount = 0;
+  let bookDrawerBodyRenderCount = 0;
   let introWorkspaceRenderCount = 0;
   let artworkWorkspaceRenderCount = 0;
   const introPaginationFocus = { action: "", focus() { this.action = "focused"; } };
@@ -42,6 +43,14 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     set outerHTML(markup) {
       artworkWorkspaceRenderCount += 1;
       contentMarkup = contentMarkup.replace(/<section class="interior-artwork-workspace">[\s\S]*?<\/section>/, markup);
+    }
+  };
+  const bookDrawerBody = {
+    scrollTop: 0,
+    querySelector: (selector) => selector === ".interior-artwork-grid-scroll" && contentMarkup.includes('class="interior-artwork-grid-scroll"') ? artworkGrid : null,
+    set innerHTML(markup) {
+      bookDrawerBodyRenderCount += 1;
+      contentMarkup = contentMarkup.replace(/(<div class="book-drawer-body">)[\s\S]*(<\/div><\/section><\/div>)$/, `$1${markup}$2`);
     }
   };
   const brandSelectListeners = {};
@@ -87,6 +96,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
         if (selector === "[data-brand-settings]") return brandSettingsEditor;
         if (selector === ".intro-template-workspace" && contentMarkup.includes('class="intro-template-workspace"')) return introWorkspace;
         if (selector === ".interior-artwork-workspace" && contentMarkup.includes('class="interior-artwork-workspace"')) return artworkWorkspace;
+        if (selector === ".book-drawer-body" && contentMarkup.includes('class="book-drawer-body"')) return bookDrawerBody;
         if (selector === ".interior-artwork-grid-scroll" && contentMarkup.includes('class="interior-artwork-grid-scroll"')) return artworkGrid;
         if (selector.startsWith('[data-action="intro-template-page"]')) return introPaginationFocus;
         return selector === ".nav-item-active" && activeRoute ? { dataset: { route: activeRoute } } : null;
@@ -97,7 +107,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSelect, brandSelectListeners, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages, browserWindow, searchInput, getFullRenderCount: () => fullRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, brandSelect, brandSelectListeners, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages, browserWindow, searchInput, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -527,8 +537,8 @@ test("book filters render a recovered interrupted workspace without failing", ()
   assert.match(content.innerHTML, /Preflight/);
 });
 
-test("Book detail separates paginated Interior settings from the Interior artwork workspace", () => {
-  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+test("Book detail changes tabs without redrawing its drawer shell", () => {
+  const { messageHandler, content, contentListeners, messages, getFullRenderCount, getBookDrawerBodyRenderCount } = loadBridge("books");
   const snapshot = (frameMode) => ({
     discovery: {
       paths: { root: { value: "D:/PrintableBook" } },
@@ -551,8 +561,12 @@ test("Book detail separates paginated Interior settings from the Interior artwor
 
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
+  const fullRendersBeforeTabChange = getFullRenderCount();
   const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
   contentListeners.click({ target: settingsTab });
+
+  assert.equal(getFullRenderCount(), fullRendersBeforeTabChange);
+  assert.equal(getBookDrawerBodyRenderCount(), 1);
 
   assert.match(content.innerHTML, /Interior settings/);
   assert.match(content.innerHTML, /Use Brand background/);
@@ -565,6 +579,8 @@ test("Book detail separates paginated Interior settings from the Interior artwor
 
   const artworkTab = { dataset: { action: "book-tab", bookTab: "artwork" }, closest: () => artworkTab };
   contentListeners.click({ target: artworkTab });
+  assert.equal(getFullRenderCount(), fullRendersBeforeTabChange);
+  assert.equal(getBookDrawerBodyRenderCount(), 2);
   assert.match(content.innerHTML, /Interior artwork/);
   assert.match(content.innerHTML, /interior-artwork-grid-scroll/);
   assert.match(content.innerHTML, /Inactive/);

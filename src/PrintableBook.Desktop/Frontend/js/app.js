@@ -443,6 +443,22 @@
     updateInteriorSaveUi();
   };
 
+  const refreshBookDrawerBody = (focusTab = "") => {
+    const book = selectedBook();
+    const summary = book ? summaryFor(book) : null;
+    const drawerBody = document.querySelector(".book-drawer-body");
+    if (!book || !summary || !drawerBody) { render("books", false); return; }
+    if (Number.isFinite(drawerBody.scrollTop)) state.bookDrawerScrollTop = drawerBody.scrollTop;
+    const artworkGrid = drawerBody.querySelector?.(".interior-artwork-grid-scroll") ?? document.querySelector(".interior-artwork-grid-scroll");
+    if (artworkGrid && Number.isFinite(artworkGrid.scrollTop)) state.artworkGridScrollTop = artworkGrid.scrollTop;
+    drawerBody.innerHTML = renderBookTabs(book, summary);
+    if (Number.isFinite(state.bookDrawerScrollTop)) drawerBody.scrollTop = state.bookDrawerScrollTop;
+    const refreshedGrid = document.querySelector(".interior-artwork-grid-scroll");
+    if (refreshedGrid && Number.isFinite(state.artworkGridScrollTop)) refreshedGrid.scrollTop = state.artworkGridScrollTop;
+    updateInteriorSaveUi();
+    if (focusTab) document.querySelector(`[data-action="book-tab"][data-book-tab="${focusTab}"]`)?.focus();
+  };
+
   const renderBookDrawer = (book, summary) => {
     if (!state.bookDrawerOpen || !book || !summary) return "";
     const cover = assetForReference(summary, valueFor(summary, "representativeCoverReference", ""));
@@ -804,7 +820,7 @@
         refreshInteriorArtworkWorkspace();
       }
     }
-    if (action === "book-tab") { state.selectedBookTab = ["settings", "artwork"].includes(target.dataset.bookTab) ? target.dataset.bookTab : "overview"; render("books", false); }
+    if (action === "book-tab") { state.selectedBookTab = ["settings", "artwork"].includes(target.dataset.bookTab) ? target.dataset.bookTab : "overview"; refreshBookDrawerBody(state.selectedBookTab); }
     if (action === "select-asset") { state.selectedAssetReference = target.dataset.sourceReference; render("books", false); }
     if (action === "asset-view") { state.assetView = target.dataset.assetView; render("books", false); }
     if (action === "asset-status") { const status = ["Active", "Inactive"].includes(target.dataset.assetStatus) ? target.dataset.assetStatus : ""; state.assetStatus = state.assetStatus === status ? "" : status; state.artworkGridScrollTop = 0; refreshInteriorArtworkWorkspace(); }
