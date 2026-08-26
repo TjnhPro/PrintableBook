@@ -5,5 +5,5 @@ namespace PrintableBook.Core.Application.Processing;
 /// </summary>
 public static class ClassificationAlgorithmVersion
 {
-    public const string Current = "artwork-classification-v1";
+    public const string Current = "artwork-classification-v2";
 }
