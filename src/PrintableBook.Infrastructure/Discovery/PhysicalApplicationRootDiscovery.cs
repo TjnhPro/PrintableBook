@@ -1,5 +1,6 @@
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Discovery;
+using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Domain.Books;
 
 namespace PrintableBook.Infrastructure.Discovery;
@@ -13,7 +14,14 @@ public sealed class PhysicalApplicationRootDiscovery(IFileSystem fileSystem, IBo
         await fileSystem.CreateDirectoryAsync(paths.BrandsDirectory, cancellationToken);
         await fileSystem.CreateDirectoryAsync(paths.SourcesDirectory, cancellationToken);
         var brands = new List<DiscoveredBrand>();
-        await foreach (var directory in fileSystem.EnumerateDirectoriesAsync(paths.BrandsDirectory, cancellationToken)) brands.Add(new DiscoveredBrand(Path.GetFileName(directory.Value), directory, await DiscoverBrandAssetsAsync(directory, cancellationToken)));
+        await foreach (var directory in fileSystem.EnumerateDirectoriesAsync(paths.BrandsDirectory, cancellationToken))
+        {
+            brands.Add(new DiscoveredBrand(
+                Path.GetFileName(directory.Value),
+                directory,
+                await DiscoverBrandAssetsAsync(directory, cancellationToken),
+                await DiscoverIntroTemplateAssetsAsync(directory, cancellationToken)));
+        }
         var books = new List<DiscoveredBook>();
         await foreach (var directory in fileSystem.EnumerateDirectoriesAsync(paths.SourcesDirectory, cancellationToken))
         {
@@ -45,5 +53,27 @@ public sealed class PhysicalApplicationRootDiscovery(IFileSystem fileSystem, IBo
             assets.Add(new DiscoveredBrandAsset(name, type, exists ? "Present" : "Missing", path));
         }
         return assets;
+    }
+
+    private async ValueTask<IReadOnlyList<DiscoveredIntroTemplateAsset>> DiscoverIntroTemplateAssetsAsync(DirectoryReference brandDirectory, CancellationToken cancellationToken)
+    {
+        var templateDirectory = new DirectoryReference(Path.Combine(brandDirectory.Value, "IntroTemplate"));
+        if (!await fileSystem.DirectoryExistsAsync(templateDirectory, cancellationToken)) return [];
+
+        var assets = new List<DiscoveredIntroTemplateAsset>();
+        await foreach (var source in fileSystem.EnumerateFilesAsync(templateDirectory, cancellationToken))
+        {
+            var sourceReference = source.Value;
+            assets.Add(new DiscoveredIntroTemplateAsset(
+                IntroTemplateSourceKey.FromTemplateRoot(templateDirectory, source),
+                sourceReference,
+                Path.GetFileName(sourceReference),
+                new Uri(Path.GetFullPath(sourceReference)).AbsoluteUri));
+        }
+
+        return assets
+            .OrderBy(asset => asset.FileName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(asset => asset.Key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 }

@@ -29,6 +29,22 @@ public sealed class ApplicationRootDiscoveryTests : IAsyncLifetime
         Assert.All(snapshot.Brands, brand => Assert.Equal(6, brand.Assets!.Count));
     }
 
+    [Fact]
+    public async Task DiscoverAsync_exposes_sorted_portable_intro_template_assets()
+    {
+        var template = Path.Combine(rootPath, "brands", "Amazon", "IntroTemplate");
+        Directory.CreateDirectory(template);
+        await File.WriteAllTextAsync(Path.Combine(template, "z-last.jpg"), "test");
+        await File.WriteAllTextAsync(Path.Combine(template, "a-first.png"), "test");
+        var fileSystem = new PhysicalFileSystem();
+        var discovery = new PhysicalApplicationRootDiscovery(fileSystem, new PhysicalBookWorkspaceFactory(fileSystem), () => rootPath);
+
+        var brand = Assert.Single((await discovery.DiscoverAsync()).Brands);
+
+        Assert.Equal(["a-first.png", "z-last.jpg"], brand.IntroTemplateAssets!.Select(asset => asset.Key));
+        Assert.All(brand.IntroTemplateAssets!, asset => Assert.StartsWith("file:", asset.LocalImageUrl, StringComparison.OrdinalIgnoreCase));
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
     public Task DisposeAsync()
     {
