@@ -24,10 +24,12 @@ public sealed record PrintableBookProcessingCommand(
     BookProcessingMode Mode = BookProcessingMode.FullBook,
     FileReference? BackgroundPage = null,
     ArtworkSourceNormalizationSettings? ArtworkSourceNormalization = null,
-    BorderLineDetectionSettings? BorderLineDetection = null)
+    BorderLineDetectionSettings? BorderLineDetection = null,
+    IReadOnlyList<FileReference>? IntroTemplatePages = null)
 {
     public ArtworkSourceNormalizationSettings EffectiveArtworkSourceNormalization => ArtworkSourceNormalization ?? ArtworkSourceNormalizationSettings.Default;
     public BorderLineDetectionSettings EffectiveBorderLineDetection => BorderLineDetection ?? BorderLineDetectionSettings.Default;
+    public IReadOnlyList<FileReference> EffectiveIntroTemplatePages => IntroTemplatePages ?? [];
 }
 
 public sealed record BookProcessingQueueRequest(IReadOnlyList<PrintableBookProcessingCommand> Books);

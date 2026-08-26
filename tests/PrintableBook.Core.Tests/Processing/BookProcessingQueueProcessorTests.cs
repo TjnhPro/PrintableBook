@@ -9,6 +9,14 @@ namespace PrintableBook.Core.Tests.Processing;
 public sealed class BookProcessingQueueProcessorTests
 {
     [Fact]
+    public void Command_exposes_an_empty_intro_sequence_when_none_was_supplied()
+    {
+        var command = Command("book-one");
+
+        Assert.Empty(command.EffectiveIntroTemplatePages);
+    }
+
+    [Fact]
     public async Task ProcessAsync_rejects_a_second_queue_while_the_first_queue_owns_the_session_gate()
     {
         var gate = new ProcessingSessionGate();
