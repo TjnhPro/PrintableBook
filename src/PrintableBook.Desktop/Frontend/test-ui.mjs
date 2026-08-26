@@ -4,6 +4,8 @@ const app = readFileSync(new URL("./js/app.js", import.meta.url), "utf8");
 const expected = [
   "Overview",
   "Interior settings",
+  "Interior pages",
+  "No processed pages",
   "book.interior.settings.save",
   "Save changes",
   "Use Brand background",

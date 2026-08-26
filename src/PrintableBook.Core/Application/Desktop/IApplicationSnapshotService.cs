@@ -9,7 +9,7 @@ using PrintableBook.Core.Application.Diagnostics;
 namespace PrintableBook.Core.Application.Desktop;
 
 public sealed record BookValidationCheck(string Code, string Message, bool IsSuccess, bool IsWarning = false);
-public sealed record InteriorPageSummary(string PageId, string Status, string FinalPagePath);
+public sealed record InteriorPageSummary(string PageId, string Status, string FinalPagePath, string LocalImageUrl = "");
 public sealed record InteriorSourcePageSummary(string SourceReference, FrameMode FrameMode, bool IsActive = true, string? SourceKey = null);
 public sealed record BookFolderSummary(string Name, string Status, int FileCount, int ImageCount);
 public sealed record BookAssetSummary(string SourceReference, string RelativePath, string FileName, string Folder, string Kind, int? Width, int? Height, FrameMode FrameMode, string LocalImageUrl, bool IsActive = true);
@@ -90,7 +90,7 @@ public sealed class ApplicationSnapshotService(
         {
             if (string.Equals(Path.GetExtension(page.Value), ".png", StringComparison.OrdinalIgnoreCase))
             {
-                interiorPages.Add(new InteriorPageSummary(Path.GetFileNameWithoutExtension(page.Value), "Completed", page.Value));
+                interiorPages.Add(new InteriorPageSummary(Path.GetFileNameWithoutExtension(page.Value), "Completed", page.Value, ToLocalImageUrl(page.Value)));
             }
         }
         var checks = new List<BookValidationCheck>();

@@ -671,6 +671,39 @@ test("Interior artwork clears saved bulk selection without redrawing the Book dr
   assert.match(content.innerHTML, /<option value="unchanged" selected>No change<\/option>/);
 });
 
+test("Interior pages shows read-only processed previews and an empty state before processing", () => {
+  const { messageHandler, content, contentListeners, getFullRenderCount } = loadBridge("books");
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, workspaceStatus: "Completed", validationChecks: [], sourceFolders: [], publishedArtifacts: [], logs: [],
+      interiorPages: [
+        { pageId: "page-0002", status: "Completed", finalPagePath: "processed/interior/page-0002.png", localImageUrl: "file:///processed/interior/page-0002.png" },
+        { pageId: "page-0001", status: "Completed", finalPagePath: "processed/interior/page-0001.png", localImageUrl: "file:///processed/interior/page-0001.png" }
+      ],
+      assets: []
+    }]
+  };
+
+  messageHandler({ data: { version: 1, id: "processed-pages", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const fullRendersBeforeTabChange = getFullRenderCount();
+  const pagesTab = { dataset: { action: "book-tab", bookTab: "pages" }, closest: () => pagesTab };
+  contentListeners.click({ target: pagesTab });
+
+  assert.equal(getFullRenderCount(), fullRendersBeforeTabChange);
+  assert.match(content.innerHTML, /Interior pages/);
+  assert.match(content.innerHTML, /<strong>2<\/strong> processed/);
+  assert.match(content.innerHTML, /src="file:\/\/\/processed\/interior\/page-0001\.png"/);
+  assert.doesNotMatch(content.innerHTML, /data-action="toggle-artwork-selection"/);
+
+  snapshot.bookSummaries[0].interiorPages = [];
+  messageHandler({ data: { version: 1, id: "processed-pages-empty", ok: true, command: "app.snapshot", payload: snapshot } });
+  assert.match(content.innerHTML, /No processed pages/);
+});
+
 test("Interior artwork hides custom Intro pages and batches only remaining artwork", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   const snapshot = {

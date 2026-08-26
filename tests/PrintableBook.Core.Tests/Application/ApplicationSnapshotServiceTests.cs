@@ -95,6 +95,24 @@ public sealed class ApplicationSnapshotServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_exposes_a_canonical_file_url_for_each_processed_interior_page()
+    {
+        var processedPage = new FileReference(Path.Combine("processed", "interior", "page-0001.png"));
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(),
+            new StubSettingsStore(),
+            new StubScanner(),
+            new StubStateStore(),
+            new StubFileSystem(processedPage)).RefreshAsync();
+
+        var page = Assert.Single(Assert.Single(snapshot.BookSummaries).InteriorPages);
+
+        Assert.Equal("page-0001", page.PageId);
+        Assert.Equal(processedPage.Value, page.FinalPagePath);
+        Assert.Equal(new Uri(Path.GetFullPath(processedPage.Value)).AbsoluteUri, page.LocalImageUrl);
+    }
+
+    [Fact]
     public async Task RefreshAsync_keeps_asset_dimensions_unavailable_without_inspecting_source_images()
     {
         var snapshot = await new ApplicationSnapshotService(
@@ -441,13 +459,16 @@ public sealed class ApplicationSnapshotServiceTests
         public ValueTask SaveErrorAsync(BookWorkspace workspace, ProcessingFailure failure, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 
-    private sealed class StubFileSystem : IFileSystem
+    private sealed class StubFileSystem(params FileReference[] files) : IFileSystem
     {
         public ValueTask<bool> FileExistsAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
         public ValueTask<bool> DirectoryExistsAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
         public ValueTask CreateDirectoryAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public async IAsyncEnumerable<DirectoryReference> EnumerateDirectoriesAsync(DirectoryReference directory, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) { yield break; }
-        public async IAsyncEnumerable<FileReference> EnumerateFilesAsync(DirectoryReference directory, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) { yield break; }
+        public async IAsyncEnumerable<FileReference> EnumerateFilesAsync(DirectoryReference directory, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            foreach (var file in files) yield return file;
+        }
         public ValueTask<string> ReadTextAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult(string.Empty);
         public ValueTask WriteTextAtomicallyAsync(FileReference file, string content, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask CopyFileAsync(FileReference source, FileReference destination, bool overwrite, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
