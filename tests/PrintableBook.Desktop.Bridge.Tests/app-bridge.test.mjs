@@ -569,7 +569,7 @@ test("Book Interior edits stay local until one explicit save request", () => {
   });
 });
 
-test("Book detail configures an ordered custom Intro template selection from the active Brand", () => {
+test("Book detail configures an ordered custom Intro selection from Book interior", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "intro-draft", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Demo", introTemplateAssets: [
@@ -577,25 +577,30 @@ test("Book detail configures an ordered custom Intro template selection from the
       { key: "second.png", fileName: "second.png", sourceReference: "brand/IntroTemplate/second.png", localImageUrl: "file:///second.png" }
     ] }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
-    bookSummaries: [{ bookId: { value: "Book 001" }, hasIntro: false, selectedIntroTemplateKeys: [], validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [] }]
+    bookSummaries: [{ bookId: { value: "Book 001" }, hasIntro: false, selectedIntroInteriorSourceKeys: [], validationChecks: [], sourceFolders: [{ name: "Book interior" }], publishedArtifacts: [], interiorPages: [], logs: [], assets: [
+      { sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", frameMode: "auto", isActive: true, localImageUrl: "file:///page-001.png" },
+      { sourceReference: "Book interior/page-003.png", relativePath: "Book interior/page-003.png", fileName: "page-003.png", folder: "Book interior", kind: "Interior", frameMode: "enabled", isActive: false, localImageUrl: "file:///page-003.png" }
+    ] }]
   } } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
   const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
   contentListeners.click({ target: assetsTab });
-  assert.match(content.innerHTML, /Intro template pages/);
+  assert.match(content.innerHTML, /Intro pages/);
   assert.match(content.innerHTML, /Automatic/);
 
   contentListeners.change({ target: { dataset: { action: "set-intro-mode", bookId: "Book 001" }, value: "custom" } });
-  const add = { dataset: { action: "intro-add-template", bookId: "Book 001", introKey: "second.png" }, closest: () => add };
+  const add = { dataset: { action: "intro-add-template", bookId: "Book 001", introSourceReference: "Book interior/page-003.png" }, closest: () => add };
   contentListeners.click({ target: add });
+  assert.match(content.innerHTML, /Intro #1/);
+  assert.match(content.innerHTML, /data-custom-intro="true" disabled/);
   const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
   contentListeners.click({ target: save });
 
-  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", hasIntro: true, brandName: "Demo", introTemplateKeys: ["second.png"], assets: [] });
+  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", hasIntro: true, introSourceReferences: ["Book interior/page-003.png"], assets: [] });
 });
 
-test("Brand switching refreshes Intro readiness without mutating the saved custom selection", () => {
+test("Brand switching leaves custom Book interior Intro selection and readiness unchanged", () => {
   const { messageHandler, content, contentListeners, brandSelect, brandSelectListeners } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "brand-switch", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [
@@ -603,27 +608,29 @@ test("Brand switching refreshes Intro readiness without mutating the saved custo
       { name: "Brand B", introTemplateAssets: [{ key: "other.png", fileName: "other.png", localImageUrl: "file:///other.png" }] }
     ], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
-    bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Ready", hasIntro: true, selectedIntroTemplateKeys: ["shared.png"], validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [] }]
+    bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Ready", hasIntro: true, selectedIntroInteriorSourceKeys: ["Book interior/page-001.png"], validationChecks: [], sourceFolders: [{ name: "Book interior" }], publishedArtifacts: [], interiorPages: [], logs: [], assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", frameMode: "auto", isActive: true, localImageUrl: "file:///page-001.png" }] }]
   } } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
   const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
   contentListeners.click({ target: assetsTab });
-  assert.doesNotMatch(content.innerHTML, /missing from the current Brand/);
+  assert.match(content.innerHTML, /Custom Book interior/);
+  assert.match(content.innerHTML, /Intro #1/);
 
   brandSelect.value = "Brand B";
   brandSelectListeners.change();
 
-  assert.match(content.innerHTML, /selected Intro template is missing from the current Brand/);
-  assert.match(content.innerHTML, /status-badge status-muted">Needs review/);
+  assert.match(content.innerHTML, /Custom Book interior/);
+  assert.match(content.innerHTML, /Intro #1/);
+  assert.doesNotMatch(content.innerHTML, /missing from the current Brand/);
 });
 
-test("Intro template preview dimensions gate the current Brand readiness without sending a bridge request", () => {
+test("Automatic Intro template preview dimensions gate the current Brand readiness without sending a bridge request", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "intro-dimensions", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Demo", introTemplateAssets: [{ key: "intro.png", fileName: "intro.png", localImageUrl: "file:///intro.png" }] }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
-    bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Ready", hasIntro: true, selectedIntroTemplateKeys: ["intro.png"], validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [] }]
+    bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Ready", hasIntro: false, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [] }]
   } } });
   const open = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => open };
   contentListeners.click({ target: open });
