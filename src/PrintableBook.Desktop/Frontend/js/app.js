@@ -543,8 +543,7 @@
     if (state.diagnosticsTab === "tasks") return renderDiagnosticsTasks();
     if (state.diagnosticsTab === "performance") return renderDiagnosticsPerformance();
     if (state.diagnosticsTab === "book") return renderDiagnosticsBook(book, summary);
-    if (state.diagnosticsTab === "summary") return renderDiagnosticsSummary(book, summary);
-    return `<section role="tabpanel" data-diagnostics-panel="${state.diagnosticsTab}"><p class="empty-copy">${escapeHtml(state.diagnosticsTab)} diagnostics are loading.</p></section>`;
+    return renderDiagnosticsSummary(book, summary);
   };
   const renderDiagnostics = () => {
     const book = selectedBook() ?? books()[0] ?? null;
