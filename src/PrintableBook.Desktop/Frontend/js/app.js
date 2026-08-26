@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, bookInteriorDrafts: new Map(), bookInteriorSavePending: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processStartPending: false, lastTerminalRefreshSession: "", backgroundTasks: [], pendingCommands: new Map() };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, bookInteriorDrafts: new Map(), bookInteriorSavePending: false, bookFilter: "", bookStatus: "All", bookFrameFilter: "Any", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", selectedAssetReference: "", assetView: "grid", assetFilter: "", assetFolder: "All folders", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processStartPending: false, lastTerminalRefreshSession: "", backgroundTasks: [], pendingCommands: new Map() };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -13,6 +13,7 @@
   const bookId = (book) => valueFor(valueFor(book, "id", {}), "value", valueFor(book, "name", ""));
   const summaryFor = (book) => summaries().find((summary) => valueFor(valueFor(summary, "bookId", {}), "value", "") === bookId(book));
   const pdfLibraryBookName = (book, summary) => bookId(book) || valueFor(valueFor(summary, "bookId", {}), "value", "");
+  const pdfLibraryPageSize = 12;
   const pdfLibraryOutputSize = (summary) => valueFor(summary, "outputSummaries", []).reduce((total, output) => total + (Number(valueFor(output, "fileSizeBytes", 0)) || 0), 0);
   const pdfLibraryGeneratedAt = (summary) => {
     const outputTimes = valueFor(summary, "outputSummaries", []).map((output) => new Date(valueFor(output, "generatedAt", 0)).getTime()).filter((value) => Number.isFinite(value) && value > 0);
@@ -426,6 +427,12 @@
   const renderOutputs = () => {
     const library = pdfLibraryBooks();
     const eligibleTotal = eligiblePdfLibraryBooks().length;
+    const totalPages = Math.max(1, Math.ceil(library.length / pdfLibraryPageSize));
+    state.pdfLibraryPage = Math.min(Math.max(1, state.pdfLibraryPage), totalPages);
+    const pageStart = (state.pdfLibraryPage - 1) * pdfLibraryPageSize;
+    const pageItems = library.slice(pageStart, pageStart + pdfLibraryPageSize);
+    const start = library.length ? pageStart + 1 : 0;
+    const end = Math.min(pageStart + pdfLibraryPageSize, library.length);
     const actions = (summary, output) => `<div class="output-actions"><button class="button-primary" data-action="open-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Open PDF</button><button class="button-secondary" data-action="reveal-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Reveal in Explorer</button><button class="button-secondary" data-action="copy-output-path" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">Copy path</button></div>`;
     const outputRow = (summary, output) => {
       const pageCount = valueFor(output, "pageCount", "—");
@@ -442,7 +449,8 @@
     const empty = eligibleTotal === 0
       ? `<section class="pdf-library-empty"><strong>No completed PDFs yet.</strong><p>Process a Book to make its final PDF appear here.</p></section>`
       : `<section class="pdf-library-empty"><strong>No PDF Books match your search.</strong><p>Try a different Book name.</p></section>`;
-    content.innerHTML = `<div class="page-header"><div><h1>PDF Library</h1><p>Completed Books with local PDF output.</p></div></div><div class="pdf-library-toolbar"><label class="field"><span>Search Books</span><input class="control" type="search" value="${escapeHtml(state.pdfLibrarySearch)}" placeholder="Search Books..." data-action="pdf-library-search"></label><label class="field pdf-library-sort"><span>Sort</span><select class="control" data-action="pdf-library-sort"><option value="newest" ${state.pdfLibrarySort === "newest" ? "selected" : ""}>Newest</option><option value="name" ${state.pdfLibrarySort === "name" ? "selected" : ""}>Name</option><option value="size" ${state.pdfLibrarySort === "size" ? "selected" : ""}>Size</option></select></label><span class="pdf-library-result-count">${library.length} ${library.length === 1 ? "Book" : "Books"}</span></div>${library.length ? `<section class="pdf-library-grid">${library.map(bookCard).join("")}</section>` : empty}`;
+    const pagination = library.length ? `<footer class="book-pagination pdf-library-pagination" data-pdf-library-total-pages="${totalPages}"><span>${start}–${end} of ${library.length}</span><div><button class="button-secondary" data-action="pdf-library-page" data-pdf-library-page="first" ${state.pdfLibraryPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="pdf-library-page" data-pdf-library-page="previous" ${state.pdfLibraryPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.pdfLibraryPage} of ${totalPages}</span><button class="button-secondary" data-action="pdf-library-page" data-pdf-library-page="next" ${state.pdfLibraryPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="pdf-library-page" data-pdf-library-page="last" ${state.pdfLibraryPage === totalPages ? "disabled" : ""}>Last</button></div></footer>` : "";
+    content.innerHTML = `<div class="page-header"><div><h1>PDF Library</h1><p>Completed Books with local PDF output.</p></div></div><div class="pdf-library-toolbar"><label class="field"><span>Search Books</span><input class="control" type="search" value="${escapeHtml(state.pdfLibrarySearch)}" placeholder="Search Books..." data-action="pdf-library-search"></label><label class="field pdf-library-sort"><span>Sort</span><select class="control" data-action="pdf-library-sort"><option value="newest" ${state.pdfLibrarySort === "newest" ? "selected" : ""}>Newest</option><option value="name" ${state.pdfLibrarySort === "name" ? "selected" : ""}>Name</option><option value="size" ${state.pdfLibrarySort === "size" ? "selected" : ""}>Size</option></select></label><span class="pdf-library-result-count">${library.length} ${library.length === 1 ? "Book" : "Books"}</span></div>${library.length ? `<section class="pdf-library-grid">${pageItems.map(bookCard).join("")}</section>` : empty}${pagination}`;
     if (state.pdfLibrarySearchFocused) {
       const input = content.querySelector('[data-action="pdf-library-search"]');
       if (input) {
@@ -534,6 +542,7 @@
       }
     }
     if (action === "book-page") { const last = Number(target.closest("[data-book-total-pages]")?.dataset.bookTotalPages ?? 1); state.bookPage = target.dataset.bookPage === "first" ? 1 : target.dataset.bookPage === "last" ? last : Math.min(last, Math.max(1, state.bookPage + (target.dataset.bookPage === "next" ? 1 : -1))); render("books", false); }
+    if (action === "pdf-library-page") { const totalPages = Math.max(1, Math.ceil(pdfLibraryBooks().length / pdfLibraryPageSize)); state.pdfLibraryPage = target.dataset.pdfLibraryPage === "first" ? 1 : target.dataset.pdfLibraryPage === "last" ? totalPages : Math.min(totalPages, Math.max(1, state.pdfLibraryPage + (target.dataset.pdfLibraryPage === "next" ? 1 : -1))); render("outputs", false); }
     if (action === "validate-book") send("book.validate", { bookId: target.dataset.bookId });
     if (action === "go-process") render("process");
     if (action === "start-process" && !state.processStartPending) { state.processStartPending = true; send("process.start", { bookIds: [...state.selectedBookIds], brandName: state.selectedBrand || brandSelect?.value || null, mode: "interior-only" }); }
@@ -545,7 +554,7 @@
   content.addEventListener("input", (event) => {
     if (event.target.dataset.action === "filter-books") { state.bookFilter = event.target.value; state.bookPage = 1; render("books", false); }
     if (event.target.dataset.action === "filter-assets") { state.assetFilter = event.target.value; render("books", false); }
-    if (event.target.dataset.action === "pdf-library-search") { state.pdfLibrarySearch = event.target.value; state.pdfLibrarySearchFocused = true; state.pdfLibrarySearchCaret = event.target.selectionStart ?? event.target.value.length; render("outputs", false); }
+    if (event.target.dataset.action === "pdf-library-search") { state.pdfLibrarySearch = event.target.value; state.pdfLibraryPage = 1; state.pdfLibrarySearchFocused = true; state.pdfLibrarySearchCaret = event.target.selectionStart ?? event.target.value.length; render("outputs", false); }
     if (event.target.dataset.brandSettings !== undefined) state.brandSettings = event.target.value;
   });
   content.addEventListener("change", (event) => {
@@ -566,7 +575,7 @@
     }
     if (event.target.dataset.action === "book-frame-filter") { state.bookFrameFilter = event.target.value; state.bookPage = 1; render("books", false); }
     if (event.target.dataset.action === "book-sort") { state.bookSort = event.target.value; state.bookPage = 1; render("books", false); }
-    if (event.target.dataset.action === "pdf-library-sort") { state.pdfLibrarySort = ["newest", "name", "size"].includes(event.target.value) ? event.target.value : "newest"; render("outputs", false); }
+    if (event.target.dataset.action === "pdf-library-sort") { state.pdfLibrarySort = ["newest", "name", "size"].includes(event.target.value) ? event.target.value : "newest"; state.pdfLibraryPage = 1; render("outputs", false); }
   });
   content.addEventListener("error", (event) => {
     const image = event.target;

@@ -109,6 +109,25 @@ const pdfLibrarySnapshot = () => ({
   ]
 });
 
+const completedPdfBook = (index, {
+  generatedAt = `2026-08-${String(Math.min(26, index + 1)).padStart(2, "0")}T10:00:00Z`,
+  fileSizeBytes = index * 1024 * 1024,
+  coverUrl = `file:///D:/PrintableBook/sources/Book%20${index}/Book%20cover/cover.png`
+} = {}) => ({
+  book: { id: { value: `Book ${String(index).padStart(2, "0")}` }, name: `Book ${String(index).padStart(2, "0")}` },
+  summary: {
+    bookId: { value: `Book ${String(index).padStart(2, "0")}` }, workspaceStatus: "Completed", lastRunAt: generatedAt,
+    representativeCoverReference: `D:\\PrintableBook\\sources\\Book ${index}\\Book cover\\cover.png`,
+    assets: [{ sourceReference: `D:\\PrintableBook\\sources\\Book ${index}\\Book cover\\cover.png`, relativePath: "Book cover/cover.png", fileName: "cover.png", folder: "Book cover", kind: "Cover", width: 2588, height: 2625, frameMode: "auto", localImageUrl: coverUrl, isActive: true }],
+    outputSummaries: [{ artifactReference: `D:\\PrintableBook\\sources\\Book ${index}\\Output\\Book ${index} - Interior.pdf`, fileName: `Book ${index} - Interior.pdf`, verificationStatus: "Verified", generatedAt, pageCount: 40 + index, widthInches: 8.5, heightInches: 8.5, fileSizeBytes }]
+  }
+});
+
+const manyPdfLibrarySnapshot = (count = 25) => {
+  const items = Array.from({ length: count }, (_, position) => completedPdfBook(position + 1));
+  return { discovery: { brands: [], books: items.map((item) => item.book) }, globalSettings: {}, bookSummaries: items.map((item) => item.summary) };
+};
+
 test("bridge accepts the JSON response emitted by the .NET host", () => {
   const { messageHandler, status } = loadBridge();
 
@@ -630,6 +649,43 @@ test("PDF Library renders one top-level card per eligible Book", () => {
   assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 2);
   assert.match(content.innerHTML, /data-pdf-book-id="Book Alpha"/);
   assert.match(content.innerHTML, /data-pdf-book-id="Book Delta"/);
+});
+
+test("PDF Library renders at most 12 Books on one page", () => {
+  const { messageHandler, content } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: manyPdfLibrarySnapshot(25) } });
+
+  assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 12);
+  assert.match(content.innerHTML, /1–12 of 25/);
+  assert.match(content.innerHTML, /Page 1 of 3/);
+});
+
+test("PDF Library pagination navigates locally", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: manyPdfLibrarySnapshot(25) } });
+  const messageCount = messages.length;
+  const navigate = (page) => { const target = { dataset: { action: "pdf-library-page", pdfLibraryPage: page }, closest: () => target }; contentListeners.click({ target }); };
+
+  navigate("next");
+  assert.match(content.innerHTML, /13–24 of 25/);
+  assert.match(content.innerHTML, /Page 2 of 3/);
+  navigate("last");
+  assert.match(content.innerHTML, /25–25 of 25/);
+  assert.match(content.innerHTML, /Page 3 of 3/);
+  assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 1);
+  assert.equal(messages.length, messageCount);
+});
+
+test("PDF Library search resets and clamps pagination", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: manyPdfLibrarySnapshot(25) } });
+  const last = { dataset: { action: "pdf-library-page", pdfLibraryPage: "last" }, closest: () => last };
+  contentListeners.click({ target: last });
+  contentListeners.input({ target: { dataset: { action: "pdf-library-search" }, value: "Book 01", selectionStart: 7 } });
+
+  assert.match(content.innerHTML, /Page 1 of 1/);
+  assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 1);
+  assert.match(content.innerHTML, /data-pdf-book-id="Book 01"/);
 });
 
 test("PDF Library search filters by Book name", () => {
