@@ -32,7 +32,14 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("const bookThumbnailMarkup", script, StringComparison.Ordinal);
         Assert.Contains("const thumbnail = bookThumbnailMarkup(item, itemSummary)", script, StringComparison.Ordinal);
         Assert.Contains("role=\"status\"", script, StringComparison.Ordinal);
-        Assert.Contains(".book-secondary-filters { align-items:flex-end", File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css")), StringComparison.Ordinal);
+        Assert.DoesNotContain("book-frame-filter", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("bookFrameFilter", script, StringComparison.Ordinal);
+        Assert.Contains("book-library-grid-scroll", script, StringComparison.Ordinal);
+
+        var layout = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css"));
+        Assert.Contains(".book-library-page { display:grid", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-library-grid-scroll { min-height:0; overflow-y:auto", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-pagination { position:static", layout, StringComparison.Ordinal);
     }
 
     [Fact]
