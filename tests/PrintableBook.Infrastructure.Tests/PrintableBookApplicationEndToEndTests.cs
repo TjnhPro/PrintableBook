@@ -384,6 +384,51 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessBookAsync_processes_ordered_intro_pages_before_interiors_and_interleaves_background()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "IntroBook"));
+        await CreateBookFixtureAsync(bookDirectory);
+        var introOne = new FileReference(Path.Combine(rootPath, "intro-01.png"));
+        var introTwo = new FileReference(Path.Combine(rootPath, "intro-02.png"));
+        var background = new FileReference(Path.Combine(rootPath, "intro-background.png"));
+        await WriteImageAsync(introOne.Value, 40, 20, 900, 980, 1024, 1024);
+        await WriteImageAsync(introTwo.Value, 20, 40, 980, 900, 1024, 1024);
+        await WriteImageAsync(background.Value, 1, 1, 298, 298);
+
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(), shuffleStore,
+            CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new MagickPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+        var command = CreateCommand("intro-book", bookDirectory) with
+        {
+            Mode = BookProcessingMode.InteriorOnly,
+            ShuffleSeed = 73,
+            BackgroundPage = background,
+            IntroTemplatePages = [introTwo, introOne]
+        };
+
+        var result = await processor.ProcessBookAsync(command);
+
+        Assert.Equal(BookProcessingStatus.Completed, result.Status);
+        using (var interiorPdf = PdfReader.Open(result.PublishedInteriorOutput!.InteriorPdf.Value))
+        {
+            Assert.Equal(8, interiorPdf.Pages.Count);
+        }
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        Assert.True(File.Exists(Path.Combine(workspace.ProcessedDirectory.Value, "intro", "intro-0001.png")));
+        Assert.True(File.Exists(Path.Combine(workspace.ProcessedDirectory.Value, "intro", "intro-0002.png")));
+        var log = await stateStore.LoadLogsAsync(workspace);
+        var entries = log.ToArray();
+        Assert.True(Array.FindIndex(entries, entry => entry.Event == "step.started" && entry.Step == "intro-pages") < Array.FindIndex(entries, entry => entry.Event == "step.started" && entry.Step == "interior-pages"));
+        var shuffle = (await shuffleStore.LoadAsync(workspace))!;
+        Assert.DoesNotContain(shuffle.Entries, entry => entry.Page == introOne || entry.Page == introTwo);
+    }
+
+    [Fact]
     public async Task ProcessBookAsync_persists_the_active_interior_step_while_the_page_pipeline_is_running()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "InterruptedBook"));
