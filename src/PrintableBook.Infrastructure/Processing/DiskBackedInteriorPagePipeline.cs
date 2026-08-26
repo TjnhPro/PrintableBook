@@ -16,7 +16,7 @@ public sealed class DiskBackedInteriorPagePipeline(
     IFinalInteriorPageProcessor finalPageProcessor,
     IImageInspector imageInspector) : IInteriorPagePipeline
 {
-    private const string CacheStampSchemaVersion = "interior-page-cache-v2";
+    private const string CacheStampSchemaVersion = "interior-page-cache-v3";
 
     public DiskBackedInteriorPagePipeline(
         IArtworkClassifier artworkClassifier,
@@ -41,7 +41,7 @@ public sealed class DiskBackedInteriorPagePipeline(
 
         request.ValidateGeometry();
         var pageCache = Path.Combine(request.Workspace.WorkingDirectory.Value, "cache", request.PageId);
-        var processedInteriorDirectory = Path.Combine(request.Workspace.ProcessedDirectory.Value, "interior");
+        var processedInteriorDirectory = Path.Combine(request.Workspace.ProcessedDirectory.Value, request.ProcessingKind == InteriorPageProcessingKind.IntroTemplate ? "intro" : "interior");
         var classificationFile = Path.Combine(pageCache, "classification.json");
         var normalized = new FileReference(Path.Combine(pageCache, "normalized-source.png"));
         var prepared = new FileReference(Path.Combine(pageCache, "prepared.png"));
@@ -72,14 +72,17 @@ public sealed class DiskBackedInteriorPagePipeline(
             {
                 DeleteDownstream(prepared, framed, working, finalPage);
                 currentStep = "normalization";
+                await ValidateRawIntroTemplateSizeAsync(request, cancellationToken);
                 await artworkSourceNormalizer.NormalizeAsync(new ArtworkSourceNormalizationRequest(
                     request.Source, normalized, new ImageSize(request.ArtworkSourceNormalization.NormalizedSourceSize, request.ArtworkSourceNormalization.NormalizedSourceSize)), cancellationToken);
                 await EnsureSizeAsync(normalized, new ImageSize(request.ArtworkSourceNormalization.NormalizedSourceSize, request.ArtworkSourceNormalization.NormalizedSourceSize), "Normalized source", cancellationToken);
             }
 
-            var classification = invalidation is CacheInvalidationStage.Classification
-                ? null
-                : await TryReadClassificationAsync(classificationFile, cancellationToken);
+            var classification = request.ProcessingKind == InteriorPageProcessingKind.IntroTemplate
+                ? CreateForcedCropArtClassification()
+                : invalidation is CacheInvalidationStage.Classification
+                    ? null
+                    : await TryReadClassificationAsync(classificationFile, cancellationToken);
             if (classification is not null && await IsReadableAsync(finalPage, request.FinalPageSize, cancellationToken))
             {
                 return new InteriorPageProcessingResult(request.PageId, request.Source, finalPage);
@@ -89,8 +92,10 @@ public sealed class DiskBackedInteriorPagePipeline(
             {
                 DeleteDownstream(prepared, framed, working, finalPage);
                 currentStep = "classification";
-                classification = await artworkClassifier.ClassifyAsync(
-                    new ArtworkClassificationRequest(normalized, request.ArtworkDetectionThreshold, request.BorderLineDetection), cancellationToken);
+                classification = request.ProcessingKind == InteriorPageProcessingKind.IntroTemplate
+                    ? CreateForcedCropArtClassification()
+                    : await artworkClassifier.ClassifyAsync(
+                        new ArtworkClassificationRequest(normalized, request.ArtworkDetectionThreshold, request.BorderLineDetection), cancellationToken);
                 await WriteClassificationAsync(classificationFile, classification, cancellationToken);
             }
 
@@ -166,6 +171,19 @@ public sealed class DiskBackedInteriorPagePipeline(
             throw new InvalidDataException($"{stage} must be a readable {expectedSize.Width}x{expectedSize.Height} raster.");
         }
     }
+
+    private async ValueTask ValidateRawIntroTemplateSizeAsync(InteriorPagePipelineRequest request, CancellationToken cancellationToken)
+    {
+        if (request.ProcessingKind != InteriorPageProcessingKind.IntroTemplate) return;
+        var size = (await imageInspector.GetInfoAsync(request.Source, cancellationToken)).Size;
+        if (size.Width != size.Height || size.Width is not 1024 and not 2048)
+        {
+            throw new InvalidDataException("IntroTemplate artwork must be a readable 1024×1024 or 2048×2048 raster.");
+        }
+    }
+
+    private static ArtworkClassificationResult CreateForcedCropArtClassification() =>
+        new(ArtworkType.CropArt, BorderLineDetectionResult.NoBorder(), BorderPixelDetectionResult.None());
 
     private async ValueTask<bool> IsReadableAsync(FileReference image, ImageSize expectedSize, CancellationToken cancellationToken)
     {
@@ -256,6 +274,7 @@ public sealed class DiskBackedInteriorPagePipeline(
         string.Equals(previous.NormalizationAlgorithmVersion, current.NormalizationAlgorithmVersion, StringComparison.Ordinal);
 
     private static bool ClassificationCompatible(CacheInputStamp previous, CacheInputStamp current) =>
+        string.Equals(previous.ProcessingKind, current.ProcessingKind, StringComparison.Ordinal) &&
         previous.ArtworkDetectionThreshold == current.ArtworkDetectionThreshold &&
         string.Equals(previous.BorderLineAlgorithmVersion, current.BorderLineAlgorithmVersion, StringComparison.Ordinal) &&
         string.Equals(previous.BorderLineSettingsFingerprint, current.BorderLineSettingsFingerprint, StringComparison.Ordinal) &&
@@ -414,8 +433,9 @@ public sealed class DiskBackedInteriorPagePipeline(
         string FrameMode,
             int NormalizedSourceSize,
             string NormalizationAlgorithmVersion,
-            string BorderLineAlgorithmVersion,
+        string BorderLineAlgorithmVersion,
             string BorderLineSettingsFingerprint,
+            string ProcessingKind,
             string SchemaVersion)
     {
         private static readonly string[] requiredProperties =
@@ -442,6 +462,7 @@ public sealed class DiskBackedInteriorPagePipeline(
             nameof(NormalizationAlgorithmVersion),
             nameof(BorderLineAlgorithmVersion),
             nameof(BorderLineSettingsFingerprint),
+            nameof(ProcessingKind),
             nameof(SchemaVersion)
         ];
 
@@ -480,6 +501,12 @@ public sealed class DiskBackedInteriorPagePipeline(
                 ArtworkSourceNormalizationAlgorithmVersion.Current,
                 global::PrintableBook.Core.Application.Processing.BorderLineAlgorithmVersion.Current,
                 JsonSerializer.Serialize(request.BorderLineDetection ?? BorderLineDetectionSettings.Default),
+                request.ProcessingKind switch
+                {
+                    InteriorPageProcessingKind.Interior => "interior",
+                    InteriorPageProcessingKind.IntroTemplate => "intro-template",
+                    _ => throw new ArgumentOutOfRangeException(nameof(request), request.ProcessingKind, "Unsupported page processing kind.")
+                },
                 CacheStampSchemaVersion);
         }
 

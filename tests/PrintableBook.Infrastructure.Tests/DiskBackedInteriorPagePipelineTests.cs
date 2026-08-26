@@ -59,6 +59,40 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessAsync_forces_intro_templates_to_crop_art_and_writes_them_under_processed_intro()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = Path.Combine(rootPath, "intro.png");
+        using (var image = new MagickImage(MagickColors.White, 1024, 1024))
+        {
+            image.GetPixels().SetPixel(100, 100, [0, 0, 0]);
+            image.Write(source);
+        }
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(new BookId("intro-book"), new DirectoryReference(Path.Combine(rootPath, "IntroBook")));
+
+        var result = await CreatePipeline().ProcessAsync(new InteriorPagePipelineRequest(
+            workspace, new FileReference(source), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(200, 200), new ImageSize(200, 200), new ImageSize(200, 200), new ImageDensity(300, 300), null, FrameMode.Disabled,
+            processingKind: InteriorPageProcessingKind.IntroTemplate));
+
+        Assert.StartsWith(Path.Combine(workspace.ProcessedDirectory.Value, "intro"), result.FinalPage.Value, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "intro-0001", "classification.json")));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_rejects_intro_templates_that_are_not_1024_or_2048_square()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("small-intro.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(new BookId("small-intro"), new DirectoryReference(Path.Combine(rootPath, "SmallIntro")));
+
+        var failure = await Assert.ThrowsAsync<InteriorPageProcessingException>(() => CreatePipeline().ProcessAsync(new InteriorPagePipelineRequest(
+            workspace, new FileReference(source), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(200, 200), new ImageSize(200, 200), new ImageSize(200, 200), new ImageDensity(300, 300), null, FrameMode.Disabled,
+            processingKind: InteriorPageProcessingKind.IntroTemplate)).AsTask());
+
+        Assert.Equal("normalization", failure.Step);
+    }
+
+    [Fact]
     public async Task ProcessAsync_migrates_a_legacy_processed_input_stamp_into_page_cache()
     {
         Directory.CreateDirectory(rootPath);
@@ -556,7 +590,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         else if (string.Equals(invalidStamp, "incompatible-schema", StringComparison.Ordinal))
         {
             var contents = await File.ReadAllTextAsync(stamp);
-            await File.WriteAllTextAsync(stamp, contents.Replace("interior-page-cache-v2", "incompatible-schema", StringComparison.Ordinal));
+            await File.WriteAllTextAsync(stamp, contents.Replace("interior-page-cache-v3", "incompatible-schema", StringComparison.Ordinal));
         }
         else if (string.Equals(invalidStamp, "numeric-frame-mode", StringComparison.Ordinal))
         {
