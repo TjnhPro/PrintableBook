@@ -7,6 +7,15 @@ namespace PrintableBook.Core.Tests.Processing;
 public sealed class InteriorPagePipelineRequestTests
 {
     [Fact]
+    public void Request_carries_a_page_role_and_rejects_unknown_roles()
+    {
+        var intro = new InteriorPagePipelineRequest(new BookWorkspace(new BookId("book"), new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("temp")), new FileReference("intro.png"), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), null, FrameMode.Disabled, processingKind: InteriorPageProcessingKind.IntroTemplate);
+
+        Assert.Equal(InteriorPageProcessingKind.IntroTemplate, intro.ProcessingKind);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new InteriorPagePipelineRequest(new BookWorkspace(new BookId("book"), new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("temp")), new FileReference("intro.png"), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), null, FrameMode.Disabled, processingKind: (InteriorPageProcessingKind)99));
+    }
+
+    [Fact]
     public void Constructor_accepts_the_canonical_prepared_working_and_final_geometry()
     {
         var request = CreateRequest(new ImageSize(2270, 2270), new ImageSize(2550, 2550), new ImageSize(2588, 2625));

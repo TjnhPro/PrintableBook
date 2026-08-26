@@ -2,6 +2,12 @@ using PrintableBook.Core.Abstractions;
 
 namespace PrintableBook.Core.Application.Processing;
 
+public enum InteriorPageProcessingKind
+{
+    Interior = 0,
+    IntroTemplate = 1
+}
+
 public sealed record InteriorPagePipelineRequest
 {
     public InteriorPagePipelineRequest(
@@ -16,7 +22,8 @@ public sealed record InteriorPagePipelineRequest
         FileReference? frame,
         FrameMode frameMode,
         ArtworkSourceNormalizationSettings? artworkSourceNormalization = null,
-        BorderLineDetectionSettings? borderLineDetection = null)
+        BorderLineDetectionSettings? borderLineDetection = null,
+        InteriorPageProcessingKind processingKind = InteriorPageProcessingKind.Interior)
     {
         Workspace = workspace;
         Source = source;
@@ -30,6 +37,8 @@ public sealed record InteriorPagePipelineRequest
         FrameMode = frameMode;
         ArtworkSourceNormalization = artworkSourceNormalization ?? ArtworkSourceNormalizationSettings.Default;
         BorderLineDetection = borderLineDetection;
+        ProcessingKind = processingKind;
+        if (!Enum.IsDefined(processingKind)) throw new ArgumentOutOfRangeException(nameof(processingKind), processingKind, "Unsupported page processing kind.");
         ValidateGeometry();
     }
 
@@ -45,6 +54,7 @@ public sealed record InteriorPagePipelineRequest
     public FrameMode FrameMode { get; init; }
     public ArtworkSourceNormalizationSettings ArtworkSourceNormalization { get; init; }
     public BorderLineDetectionSettings? BorderLineDetection { get; init; }
+    public InteriorPageProcessingKind ProcessingKind { get; init; }
 
     public void ValidateGeometry()
     {
