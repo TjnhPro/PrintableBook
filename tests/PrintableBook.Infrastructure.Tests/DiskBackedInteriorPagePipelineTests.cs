@@ -83,7 +83,11 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
     public async Task ProcessAsync_rejects_intro_templates_that_are_not_1024_or_2048_square()
     {
         Directory.CreateDirectory(rootPath);
-        var source = await CreateArtworkSourceAsync("small-intro.png");
+        var source = Path.Combine(rootPath, "non-square-intro.png");
+        using (var image = new MagickImage(MagickColors.White, 1024, 2048))
+        {
+            image.Write(source);
+        }
         var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(new BookId("small-intro"), new DirectoryReference(Path.Combine(rootPath, "SmallIntro")));
 
         var failure = await Assert.ThrowsAsync<InteriorPageProcessingException>(() => CreatePipeline().ProcessAsync(new InteriorPagePipelineRequest(
@@ -91,6 +95,25 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
             processingKind: InteriorPageProcessingKind.IntroTemplate)).AsTask());
 
         Assert.Equal("normalization", failure.Step);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_accepts_2048_square_intro_templates()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = Path.Combine(rootPath, "large-intro.png");
+        using (var image = new MagickImage(MagickColors.White, 2048, 2048))
+        {
+            image.GetPixels().SetPixel(100, 100, [0, 0, 0]);
+            image.Write(source);
+        }
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(new BookId("large-intro"), new DirectoryReference(Path.Combine(rootPath, "LargeIntro")));
+
+        var result = await CreatePipeline().ProcessAsync(new InteriorPagePipelineRequest(
+            workspace, new FileReference(source), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(200, 200), new ImageSize(200, 200), new ImageSize(200, 200), new ImageDensity(300, 300), null, FrameMode.Disabled,
+            processingKind: InteriorPageProcessingKind.IntroTemplate));
+
+        Assert.Equal(new ImageSize(200, 200), (await new MagickImageInspector().GetInfoAsync(result.FinalPage)).Size);
     }
 
     [Fact]
