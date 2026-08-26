@@ -51,6 +51,56 @@ public sealed class ProcessingSessionWorker(
             cancellationToken);
 
         var summaries = snapshot.BookSummaries.ToDictionary(summary => summary.BookId.Value, StringComparer.Ordinal);
+        var introTemplatePagesByBook = new Dictionary<string, IReadOnlyList<FileReference>>(StringComparer.Ordinal);
+        var validatedIntroSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var book in books)
+        {
+            var summary = summaries[book.Id.Value];
+            var selection = IntroTemplateSelectionResolver.Resolve(summary.HasIntro, summary.SelectedIntroTemplateKeys, brand.IntroTemplateAssets);
+            if (!selection.IsSuccess)
+            {
+                var code = selection.Failure!.Code switch
+                {
+                    "intro.selection_required" => "process_intro_selection_required",
+                    "intro.selection_missing" => "process_intro_selection_missing",
+                    "intro.template_empty" => "process_intro_template_empty",
+                    _ => "process_intro_template_invalid"
+                };
+                Fail(request, context, code, selection.Failure.Message, book.Id);
+            }
+
+            var pages = selection.Assets.Select(asset => new FileReference(asset.SourceReference)).ToArray();
+            foreach (var page in pages)
+            {
+                if (!validatedIntroSources.Add(page.Value)) continue;
+                if (!await fileSystem.FileExistsAsync(page, cancellationToken))
+                {
+                    Fail(request, context, "process_intro_template_invalid", "A selected IntroTemplate image is no longer readable.", book.Id);
+                }
+
+                try
+                {
+                    var size = await imageInspector.GetSizeAsync(page, cancellationToken);
+                    if (size.Width != size.Height || size.Width is not 1024 and not 2048)
+                    {
+                        Fail(request, context, "process_intro_template_invalid", "IntroTemplate images must be 1024×1024 or 2048×2048 pixels.", book.Id);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (BackgroundTaskFailureException)
+                {
+                    throw;
+                }
+                catch (Exception)
+                {
+                    Fail(request, context, "process_intro_template_invalid", "A selected IntroTemplate image cannot be read.", book.Id);
+                }
+            }
+            introTemplatePagesByBook[book.Id.Value] = pages;
+        }
         FileReference? background = null;
         if (books.Any(book => summaries[book.Id.Value].HasBackground))
         {
@@ -104,7 +154,8 @@ public sealed class ProcessingSessionWorker(
             Mode: request.Mode,
             BackgroundPage: summaries[book.Id.Value].HasBackground ? background : null,
             ArtworkSourceNormalization: settings.EffectiveArtworkSourceNormalization,
-            BorderLineDetection: settings.EffectiveBorderLineDetection)).ToArray());
+            BorderLineDetection: settings.EffectiveBorderLineDetection,
+            IntroTemplatePages: introTemplatePagesByBook[book.Id.Value])).ToArray());
 
         void Report(BookProcessingProgress progress)
         {

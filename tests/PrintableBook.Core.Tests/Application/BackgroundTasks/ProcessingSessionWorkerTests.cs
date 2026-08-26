@@ -75,8 +75,8 @@ public sealed class ProcessingSessionWorkerTests
         await worker.ExecuteAsync(Request(), new Context(), CancellationToken.None);
 
         Assert.NotNull(application.Request);
-        Assert.Equal(0, files.Calls);
-        Assert.Equal(0, inspector.Calls);
+        Assert.Equal(1, files.Calls);
+        Assert.Equal(1, inspector.Calls);
         Assert.Null(Assert.Single(application.Request!.Books).BackgroundPage);
     }
 
@@ -149,11 +149,95 @@ public sealed class ProcessingSessionWorkerTests
 
         await worker.ExecuteAsync(new ProcessingSessionWorkerRequest(["book-one", "book-two"], "Brand", BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow), new Context(), CancellationToken.None);
 
-        Assert.Equal(1, files.Calls);
-        Assert.Equal(1, inspector.Calls);
+        Assert.Equal(2, files.Calls);
+        Assert.Equal(2, inspector.Calls);
         Assert.Collection(application.Request!.Books,
             first => Assert.Equal(new FileReference(Path.Combine("brand", "background.png")), first.BackgroundPage),
             second => Assert.Null(second.BackgroundPage));
+    }
+
+    [Fact]
+    public async Task Resolves_automatic_intro_pages_in_filename_order()
+    {
+        var initial = Snapshot();
+        var brand = Brand() with
+        {
+            IntroTemplateAssets =
+            [
+                new DiscoveredIntroTemplateAsset("intro-02.png", Path.Combine("brand", "IntroTemplate", "intro-02.png"), "intro-02.png", "file:///intro-02.png"),
+                new DiscoveredIntroTemplateAsset("intro-01.png", Path.Combine("brand", "IntroTemplate", "intro-01.png"), "intro-01.png", "file:///intro-01.png")
+            ]
+        };
+        var application = new Application();
+        IBackgroundTaskWorker worker = new ProcessingSessionWorker(
+            new Provider(initial with { Discovery = initial.Discovery with { Brands = [brand] } }),
+            application,
+            new FrameResolver(),
+            new FileSystem(),
+            new ImageInspector());
+
+        await worker.ExecuteAsync(Request(), new Context(), CancellationToken.None);
+
+        Assert.Equal(
+            [
+                new FileReference(Path.Combine("brand", "IntroTemplate", "intro-01.png")),
+                new FileReference(Path.Combine("brand", "IntroTemplate", "intro-02.png"))
+            ],
+            Assert.Single(application.Request!.Books).EffectiveIntroTemplatePages);
+    }
+
+    [Fact]
+    public async Task Resolves_custom_intro_pages_in_the_saved_order()
+    {
+        var initial = Snapshot();
+        var summary = initial.BookSummaries[0] with
+        {
+            HasIntro = true,
+            SelectedIntroTemplateKeys = ["intro-02.png", "intro-01.png"]
+        };
+        var brand = Brand() with
+        {
+            IntroTemplateAssets =
+            [
+                new DiscoveredIntroTemplateAsset("intro-01.png", Path.Combine("brand", "IntroTemplate", "intro-01.png"), "intro-01.png", "file:///intro-01.png"),
+                new DiscoveredIntroTemplateAsset("intro-02.png", Path.Combine("brand", "IntroTemplate", "intro-02.png"), "intro-02.png", "file:///intro-02.png")
+            ]
+        };
+        var application = new Application();
+        IBackgroundTaskWorker worker = new ProcessingSessionWorker(
+            new Provider(initial with { Discovery = initial.Discovery with { Brands = [brand] }, BookSummaries = [summary] }),
+            application,
+            new FrameResolver(),
+            new FileSystem(),
+            new ImageInspector());
+
+        await worker.ExecuteAsync(Request(), new Context(), CancellationToken.None);
+
+        Assert.Equal(
+            [
+                new FileReference(Path.Combine("brand", "IntroTemplate", "intro-02.png")),
+                new FileReference(Path.Combine("brand", "IntroTemplate", "intro-01.png"))
+            ],
+            Assert.Single(application.Request!.Books).EffectiveIntroTemplatePages);
+    }
+
+    [Theory]
+    [InlineData(true, null, "process_intro_selection_required")]
+    [InlineData(true, new[] { "missing.png" }, "process_intro_selection_missing")]
+    public async Task Rejects_invalid_custom_intro_selection(bool hasIntro, string[]? keys, string expectedCode)
+    {
+        var initial = Snapshot();
+        var summary = initial.BookSummaries[0] with { HasIntro = hasIntro, SelectedIntroTemplateKeys = keys };
+        IBackgroundTaskWorker worker = new ProcessingSessionWorker(
+            new Provider(initial with { BookSummaries = [summary] }),
+            new Application(),
+            new FrameResolver(),
+            new FileSystem(),
+            new ImageInspector());
+
+        var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(Request(), new Context(), CancellationToken.None).AsTask());
+
+        Assert.Equal(expectedCode, failure.Code);
     }
 
     private static ApplicationSnapshot Snapshot(bool hasBackground = false, GlobalSettings? settings = null)
@@ -162,7 +246,7 @@ public sealed class ProcessingSessionWorkerTests
         var workspace = new BookWorkspace(bookId, new DirectoryReference("workspace"), new DirectoryReference("processed"), new DirectoryReference("temp"));
         var book = new DiscoveredBook("Book One", bookId, new DirectoryReference("book-one"), workspace);
         return new ApplicationSnapshot(
-            new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [new DiscoveredBrand("Brand", new DirectoryReference("brand"))], [book]),
+            new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [Brand()], [book]),
             settings ?? GlobalSettings.Default,
             [new BookDesktopSummary(bookId, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1, HasBackground: hasBackground)],
             DateTimeOffset.UtcNow);
@@ -175,7 +259,7 @@ public sealed class ProcessingSessionWorkerTests
         var bookOne = new DiscoveredBook("Book One", bookOneId, new DirectoryReference("book-one"), new BookWorkspace(bookOneId, new DirectoryReference("workspace-one"), new DirectoryReference("processed-one"), new DirectoryReference("temp-one")));
         var bookTwo = new DiscoveredBook("Book Two", bookTwoId, new DirectoryReference("book-two"), new BookWorkspace(bookTwoId, new DirectoryReference("workspace-two"), new DirectoryReference("processed-two"), new DirectoryReference("temp-two")));
         return new ApplicationSnapshot(
-            new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [new DiscoveredBrand("Brand", new DirectoryReference("brand"))], [bookOne, bookTwo]),
+            new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [Brand()], [bookOne, bookTwo]),
             GlobalSettings.Default,
             [
                 new BookDesktopSummary(bookOneId, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1, HasBackground: true),
@@ -183,6 +267,8 @@ public sealed class ProcessingSessionWorkerTests
             ],
             DateTimeOffset.UtcNow);
     }
+
+    private static DiscoveredBrand Brand() => new("Brand", new DirectoryReference("brand"), IntroTemplateAssets: [new DiscoveredIntroTemplateAsset("intro.png", Path.Combine("brand", "IntroTemplate", "intro.png"), "intro.png", "file:///intro.png")]);
 
     private sealed class Context : IBackgroundTaskContext
     {
@@ -207,7 +293,7 @@ public sealed class ProcessingSessionWorkerTests
     private sealed class FileSystem(bool exists = false) : IFileSystem
     {
         public int Calls { get; private set; }
-        public ValueTask<bool> FileExistsAsync(FileReference file, CancellationToken cancellationToken = default) { Calls++; return ValueTask.FromResult(exists); }
+        public ValueTask<bool> FileExistsAsync(FileReference file, CancellationToken cancellationToken = default) { Calls++; return ValueTask.FromResult(exists || file.Value.Contains("IntroTemplate", StringComparison.OrdinalIgnoreCase)); }
         public ValueTask<bool> DirectoryExistsAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
         public ValueTask CreateDirectoryAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public async IAsyncEnumerable<DirectoryReference> EnumerateDirectoriesAsync(DirectoryReference directory, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) { await Task.CompletedTask; yield break; }
@@ -227,6 +313,7 @@ public sealed class ProcessingSessionWorkerTests
         public ValueTask<ImageSize> GetSizeAsync(FileReference image, CancellationToken cancellationToken = default)
         {
             Calls++;
+            if (image.Value.Contains("IntroTemplate", StringComparison.OrdinalIgnoreCase)) return ValueTask.FromResult(new ImageSize(1024, 1024));
             if (exception is not null) throw exception;
             return ValueTask.FromResult(size ?? new ImageSize(GlobalSettings.Default.FinalPageWidth, GlobalSettings.Default.FinalPageHeight));
         }
