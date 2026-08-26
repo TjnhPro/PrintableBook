@@ -29,6 +29,7 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
         var classification = Path.Combine(cache, "classification.json");
         var stamp = Path.Combine(cache, "input-stamp.json");
         var prepared = Path.Combine(cache, "prepared.png");
+        var normalized = Path.Combine(cache, "normalized-source.png");
         var processed = Path.Combine(fixture.Workspace.ProcessedDirectory.Value, "interior", "page-0001.png");
         var published = fixture.First.PublishedInteriorOutput!.InteriorPdf.Value;
         var classificationBytes = await File.ReadAllBytesAsync(classification);
@@ -37,6 +38,7 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
 
         Assert.True(File.Exists(classification));
         Assert.True(File.Exists(stamp));
+        Assert.False(File.Exists(normalized));
         Assert.False(File.Exists(prepared));
         Assert.False(File.Exists(processed));
         Assert.True(File.Exists(published));
@@ -46,6 +48,7 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
         Assert.Equal(BookProcessingStatus.Completed, repeated.Status);
         Assert.True(File.Exists(repeated.PublishedInteriorOutput!.InteriorPdf.Value));
         Assert.True(File.Exists(prepared));
+        Assert.True(File.Exists(normalized));
         Assert.True(File.Exists(processed));
         Assert.Equal(classificationBytes, await File.ReadAllBytesAsync(classification));
     }
