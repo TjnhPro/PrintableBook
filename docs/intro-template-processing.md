@@ -4,12 +4,12 @@
 
 Brand-owned source artwork lives directly under `brands/<BrandName>/IntroTemplate/`.  The folder is discovered as file references only; Library Refresh does not inspect image metadata.
 
-A Book does not retain a Brand name or any absolute Brand path.  Its workspace state stores only these values:
+A Book does not retain a Brand name or any absolute path for a custom Intro. Its workspace state stores only these values:
 
 - `HasIntro = false`: automatic mode. All eligible `.png`, `.jpg`, and `.jpeg` files in the current Brand are used in filename order.
-- `HasIntro = true`: custom mode. The ordered, Brand-relative `SelectedIntroTemplateKeys` list is used. At least one key is required.
+- `HasIntro = true`: custom mode. The ordered, Book-relative `SelectedIntroInteriorSourceKeys` list is used. Each key identifies a source under that Book's `Book interior` folder, and at least one key is required.
 
-Changing Brand resolves those stored keys against the newly selected Brand. Missing custom keys need review in the UI and reject processing; automatic mode recomputes its list without changing Book state.
+Changing Brand only changes automatic mode. A custom selection is resolved against the current Book's full Interior source set, so it is independent of the active Brand. Missing custom Book sources need review in the UI and reject processing; automatic mode recomputes its Brand list without changing Book state.
 
 ## Processing and assembly
 
@@ -25,7 +25,9 @@ raw IntroTemplate (1024 or 2048)
 
 IntroTemplate pages do not call BorderLine or BorderPixel detection and never apply a frame. They use Book-local cache directories, with final rasters under `.workspace/processed/intro/`.
 
-The processor runs the ordered `intro-pages` batch before the bounded `interior-pages` batch, using the same per-Book concurrency controller. Intro pages are never included in `InteriorShuffleMap`.
+The processor runs the ordered `intro-pages` batch before the bounded `interior-pages` batch, using the same per-Book concurrency controller. For custom mode it first removes the selected Book Interior keys from the normal source set, then applies the normal Active filter and shuffle. A custom Intro source is therefore never included in `InteriorShuffleMap` or processed twice.
+
+Selecting a Book Interior page as custom Intro does not change its stored Active or Frame mode. Those settings are ignored while it is an Intro page (Intro is always unframed), and resume unchanged when it is removed from the custom selection. Custom Intro pages do not satisfy the requirement for at least one active normal Interior page.
 
 Assembly places the complete Intro block before shuffled Interior artwork. When a Brand background is enabled, it follows every Intro page and every shuffled Interior page, including the last page of each block.
 
@@ -42,4 +44,4 @@ Clear Cache deletes heavy Intro artifacts (normalized, prepared, working, and fi
 
 ## UI and safety boundary
 
-Book detail exposes automatic/custom selection, local previews, explicit ordering, and a single existing Interior settings save action. Changing a Brand refreshes Intro readiness without mutating saved selection. The UI communicates selection problems, but backend worker and pipeline checks remain the correctness boundary for existence, readability, and dimensions.
+Book detail exposes Brand-template previews for automatic mode and Book Interior candidates for custom mode, with local previews, explicit ordering, and a single existing Interior settings save action. Selected custom cards are marked as Intro and their Active/Frame controls are disabled without mutating stored settings. Changing a Brand does not alter custom selection or readiness. The UI communicates selection problems, but backend worker and pipeline checks remain the correctness boundary for existence, readability, and dimensions.
