@@ -251,6 +251,57 @@ internal sealed class WebViewBridgeRouter(
                         hasBackground = backgroundElement.GetBoolean();
                     }
 
+                    bool? hasIntro = null;
+                    if (settingsPayload.TryGetProperty("hasIntro", out var introElement))
+                    {
+                        if (introElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                        }
+                        hasIntro = introElement.GetBoolean();
+                    }
+
+                    IReadOnlyList<string>? introTemplateKeys = null;
+                    if (settingsPayload.TryGetProperty("introTemplateKeys", out var introKeysElement))
+                    {
+                        if (introKeysElement.ValueKind != JsonValueKind.Array)
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                        }
+
+                        if (!settingsPayload.TryGetProperty("brandName", out var brandNameElement) || string.IsNullOrWhiteSpace(brandNameElement.GetString()))
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                        }
+
+                        var brand = snapshot.Discovery.Brands.FirstOrDefault(item => string.Equals(item.Name, brandNameElement.GetString(), StringComparison.Ordinal));
+                        if (brand is null)
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                        }
+
+                        var available = new HashSet<string>((brand.IntroTemplateAssets ?? []).Select(asset => asset.Key), StringComparer.OrdinalIgnoreCase);
+                        var keys = new List<string>();
+                        var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var keyElement in introKeysElement.EnumerateArray())
+                        {
+                            if (keyElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(keyElement.GetString()))
+                            {
+                                return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                            }
+
+                            string key;
+                            try { key = IntroTemplateSourceKey.Normalize(keyElement.GetString()!); }
+                            catch (ArgumentException) { return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings"); }
+                            if (!unique.Add(key) || !available.Contains(key))
+                            {
+                                return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                            }
+                            keys.Add(key);
+                        }
+                        introTemplateKeys = keys;
+                    }
+
                     var changes = new List<InteriorAssetSettingsChange>();
                     if (settingsPayload.TryGetProperty("assets", out var assetsElement))
                     {
@@ -301,14 +352,14 @@ internal sealed class WebViewBridgeRouter(
                         }
                     }
 
-                    if (hasBackground is null && changes.Count == 0)
+                    if (hasBackground is null && hasIntro is null && introTemplateKeys is null && changes.Count == 0)
                     {
                         return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
                     }
 
                     try
                     {
-                        await bookInteriorSettingsService.SaveAsync(book, new BookInteriorSettingsChange(hasBackground, changes), cancellationToken);
+                        await bookInteriorSettingsService.SaveAsync(book, new BookInteriorSettingsChange(hasBackground, changes, hasIntro, introTemplateKeys), cancellationToken);
                     }
                     catch (ArgumentException)
                     {

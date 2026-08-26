@@ -450,6 +450,38 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Book_interior_settings_save_persists_an_ordered_intro_selection_authorized_by_the_selected_brand()
+    {
+        var settings = new StubBookInteriorSettingsService();
+        var snapshot = CreateSnapshot() with
+        {
+            Discovery = CreateSnapshot().Discovery with
+            {
+                Brands = [new DiscoveredBrand("Brand One", new DirectoryReference("brands/Brand One"), IntroTemplateAssets: [
+                    new DiscoveredIntroTemplateAsset("first.png", "brands/Brand One/IntroTemplate/first.png", "first.png", "file:///first.png"),
+                    new DiscoveredIntroTemplateAsset("second.png", "brands/Brand One/IntroTemplate/second.png", "second.png", "file:///second.png")])]
+            }
+        };
+        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)), bookInteriorSettingsService: settings);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"save","command":"book.interior.settings.save","payload":{"bookId":"Book One","brandName":"Brand One","hasIntro":true,"introTemplateKeys":["second.png","first.png"]}}""");
+
+        Assert.True(response.Ok);
+        Assert.True(settings.Batch!.HasIntro);
+        Assert.Equal(["second.png", "first.png"], settings.Batch.IntroTemplateKeys);
+    }
+
+    [Fact]
+    public async Task Book_interior_settings_save_rejects_intro_keys_not_authorized_by_the_brand()
+    {
+        var router = new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(CreateSnapshot())), bookInteriorSettingsService: new StubBookInteriorSettingsService());
+
+        var response = await router.HandleAsync("""{"version":1,"id":"save","command":"book.interior.settings.save","payload":{"bookId":"Book One","brandName":"Brand One","introTemplateKeys":["missing.png"]}}""");
+
+        Assert.Equal("invalid_book_interior_settings", response.Error);
+    }
+
+    [Fact]
     public async Task Book_interior_settings_save_rejects_unknown_or_empty_changes()
     {
         var router = new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(CreateSnapshot())), bookInteriorSettingsService: new StubBookInteriorSettingsService());
