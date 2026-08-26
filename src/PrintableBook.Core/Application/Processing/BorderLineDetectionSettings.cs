@@ -18,5 +18,5 @@ public sealed record BorderLineDetectionSettings(
     int MaximumMissingSegmentRun)
 {
     public static BorderLineDetectionSettings Default { get; } = new(
-        200, 320, 40, 6, 16, 24, 8, 0.10, 3, 0.35, 0.55, 0.70, 6, 2);
+        200, 320, 40, 6, 16, 24, 8, 0.10, 3, 0.35, 0.70, 0.70, 6, 2);
 }

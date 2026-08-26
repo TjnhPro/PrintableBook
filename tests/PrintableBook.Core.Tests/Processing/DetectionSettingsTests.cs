@@ -15,7 +15,7 @@ public sealed class DetectionSettingsTests
              settings.TrackDepthTolerance, settings.CornerLineTolerance, settings.MaximumDepthSpread,
              settings.SegmentCount, settings.MinimumCompatibleCorners, settings.MinimumSupportedSegments,
              settings.MaximumMissingSegmentRun));
-        Assert.Equal((0.10, 0.35, 0.55, 0.70),
+        Assert.Equal((0.10, 0.35, 0.70, 0.70),
             (settings.CornerExclusionRatio, settings.MinimumSegmentSupportRatio,
              settings.MinimumSideSupportRatio, settings.MinimumSpanRatio));
     }
