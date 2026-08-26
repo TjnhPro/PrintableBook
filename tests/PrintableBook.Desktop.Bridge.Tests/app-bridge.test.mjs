@@ -600,6 +600,38 @@ test("Book detail configures an ordered custom Intro selection from Book interio
   assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", hasIntro: true, introSourceReferences: ["Book interior/page-003.png"], assets: [] });
 });
 
+test("Adding to a persisted custom Intro submits asset source references instead of stored source keys", () => {
+  const { messageHandler, contentListeners, messages } = loadBridge("books");
+  const firstReference = "D:\\PrintableBook\\sources\\Book 001\\Book interior\\page-001.png";
+  const secondReference = "D:\\PrintableBook\\sources\\Book 001\\Book interior\\page-002.png";
+  messageHandler({ data: { version: 1, id: "persisted-custom-intro", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, hasIntro: true, selectedIntroInteriorSourceKeys: ["Book interior/page-001.png"], validationChecks: [], sourceFolders: [{ name: "Book interior" }], publishedArtifacts: [], interiorPages: [], logs: [],
+      interiorSourcePages: [
+        { sourceReference: firstReference, sourceKey: "Book interior/page-001.png", frameMode: "auto", isActive: true },
+        { sourceReference: secondReference, sourceKey: "Book interior/page-002.png", frameMode: "auto", isActive: true }
+      ],
+      assets: [
+        { sourceReference: firstReference, relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", frameMode: "auto", isActive: true },
+        { sourceReference: secondReference, relativePath: "Book interior/page-002.png", fileName: "page-002.png", folder: "Book interior", kind: "Interior", frameMode: "auto", isActive: true }
+      ]
+    }]
+  } } });
+
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
+  contentListeners.click({ target: assetsTab });
+  const add = { dataset: { action: "intro-add-template", bookId: "Book 001", introSourceReference: secondReference }, closest: () => add };
+  contentListeners.click({ target: add });
+  const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
+  contentListeners.click({ target: save });
+
+  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", introSourceReferences: [firstReference, secondReference], assets: [] });
+});
+
 test("Brand switching leaves custom Book interior Intro selection and readiness unchanged", () => {
   const { messageHandler, content, contentListeners, brandSelect, brandSelectListeners } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "brand-switch", ok: true, command: "app.snapshot", payload: {

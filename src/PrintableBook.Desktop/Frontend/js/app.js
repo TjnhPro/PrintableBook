@@ -198,11 +198,19 @@
     if (change.active === undefined && change.frameMode === undefined) draft.assets.delete(reference); else draft.assets.set(reference, change);
     trimEmptyInteriorDraft(id, draft);
   };
+  const persistedIntroSourceReferences = (summary) => {
+    const sources = [
+      ...(valueFor(summary, "interiorSourcePages", []) ?? []).map((page) => ({ sourceKey: valueFor(page, "sourceKey", ""), sourceReference: valueFor(page, "sourceReference", "") })),
+      ...assetsFor(summary).filter((asset) => valueFor(asset, "kind", "") === "Interior").map((asset) => ({ sourceKey: valueFor(asset, "relativePath", ""), sourceReference: valueFor(asset, "sourceReference", "") }))
+    ];
+    return (valueFor(summary, "selectedIntroInteriorSourceKeys", []) ?? []).map((sourceKey) =>
+      sources.find((source) => String(source.sourceKey).toLowerCase() === String(sourceKey).toLowerCase())?.sourceReference ?? sourceKey);
+  };
   const effectiveIntro = (book, summary) => {
     const draft = interiorDraftFor(bookId(book));
     return {
       hasIntro: draft?.hasIntro ?? valueFor(summary, "hasIntro", false),
-      sourceReferences: draft?.introSourceReferences ?? valueFor(summary, "selectedIntroInteriorSourceKeys", []) ?? []
+      sourceReferences: draft?.introSourceReferences ?? persistedIntroSourceReferences(summary)
     };
   };
   const introTemplateAssetId = (asset) => encodeURIComponent(`${valueFor(activeBrand(), "name", "")}\u0000${valueFor(asset, "key", "")}`);
@@ -234,7 +242,7 @@
     const id = bookId(book);
     const draft = interiorDraftFor(id, true);
     const originalHasIntro = valueFor(summary, "hasIntro", false);
-    const originalSources = valueFor(summary, "selectedIntroInteriorSourceKeys", []) ?? [];
+    const originalSources = persistedIntroSourceReferences(summary);
     if (hasIntro === originalHasIntro) delete draft.hasIntro; else draft.hasIntro = hasIntro;
     if (!hasIntro) delete draft.introSourceReferences;
     else if (sameKeys(sourceReferences, originalSources)) delete draft.introSourceReferences;
