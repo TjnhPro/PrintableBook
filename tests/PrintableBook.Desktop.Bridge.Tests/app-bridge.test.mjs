@@ -128,6 +128,28 @@ const manyPdfLibrarySnapshot = (count = 25) => {
   return { discovery: { brands: [], books: items.map((item) => item.book) }, globalSettings: {}, bookSummaries: items.map((item) => item.summary) };
 };
 
+const diagnosticsSnapshot = () => ({
+  discovery: {
+    brands: [],
+    books: [{ id: { value: "Book Alpha" }, name: "Book Alpha" }]
+  },
+  globalSettings: {},
+  bookSummaries: [{
+    bookId: { value: "Book Alpha" },
+    workspaceStatus: "Completed",
+    currentStep: null,
+    lastRunAt: "2026-08-25T23:34:07Z",
+    sourceFolders: [
+      { name: "Book colored", status: "Present", imageCount: 2 },
+      { name: "Book cover", status: "Present", imageCount: 2 },
+      { name: "Book interior", status: "Present", imageCount: 44 },
+      { name: "Source cover", status: "Present", imageCount: 5 },
+      { name: "Source cover colored", status: "Missing", imageCount: 0 }
+    ],
+    logs: []
+  }]
+});
+
 test("bridge accepts the JSON response emitted by the .NET host", () => {
   const { messageHandler, status } = loadBridge();
 
@@ -862,6 +884,33 @@ test("PDF Library Copy path sends the exact Book artifact reference", () => {
   const copy = { dataset: { action: "copy-output-path", bookId: "Book Delta", artifactReference }, closest: () => copy };
   contentListeners.click({ target: copy });
   assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.copy-path", payload: { bookId: "Book Delta", artifactReference } });
+});
+
+test("Diagnostics opens on Summary with four tabs", () => {
+  const { messageHandler, content } = loadBridge("diagnostics");
+
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: diagnosticsSnapshot() } });
+
+  assert.match(content.innerHTML, /role="tablist"/);
+  assert.match(content.innerHTML, />Summary</);
+  assert.match(content.innerHTML, />Tasks</);
+  assert.match(content.innerHTML, />Performance</);
+  assert.match(content.innerHTML, />Book</);
+  assert.match(content.innerHTML, /data-diagnostics-tab="summary"/);
+  assert.match(content.innerHTML, /aria-selected="true"/);
+});
+
+test("Diagnostics tab switching is local and sends no bridge message", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("diagnostics");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: diagnosticsSnapshot() } });
+  const count = messages.length;
+  const target = { dataset: { action: "diagnostics-tab", diagnosticsTab: "tasks" } };
+  target.closest = () => target;
+
+  contentListeners.click({ target });
+
+  assert.match(content.innerHTML, /data-diagnostics-panel="tasks"/);
+  assert.equal(messages.length, count);
 });
 
 test("Diagnostics route requests and renders sanitized responsiveness events", () => {
