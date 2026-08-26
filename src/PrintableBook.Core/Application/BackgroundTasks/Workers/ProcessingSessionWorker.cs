@@ -69,6 +69,10 @@ public sealed class ProcessingSessionWorker(
                     Fail(request, context, "process_background_invalid", $"Brand background.png must be {expected.Width}×{expected.Height} pixels.");
                 }
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (BackgroundTaskFailureException)
             {
                 throw;

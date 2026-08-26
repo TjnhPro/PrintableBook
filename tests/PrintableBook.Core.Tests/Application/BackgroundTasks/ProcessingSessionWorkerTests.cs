@@ -109,6 +109,25 @@ public sealed class ProcessingSessionWorkerTests
     }
 
     [Fact]
+    public async Task Background_validation_cancellation_propagates_as_cancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var application = new Application();
+        IBackgroundTaskWorker worker = new ProcessingSessionWorker(
+            new Provider(Snapshot(hasBackground: true)),
+            application,
+            new FrameResolver(),
+            new FileSystem(true),
+            new ImageInspector(new OperationCanceledException(cancellation.Token)));
+
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => worker.ExecuteAsync(Request(), new Context(), cancellation.Token).AsTask());
+
+        Assert.Equal(cancellation.Token, exception.CancellationToken);
+        Assert.Null(application.Request);
+    }
+
+    [Fact]
     public async Task Background_enabled_passes_a_valid_page_using_the_effective_final_size()
     {
         var settings = GlobalSettings.Default with { FinalPageWidth = 901, FinalPageHeight = 902 };
