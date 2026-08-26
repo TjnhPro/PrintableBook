@@ -217,6 +217,10 @@
       ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="256" height="256" loading="lazy" decoding="async" data-local-image data-image-fallback="${escapeHtml(fallback)}">`
       : `<span class="book-preview-fallback" aria-label="${escapeHtml(fallback)}">${escapeHtml(fallback)}</span>`;
   };
+  const bookThumbnailMarkup = (book, summary, fallback = "Preview unavailable") => {
+    const cover = assetForReference(summary, valueFor(summary, "representativeCoverReference", ""));
+    return localImageMarkup(cover, `Cover for ${valueFor(book, "name", bookId(book))}`, fallback);
+  };
   const assetDimensions = (asset) => {
     const width = valueFor(asset, "width", null);
     const height = valueFor(asset, "height", null);
@@ -361,8 +365,7 @@
     const card = (item) => {
       const itemSummary = summaryFor(item);
       const id = bookId(item);
-      const cover = assetForReference(itemSummary, valueFor(itemSummary, "representativeCoverReference", ""));
-      const thumbnail = localImageMarkup(cover, `Cover for ${valueFor(item, "name", "")}`);
+      const thumbnail = bookThumbnailMarkup(item, itemSummary);
       const total = valueFor(itemSummary, "interiorSourcePageCount", 0);
       const interiorAssets = assetsFor(itemSummary).filter((asset) => valueFor(asset, "kind", "") === "Interior");
       const active = interiorAssets.length ? interiorAssets.filter((asset) => effectiveInteriorAsset(item, asset).isActive).length : valueFor(itemSummary, "activeInteriorSourcePageCount", total);
@@ -441,10 +444,11 @@
     };
     const bookCard = ({ book, summary }) => {
       const name = pdfLibraryBookName(book, summary);
+      const thumbnail = bookThumbnailMarkup(book, summary, "Cover unavailable");
       const outputs = valueFor(summary, "outputSummaries", []);
       const totalBytes = pdfLibraryOutputSize(summary);
       const generatedAt = pdfLibraryGeneratedAt(summary);
-      return `<article class="pdf-library-book" data-pdf-book-id="${escapeHtml(name)}"><header class="pdf-library-book-header"><div><div class="pdf-library-title-row"><h2>${escapeHtml(name)}</h2><span class="status-badge status-good">PDF ready</span></div><p>${outputs.length} ${outputs.length === 1 ? "PDF" : "PDFs"} · ${fileSize(totalBytes)} · ${dateTime(generatedAt ? new Date(generatedAt).toISOString() : null)}</p></div></header><ul class="pdf-library-files">${outputs.map((output) => outputRow(summary, output)).join("")}</ul></article>`;
+      return `<article class="pdf-library-book" data-pdf-book-id="${escapeHtml(name)}"><span class="pdf-library-book-preview">${thumbnail}</span><header class="pdf-library-book-header"><div><div class="pdf-library-title-row"><h2>${escapeHtml(name)}</h2><span class="status-badge status-good">PDF ready</span></div><p>${outputs.length} ${outputs.length === 1 ? "PDF" : "PDFs"} · ${fileSize(totalBytes)} · ${dateTime(generatedAt ? new Date(generatedAt).toISOString() : null)}</p></div></header><ul class="pdf-library-files">${outputs.map((output) => outputRow(summary, output)).join("")}</ul></article>`;
     };
     const empty = eligibleTotal === 0
       ? `<section class="pdf-library-empty"><strong>No completed PDFs yet.</strong><p>Process a Book to make its final PDF appear here.</p></section>`

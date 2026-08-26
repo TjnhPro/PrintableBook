@@ -688,6 +688,26 @@ test("PDF Library search resets and clamps pagination", () => {
   assert.match(content.innerHTML, /data-pdf-book-id="Book 01"/);
 });
 
+test("PDF Library reuses each Book representative cover thumbnail", () => {
+  const { messageHandler, content } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: manyPdfLibrarySnapshot(1) } });
+
+  assert.match(content.innerHTML, /file:\/\/\/D:\/PrintableBook\/sources\/Book%201\/Book%20cover\/cover\.png/);
+  assert.match(content.innerHTML, /loading="lazy"/);
+  assert.match(content.innerHTML, /decoding="async"/);
+  assert.match(content.innerHTML, /data-local-image/);
+});
+
+test("PDF Library shows the existing fallback when a representative cover is unavailable", () => {
+  const { messageHandler, content } = loadBridge("outputs");
+  const snapshot = manyPdfLibrarySnapshot(1);
+  snapshot.bookSummaries[0].representativeCoverReference = "";
+  snapshot.bookSummaries[0].assets = [];
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+
+  assert.match(content.innerHTML, /Cover unavailable/);
+});
+
 test("PDF Library search filters by Book name", () => {
   const { messageHandler, content, contentListeners, messages, searchInput } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
