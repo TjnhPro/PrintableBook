@@ -24,7 +24,8 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     insertAdjacentHTML: (_position, markup) => { content.innerHTML += markup; },
     querySelector: (selector) => selector === '[data-action="pdf-library-search"]' ? searchInput : null
   };
-  const brandSelect = { innerHTML: "", value: "", addEventListener: () => { } };
+  const brandSelectListeners = {};
+  const brandSelect = { innerHTML: "", value: "", addEventListener: (eventName, handler) => { brandSelectListeners[eventName] = handler; } };
   const brandSettingsEditor = { dataset: { brandSettings: "" }, value: "{}" };
   const refreshButton = {
     disabled: false,
@@ -69,7 +70,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSelect, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages, browserWindow, searchInput };
+  return { messageHandler, status, content, brandSelect, brandSelectListeners, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages, browserWindow, searchInput };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -592,6 +593,28 @@ test("Book detail configures an ordered custom Intro template selection from the
   contentListeners.click({ target: save });
 
   assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", hasIntro: true, brandName: "Demo", introTemplateKeys: ["second.png"], assets: [] });
+});
+
+test("Brand switching refreshes Intro readiness without mutating the saved custom selection", () => {
+  const { messageHandler, content, contentListeners, brandSelect, brandSelectListeners } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "brand-switch", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [
+      { name: "Brand A", introTemplateAssets: [{ key: "shared.png", fileName: "shared.png", localImageUrl: "file:///shared.png" }] },
+      { name: "Brand B", introTemplateAssets: [{ key: "other.png", fileName: "other.png", localImageUrl: "file:///other.png" }] }
+    ], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Ready", hasIntro: true, selectedIntroTemplateKeys: ["shared.png"], validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [] }]
+  } } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const assetsTab = { dataset: { action: "book-tab", bookTab: "assets" }, closest: () => assetsTab };
+  contentListeners.click({ target: assetsTab });
+  assert.doesNotMatch(content.innerHTML, /missing from the current Brand/);
+
+  brandSelect.value = "Brand B";
+  brandSelectListeners.change();
+
+  assert.match(content.innerHTML, /selected Intro template is missing from the current Brand/);
 });
 
 test("Books render direct Cover and Interior local image URLs and replace a failed image locally", () => {

@@ -204,6 +204,22 @@
       keys: draft?.introTemplateKeys ?? valueFor(summary, "selectedIntroTemplateKeys", []) ?? []
     };
   };
+  const introReadiness = (book, summary) => {
+    const brand = activeBrand();
+    if (!brand) return { ready: false, reason: "Choose a Brand before processing Intro templates." };
+    const templates = (valueFor(brand, "introTemplateAssets", []) ?? []).filter((asset) => /\.(png|jpe?g)$/i.test(valueFor(asset, "fileName", "")));
+    const selection = effectiveIntro(book, summary);
+    if (!selection.hasIntro && !templates.length) return { ready: false, reason: "The current Brand has no eligible Intro templates." };
+    if (selection.hasIntro && !selection.keys.length) return { ready: false, reason: "Custom Intro mode needs at least one selected template." };
+    const keys = new Set(templates.map((asset) => String(valueFor(asset, "key", "")).toLowerCase()));
+    if (selection.hasIntro && selection.keys.some((key) => !keys.has(String(key).toLowerCase()))) return { ready: false, reason: "A selected Intro template is missing from the current Brand." };
+    return { ready: true, reason: "" };
+  };
+  const processingReadiness = (book, summary) => {
+    if (hasInteriorDraft(bookId(book))) return { ready: false, reason: "Save Interior changes before processing." };
+    if (valueFor(summary, "validationStatus", "Needs review") !== "Ready") return { ready: false, reason: "Run Interior preflight until this Book is ready." };
+    return introReadiness(book, summary);
+  };
   const sameKeys = (left, right) => left.length === right.length && left.every((key, index) => key.toLowerCase() === String(right[index] ?? "").toLowerCase());
   const stageIntroChange = (book, summary, hasIntro, keys) => {
     const id = bookId(book);
@@ -321,7 +337,8 @@
     if (state.selectedBookTab === "processing") body = panel("Processing", `<dl class="summary-grid"><div><span>Workspace</span>${badge(workspaceStatus(summary))}</div><div><span>Current step</span><strong>${escapeHtml(valueFor(summary, "currentStep", "Not started"))}</strong></div><div><span>Cached processed pages</span><strong>${pages.length} / ${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></dl>${pages.length ? `<table class="data-table mt-4"><thead><tr><th>Page</th><th>Status</th><th>Final page</th></tr></thead><tbody>${pages.map((page) => `<tr><td>${escapeHtml(valueFor(page, "pageId", ""))}</td><td>${badge(valueFor(page, "status", ""))}</td><td class="detail-path">${escapeHtml(String(valueFor(page, "finalPagePath", "")).split(/[\\/]/).pop())}</td></tr>`).join("")}</tbody></table>` : "<p class=\"empty-copy mt-4\">No processed page cache is currently retained.</p>"}`);
     if (state.selectedBookTab === "outputs") body = panel("Published outputs", artifacts.length ? `<ul class="artifact-list">${artifacts.map((artifact) => `<li>${escapeHtml(String(artifact).split(/[\\/]/).pop())}</li>`).join("")}</ul>` : "<p class=\"empty-copy\">No published output yet.</p>");
     if (state.selectedBookTab === "logs") body = panel("Workspace logs", logs.length ? `<table class="data-table"><thead><tr><th>Time</th><th>Event</th><th>Detail</th></tr></thead><tbody>${logs.map((log) => `<tr><td>${dateTime(valueFor(log, "timestamp", null))}</td><td>${escapeHtml(valueFor(log, "eventName", ""))}</td><td>${escapeHtml(valueFor(log, "detail", ""))}</td></tr>`).join("")}</tbody></table>` : "<p class=\"empty-copy\">No workspace log entries yet.</p>");
-    return `<div class="book-heading"><div><h2>${escapeHtml(valueFor(book, "name", ""))}</h2><p>Interior-only production workspace</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book">Process Interior</button></div></div><nav class="detail-tabs">${tabButton("overview", "Overview")}${tabButton("assets", `Interior assets (${assets.filter((asset) => valueFor(asset, "kind", "") === "Interior").length})`)}${tabButton("validation", "Validation")}${tabButton("processing", "Processing")}${tabButton("outputs", "Outputs")}${tabButton("logs", "Logs")}</nav><div class="tab-body">${body}</div>`;
+    const readiness = processingReadiness(book, summary);
+    return `<div class="book-heading"><div><h2>${escapeHtml(valueFor(book, "name", ""))}</h2><p>Interior-only production workspace</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs">${tabButton("overview", "Overview")}${tabButton("assets", `Interior assets (${assets.filter((asset) => valueFor(asset, "kind", "") === "Interior").length})`)}${tabButton("validation", "Validation")}${tabButton("processing", "Processing")}${tabButton("outputs", "Outputs")}${tabButton("logs", "Logs")}</nav><div class="tab-body">${body}</div>`;
   };
 
   const renderIntroTemplateWorkspace = (book, summary) => {
@@ -333,13 +350,14 @@
     const selected = selection.keys.map((key) => byKey.get(String(key).toLowerCase())).filter(Boolean);
     const available = templates.filter((asset) => !selection.keys.some((key) => String(key).toLowerCase() === String(valueFor(asset, "key", "")).toLowerCase()));
     const disabled = processIsActive() || state.bookInteriorSavePending;
+    const readiness = introReadiness(book, summary);
     const selectedTile = (asset, index) => {
       const key = valueFor(asset, "key", "");
       return `<article class="intro-template-tile"><span class="intro-template-preview">${localImageMarkup(asset, `Intro template ${valueFor(asset, "fileName", "")}`, "Image unavailable")}</span><strong title="${escapeHtml(valueFor(asset, "fileName", ""))}">${escapeHtml(valueFor(asset, "fileName", ""))}</strong><div class="intro-template-actions"><button class="button-secondary" data-action="intro-move-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-index="${index}" data-intro-direction="up" aria-label="Move ${escapeHtml(valueFor(asset, "fileName", ""))} earlier" ${index === 0 || disabled ? "disabled" : ""}>Earlier</button><button class="button-secondary" data-action="intro-move-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-index="${index}" data-intro-direction="down" aria-label="Move ${escapeHtml(valueFor(asset, "fileName", ""))} later" ${index === selected.length - 1 || disabled ? "disabled" : ""}>Later</button><button class="button-secondary" data-action="intro-remove-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-key="${escapeHtml(key)}" ${disabled ? "disabled" : ""}>Remove</button></div></article>`;
     };
     const availableOption = (asset) => `<button class="intro-template-add" data-action="intro-add-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-key="${escapeHtml(valueFor(asset, "key", ""))}" ${disabled ? "disabled" : ""}>${localImageMarkup(asset, `Available template ${valueFor(asset, "fileName", "")}`, "Image unavailable")}<span>${escapeHtml(valueFor(asset, "fileName", ""))}</span><small>Add</small></button>`;
     const brandCopy = brand ? `${escapeHtml(valueFor(brand, "name", ""))} · ${templates.length} eligible local template${templates.length === 1 ? "" : "s"}` : "Choose a Brand in the header to see local templates.";
-    return `<section class="intro-template-workspace"><div class="intro-template-heading"><div><h3>Intro template pages</h3><p>${brandCopy}</p></div><span class="status-badge ${selection.hasIntro ? "status-warn" : "status-muted"}">${selection.hasIntro ? "Custom order" : "Automatic"}</span></div><fieldset class="intro-mode-choice" ${disabled ? "disabled" : ""}><legend>Intro source</legend><label><input type="radio" name="intro-mode" data-action="set-intro-mode" data-book-id="${escapeHtml(bookId(book))}" value="auto" ${selection.hasIntro ? "" : "checked"}> Automatic <small>Use every eligible template in filename order.</small></label><label><input type="radio" name="intro-mode" data-action="set-intro-mode" data-book-id="${escapeHtml(bookId(book))}" value="custom" ${selection.hasIntro ? "checked" : ""}> Custom <small>Select exact pages and their print order.</small></label></fieldset>${selection.hasIntro ? `<div class="intro-template-selection"><div><h4>Selected order</h4><p>${selected.length ? "Intro pages process before Interior pages." : "Add at least one template to make this Book ready."}</p></div><div class="intro-template-grid">${selected.length ? selected.map(selectedTile).join("") : "<p class=\"empty-copy\">No Intro templates selected.</p>"}</div>${available.length ? `<div class="intro-template-available"><h4>Add available template</h4><div class="intro-template-add-grid">${available.map(availableOption).join("")}</div></div>` : ""}</div>` : `<p class="panel-note">Automatic mode is non-destructive: custom choices stay saved and are reused when you switch back to Custom.</p>`}</section>`;
+    return `<section class="intro-template-workspace"><div class="intro-template-heading"><div><h3>Intro template pages</h3><p>${brandCopy}</p></div><span class="status-badge ${selection.hasIntro ? "status-warn" : "status-muted"}">${selection.hasIntro ? "Custom order" : "Automatic"}</span></div><p class="${readiness.ready ? "panel-note" : "intro-template-warning"}" role="${readiness.ready ? "status" : "alert"}">${readiness.ready ? "Ready for backend size validation during processing." : escapeHtml(readiness.reason)}</p><fieldset class="intro-mode-choice" ${disabled ? "disabled" : ""}><legend>Intro source</legend><label><input type="radio" name="intro-mode" data-action="set-intro-mode" data-book-id="${escapeHtml(bookId(book))}" value="auto" ${selection.hasIntro ? "" : "checked"}> Automatic <small>Use every eligible template in filename order.</small></label><label><input type="radio" name="intro-mode" data-action="set-intro-mode" data-book-id="${escapeHtml(bookId(book))}" value="custom" ${selection.hasIntro ? "checked" : ""}> Custom <small>Select exact pages and their print order.</small></label></fieldset>${selection.hasIntro ? `<div class="intro-template-selection"><div><h4>Selected order</h4><p>${selected.length ? "Intro pages process before Interior pages." : "Add at least one template to make this Book ready."}</p></div><div class="intro-template-grid">${selected.length ? selected.map(selectedTile).join("") : "<p class=\"empty-copy\">No Intro templates selected.</p>"}</div>${available.length ? `<div class="intro-template-available"><h4>Add available template</h4><div class="intro-template-add-grid">${available.map(availableOption).join("")}</div></div>` : ""}</div>` : `<p class="panel-note">Automatic mode is non-destructive: custom choices stay saved and are reused when you switch back to Custom.</p>`}</section>`;
   };
 
   const renderFolderAssetWorkspace = (book, summary) => {
@@ -446,6 +464,11 @@
       const book = books().find((candidate) => bookId(candidate) === id);
       return { bookId: { value: id }, status: "Ready", detail: valueFor(book, "name", id) };
     });
+    const blockedSelection = [...state.selectedBookIds]
+      .map((id) => books().find((book) => bookId(book) === id))
+      .filter(Boolean)
+      .map((book) => ({ book, readiness: processingReadiness(book, summaryFor(book)) }))
+      .find((item) => !item.readiness.ready);
     const queue = hasSession ? sessionQueue : pendingQueue;
     const currentBook = valueFor(valueFor(session, "currentBookId", {}), "value", terminal ? "Last session" : "No active Book");
     const terminalStatuses = sessionQueue.map((entry) => displayStatus(valueFor(entry, "status", "Not started")));
@@ -462,7 +485,7 @@
     const stages = ["Preparing", "Processing", "PDF export"];
     const currentStageIndex = stage === "Processing" ? 1 : stage === "PDF export" ? 2 : 0;
     const failureDetails = queue.filter((entry) => displayStatus(valueFor(entry, "status", "")) === "Failed" && valueFor(entry, "detail", null));
-    content.innerHTML = `<div class="page-header"><div><h1>Process Interior</h1><p>${cancelling ? "Stopping Interior Processing session…" : active ? "Active Interior Processing session" : terminal ? "Last Interior Processing session" : "Prepare a selected interior-only book queue."}</p></div>${active ? cancelling ? '<button class="button-danger" disabled>Stopping processing…</button>' : '<button class="button-danger" data-action="cancel-process">Cancel session</button>' : ""}</div><section class="process-status-strip" aria-live="polite"><div><span>Session state</span><strong>${escapeHtml(stage)}</strong></div><div><span>Elapsed</span><strong>${elapsedTime(valueFor(session, "startedAt", null))}</strong></div><div><span>Workers</span><strong>${valueFor(session, "workerLimit", 0) || "—"}</strong></div><div><span>Progress</span><strong>${completed} / ${total || "?"} pages</strong></div></section><ol class="process-stages">${stages.map((item, index) => `<li class="${index < currentStageIndex ? "complete" : index === currentStageIndex && active ? "active" : ""}"><span>${index + 1}</span>${item}</li>`).join("")}</ol><div class="process-grid">${panel(hasSession ? (terminal ? "Last session" : "Queue") : "Selected queue", `<ul class="queue-list">${queue.length ? queue.map((entry) => `<li><span>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}</span>${badge(valueFor(entry, "status", "NotStarted"))}<small>${escapeHtml(valueFor(entry, "detail", "Waiting"))}</small></li>`).join("") : "<li class=\"empty-row\">Select Books on the Books page.</li>"}</ul>`)}${panel("Current stage", `<div class="process-book"><strong>${escapeHtml(currentBook)}</strong><span>${escapeHtml(currentStep)}</span></div><div class="progress-track"><span style="width:${percent}%"></span></div><p class="progress-copy">${completed} / ${total || "?"} pages · ${valueFor(session, "workerLimit", 0) || "?"} workers</p>${failureDetails.length ? `<div class="process-failure" role="alert"><strong>Run needs review</strong>${failureDetails.map((entry) => `<p>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}: ${escapeHtml(valueFor(entry, "detail", ""))}</p>`).join("")}</div>` : ""}<div class="page-actions mt-4">${active || cancelling ? "" : `<button class="button-primary" data-action="start-process" ${state.selectedBookIds.size ? "" : "disabled"}>${terminal ? "Start New Interior Processing" : "Start Interior Processing"}</button>`}</div>`)}</div>`;
+    content.innerHTML = `<div class="page-header"><div><h1>Process Interior</h1><p>${cancelling ? "Stopping Interior Processing session…" : active ? "Active Interior Processing session" : terminal ? "Last Interior Processing session" : "Prepare a selected interior-only book queue."}</p></div>${active ? cancelling ? '<button class="button-danger" disabled>Stopping processing…</button>' : '<button class="button-danger" data-action="cancel-process">Cancel session</button>' : ""}</div><section class="process-status-strip" aria-live="polite"><div><span>Session state</span><strong>${escapeHtml(stage)}</strong></div><div><span>Elapsed</span><strong>${elapsedTime(valueFor(session, "startedAt", null))}</strong></div><div><span>Workers</span><strong>${valueFor(session, "workerLimit", 0) || "—"}</strong></div><div><span>Progress</span><strong>${completed} / ${total || "?"} pages</strong></div></section><ol class="process-stages">${stages.map((item, index) => `<li class="${index < currentStageIndex ? "complete" : index === currentStageIndex && active ? "active" : ""}"><span>${index + 1}</span>${item}</li>`).join("")}</ol><div class="process-grid">${panel(hasSession ? (terminal ? "Last session" : "Queue") : "Selected queue", `<ul class="queue-list">${queue.length ? queue.map((entry) => `<li><span>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}</span>${badge(valueFor(entry, "status", "NotStarted"))}<small>${escapeHtml(valueFor(entry, "detail", "Waiting"))}</small></li>`).join("") : "<li class=\"empty-row\">Select Books on the Books page.</li>"}</ul>`)}${panel("Current stage", `<div class="process-book"><strong>${escapeHtml(currentBook)}</strong><span>${escapeHtml(currentStep)}</span></div><div class="progress-track"><span style="width:${percent}%"></span></div><p class="progress-copy">${completed} / ${total || "?"} pages · ${valueFor(session, "workerLimit", 0) || "?"} workers</p>${blockedSelection ? `<div class="process-failure" role="alert"><strong>Selected Book needs review</strong><p>${escapeHtml(valueFor(blockedSelection.book, "name", "Book"))}: ${escapeHtml(blockedSelection.readiness.reason)}</p></div>` : ""}${failureDetails.length ? `<div class="process-failure" role="alert"><strong>Run needs review</strong>${failureDetails.map((entry) => `<p>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}: ${escapeHtml(valueFor(entry, "detail", ""))}</p>`).join("")}</div>` : ""}<div class="page-actions mt-4">${active || cancelling ? "" : `<button class="button-primary" data-action="start-process" ${state.selectedBookIds.size && !blockedSelection ? "" : "disabled"}>${terminal ? "Start New Interior Processing" : "Start Interior Processing"}</button>`}</div>`)}</div>`;
     if (requestProcess) send("process.get");
   };
 
@@ -670,7 +693,13 @@
       }
     }
     if (action === "queue-book") { const id = target.dataset.bookId; if (target.checked) state.selectedBookIds.add(id); else state.selectedBookIds.delete(id); }
-    if (action === "queue-selected-book") { if (state.selectedBookId) state.selectedBookIds.add(state.selectedBookId); render("process"); }
+    if (action === "queue-selected-book") {
+      const book = books().find((item) => bookId(item) === state.selectedBookId);
+      const readiness = book ? processingReadiness(book, summaryFor(book)) : { ready: false, reason: "Choose a Book first." };
+      if (!readiness.ready) { status.textContent = readiness.reason; return; }
+      state.selectedBookIds.add(state.selectedBookId);
+      render("process");
+    }
     if (action === "book-tab") { state.selectedBookTab = target.dataset.bookTab; render("books", false); }
     if (action === "select-asset") { state.selectedAssetReference = target.dataset.sourceReference; render("books", false); }
     if (action === "asset-view") { state.assetView = target.dataset.assetView; render("books", false); }
@@ -689,7 +718,12 @@
     if (action === "pdf-library-view") { state.pdfLibraryView = target.dataset.pdfLibraryView === "list" ? "list" : "grid"; render("outputs", false); }
     if (action === "validate-book") send("book.validate", { bookId: target.dataset.bookId });
     if (action === "go-process") render("process");
-    if (action === "start-process" && !state.processStartPending) { state.processStartPending = true; send("process.start", { bookIds: [...state.selectedBookIds], brandName: state.selectedBrand || brandSelect?.value || null, mode: "interior-only" }); }
+    if (action === "start-process" && !state.processStartPending) {
+      const blocked = [...state.selectedBookIds].map((id) => books().find((book) => bookId(book) === id)).filter(Boolean).map((book) => ({ book, readiness: processingReadiness(book, summaryFor(book)) })).find((item) => !item.readiness.ready);
+      if (blocked) { status.textContent = `${valueFor(blocked.book, "name", "Book")}: ${blocked.readiness.reason}`; return; }
+      state.processStartPending = true;
+      send("process.start", { bookIds: [...state.selectedBookIds], brandName: state.selectedBrand || brandSelect?.value || null, mode: "interior-only" });
+    }
     if (action === "cancel-process") send("process.cancel");
     if (action === "open-output") send("book.output.open", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
     if (action === "reveal-output") send("book.output.reveal", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
@@ -865,7 +899,10 @@
   const globalProcessStatus = document.getElementById("global-process-status");
   if (globalProcessStatus) globalProcessStatus.addEventListener("click", () => render("process"));
   updateGlobalProcessStatus();
-  if (brandSelect) brandSelect.addEventListener("change", () => { state.selectedBrand = brandSelect.value; });
+  if (brandSelect) brandSelect.addEventListener("change", () => {
+    state.selectedBrand = brandSelect.value;
+    render(document.querySelector(".nav-item-active")?.dataset.route ?? "books", false);
+  });
   window.setInterval(() => { if (valueFor(window.processSnapshot, "isActive", false) || valueFor(window.processSnapshot, "isCancelling", false)) send("process.get"); }, 1000);
   send("app.ping");
   state.applicationLoadState = "loading";
