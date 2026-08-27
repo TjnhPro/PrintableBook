@@ -84,15 +84,10 @@ public sealed class ApplicationSnapshotService(
         var state = await stateStore.LoadAsync(book.Workspace, cancellationToken) ?? BookProcessingState.NotStarted(book.Id);
         var coverCandidates = source?.GetAssets(BookAssetKind.Cover).Select(asset => asset.Reference).ToArray() ?? [];
         var hasSelectedCover = coverCandidates.Length == 1 || coverCandidates.Any(candidate => string.Equals(candidate, state.SelectedCoverReference, StringComparison.OrdinalIgnoreCase));
-        var interiorDirectory = new DirectoryReference(Path.Combine(book.Workspace.ProcessedDirectory.Value, "interior"));
-        var interiorPages = new List<InteriorPageSummary>();
-        await foreach (var page in fileSystem.EnumerateFilesAsync(interiorDirectory, cancellationToken))
-        {
-            if (string.Equals(Path.GetExtension(page.Value), ".png", StringComparison.OrdinalIgnoreCase))
-            {
-                interiorPages.Add(new InteriorPageSummary(Path.GetFileNameWithoutExtension(page.Value), "Completed", page.Value, ToLocalImageUrl(page.Value)));
-            }
-        }
+        var interiorPages = (state.PublishedInteriorPreviews ?? [])
+            .Select(preview => new InteriorPageSummary(preview.PageId, "Completed", preview.FinalPagePath, ToLocalImageUrl(preview.FinalPagePath)))
+            .OrderBy(page => page.PageId, StringComparer.Ordinal)
+            .ToArray();
         var checks = new List<BookValidationCheck>();
         if (isSourceValid)
         {
@@ -188,7 +183,7 @@ public sealed class ApplicationSnapshotService(
             state.CurrentStep,
             state.Failure?.Message,
             state.PublishedArtifactReferences ?? [],
-            interiorPages.OrderBy(page => page.PageId, StringComparer.Ordinal).ToArray(),
+            interiorPages,
             await stateStore.LoadLogsAsync(book.Workspace, cancellationToken),
             source?.GetAssets(BookAssetKind.Interior).Count ?? 0,
             await DiscoverSourceFoldersAsync(book.Directory, cancellationToken),

@@ -98,11 +98,13 @@ public sealed class ApplicationSnapshotServiceTests
     public async Task RefreshAsync_exposes_a_canonical_file_url_for_each_processed_interior_page()
     {
         var processedPage = new FileReference(Path.Combine("processed", "interior", "page-0001.png"));
+        var state = BookProcessingState.NotStarted(new BookId("Book A"))
+            .RecordPublishedInteriorPreviews([new PublishedInteriorPreview("page-0001", processedPage.Value)]);
         var snapshot = await new ApplicationSnapshotService(
             new StubDiscovery(),
             new StubSettingsStore(),
             new StubScanner(),
-            new StubStateStore(),
+            new StubStateStore(explicitState: state),
             new StubFileSystem(processedPage)).RefreshAsync();
 
         var page = Assert.Single(Assert.Single(snapshot.BookSummaries).InteriorPages);
@@ -110,6 +112,25 @@ public sealed class ApplicationSnapshotServiceTests
         Assert.Equal("page-0001", page.PageId);
         Assert.Equal(processedPage.Value, page.FinalPagePath);
         Assert.Equal(new Uri(Path.GetFullPath(processedPage.Value)).AbsoluteUri, page.LocalImageUrl);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_uses_only_the_last_published_interior_preview_manifest()
+    {
+        var stalePage = new FileReference(Path.Combine("processed", "interior", "page-0001.png"));
+        var publishedPage = new FileReference(Path.Combine("processed", "interior", "page-0002.png"));
+        var state = BookProcessingState.NotStarted(new BookId("Book A"))
+            .RecordPublishedInteriorPreviews([new PublishedInteriorPreview("page-0002", publishedPage.Value)]);
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(),
+            new StubSettingsStore(),
+            new StubScanner(),
+            new StubStateStore(explicitState: state),
+            new StubFileSystem(stalePage, publishedPage)).RefreshAsync();
+
+        var page = Assert.Single(Assert.Single(snapshot.BookSummaries).InteriorPages);
+        Assert.Equal("page-0002", page.PageId);
+        Assert.Equal(publishedPage.Value, page.FinalPagePath);
     }
 
     [Fact]
