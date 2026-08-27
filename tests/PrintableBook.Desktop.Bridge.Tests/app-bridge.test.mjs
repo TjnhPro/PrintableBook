@@ -1220,11 +1220,11 @@ test("PDF Library Grid uses compact Book cards and the documented desktop column
   assert.match(content.innerHTML, />Open</);
   assert.match(content.innerHTML, />Reveal</);
   assert.match(content.innerHTML, />Copy</);
-  assert.match(css, /repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(css, /\.pdf-library-grid \{ display:grid; grid-template-columns:repeat\(4,minmax\(0,1fr\)\); align-items:start; gap:16px; \}/);
   assert.match(css, /\.pdf-library-page \{ display:grid; grid-template-rows:auto auto minmax\(0,1fr\); width:100%; max-width:100%; height:100%; min-height:0; overflow:hidden;/);
   assert.match(css, /\.pb-content:has\(\.pdf-library-page\) \{ display:grid; grid-template-rows:minmax\(0,1fr\); overflow:hidden; \}/);
-  assert.match(css, /\.pdf-library-grid \{ display:grid; grid-template-columns:repeat\(3,minmax\(0,1fr\)\); grid-auto-rows:1fr;/);
-  assert.match(css, /\.pdf-library-book-grid \{ display:grid; grid-template-rows:auto auto minmax\(0,1fr\); min-width:0; height:100%;/);
+  assert.match(css, /@container \(max-width:1120px\) \{ \.pdf-library-grid \{ grid-template-columns:repeat\(3,minmax\(0,1fr\)\); \} \}/);
+  assert.match(css, /\.pdf-library-book-grid \{ display:grid; grid-template-rows:auto auto auto; min-width:0; \}/);
   assert.match(css, /\.pdf-library-book-grid \.pdf-library-book-preview \{ aspect-ratio:16 \/ 9; \}/);
   assert.match(css, /\.pdf-library-book-grid \.pdf-library-book-header > div \{ width:100%; min-width:0;/);
   assert.match(css, /\.pdf-library-book-grid \.pdf-library-title-row \{ display:grid; grid-template-columns:minmax\(0,1fr\) auto; min-width:0;/);
@@ -1234,7 +1234,7 @@ test("PDF Library Grid uses compact Book cards and the documented desktop column
   assert.match(css, /\.pdf-library-toolbar \{ display:grid; grid-template-columns:minmax\(0,1fr\) minmax\(144px,180px\) auto;/);
   assert.match(css, /\.pdf-library-file-title \{ display:grid; grid-template-columns:minmax\(0,1fr\) auto;/);
   assert.match(css, /\.pdf-library-book-grid \.pdf-library-file-copy \{ grid-template-rows:20px 18px 32px;/);
-  assert.match(css, /@container \(min-width:1360px\) \{ \.pdf-library-grid \{ grid-template-columns:repeat\(4,/);
+  assert.match(css, /@container \(max-width:820px\) \{ \.pdf-library-grid \{ grid-template-columns:repeat\(2,minmax\(0,1fr\)\); \} \}/);
 });
 
 test("PDF Library List uses bounded thumbnails and verbose output actions", () => {
