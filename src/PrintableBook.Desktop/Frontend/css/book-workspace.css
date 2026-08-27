@@ -77,7 +77,7 @@
 .book-card footer { display:flex; align-items:center; justify-content:space-between; gap:8px; border-top:1px solid var(--pb-border); padding:10px 12px; font-size:13px; }.book-card footer label { display:flex; align-items:center; gap:6px; min-width:0; }.book-card-action { flex:0 0 auto; }
 .book-compact-list .book-card { grid-template-columns:minmax(0,1fr) auto; }.book-compact-list .book-card-main { grid-template-columns:80px minmax(0,1fr); gap:12px; align-items:center; }.book-compact-list .book-card-preview { aspect-ratio:1; }.book-compact-list .book-card-copy { padding:0; }.book-compact-list .book-card footer { border-top:0; border-left:1px solid var(--pb-border); }
 .book-grid-empty { display:grid; gap:6px; grid-column:1/-1; padding:36px; border:1px dashed var(--pb-border); border-radius:12px; color:var(--pb-muted); text-align:center; }.book-grid-empty strong { color:var(--pb-ink); }
-.book-pagination { position:static; justify-content:space-between; margin:0; padding:12px 0 0; border-top:1px solid var(--pb-border); background:var(--pb-canvas); font-size:13px; }.book-pagination>div { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }.book-pagination .button-secondary { height:32px; }
+.book-pagination { position:static; justify-content:space-between; margin:0; padding:12px 0 0; border-top:1px solid var(--pb-border); background:var(--pb-surface); font-size:13px; }.book-pagination>div { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }.book-pagination .button-secondary { height:32px; }
 @media (min-width:1450px) { .book-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
 
 .book-drawer-layer { position:fixed; inset:0; z-index:40; display:flex; align-items:flex-end; background:rgb(24 32 51 / .32); }
