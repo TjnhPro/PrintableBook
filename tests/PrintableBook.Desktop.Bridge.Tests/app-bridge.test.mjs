@@ -476,7 +476,7 @@ test("saved brand settings survive the application refresh", () => {
   assert.match(content.innerHTML, /frame.*true/);
 });
 
-test("Books ignores background process snapshots and Process refreshes only on user navigation", () => {
+test("Books ignores background process snapshots while Process polling stays active", () => {
   const { messageHandler, content, getFullRenderCount, intervals, messages, routeButtons } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "books", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] }, globalSettings: {}, bookSummaries: []
@@ -485,7 +485,9 @@ test("Books ignores background process snapshots and Process refreshes only on u
   const rendersBeforeSnapshot = getFullRenderCount();
   messageHandler({ data: { version: 1, id: "process-1", ok: true, command: "process.snapshot", payload: { isActive: true, isCancelling: false } } });
   assert.equal(getFullRenderCount(), rendersBeforeSnapshot, "background processing must not redraw Book Library");
-  assert.equal(intervals.length, 0, "Process snapshots must not be polled in the background");
+  assert.equal(intervals.length, 1, "Process polling keeps the global status current");
+  intervals[0]();
+  assert.equal(messages.at(-1).command, "process.get");
 
   routeButtons.find((button) => button.dataset.route === "process").listeners.click();
   assert.match(content.innerHTML, /Process Interior/);
@@ -539,7 +541,7 @@ test("selected queue is paged in its tab and a pending Book can be removed", () 
 
 for (const [status, serializedStatus, detail] of [["Completed", 4, null], ["Failed", 2, "PDF export failed"], ["Cancelled", 3, "Cancelled"]]) {
   test(`${status.toLowerCase()} terminal processing remains visible and allows a new session`, () => {
-    const { messageHandler, content, intervals } = loadBridge("process");
+    const { messageHandler, content, intervals, messages } = loadBridge("process");
     messageHandler({ data: { version: 1, id: `process-${status}`, ok: true, command: "process.snapshot", payload: {
       isActive: false,
       isCancelling: false,
@@ -552,7 +554,10 @@ for (const [status, serializedStatus, detail] of [["Completed", 4, null], ["Fail
     assert.match(content.innerHTML, new RegExp(status));
     assert.match(content.innerHTML, /Selected queue/);
     assert.match(content.innerHTML, /Start New Interior Processing/);
-    assert.equal(intervals.length, 0, "terminal Process state must not schedule background polling");
+    assert.equal(intervals.length, 1, "global polling exists but must stop after a terminal Process snapshot");
+    const messageCount = messages.length;
+    intervals[0]();
+    assert.equal(messages.length, messageCount);
   });
 }
 
