@@ -1,116 +1,157 @@
-# Architecture
+# Kiến trúc Printable Book v0.1
 
-## Purpose
+## Mục tiêu và ranh giới
 
-Printable Book is a modular-monolith Windows application for preparing printable colouring-book assets. It has a platform-independent Core, Infrastructure adapters that perform real image/PDF work, and a WPF/WebView2 presentation host.
-
-| Project | Responsibility |
-| --- | --- |
-| `PrintableBook.Core` | Platform-independent domain, processing contracts, configuration snapshot, application use case, pipeline, and technical adapter contracts. |
-| `PrintableBook.Infrastructure` | Concrete file system, image, PDF, metadata, workspace, and brand-profile adapters. |
-| `PrintableBook.Desktop` | WPF composition root and WebView2 presentation host. It invokes application use cases and owns no processing logic. |
-| `PrintableBook.Core.Tests` | Unit and architecture tests for Core contracts. |
-| `PrintableBook.Infrastructure.Tests` | Integration-test foundation and future small real PNG/PDF fixtures. |
-
-## Dependency direction
+Printable Book là ứng dụng Windows local-first để kiểm tra, chuẩn bị ảnh Coloring Book và xuất PDF. v0.1 là ứng dụng portable: dữ liệu runtime được quản lý cạnh file thực thi, không dùng service từ xa và không có installer, auto-update hay data-root migration.
 
 ```text
-PrintableBook.Infrastructure ─────► PrintableBook.Core
-PrintableBook.Desktop ─────────────► PrintableBook.Core
-PrintableBook.Desktop ─────────────► PrintableBook.Infrastructure
-PrintableBook.Core.Tests ──────────► PrintableBook.Core
-PrintableBook.Infrastructure.Tests ► PrintableBook.Infrastructure
-
-PrintableBook.Core ──X──► Infrastructure / Desktop / WPF / WebView2 / Windows APIs
-PrintableBook.Infrastructure ──X──► Desktop
+<AppRoot>/
+├─ PrintableBook.exe
+├─ Frontend/
+├─ brands/
+├─ sources/
+└─ settings.json
 ```
 
-Core owns the interfaces and technical primitives needed by processing; Infrastructure implements them. Core architecture tests reject direct references to Infrastructure, Desktop, WPF, WebView2, and Windows assemblies. Infrastructure tests reject a Desktop reference. This retains reuse by a future worker or CLI host.
+`AppRoot = AppDomain.CurrentDomain.BaseDirectory`. Vì `brands/`, `sources/`, `settings.json` và `.workspace/` của từng Book đều cần ghi được, ứng dụng phải được giải nén vào thư mục writable (ví dụ `C:\PrintableBook\`), không phải `Program Files`.
 
-## Domain and configuration
-
-A `Book` holds a `BookId` and a general `BookSource`, whose assets are explicitly classified as Cover, Intro, Interior, or Colored. The model is deliberately small and uses no inheritance tree.
-
-A `BrandProfile` is a resolved profile selected independently of the book. It can optionally carry an effective settings snapshot and opaque resource references. `IBrandProfileResolver` is a Core-owned adapter contract: Core never reads a brand folder, file, JSON, YAML, or environment value directly. Folder layout, extensions, resource names, and automation rules remain changeable.
-
-Processing settings are opaque key/value values from ordered `IProcessingSettingsSource` instances. A later source overrides an earlier source and `ProcessingSettingsResolver` creates an immutable `EffectiveProcessingSettings` snapshot before processing begins. This supports configuration, environment, and runtime overrides without declaring a final schema or embedding KDP pixel values in code.
-
-## Processing execution
-
-The runtime flow is:
+## Module và hướng phụ thuộc
 
 ```text
-Select Brand + Select Book
-        ↓
-Resolve Brand Profile + Effective Settings
-        ↓
-Create ProcessingContext and BookWorkspace
-        ↓
-IPrintableBookApplication → IBookProcessingPipeline → replaceable stages
+PrintableBook.Desktop
+├─ WPF window / lifecycle
+├─ WebView2 host
+├─ JSON bridge v1
+└─ BackgroundTaskManager
+        │
+        ▼
+PrintableBook.Core
+├─ discovery contracts
+├─ application snapshots
+├─ Book state/workspace model
+├─ processing orchestration
+├─ classification contracts
+└─ ports
+        │
+        ▼
+PrintableBook.Infrastructure
+├─ physical filesystem
+├─ Magick.NET image adapters
+├─ disk-backed page pipeline/cache
+├─ PDFsharp export/inspection
+└─ workspace/output persistence
 ```
 
-`ProcessingContext` contains only the resolved book, brand, settings, workspace, and per-run options. `ProcessingResult` communicates Success, Warning, Failure, or Cancelled with small structured issues. `ProcessingProgress` is generic and application APIs expose `CancellationToken` boundaries.
+`PrintableBook.Core` giữ domain model, use case, orchestration và các port trung lập. `PrintableBook.Infrastructure` triển khai filesystem, Magick.NET, PDFsharp và persistence. `PrintableBook.Desktop` là composition root WPF/WebView2; frontend chỉ render snapshot và gửi command qua JSON bridge v1, không nắm business logic hay raster processing.
 
-## Interior processing architecture
+Các test kiến trúc bảo vệ hướng phụ thuộc: Core không tham chiếu Infrastructure/Desktop/WPF/WebView2/Windows APIs; Infrastructure không tham chiếu Desktop.
 
-The classified Interior workflow is fixed and disk-backed. `DiskBackedInteriorPagePipeline` orchestrates stages; it does not contain detector, classifier, or type-specific raster policy.
+## Discovery, Book và workspace
+
+Library discovery quét `sources/` thành Book, assets và validation snapshot. Mỗi Book có workspace riêng dưới `.workspace/`, gồm state, log, cache, processed preview và output tạm. Trạng thái Book lưu các lựa chọn ổn định theo key tương đối của ảnh Interior, không theo index hiển thị, nên refresh hay đổi thứ tự file không làm mất lựa chọn.
+
+Các output đã publish thuộc `Output/` của Book. PDF Library đọc output đã publish; không đọc trực tiếp cache tạm.
+
+## Luồng xử lý ảnh chuẩn hoá
+
+Luồng production dùng một nguồn chuẩn duy nhất cho từng trang Interior:
 
 ```text
-original source
-  → BorderLine / BorderPixel evidence
-  → ArtworkClassifier
-  → type-specific Preparation
-  → PreparedArtwork
-  → frame decision
-  → WorkingPage
-  → FinalPage
+RAW Interior source
+        ↓
+artwork-source-normalization-v1
+        ↓
+.workspace/cache/<page>/normalized-source.png
+default 2048×2048
+        ↓
+classification
+├─ BorderLine V3
+└─ BorderPixel V1 fallback
+        ↓
+Artwork Preparation V1
+        ↓
+Prepared 2270×2270
+        ↓
+optional frame
+        ↓
+Working 2550×2550
+        ↓
+Final 2588×2625
+        ↓
+shuffle / assembly
+        ↓
+Interior PDF
 ```
 
-Detector is not Classifier, and Classifier is not Preparation. Type-specific behavior ends at `PreparedArtwork`; downstream stages work from its raster and metadata only. The current geometry is `2270×2270 → 2550×2550 → 2588×2625`.
+Raw source chỉ được dùng để xác định/fingerprint và chuẩn hoá. Sau khi `normalized-source.png` đã có, detector, classifier, preparation, frame và page production đều đọc artifact này; không có stage sau đó mở lại raw source. Normalization tạo PNG vuông opaque-white trong cùng toạ độ chuẩn (mặc định `2048×2048`).
 
-Framing has three separate facts: `FrameAvailable` means a compatible Brand frame exists, `AutoFrameRecommended` comes from the classified artwork type, and `FrameMode` is the per-source user decision (`Auto`, `Enabled`, or `Disabled`). The final decision is:
+`BorderLine V3` là detector hiện hành: pass 1 tìm viền nông (`200`), pass 2 sâu hơn (`320`) chỉ chạy khi pass 1 không có outer frame bốn cạnh coherent. Hai pass dùng cùng quality gates; `BorderPixel V1` chỉ là fallback khi BorderLine âm. Tuning BorderLine, version classification hoặc normalization làm invalid stage cache và các stage downstream tương ứng.
+
+Preparation kết thúc tại raster `PreparedArtwork`. Từ đó các stage downstream không cần biết loại artwork. `FrameMode.Auto` dùng recommendation từ classification, `Enabled` buộc frame nếu Brand có frame tương thích, còn `Disabled` không dùng frame:
 
 ```text
 ShouldApplyFrame = FrameAvailable &&
   (Auto => AutoFrameRecommended, Enabled => true, Disabled => false)
 ```
 
-`Auto` is the default. Only explicit `Enabled` and `Disabled` overrides are persisted in the Book workspace state, keyed by normalized source-relative path rather than a page index. This makes overrides survive refresh/restart while source ordering may change.
+## Intro, Active và Frame
 
-Interior processing also stores two sparse per-Book choices in the same workspace state: `HasBackground` defaults to false, and inactive Interior source keys are the only activation overrides persisted (all sources are active by default). The production order is deliberately small and explicit:
+Identity của các trang Book Interior được gán ổn định trước khi lọc.
 
 ```text
-all Interior assets
-  → assign stable source/page identities
-  → apply per-Book Active filter
-  → process active artwork
-  → deterministic artwork-only shuffle
-  → optional Brand background interleave
-  → PDF
+HasIntro=false
+→ AUTO
+→ current Brand/IntroTemplate
+→ all eligible images
+→ filename ASC
+
+HasIntro=true
+→ CUSTOM
+→ ordered Book interior selection
+→ selected pages removed from normal Interior
+→ no shuffle for Intro
 ```
 
-The Brand `background.png` is a separate final-size page, never an overlay. It is optional generally but required when `HasBackground=true`; process start validates that it is readable and exactly matches the effective Final Page raster size. It never enters classification, page cache, frame processing, or `InteriorShuffleMap`. Assembly appends one occurrence after each shuffled active artwork page, so repeated references deliberately become distinct PDF pages. Changing the source image's activation or background setting is blocked while a processing session is running or cancelling.
+Intro dùng cùng canonical normalization nhưng luôn forced `CropArt`, không chạy BorderLine/BorderPixel và không frame. Với CUSTOM, các trang Book Interior đã chọn bị tách khỏi tập Interior bình thường trước khi kiểm tra Active; vì vậy không xuất hiện hai lần và không đi vào `InteriorShuffleMap`. Các giá trị Active/Frame đã lưu của chúng được giữ nguyên nhưng bị bỏ qua khi đang là Intro.
 
-Core represents file/directory references, image size/point/bounds, PDF document facts, metadata cleaning, and per-book workspaces with neutral contracts. No third-party image or PDF types can leak through those contracts.
+Các trang Interior bình thường inactive bị loại trước image processing và shuffle. Sau khi xử lý, chỉ Interior bình thường active được deterministic shuffle. Intro giữ thứ tự đã chọn/filename.
 
-## Desktop and bridge boundary
+## Assembly với Brand background
 
-Desktop is the composition root through `AddPrintableBookCore` and `AddPrintableBookInfrastructure`. The WPF `MainWindow` receives a WebView2 message, passes it to `WebViewBridgeRouter`, and serializes the response. The router owns request/response envelopes, version validation, correlation IDs, and the narrow `app.ping` route. It exposes no arbitrary .NET object to JavaScript.
+`background.png` của Brand là một trang final-size độc lập, không phải overlay. Nó phải đúng Final Page size, không classification, không vào page cache và không shuffle. Khi background bật, assembly xen sau từng Intro và từng Interior đã shuffle:
 
-Frontend code remains presentation-only and contains no processing/business calculations. It renders the C# snapshot and sends the additive `book.interior.frame-mode.set` command; the workspace state remains the source of truth.
+```text
+intro1
+background
+intro2
+background
+interior-shuffled-1
+background
+interior-shuffled-2
+background
+```
 
-## Background processing and recovery
+## Thực thi nền và concurrency
 
-`IProcessSessionService` owns an Interior Processing session from the immediate `StartAsync` snapshot through terminal cleanup. It schedules the actual queue execution once on the thread pool, holds the cancellation source and execution task, and exposes snapshots through `process.get`. `CancelAsync` is non-blocking: it requests cancellation outside the session lock and returns `Cancelling`; `StopAndWaitAsync` is reserved for bounded application shutdown.
+`BackgroundTaskManager` của Desktop là scheduling/task boundary. Nó áp policy lane, duplicate/conflict và lifecycle cho `ProcessingSessionWorker`; UI hay WebView polling không sở hữu worker thread. Worker tạo snapshot queue, kiểm tra Brand/Intro/background, sau đó gọi orchestration của Core.
 
-The frontend polls an active session globally, independent of the visible route. WPF closing uses a native prompt and an asynchronous shutdown coordinator. The OS session-ending event performs a five-second best-effort cancellation without UI. On startup, `IInterruptedProcessingRecoveryService` changes only stale persisted `Running` workspace state to the appended terminal `Interrupted` status, preserving resumable metadata. See [background process session](background-process-session.md).
+- Mỗi lần chỉ có một processing session active.
+- Books chạy tuần tự trong session.
+- Chỉ các trang của Book hiện tại chạy bounded concurrency, cấu hình hợp lệ `1..12`.
+- Không có nested parallelism.
+- Library Refresh có thể overlap processing theo policy của manager.
+- Cancellation là cooperative: command cancel chuyển task sang `Cancelling`, worker quan sát `CancellationToken` và trạng thái terminal được publish khi unwind hoàn tất.
 
-## Testing policy
+Snapshot session/worker vẫn observable qua bridge để WebView hiển thị Process và taskbar status. Khi đóng ứng dụng, Desktop dùng graceful-stop có thời hạn; startup recovery chỉ chuyển workspace stale `Running` thành `Interrupted`, không thay đổi Completed/Failed/Cancelled.
 
-Mocks and fakes are allowed for pipeline orchestration or boundary tests. They do not prove an image/PDF implementation correct. Repository-owned integration tests must use a small, deterministic, redistributable real PNG/PDF input; open and inspect the actual output for its relevant dimensions, page count, content properties, or metadata. The `Infrastructure.Tests/TestData` directory is reserved for checked-in fixtures and is required by CI. A test may generate a compact deterministic raster input when pixel-level geometry is the behaviour under test; it remains repository-owned and must not depend on user files or network data.
+## Cache, output và Clear Cache
 
-User-supplied image corpora are a separate `TestScope=LocalCorpus`. They live under ignored `TestResults/` paths, require explicit local opt-in, and must be excluded from CI. A clean checkout can only run repository-owned tests.
+Page pipeline có cache stage-aware. `classification.json`, canonical source và raster stage có input stamp/version/fingerprint; thay đổi ở stage nào thì chỉ invalid stage đó và downstream. FrameMode-only có thể tái sử dụng classification/prepared, còn thay normalization hay BorderLine settings bắt đầu invalid sớm hơn.
 
-## Deliberately unconfirmed decisions
+Clear Cache xóa raster nặng (canonical/processed cache) nhưng giữ Book state và metadata classification theo hành vi production hiện tại. PDF đã publish không thuộc cache nên vẫn tồn tại; lần process sau dựng lại cache cần thiết.
 
-The following are not contracts yet: configuration field names/schema, brand folder convention, configuration file format, output naming, and brand automation. They must be chosen alongside a concrete implementation and real-input tests rather than inferred by this foundation.
+## Kiểm thử
+
+CI chỉ chạy fixture repository-owned, deterministic và redistributable. Corpus ảnh thật do user cung cấp nằm trong `TestResults/`, được đánh dấu `TestScope=LocalCorpus`, chỉ chạy explicit local opt-in và không được yêu cầu trên clean checkout/CI. Real-output certification phải kiểm tra file/raster/PDF thật thay vì chỉ mock.
+
+Tài liệu liên quan: [processing background](background-process-session.md), [BorderLine V3](borderline-detector-v3.md), [shared Interior pipeline](interior-shared-pipeline-integration.md), [Intro](intro-template-processing.md) và [PDF engine](pdf-engine.md).
