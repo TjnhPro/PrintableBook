@@ -16,6 +16,7 @@ namespace PrintableBook.Desktop;
 
 public partial class MainWindow : Window
 {
+    private static readonly Size PreferredWindowSize = new(1650, 950);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly WebViewBridgeRouter bridgeRouter;
     private readonly ProcessWindowShutdownCoordinator shutdownCoordinator;
@@ -55,6 +56,30 @@ public partial class MainWindow : Window
 
     internal static bool ShouldHandleInteractiveClose(bool allowClose, bool systemShutdown) =>
         !allowClose && !systemShutdown;
+
+    internal static Size ConstrainToWorkingArea(Size preferredSize, Size workingAreaSize) =>
+        new(
+            Math.Min(preferredSize.Width, workingAreaSize.Width),
+            Math.Min(preferredSize.Height, workingAreaSize.Height));
+
+    private void OnSourceInitialized(object? sender, EventArgs e)
+    {
+        // WPF dimensions are device-independent pixels. A fixed 1650x950 minimum can
+        // exceed the usable desktop at a scaled DPI, leaving the WebView laid out beyond
+        // the visible right or bottom edge. Keep that as the preferred size, but never
+        // demand more than the current desktop can display.
+        var workArea = SystemParameters.WorkArea;
+        var fittedSize = ConstrainToWorkingArea(
+            PreferredWindowSize,
+            new Size(workArea.Width, workArea.Height));
+
+        MinWidth = fittedSize.Width;
+        MinHeight = fittedSize.Height;
+        Width = fittedSize.Width;
+        Height = fittedSize.Height;
+        Left = workArea.Left + Math.Max(0, (workArea.Width - Width) / 2);
+        Top = workArea.Top + Math.Max(0, (workArea.Height - Height) / 2);
+    }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
