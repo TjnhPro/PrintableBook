@@ -33,6 +33,9 @@ artifacts/
 !tests/**/*.jpg
 !tests/**/*.jpeg
 
+# Product identity assets are shipped with the desktop application.
+!src/PrintableBook.Desktop/Frontend/assets/printable-book-logo.png
+
 # Tooling workspaces
 .worktrees/
 .superpowers/

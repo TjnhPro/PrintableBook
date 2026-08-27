@@ -214,6 +214,18 @@ test("webview shell exposes every top-level desktop route", () => {
   assert.match(page, /id="app-content"/);
 });
 
+test("desktop shell ships the Printable Book logo for its sidebar and window icon", () => {
+  const desktopRoot = join(process.cwd(), "src", "PrintableBook.Desktop");
+  const page = readFileSync(join(desktopRoot, "Frontend", "index.html"), "utf8");
+  const windowMarkup = readFileSync(join(desktopRoot, "MainWindow.xaml"), "utf8");
+  const logo = readFileSync(join(desktopRoot, "Frontend", "assets", "printable-book-logo.png"));
+
+  assert.ok(logo.length > 0);
+  assert.match(page, /<img class="pb-brand-logo" src="assets\/printable-book-logo\.png" width="44" height="44" alt="" aria-hidden="true">/);
+  assert.match(page, /<link rel="icon" type="image\/png" href="assets\/printable-book-logo\.png">/);
+  assert.match(windowMarkup, /Icon="pack:\/\/application:,,,\/Frontend\/assets\/printable-book-logo\.png"/);
+});
+
 test("desktop navigation names the outputs route PDF Library", () => {
   const page = readFileSync(join(process.cwd(), "src", "PrintableBook.Desktop", "Frontend", "index.html"), "utf8");
 
