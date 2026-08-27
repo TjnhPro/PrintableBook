@@ -158,7 +158,9 @@ button.process-queue-card-main:hover { background:var(--pb-surface-muted); }
 @media (max-width:1180px) { .interior-artwork-grid,.processed-interior-pages-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 @media (max-width:980px) { .interior-artwork-workspace { grid-template-columns:1fr; }.interior-artwork-filters,.asset-filter-chip-groups,.interior-artwork-bulk-toolbar { flex-wrap:wrap; }.asset-search-field { flex-basis:100%; max-width:none; } }
 
-.pdf-library-page { display:grid; grid-template-rows:auto auto minmax(0,1fr); width:100%; max-width:100%; min-height:0; overflow:hidden; }
+/* PDF Library owns the available tab viewport: only its card grid may scroll. */
+.pb-content:has(.pdf-library-page) { display:grid; grid-template-rows:minmax(0,1fr); overflow:hidden; }
+.pdf-library-page { display:grid; grid-template-rows:auto auto minmax(0,1fr); width:100%; max-width:100%; height:100%; min-height:0; overflow:hidden; }
 .pdf-library-page > * { min-width:0; }
 .pdf-library-results { display:grid; grid-template-rows:minmax(0,1fr) auto; width:100%; max-width:100%; min-height:0; margin-top:12px; padding:12px; overflow:hidden; container-type:inline-size; border:1px solid var(--pb-border); border-radius:10px; background:var(--pb-surface); box-sizing:border-box; }
 .pdf-library-grid-scroll { min-height:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; padding:2px 4px 12px 0; scroll-padding:12px; }
@@ -187,6 +189,7 @@ button.process-queue-card-main:hover { background:var(--pb-surface-muted); }
 .pdf-library-sort { min-width:144px; }
 .pdf-library-toolbar .asset-view-toggle { justify-self:end; white-space:nowrap; }
 .pdf-library-book-grid { display:grid; grid-template-rows:auto auto minmax(0,1fr); min-width:0; height:100%; }
+.pdf-library-book-grid .pdf-library-book-preview { aspect-ratio:16 / 9; }
 .pdf-library-book-grid .pdf-library-book-header { padding:12px 14px; }
 .pdf-library-book-grid .pdf-library-book-header > div { width:100%; min-width:0; }
 .pdf-library-book-grid .pdf-library-title-row { display:grid; grid-template-columns:minmax(0,1fr) auto; min-width:0; flex-wrap:nowrap; }

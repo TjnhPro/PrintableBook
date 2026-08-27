@@ -1221,8 +1221,11 @@ test("PDF Library Grid uses compact Book cards and the documented desktop column
   assert.match(content.innerHTML, />Reveal</);
   assert.match(content.innerHTML, />Copy</);
   assert.match(css, /repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(css, /\.pdf-library-page \{ display:grid; grid-template-rows:auto auto minmax\(0,1fr\); width:100%; max-width:100%; height:100%; min-height:0; overflow:hidden;/);
+  assert.match(css, /\.pb-content:has\(\.pdf-library-page\) \{ display:grid; grid-template-rows:minmax\(0,1fr\); overflow:hidden; \}/);
   assert.match(css, /\.pdf-library-grid \{ display:grid; grid-template-columns:repeat\(3,minmax\(0,1fr\)\); grid-auto-rows:1fr;/);
   assert.match(css, /\.pdf-library-book-grid \{ display:grid; grid-template-rows:auto auto minmax\(0,1fr\); min-width:0; height:100%;/);
+  assert.match(css, /\.pdf-library-book-grid \.pdf-library-book-preview \{ aspect-ratio:16 \/ 9; \}/);
   assert.match(css, /\.pdf-library-book-grid \.pdf-library-book-header > div \{ width:100%; min-width:0;/);
   assert.match(css, /\.pdf-library-book-grid \.pdf-library-title-row \{ display:grid; grid-template-columns:minmax\(0,1fr\) auto; min-width:0;/);
   assert.match(css, /\.pdf-library-book-grid \.pdf-library-title-row h2 \{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;/);
