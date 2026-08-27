@@ -240,7 +240,7 @@ test("snapshot rendering opens the Book Library and keeps discovery and brand da
 
   assert.equal(status.textContent, "Connected");
   assert.match(brandSelect.innerHTML, /Amazon/);
-  assert.match(content.innerHTML, /1 Books match the active filters/);
+  assert.doesNotMatch(content.innerHTML, /Books match the active filters/);
   assert.match(content.innerHTML, /Book 001/);
   assert.match(content.innerHTML, /Process Interior/);
   assert.doesNotMatch(content.innerHTML, /Paths \(Read Only\)/);
