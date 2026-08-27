@@ -61,6 +61,8 @@
   };
   const statusClass = (value) => value === "Ready" || value === "Completed" || value === "Present" ? "status-good" : value === "Invalid" || value === "Failed" ? "status-bad" : value === "Needs selection" || value === "Running" ? "status-warn" : "status-muted";
   const badge = (value) => { const label = displayStatus(value); return `<span class="status-badge ${statusClass(label)}">${escapeHtml(label)}</span>`; };
+  const bookSelectIcon = (selected) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="17" height="17" rx="4"></rect>${selected ? '<path d="m7.5 12.5 3 3 6-7"></path>' : ""}</svg>`;
+  const bookEditIcon = () => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m4 20 4.1-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"></path><path d="m13.7 7.3 3 3"></path></svg>';
   const send = (command, payload) => {
     const id = crypto.randomUUID();
     state.pendingCommands.set(id, command);
@@ -518,7 +520,9 @@
       const interiorAssets = assetsFor(itemSummary).filter((asset) => valueFor(asset, "kind", "") === "Interior");
       const active = interiorAssets.length ? interiorAssets.filter((asset) => effectiveInteriorAsset(item, asset).isActive).length : valueFor(itemSummary, "activeInteriorSourcePageCount", total);
       const status = productionStatus(itemSummary, item);
-      return `<article class="book-card ${id === state.selectedBookId ? "selected" : ""}"><button type="button" class="book-card-main" data-action="select-book" data-book-id="${escapeHtml(id)}" aria-label="Open ${escapeHtml(valueFor(item, "name", ""))}"><span class="book-card-preview">${thumbnail}</span><span class="book-card-copy"><strong title="${escapeHtml(valueFor(item, "name", ""))}">${escapeHtml(valueFor(item, "name", ""))}</strong><small>${active} / ${total} Interior active</small><span>${badge(status)} ${badge(bookFrameState(itemSummary))}</span></span></button><footer><label><input type="checkbox" aria-label="Queue ${escapeHtml(valueFor(item, "name", ""))}" data-action="queue-book" data-book-id="${escapeHtml(id)}" ${state.selectedBookIds.has(id) ? "checked" : ""}> Queue</label><button class="button-secondary book-card-action" data-action="select-book" data-book-id="${escapeHtml(id)}">${status === "Ready" ? "Review files" : status === "Processing" ? "View process" : "Preflight"}</button></footer></article>`;
+      const selected = state.selectedBookIds.has(id);
+      const name = valueFor(item, "name", "");
+      return `<article class="book-card ${selected ? "selected" : ""}"><button type="button" class="book-card-main" data-action="toggle-book-selection" data-book-id="${escapeHtml(id)}" aria-label="${selected ? "Remove" : "Select"} ${escapeHtml(name)} ${selected ? "from" : "for"} Interior Processing" aria-pressed="${selected}"><span class="book-card-preview"><span class="book-card-selection-icon" aria-hidden="true">${bookSelectIcon(selected)}</span>${thumbnail}</span><span class="book-card-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong><small>${active} / ${total} Interior active</small><span>${badge(status)} ${badge(bookFrameState(itemSummary))}</span></span></button><button type="button" class="book-card-edit" data-action="open-book-detail" data-book-id="${escapeHtml(id)}" aria-label="Open Book detail for ${escapeHtml(name)}" title="Open Book detail">${bookEditIcon()}</button></article>`;
     };
     const start = filtered.length ? (state.bookPage - 1) * pageSize + 1 : 0;
     const end = Math.min(state.bookPage * pageSize, filtered.length);
@@ -531,7 +535,7 @@
     }
     if (state.restoreBookFocus) {
       state.restoreBookFocus = false;
-      document.querySelector(`[data-action="select-book"][data-book-id="${CSS.escape(state.selectedBookId)}"]`)?.focus();
+      document.querySelector(`[data-action="open-book-detail"][data-book-id="${CSS.escape(state.selectedBookId)}"]`)?.focus();
     }
     const drawerBody = document.querySelector(".book-drawer-body");
     if (drawerBody && Number.isFinite(state.bookDrawerScrollTop)) drawerBody.scrollTop = state.bookDrawerScrollTop;
@@ -789,7 +793,7 @@
     if (action === "select-brand") { state.selectedBrand = target.dataset.brandName; if (brandSelect) brandSelect.value = state.selectedBrand; render("brands"); }
     if (action === "load-brand-settings") send("brand.settings.get", { brandName: state.selectedBrand });
     if (action === "save-brand-settings") send("brand.settings.save", { brandName: state.selectedBrand, json: state.brandSettings });
-    if (action === "select-book") { state.selectedBookId = target.dataset.bookId; state.selectedBookTab = "overview"; state.selectedAssetReference = ""; clearArtworkBulkSelection(); state.assetStatus = "Active"; state.assetFrameMode = "auto"; state.introTemplatePage = 1; state.bookDrawerScrollTop = 0; state.artworkGridScrollTop = 0; state.bookDrawerOpen = true; state.drawerFocusTitle = true; render("books", false); }
+    if (action === "select-book" || action === "open-book-detail") { state.selectedBookId = target.dataset.bookId; state.selectedBookTab = "overview"; state.selectedAssetReference = ""; clearArtworkBulkSelection(); state.assetStatus = "Active"; state.assetFrameMode = "auto"; state.introTemplatePage = 1; state.bookDrawerScrollTop = 0; state.artworkGridScrollTop = 0; state.bookDrawerOpen = true; state.drawerFocusTitle = true; render("books", false); }
     if (action === "close-book-drawer") closeBookDrawer();
     if (action === "save-book-interior-settings" && !state.bookInteriorSavePending) {
       const payload = interiorSavePayload(target.dataset.bookId);
@@ -825,6 +829,12 @@
       const last = Math.max(1, Math.ceil(itemCount / 6));
       state.introTemplatePage = Math.min(last, Math.max(1, state.introTemplatePage + (target.dataset.introTemplatePage === "next" ? 1 : -1)));
       refreshIntroTemplateWorkspace(target.dataset.introTemplatePage);
+    }
+    if (action === "toggle-book-selection") {
+      const id = target.dataset.bookId;
+      if (state.selectedBookIds.has(id)) state.selectedBookIds.delete(id); else state.selectedBookIds.add(id);
+      status.textContent = state.selectedBookIds.size ? `${state.selectedBookIds.size} Book${state.selectedBookIds.size === 1 ? "" : "s"} selected` : "Selection cleared";
+      render("books", false);
     }
     if (action === "queue-book") { const id = target.dataset.bookId; if (target.checked) state.selectedBookIds.add(id); else state.selectedBookIds.delete(id); }
     if (action === "queue-selected-book") {

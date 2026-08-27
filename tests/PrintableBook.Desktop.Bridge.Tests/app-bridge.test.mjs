@@ -259,6 +259,29 @@ test("Books display the active Interior page count without local folder size", (
   assert.doesNotMatch(content.innerHTML, /Interior active ·/);
 });
 
+test("Book cards toggle their selection from the card surface while the edit icon opens detail", () => {
+  const { messageHandler, content, contentListeners, status } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "book-card-actions", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{ bookId: { value: "Book 001" }, interiorSourcePageCount: 12, activeInteriorSourcePageCount: 12, validationStatus: "Ready", workspaceStatus: "Not started", assets: [] }]
+  } } });
+
+  assert.match(content.innerHTML, /data-action="toggle-book-selection"/);
+  assert.match(content.innerHTML, /data-action="open-book-detail"/);
+  assert.doesNotMatch(content.innerHTML, />Queue</);
+
+  const select = { dataset: { action: "toggle-book-selection", bookId: "Book 001" }, closest: () => select };
+  contentListeners.click({ target: select });
+  assert.match(status.textContent, /1 Book selected/);
+  assert.match(content.innerHTML, /aria-pressed="true"/);
+  assert.doesNotMatch(content.innerHTML, /role="dialog"/);
+
+  const edit = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => edit };
+  contentListeners.click({ target: edit });
+  assert.match(content.innerHTML, /Book detail/);
+});
+
 test("books toolbar starts one confirmed cache cleanup and polls it", () => {
   const { messageHandler, contentListeners, messages, intervals } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: { discovery: { brands: [], books: [] }, globalSettings: {}, bookSummaries: [] } } });
@@ -567,7 +590,7 @@ test("book filters render a recovered interrupted workspace without failing", ()
   } } });
 
   assert.match(content.innerHTML, /Book 001/);
-  assert.match(content.innerHTML, /Preflight/);
+  assert.match(content.innerHTML, /data-action="open-book-detail"/);
 });
 
 test("Book detail changes tabs without redrawing its drawer shell", () => {
