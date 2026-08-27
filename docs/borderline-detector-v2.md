@@ -1,5 +1,11 @@
 # BorderLine detector V2 calibration
 
+> Trạng thái: Historical / superseded.
+> Production v0.1 sử dụng BorderLine V3.
+> Tài liệu này chỉ giữ lại để giải thích calibration V2.
+>
+> Xem [BorderLine V3](borderline-detector-v3.md) và [kiến trúc v0.1](architecture.md) để biết luồng production hiện hành.
+
 `MagickBorderLineDetector` identifies a persistent, coherent outer frame for the Interior Processing classifier. It does not classify `fullart` or `cropart`, crop pixels, or apply a brand frame.
 
 ## Decision rules

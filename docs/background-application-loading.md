@@ -1,5 +1,7 @@
 # Background task manager architecture
 
+> Xem [kiến trúc v0.1](architecture.md) và [Background Process Session](background-process-session.md).
+
 Printable Book is a local WPF/WebView application. UI-affine work stays on the Dispatcher; substantial local discovery and Interior Processing run through one owned runtime:
 
 ```text

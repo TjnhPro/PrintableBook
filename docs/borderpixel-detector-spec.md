@@ -1,9 +1,11 @@
 # BorderPixel detector V1
 
+> Xem [kiến trúc v0.1](architecture.md) và [BorderLine V3](borderline-detector-v3.md). Trong pipeline production, detector nhận `normalized-source.png`, không mở lại raw source.
+
 **Status:** Implemented; awaiting local product-corpus certification
 **Scope:** evidence used only after `IBorderLineDetector` returns `HasBorder=false`
 
-BorderPixel answers a narrow question about the original, untrimmed source raster:
+BorderPixel answers a narrow question about canonical, untrimmed artwork raster:
 
 > Does any visible near-black ink pixel touch an exact outermost raster edge?
 
@@ -12,7 +14,7 @@ It is not a classifier and it does not trim, prepare, resize, or otherwise trans
 ## Locked V1 rule
 
 ```text
-source             = original untrimmed raster
+source             = canonical normalized-source.png
 perimeter thickness = exactly 1 pixel
 qualifying ink      = A >= 128 and each RGB channel <= ArtworkDetectionThreshold
 positive            = any qualifying pixel on any one of the four sides

@@ -1,26 +1,30 @@
-# Background process session
+# Background Process Session
 
-Interior Processing is owned by `IProcessSessionService`, not by the WPF UI or WebView route that started it. `StartAsync` validates and snapshots the requested queue, then starts one owned worker task on the thread pool and returns the `Running` snapshot immediately. Only one session can be active at a time.
+> Xem kiến trúc tổng thể tại [architecture.md](architecture.md) và task/lane policy tại [background-application-loading.md](background-application-loading.md).
+
+## Ownership hiện hành
+
+`BackgroundTaskManager` trong Desktop là scheduling và task boundary duy nhất cho Interior Processing. `IProcessSessionService` là facade semantic cho bridge: nó tạo/lấy/hủy `ProcessingSession` task, còn `ProcessingSessionWorker` mới chạy snapshot validation và queue orchestration. WPF/WebView chỉ gửi command và đọc snapshot; polling UI không tạo hay sở hữu worker thread.
 
 ```text
 WebView process.start
-  -> IProcessSessionService.StartAsync
-  -> immutable queue snapshot + session cancellation source
-  -> Task.Run(ExecuteAsync)
-  -> IPrintableBookApplication.ProcessBooksAsync
-  -> terminal session snapshot + cancellation cleanup
+  → IProcessSessionService
+  → IBackgroundTaskManager.StartAsync(ProcessingSession)
+  → ProcessingSessionWorker
+  → IPrintableBookApplication.ProcessBooksAsync
+  → terminal task + observable ProcessSessionSnapshot
 ```
 
-`process.get` is a snapshot read: it does not start work and can be called from any page. The desktop shell polls it once a second while `IsActive` is true, so progress remains current when the Process page is not visible. `process.cancel` only requests cancellation and returns the `Cancelling` snapshot; it never waits for image or PDF work to finish.
+Manager áp dụng duplicate/conflict policy và lane limit. Chỉ một ProcessingSession active; Books lần lượt chạy trong session, còn bounded page concurrency chỉ nằm bên trong Book đang xử lý. `process.get` là snapshot read. `process.cancel` chỉ gửi cooperative cancellation request, trả `Cancelling` mà không đợi image/PDF worker hoàn tất.
 
-Before the queue starts, the worker resolves the selected Brand frame and, only if one or more selected Books enable a background, validates that Brand's `background.png` once against the effective Final Page size. The validated reference is sent only to those enabled Books. Processing then filters inactive Interior sources, processes and shuffles active artwork, and assembly inserts the separate background page after each artwork page. The background is not processed, cached, or shuffled.
+`LibraryRefresh` có thể đồng thời chạy với Processing theo policy hiện hành. `CacheCleanup` conflict với cả hai để không xoá workspace trong lúc đọc/ghi.
 
-## Shutdown behaviour
+## Snapshot và shutdown
 
-Closing the desktop window checks the current snapshot. If processing is active, the user can keep the application open or request a graceful stop. The coordinator calls `StopAndWaitAsync` with a five-second timeout. A timeout presents an explicit choice to keep waiting or force exit; no UI close path blocks the dispatcher synchronously.
+Worker cập nhật queue, Book hiện tại, step, page progress và worker count vào task view. Những snapshot đó được bridge trả về cho Process page, taskbar status và Diagnostics; frontend không suy luận trạng thái processing từ polling riêng.
 
-Windows session ending uses the same five-second bounded stop as best effort and does not display UI or prevent the operating system from ending the session. Abrupt termination can leave a Book workspace marked `Running`; startup recovery changes only such stale states to `Interrupted`. Completed, failed, and cancelled workspaces are untouched. `Interrupted` is a terminal state that preserves resume metadata.
+Khi đóng cửa sổ, `ProcessWindowShutdownCoordinator` dùng graceful-stop bounded timeout. Hết thời hạn, user mới được chọn tiếp tục chờ hoặc force exit; dispatcher không bị block. Windows session ending dùng cùng best-effort stop không hiện UI. Sau restart, interrupted recovery chỉ chuyển workspace stale `Running` thành terminal `Interrupted`, giữ nguyên Completed/Failed/Cancelled và metadata có thể retry.
 
 ## Verification
 
-Core tests prove execution runs outside the caller synchronization context, cancellation becomes observable before worker unwind, bounded wait times out for non-cooperative work, and a new session is possible only after terminal cleanup. Desktop tests cover the close decision coordinator. Bridge tests cover global polling and stopping controls.
+Core tests kiểm tra task chạy ngoài caller context, cancellation observable trước worker unwind, timeout bounded và cleanup terminal cho phép session tiếp theo. Desktop tests kiểm tra close coordinator. Bridge/frontend tests kiểm tra poll global, cancel control và observable task/session snapshot.

@@ -1,5 +1,7 @@
 # Shared Interior pipeline integration
 
+> Xem [kiến trúc v0.1](architecture.md), [BorderLine V3](borderline-detector-v3.md) và [Artwork Preparation V1](interior-artwork-preparation-v1.md).
+
 ## Status
 
 The production shared Interior workflow and its deterministic certification are complete. Product-artwork workflow certification remains intentionally local until reviewed user images are supplied under `TestResults/InteriorWorkflowCorpus/`. The corpus, its temporary workspaces, and rendered outputs are ignored by Git and excluded from CI.
@@ -9,7 +11,8 @@ The production shared Interior workflow and its deterministic certification are 
 `DiskBackedInteriorPagePipeline` is an orchestration boundary. It does not contain detector or type-specific raster logic.
 
 ```text
-original source
+raw source
+  -> normalized-source.png (artwork-source-normalization-v1)
   -> classify (artwork-classification-v1)
   -> prepare by ArtworkType (artwork-preparation-v1)
   -> prepared.png: 2270 x 2270, opaque
@@ -40,6 +43,7 @@ Each page has these durable artifacts:
 
 ```text
 .workspace/cache/<PageId>/classification.json
+.workspace/cache/<PageId>/normalized-source.png
 .workspace/cache/<PageId>/prepared.png
 .workspace/cache/<PageId>/framed.png
 .workspace/cache/<PageId>/working-page.png

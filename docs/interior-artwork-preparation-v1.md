@@ -1,5 +1,7 @@
 # Interior Artwork Preparation V1
 
+> Xem [kiến trúc v0.1](architecture.md), [BorderLine V3](borderline-detector-v3.md) và [shared Interior pipeline](interior-shared-pipeline-integration.md).
+
 ## Status
 
 The implementation and deterministic raster certification are complete. Product-artwork certification remains intentionally local: it passes only after reviewed user images are supplied under `TestResults/ArtworkPreparationCorpus/` and the opt-in corpus test succeeds. The corpus and its rendered output are ignored by Git, so they never affect a clean checkout or CI.

@@ -1,5 +1,7 @@
 # Phase 2 — Core Processing MVP
 
+> Trạng thái: Historical implementation milestone. Những mô tả output/cache cũ trong tài liệu này không thay thế [kiến trúc v0.1](architecture.md), [shared Interior pipeline](interior-shared-pipeline-integration.md) hoặc [Intro processing](intro-template-processing.md).
+
 The processing entry point accepts an ordered queue of Book folders. One session owns the queue at a time; Books are processed sequentially while only Interior pages of the active Book may run concurrently (clamped to 1–12 workers).
 
 For each Book, the application creates `.workspace`, scans PNG sources, validates Cover dimensions, processes Interior artwork through disk-backed `trim → square canvas → resize → frame → final PNG` stages, persists a shuffle map, assembles the logical page order, writes real Cover and Interior PDFs, reopens/validates them, then moves the complete output set into one versioned final-output directory. Cover and Interior PDF page geometry are supplied and validated independently, so a non-square full-wrap Cover is never forced to use the Interior physical size.

@@ -1,5 +1,7 @@
 # IntroTemplate processing
 
+> Xem [kiến trúc v0.1](architecture.md) và [shared Interior pipeline](interior-shared-pipeline-integration.md).
+
 ## Ownership and selection
 
 Brand-owned source artwork lives directly under `brands/<BrandName>/IntroTemplate/`.  The folder is discovered as file references only; Library Refresh does not inspect image metadata.
