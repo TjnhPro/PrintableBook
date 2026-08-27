@@ -583,10 +583,9 @@ test("Book detail changes tabs without redrawing its drawer shell", () => {
   assert.equal(getBookDrawerBodyRenderCount(), 2);
   assert.match(content.innerHTML, /Interior artwork/);
   assert.match(content.innerHTML, /interior-artwork-grid-scroll/);
-  assert.match(content.innerHTML, /Inactive/);
-  assert.match(content.innerHTML, /No frame/);
-  assert.match(content.innerHTML, /data-action="toggle-artwork-selection"/);
-  assert.match(content.innerHTML, /aria-pressed="false"/);
+  assert.match(content.innerHTML, /No artwork matches this view/);
+  assert.match(content.innerHTML, /data-asset-status="Active" aria-pressed="true"/);
+  assert.match(content.innerHTML, /data-asset-frame-mode="auto" aria-pressed="true"/);
   assert.match(content.innerHTML, /data-action="asset-frame-mode"/);
   assert.doesNotMatch(content.innerHTML, /All folders/);
   assert.doesNotMatch(content.innerHTML, /data-action="asset-folder"/);
@@ -598,9 +597,10 @@ test("Book detail changes tabs without redrawing its drawer shell", () => {
 
   const activeOnly = { dataset: { action: "asset-status", assetStatus: "Active" }, closest: () => activeOnly };
   contentListeners.click({ target: activeOnly });
-  assert.match(content.innerHTML, /No artwork matches this view/);
+  assert.match(content.innerHTML, /Inactive/);
+  assert.match(content.innerHTML, /data-action="toggle-artwork-selection"/);
+  assert.match(content.innerHTML, /aria-pressed="false"/);
 
-  contentListeners.click({ target: activeOnly });
   const frameOnly = { dataset: { action: "asset-frame-mode", assetFrameMode: "enabled" }, closest: () => frameOnly };
   contentListeners.click({ target: frameOnly });
   assert.match(content.innerHTML, /No artwork matches this view/);
@@ -666,7 +666,7 @@ test("Interior artwork clears saved bulk selection without redrawing the Book dr
 
   assert.equal(getFullRenderCount(), fullRendersBeforeEdit);
   assert.equal(getArtworkWorkspaceRenderCount(), artworkRendersBeforeSavedSnapshot + 1);
-  assert.match(content.innerHTML, /class="interior-artwork-card is-inactive " data-action="toggle-artwork-selection" data-source-reference="Book interior\/page-001\.png" aria-pressed="false"/);
+  assert.match(content.innerHTML, /class="interior-artwork-card is-active " data-action="toggle-artwork-selection" data-source-reference="Book interior\/page-002\.png" aria-pressed="false"/);
   assert.match(content.innerHTML, /Apply to 0 selected/);
   assert.match(content.innerHTML, /<option value="unchanged" selected>No change<\/option>/);
 });
