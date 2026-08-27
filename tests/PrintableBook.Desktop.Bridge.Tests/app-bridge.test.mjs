@@ -259,8 +259,8 @@ test("Books display the active Interior page count without local folder size", (
   assert.doesNotMatch(content.innerHTML, /Interior active ·/);
 });
 
-test("Book cards toggle their selection from the card surface while the edit icon opens detail", () => {
-  const { messageHandler, content, contentListeners, status } = loadBridge("books");
+test("Book card selection and detail entry do not redraw the Book Library", () => {
+  const { messageHandler, content, contentListeners, status, getFullRenderCount } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-card-actions", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
@@ -271,19 +271,22 @@ test("Book cards toggle their selection from the card surface while the edit ico
   assert.match(content.innerHTML, /data-action="open-book-detail"/);
   assert.doesNotMatch(content.innerHTML, />Queue</);
 
+  const rendersBeforeSelection = getFullRenderCount();
   const select = { dataset: { action: "toggle-book-selection", bookId: "Book 001" }, closest: () => select };
   contentListeners.click({ target: select });
   assert.match(status.textContent, /1 Book selected/);
-  assert.match(content.innerHTML, /aria-pressed="true"/);
   assert.doesNotMatch(content.innerHTML, /role="dialog"/);
+  assert.equal(getFullRenderCount(), rendersBeforeSelection, "selecting a Book must preserve the grid and its scroll position");
 
+  const rendersBeforeDetail = getFullRenderCount();
   const edit = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => edit };
   contentListeners.click({ target: edit });
   assert.match(content.innerHTML, /Book detail/);
+  assert.equal(getFullRenderCount(), rendersBeforeDetail, "opening Book detail must preserve the grid and its scroll position");
 });
 
 test("Book Library selects a page or every matching Book and always clears the selection", () => {
-  const { messageHandler, content, contentListeners, status } = loadBridge("books");
+  const { messageHandler, content, contentListeners, status, getFullRenderCount } = loadBridge("books");
   const books = Array.from({ length: 13 }, (_, index) => ({ id: { value: `Book ${index + 1}` }, name: `Book ${index + 1}` }));
   messageHandler({ data: { version: 1, id: "book-bulk-selection", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books }, globalSettings: {},
@@ -294,20 +297,21 @@ test("Book Library selects a page or every matching Book and always clears the s
   assert.match(content.innerHTML, /Select all 13 matching/);
   assert.match(content.innerHTML, /data-action="clear-book-selection" disabled/);
 
+  const rendersBeforeBulkSelection = getFullRenderCount();
   const selectPage = { dataset: { action: "toggle-book-page-selection" }, checked: true, closest: () => selectPage };
   contentListeners.click({ target: selectPage });
   assert.match(status.textContent, /12 Books selected/);
-  assert.match(content.innerHTML, /Process Interior · 12 selected/);
+  assert.equal(getFullRenderCount(), rendersBeforeBulkSelection);
 
   const selectAll = { dataset: { action: "select-all-filtered-books" }, closest: () => selectAll };
   contentListeners.click({ target: selectAll });
-  assert.match(content.innerHTML, /13 selected/);
+  assert.match(status.textContent, /13 Books selected/);
+  assert.equal(getFullRenderCount(), rendersBeforeBulkSelection);
 
   const clear = { dataset: { action: "clear-book-selection" }, closest: () => clear };
   contentListeners.click({ target: clear });
   assert.equal(status.textContent, "Selection cleared");
-  assert.match(content.innerHTML, /0 selected/);
-  assert.match(content.innerHTML, /data-action="clear-book-selection" disabled/);
+  assert.equal(getFullRenderCount(), rendersBeforeBulkSelection);
 });
 
 test("books toolbar starts one confirmed cache cleanup and polls it", () => {

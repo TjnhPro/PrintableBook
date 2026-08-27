@@ -495,6 +495,44 @@
     return new Date(valueFor(rightSummary, "lastRunAt", 0)).getTime() - new Date(valueFor(leftSummary, "lastRunAt", 0)).getTime();
   });
 
+  const refreshBookSelectionUi = () => {
+    const filtered = filteredBooks();
+    const pageItems = filtered.slice((state.bookPage - 1) * 12, state.bookPage * 12);
+    const selectedCount = state.selectedBookIds.size;
+    const pageSelectedCount = pageItems.filter((book) => state.selectedBookIds.has(bookId(book))).length;
+    const allPageSelected = pageItems.length > 0 && pageSelectedCount === pageItems.length;
+    const allFilteredSelected = filtered.length > 0 && filtered.every((book) => state.selectedBookIds.has(bookId(book)));
+
+    document.querySelectorAll("[data-book-card-id]").forEach((card) => {
+      const id = card.dataset.bookCardId;
+      const book = books().find((item) => bookId(item) === id);
+      const selected = state.selectedBookIds.has(id);
+      const name = valueFor(book, "name", id);
+      card.classList.toggle("selected", selected);
+      const toggle = card.querySelector('[data-action="toggle-book-selection"]');
+      if (toggle) {
+        toggle.setAttribute("aria-pressed", String(selected));
+        toggle.setAttribute("aria-label", `${selected ? "Remove" : "Select"} ${name} ${selected ? "from" : "for"} Interior Processing`);
+      }
+      const icon = card.querySelector("[data-book-selection-icon]");
+      if (icon) icon.innerHTML = bookSelectIcon(selected);
+    });
+
+    const process = document.querySelector('[data-action="go-process"]');
+    if (process) process.textContent = selectedCount ? `Process Interior · ${selectedCount} selected` : "Process Interior";
+    const count = document.querySelector("[data-book-selection-count]");
+    if (count) count.textContent = `${selectedCount} selected`;
+    const pageSelection = document.querySelector('[data-action="toggle-book-page-selection"]');
+    if (pageSelection) {
+      pageSelection.checked = allPageSelected;
+      pageSelection.indeterminate = pageSelectedCount > 0 && !allPageSelected;
+    }
+    const selectAll = document.querySelector('[data-action="select-all-filtered-books"]');
+    if (selectAll) selectAll.disabled = !filtered.length || allFilteredSelected;
+    const clear = document.querySelector('[data-action="clear-book-selection"]');
+    if (clear) clear.disabled = !selectedCount;
+  };
+
   const renderBooks = () => {
     const existingDrawerBody = document.querySelector(".book-drawer-body");
     if (existingDrawerBody && Number.isFinite(existingDrawerBody.scrollTop)) state.bookDrawerScrollTop = existingDrawerBody.scrollTop;
@@ -524,7 +562,7 @@
       const status = productionStatus(itemSummary, item);
       const selected = state.selectedBookIds.has(id);
       const name = valueFor(item, "name", "");
-      return `<article class="book-card ${selected ? "selected" : ""}"><button type="button" class="book-card-main" data-action="toggle-book-selection" data-book-id="${escapeHtml(id)}" aria-label="${selected ? "Remove" : "Select"} ${escapeHtml(name)} ${selected ? "from" : "for"} Interior Processing" aria-pressed="${selected}"><span class="book-card-preview"><span class="book-card-selection-icon" aria-hidden="true">${bookSelectIcon(selected)}</span>${thumbnail}</span><span class="book-card-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong><small>${active} / ${total} Interior active</small><span>${badge(status)} ${badge(bookFrameState(itemSummary))}</span></span></button><button type="button" class="book-card-edit" data-action="open-book-detail" data-book-id="${escapeHtml(id)}" aria-label="Open Book detail for ${escapeHtml(name)}" title="Open Book detail">${bookEditIcon()}</button></article>`;
+      return `<article class="book-card ${selected ? "selected" : ""}" data-book-card-id="${escapeHtml(id)}"><button type="button" class="book-card-main" data-action="toggle-book-selection" data-book-id="${escapeHtml(id)}" aria-label="${selected ? "Remove" : "Select"} ${escapeHtml(name)} ${selected ? "from" : "for"} Interior Processing" aria-pressed="${selected}"><span class="book-card-preview"><span class="book-card-selection-icon" data-book-selection-icon aria-hidden="true">${bookSelectIcon(selected)}</span>${thumbnail}</span><span class="book-card-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong><small>${active} / ${total} Interior active</small><span>${badge(status)} ${badge(bookFrameState(itemSummary))}</span></span></button><button type="button" class="book-card-edit" data-action="open-book-detail" data-book-id="${escapeHtml(id)}" aria-label="Open Book detail for ${escapeHtml(name)}" title="Open Book detail">${bookEditIcon()}</button></article>`;
     };
     const start = filtered.length ? (state.bookPage - 1) * pageSize + 1 : 0;
     const end = Math.min(state.bookPage * pageSize, filtered.length);
@@ -533,7 +571,7 @@
     const allPageSelected = pageItems.length > 0 && pageSelectedCount === pageItems.length;
     const processLabel = selectedCount ? `Process Interior · ${selectedCount} selected` : "Process Interior";
     const allFilteredSelected = filtered.length > 0 && filtered.every((item) => state.selectedBookIds.has(bookId(item)));
-    const selectionToolbar = `<section class="book-selection-toolbar" aria-label="Book selection"><label class="book-selection-page"><input type="checkbox" data-action="toggle-book-page-selection" ${allPageSelected ? "checked" : ""} ${pageItems.length ? "" : "disabled"}> Select page <span>(${pageItems.length})</span></label><button class="button-secondary" data-action="select-all-filtered-books" ${filtered.length && !allFilteredSelected ? "" : "disabled"}>Select all ${filtered.length} matching</button><span class="book-selection-count" role="status" aria-live="polite">${selectedCount} selected</span><button class="button-secondary" data-action="clear-book-selection" ${selectedCount ? "" : "disabled"}>Clear selection</button></section>`;
+    const selectionToolbar = `<section class="book-selection-toolbar" aria-label="Book selection"><label class="book-selection-page"><input type="checkbox" data-action="toggle-book-page-selection" ${allPageSelected ? "checked" : ""} ${pageItems.length ? "" : "disabled"}> Select page <span>(${pageItems.length})</span></label><button class="button-secondary" data-action="select-all-filtered-books" ${filtered.length && !allFilteredSelected ? "" : "disabled"}>Select all ${filtered.length} matching</button><span class="book-selection-count" data-book-selection-count role="status" aria-live="polite">${selectedCount} selected</span><button class="button-secondary" data-action="clear-book-selection" ${selectedCount ? "" : "disabled"}>Clear selection</button></section>`;
     content.innerHTML = `<section class="book-library-page"><div class="page-header"><div><h1>Books</h1><p>Filter local Books, validate only what needs review, and send selected Books to Interior Processing.</p></div><div class="page-actions">${refreshAction()}<button class="button-secondary" data-action="clear-cache" ${cacheCleanupBlocked() ? "disabled" : ""}>${state.cacheCleanupActive ? "Clearing…" : "Clear Cache"}</button><button class="button-secondary" data-action="validate-all">Validate all</button><button class="button-primary" data-action="go-process">${processLabel}</button></div></div><section class="book-toolbar"><label class="field"><span>Search books</span><input class="control" data-action="filter-books" value="${escapeHtml(state.bookFilter)}" placeholder="Book name"></label><label class="field"><span>Sort</span><select class="control" data-action="book-sort"><option value="activity" ${state.bookSort === "activity" ? "selected" : ""}>Last activity</option><option value="name" ${state.bookSort === "name" ? "selected" : ""}>Book name</option></select></label><div class="status-filters book-status-filters" role="group" aria-label="Book status filters">${statusCounts.map(({ name, count }) => `<button class="${state.bookStatus === name ? "active" : ""}" data-action="book-status" data-book-status="${name}" aria-pressed="${state.bookStatus === name}">${name}<strong>${count}</strong></button>`).join("")}</div><div class="asset-view-toggle" aria-label="Book view"><button class="${state.bookView === "grid" ? "active" : ""}" data-action="book-view" data-book-view="grid" aria-pressed="${state.bookView === "grid"}">Grid</button><button class="${state.bookView === "list" ? "active" : ""}" data-action="book-view" data-book-view="list" aria-pressed="${state.bookView === "list"}">Compact list</button></div></section>${selectionToolbar}<section class="book-library-results"><div class="book-library-grid-scroll"><section class="${state.bookView === "grid" ? "book-grid" : "book-compact-list"}">${pageItems.length ? pageItems.map(card).join("") : `<div class="book-grid-empty"><strong>No Books match this view.</strong><span>Adjust the search or status filter, or refresh the local source folders.</span></div>`}</section></div><footer class="book-pagination" data-book-total-pages="${totalPages}"><span>${start}–${end} of ${filtered.length}</span><div><button class="button-secondary" data-action="book-page" data-book-page="first" ${state.bookPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="book-page" data-book-page="previous" ${state.bookPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.bookPage} of ${totalPages}</span><button class="button-secondary" data-action="book-page" data-book-page="next" ${state.bookPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="book-page" data-book-page="last" ${state.bookPage === totalPages ? "disabled" : ""}>Last</button></div></footer></section></section>`;
     const pageSelection = document.querySelector('[data-action="toggle-book-page-selection"]');
     if (pageSelection) pageSelection.indeterminate = pageSelectedCount > 0 && !allPageSelected;
@@ -774,14 +812,31 @@
   };
 
   document.querySelectorAll("[data-route]").forEach((button) => button.addEventListener("click", () => { render(button.dataset.route); if (button.dataset.route === "diagnostics") { send("diagnostics.get"); send("task.list"); } }));
+  const openBookDrawer = (id) => {
+    state.selectedBookId = id;
+    state.selectedBookTab = "overview";
+    state.selectedAssetReference = "";
+    clearArtworkBulkSelection();
+    state.assetStatus = "Active";
+    state.assetFrameMode = "auto";
+    state.introTemplatePage = 1;
+    state.bookDrawerScrollTop = 0;
+    state.artworkGridScrollTop = 0;
+    state.bookDrawerOpen = true;
+    document.querySelector(".book-drawer-layer")?.remove();
+    const book = selectedBook();
+    if (!book) return;
+    content.insertAdjacentHTML("beforeend", renderBookDrawer(book, summaryFor(book)));
+    document.getElementById("book-drawer-title")?.focus();
+  };
   const closeBookDrawer = () => {
     if (state.bookInteriorSavePending) return;
     if (hasInteriorDraft(state.selectedBookId) && !window.confirm("Discard unsaved Interior changes?")) return;
     clearInteriorDraft(state.selectedBookId);
     state.bookDrawerScrollTop = 0;
     state.bookDrawerOpen = false;
-    state.restoreBookFocus = true;
-    render("books", false);
+    document.querySelector(".book-drawer-layer")?.remove();
+    document.querySelector(`[data-action="open-book-detail"][data-book-id="${CSS.escape(state.selectedBookId)}"]`)?.focus();
   };
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape" || !state.bookDrawerOpen) return;
@@ -803,7 +858,7 @@
     if (action === "select-brand") { state.selectedBrand = target.dataset.brandName; if (brandSelect) brandSelect.value = state.selectedBrand; render("brands"); }
     if (action === "load-brand-settings") send("brand.settings.get", { brandName: state.selectedBrand });
     if (action === "save-brand-settings") send("brand.settings.save", { brandName: state.selectedBrand, json: state.brandSettings });
-    if (action === "select-book" || action === "open-book-detail") { state.selectedBookId = target.dataset.bookId; state.selectedBookTab = "overview"; state.selectedAssetReference = ""; clearArtworkBulkSelection(); state.assetStatus = "Active"; state.assetFrameMode = "auto"; state.introTemplatePage = 1; state.bookDrawerScrollTop = 0; state.artworkGridScrollTop = 0; state.bookDrawerOpen = true; state.drawerFocusTitle = true; render("books", false); }
+    if (action === "select-book" || action === "open-book-detail") openBookDrawer(target.dataset.bookId);
     if (action === "close-book-drawer") closeBookDrawer();
     if (action === "save-book-interior-settings" && !state.bookInteriorSavePending) {
       const payload = interiorSavePayload(target.dataset.bookId);
@@ -844,24 +899,24 @@
       const id = target.dataset.bookId;
       if (state.selectedBookIds.has(id)) state.selectedBookIds.delete(id); else state.selectedBookIds.add(id);
       status.textContent = state.selectedBookIds.size ? `${state.selectedBookIds.size} Book${state.selectedBookIds.size === 1 ? "" : "s"} selected` : "Selection cleared";
-      render("books", false);
+      refreshBookSelectionUi();
     }
     if (action === "toggle-book-page-selection") {
       const pageSize = 12;
       const pageItems = filteredBooks().slice((state.bookPage - 1) * pageSize, state.bookPage * pageSize);
       pageItems.forEach((book) => { if (target.checked) state.selectedBookIds.add(bookId(book)); else state.selectedBookIds.delete(bookId(book)); });
       status.textContent = state.selectedBookIds.size ? `${state.selectedBookIds.size} Book${state.selectedBookIds.size === 1 ? "" : "s"} selected` : "Selection cleared";
-      render("books", false);
+      refreshBookSelectionUi();
     }
     if (action === "select-all-filtered-books") {
       filteredBooks().forEach((book) => state.selectedBookIds.add(bookId(book)));
       status.textContent = `${state.selectedBookIds.size} Book${state.selectedBookIds.size === 1 ? "" : "s"} selected`;
-      render("books", false);
+      refreshBookSelectionUi();
     }
     if (action === "clear-book-selection") {
       state.selectedBookIds.clear();
       status.textContent = "Selection cleared";
-      render("books", false);
+      refreshBookSelectionUi();
     }
     if (action === "queue-book") { const id = target.dataset.bookId; if (target.checked) state.selectedBookIds.add(id); else state.selectedBookIds.delete(id); }
     if (action === "queue-selected-book") {
