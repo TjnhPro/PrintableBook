@@ -32,6 +32,8 @@ artifacts/
 !tests/**/*.png
 !tests/**/*.jpg
 !tests/**/*.jpeg
+!docs/assets/screenshots/0.1/0[1-9]-*.png
+!docs/assets/screenshots/0.1/1[0-8]-*.png
 
 # Product identity assets are shipped with the desktop application.
 !src/PrintableBook.Desktop/Frontend/assets/printable-book-logo.png
