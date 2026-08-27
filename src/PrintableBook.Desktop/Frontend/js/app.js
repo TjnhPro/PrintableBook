@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "auto", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map() };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "auto", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map() };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -16,6 +16,7 @@
   const summaryFor = (book) => summaries().find((summary) => valueFor(valueFor(summary, "bookId", {}), "value", "") === bookId(book));
   const pdfLibraryBookName = (book, summary) => bookId(book) || valueFor(valueFor(summary, "bookId", {}), "value", "");
   const pdfLibraryPageSize = 12;
+  const processQueuePageSize = 12;
   const pdfLibraryOutputSize = (summary) => valueFor(summary, "outputSummaries", []).reduce((total, output) => total + (Number(valueFor(output, "fileSizeBytes", 0)) || 0), 0);
   const pdfLibraryGeneratedAt = (summary) => {
     const outputTimes = valueFor(summary, "outputSummaries", []).map((output) => new Date(valueFor(output, "generatedAt", 0)).getTime()).filter((value) => Number.isFinite(value) && value > 0);
@@ -550,6 +551,7 @@
     const session = window.processSnapshot;
     const active = valueFor(session, "isActive", false);
     const cancelling = valueFor(session, "isCancelling", false);
+    const queueLocked = active || cancelling;
     const sessionQueue = valueFor(session, "queue", []);
     const hasSession = active || cancelling || sessionQueue.length > 0;
     const terminal = hasSession && !active && !cancelling;
@@ -562,8 +564,9 @@
       .filter(Boolean)
       .map((book) => ({ book, readiness: processingReadiness(book, summaryFor(book)) }))
       .find((item) => !item.readiness.ready);
-    const queue = hasSession ? sessionQueue : pendingQueue;
-    const currentBook = valueFor(valueFor(session, "currentBookId", {}), "value", terminal ? "Last session" : "No active Book");
+    const queue = queueLocked ? sessionQueue : pendingQueue;
+    const queueCurrentBook = sessionQueue.find((entry) => ["Running", "Processing"].includes(displayStatus(valueFor(entry, "status", "")))) ?? sessionQueue[0];
+    const currentBook = valueFor(valueFor(session, "currentBookId", {}), "value", valueFor(valueFor(queueCurrentBook, "bookId", {}), "value", terminal ? "Last session" : "No active Book"));
     const terminalStatuses = sessionQueue.map((entry) => displayStatus(valueFor(entry, "status", "Not started")));
     const derivedTerminalStep = terminalStatuses.includes("Failed")
       ? "Failed"
@@ -577,8 +580,36 @@
     const stage = cancelling ? "Cancelling" : terminal ? derivedTerminalStep : currentStep;
     const stages = ["Preparing", "Processing", "PDF export"];
     const currentStageIndex = stage === "Processing" ? 1 : stage === "PDF export" ? 2 : 0;
-    const failureDetails = queue.filter((entry) => displayStatus(valueFor(entry, "status", "")) === "Failed" && valueFor(entry, "detail", null));
-    content.innerHTML = `<div class="page-header"><div><h1>Process Interior</h1><p>${cancelling ? "Stopping Interior Processing session…" : active ? "Active Interior Processing session" : terminal ? "Last Interior Processing session" : "Prepare a selected interior-only book queue."}</p></div>${active ? cancelling ? '<button class="button-danger" disabled>Stopping processing…</button>' : '<button class="button-danger" data-action="cancel-process">Cancel session</button>' : ""}</div><section class="process-status-strip" aria-live="polite"><div><span>Session state</span><strong>${escapeHtml(stage)}</strong></div><div><span>Elapsed</span><strong>${elapsedTime(valueFor(session, "startedAt", null))}</strong></div><div><span>Workers</span><strong>${valueFor(session, "workerLimit", 0) || "—"}</strong></div><div><span>Progress</span><strong>${completed} / ${total || "?"} pages</strong></div></section><ol class="process-stages">${stages.map((item, index) => `<li class="${index < currentStageIndex ? "complete" : index === currentStageIndex && active ? "active" : ""}"><span>${index + 1}</span>${item}</li>`).join("")}</ol><div class="process-grid">${panel(hasSession ? (terminal ? "Last session" : "Queue") : "Selected queue", `<ul class="queue-list">${queue.length ? queue.map((entry) => `<li><span>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}</span>${badge(valueFor(entry, "status", "NotStarted"))}<small>${escapeHtml(valueFor(entry, "detail", "Waiting"))}</small></li>`).join("") : "<li class=\"empty-row\">Select Books on the Books page.</li>"}</ul>`)}${panel("Current stage", `<div class="process-book"><strong>${escapeHtml(currentBook)}</strong><span>${escapeHtml(currentStep)}</span></div><div class="progress-track"><span style="width:${percent}%"></span></div><p class="progress-copy">${completed} / ${total || "?"} pages · ${valueFor(session, "workerLimit", 0) || "?"} workers</p>${blockedSelection ? `<div class="process-failure" role="alert"><strong>Selected Book needs review</strong><p>${escapeHtml(valueFor(blockedSelection.book, "name", "Book"))}: ${escapeHtml(blockedSelection.readiness.reason)}</p></div>` : ""}${failureDetails.length ? `<div class="process-failure" role="alert"><strong>Run needs review</strong>${failureDetails.map((entry) => `<p>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}: ${escapeHtml(valueFor(entry, "detail", ""))}</p>`).join("")}</div>` : ""}<div class="page-actions mt-4">${active || cancelling ? "" : `<button class="button-primary" data-action="start-process" ${state.selectedBookIds.size && !blockedSelection ? "" : "disabled"}>${terminal ? "Start New Interior Processing" : "Start Interior Processing"}</button>`}</div>`)}</div>`;
+    const failureDetails = sessionQueue.filter((entry) => displayStatus(valueFor(entry, "status", "")) === "Failed" && valueFor(entry, "detail", null));
+    const queueTotalPages = Math.max(1, Math.ceil(queue.length / processQueuePageSize));
+    state.processQueuePage = Math.min(Math.max(1, state.processQueuePage), queueTotalPages);
+    const queueStart = (state.processQueuePage - 1) * processQueuePageSize;
+    const queueItems = queue.slice(queueStart, queueStart + processQueuePageSize);
+    const queueRangeStart = queue.length ? queueStart + 1 : 0;
+    const queueRangeEnd = Math.min(queueStart + processQueuePageSize, queue.length);
+    const completedBooks = sessionQueue.filter((entry) => displayStatus(valueFor(entry, "status", "")) === "Completed").length;
+    const failedBooks = sessionQueue.filter((entry) => displayStatus(valueFor(entry, "status", "")) === "Failed").length;
+    const renderQueueCard = (entry) => {
+      const id = valueFor(valueFor(entry, "bookId", {}), "value", "");
+      const book = books().find((candidate) => bookId(candidate) === id);
+      const summary = book ? summaryFor(book) : null;
+      const name = valueFor(book, "name", valueFor(entry, "detail", id));
+      const totalPages = valueFor(summary, "interiorSourcePageCount", 0);
+      const activePages = valueFor(summary, "activeInteriorSourcePageCount", totalPages);
+      const entryStatus = queueLocked ? valueFor(entry, "status", "NotStarted") : "Ready";
+      const details = totalPages ? `${activePages} / ${totalPages} Interior active` : queueLocked ? valueFor(entry, "detail", "Waiting") : "Ready for Interior Processing";
+      const preview = book ? bookThumbnailMarkup(book, summary, "Cover unavailable") : `<span class="book-preview-fallback">Cover unavailable</span>`;
+      const main = book
+        ? `<button type="button" class="process-queue-card-main" data-action="select-book" data-book-id="${escapeHtml(id)}" aria-label="Open ${escapeHtml(name)}"><span class="process-queue-preview">${preview}</span><span class="process-queue-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong><small>${escapeHtml(details)}</small><span>${badge(entryStatus)}</span></span></button>`
+        : `<div class="process-queue-card-main"><span class="process-queue-preview">${preview}</span><span class="process-queue-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong><small>${escapeHtml(details)}</small><span>${badge(entryStatus)}</span></span></div>`;
+      const action = queueLocked
+        ? `<span class="process-queue-locked">Queue locked</span>`
+        : `<button class="button-secondary process-queue-remove" data-action="remove-process-queue-book" data-book-id="${escapeHtml(id)}" aria-label="Remove ${escapeHtml(name)} from selected queue">Remove</button>`;
+      return `<article class="process-queue-card">${main}<footer>${action}</footer></article>`;
+    };
+    const queueTab = `<section class="process-queue-workspace" aria-labelledby="selected-queue-title"><header class="process-queue-heading"><div><h2 id="selected-queue-title">Selected queue <span>${queue.length}</span></h2><p>${queueLocked ? "Queue is locked while Interior Processing is running." : "Review selected Books before starting Interior Processing."}</p></div><span class="process-queue-range" aria-live="polite">${queueRangeStart}–${queueRangeEnd} of ${queue.length}</span></header><div class="process-queue-grid-scroll"><div class="process-queue-grid">${queueItems.length ? queueItems.map(renderQueueCard).join("") : `<div class="process-queue-empty"><strong>No Books selected</strong><span>Select ready Books from the Books workspace, then return here to process them.</span><button class="button-secondary" data-action="go-books">Go to Books</button></div>`}</div></div><footer class="process-queue-pagination" data-process-queue-total-pages="${queueTotalPages}"><span>${queueRangeStart}–${queueRangeEnd} of ${queue.length}</span><div><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="first" ${state.processQueuePage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="previous" ${state.processQueuePage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.processQueuePage} of ${queueTotalPages}</span><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="next" ${state.processQueuePage === queueTotalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="last" ${state.processQueuePage === queueTotalPages ? "disabled" : ""}>Last</button></div></footer></section>`;
+    const overviewTab = `<section class="process-overview-grid"><section class="panel process-summary-panel"><div class="process-panel-heading"><div><h2 class="panel-title">Summary</h2><p>${terminal ? "Last completed Interior Processing session" : queueLocked ? "Current Interior Processing session" : "Books ready to process"}</p></div>${badge(stage)}</div><div class="process-summary-stats" aria-live="polite"><div><span>Selected queue</span><strong>${queueLocked ? sessionQueue.length : pendingQueue.length}</strong></div><div><span>Completed</span><strong>${completedBooks}</strong></div><div><span>Failed</span><strong>${failedBooks}</strong></div><div><span>Workers</span><strong>${valueFor(session, "workerLimit", 0) || "—"}</strong></div><div><span>Elapsed</span><strong>${elapsedTime(valueFor(session, "startedAt", null))}</strong></div><div><span>Progress</span><strong>${completed} / ${total || "?"}</strong></div></div><ol class="process-stages">${stages.map((item, index) => `<li class="${index < currentStageIndex ? "complete" : index === currentStageIndex && queueLocked ? "active" : ""}"><span>${index + 1}</span>${item}</li>`).join("")}</ol></section><section class="panel process-current-stage-panel"><div class="process-panel-heading"><div><h2 class="panel-title">Current stage</h2><p>${queueLocked ? "Live progress for the active Book" : terminal ? "Final state of the last session" : "Start processing when the selected queue is ready"}</p></div></div><div class="process-book"><strong>${escapeHtml(currentBook)}</strong><span>${escapeHtml(currentStep)}</span></div><div class="progress-track"><span style="width:${percent}%"></span></div><p class="progress-copy">${completed} / ${total || "?"} pages · ${valueFor(session, "workerLimit", 0) || "?"} workers</p>${blockedSelection ? `<div class="process-failure" role="alert"><strong>Selected Book needs review</strong><p>${escapeHtml(valueFor(blockedSelection.book, "name", "Book"))}: ${escapeHtml(blockedSelection.readiness.reason)}</p></div>` : ""}${failureDetails.length ? `<div class="process-failure" role="alert"><strong>Run needs review</strong>${failureDetails.map((entry) => `<p>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}: ${escapeHtml(valueFor(entry, "detail", ""))}</p>`).join("")}</div>` : ""}<div class="page-actions mt-4">${queueLocked ? "" : `<button class="button-primary" data-action="start-process" ${state.selectedBookIds.size && !blockedSelection ? "" : "disabled"}>${terminal ? "Start New Interior Processing" : "Start Interior Processing"}</button>`}</div></section></section>`;
+    content.innerHTML = `<section class="process-page"><div class="page-header"><div><h1>Process Interior</h1><p>${cancelling ? "Stopping Interior Processing session…" : active ? "Active Interior Processing session" : terminal ? "Last Interior Processing session" : "Prepare a selected interior-only book queue."}</p></div>${active ? cancelling ? '<button class="button-danger" disabled>Stopping processing…</button>' : '<button class="button-danger" data-action="cancel-process">Cancel session</button>' : ""}</div><nav class="process-tabs" role="tablist" aria-label="Interior Processing workspace"><button class="${state.processTab === "overview" ? "active" : ""}" data-action="process-tab" data-process-tab="overview" role="tab" aria-selected="${state.processTab === "overview"}">Overview</button><button class="${state.processTab === "queue" ? "active" : ""}" data-action="process-tab" data-process-tab="queue" role="tab" aria-selected="${state.processTab === "queue"}">Selected queue <span>${queue.length}</span></button></nav><div class="process-tab-body">${state.processTab === "queue" ? queueTab : overviewTab}</div></section>`;
     if (requestProcess) send("process.get");
   };
 
@@ -801,6 +832,8 @@
       const readiness = book ? processingReadiness(book, summaryFor(book)) : { ready: false, reason: "Choose a Book first." };
       if (!readiness.ready) { status.textContent = readiness.reason; return; }
       state.selectedBookIds.add(state.selectedBookId);
+      state.processTab = "queue";
+      state.processQueuePage = 1;
       render("process");
     }
     if (action === "toggle-artwork-selection") {
@@ -850,8 +883,20 @@
     if (action === "book-page") { const last = Number(target.closest("[data-book-total-pages]")?.dataset.bookTotalPages ?? 1); state.bookPage = target.dataset.bookPage === "first" ? 1 : target.dataset.bookPage === "last" ? last : Math.min(last, Math.max(1, state.bookPage + (target.dataset.bookPage === "next" ? 1 : -1))); render("books", false); }
     if (action === "pdf-library-page") { const totalPages = Math.max(1, Math.ceil(pdfLibraryBooks().length / pdfLibraryPageSize)); state.pdfLibraryPage = target.dataset.pdfLibraryPage === "first" ? 1 : target.dataset.pdfLibraryPage === "last" ? totalPages : Math.min(totalPages, Math.max(1, state.pdfLibraryPage + (target.dataset.pdfLibraryPage === "next" ? 1 : -1))); render("outputs", false); }
     if (action === "pdf-library-view") { state.pdfLibraryView = target.dataset.pdfLibraryView === "list" ? "list" : "grid"; render("outputs", false); }
+    if (action === "process-tab") { state.processTab = target.dataset.processTab === "queue" ? "queue" : "overview"; render("process", false); }
+    if (action === "process-queue-page") { const last = Number(target.closest("[data-process-queue-total-pages]")?.dataset.processQueueTotalPages ?? 1); state.processQueuePage = target.dataset.processQueuePage === "first" ? 1 : target.dataset.processQueuePage === "last" ? last : Math.min(last, Math.max(1, state.processQueuePage + (target.dataset.processQueuePage === "next" ? 1 : -1))); render("process", false); }
+    if (action === "remove-process-queue-book" && !processIsActive()) {
+      const id = target.dataset.bookId;
+      const book = books().find((item) => bookId(item) === id);
+      const name = valueFor(book, "name", id);
+      if (!window.confirm(`Remove ${name} from the selected queue?`)) return;
+      state.selectedBookIds.delete(id);
+      status.textContent = `${name} removed from selected queue`;
+      render("process", false);
+    }
     if (action === "validate-book") send("book.validate", { bookId: target.dataset.bookId });
     if (action === "go-process") render("process");
+    if (action === "go-books") render("books", false);
     if (action === "start-process" && !state.processStartPending) {
       const blocked = [...state.selectedBookIds].map((id) => books().find((book) => bookId(book) === id)).filter(Boolean).map((book) => ({ book, readiness: processingReadiness(book, summaryFor(book)) })).find((item) => !item.readiness.ready);
       if (blocked) { status.textContent = `${valueFor(blocked.book, "name", "Book")}: ${blocked.readiness.reason}`; return; }

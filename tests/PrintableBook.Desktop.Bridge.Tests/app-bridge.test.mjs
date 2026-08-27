@@ -457,6 +457,37 @@ test("process controls disable cancellation while a stop is in progress", () => 
   assert.equal(messages.at(-1).command, "process.cancel");
 });
 
+test("selected queue is paged in its tab and a pending Book can be removed", () => {
+  const { messageHandler, content, contentListeners, status } = loadBridge("process");
+  const books = Array.from({ length: 13 }, (_, index) => ({ id: { value: `Book ${index + 1}` }, name: `Book ${index + 1}` }));
+  const summaries = books.map((book) => ({ bookId: book.id, workspaceStatus: "Not started", validationStatus: "Ready", interiorSourcePageCount: 12, activeInteriorSourcePageCount: 12, assets: [] }));
+  messageHandler({ data: { version: 1, id: "queue-books", ok: true, command: "app.snapshot", payload: { discovery: { brands: [], books }, globalSettings: {}, bookSummaries: summaries } } });
+
+  for (const book of books) {
+    const queue = { dataset: { action: "queue-book", bookId: book.id.value }, checked: true, closest: () => queue };
+    contentListeners.click({ target: queue });
+  }
+  const queueTab = { dataset: { action: "process-tab", processTab: "queue" }, closest: () => queueTab };
+  contentListeners.click({ target: queueTab });
+
+  assert.match(content.innerHTML, /Selected queue <span>13<\/span>/);
+  assert.match(content.innerHTML, /Page 1 of 2/);
+  assert.match(content.innerHTML, /Book 1/);
+  assert.doesNotMatch(content.innerHTML, /Book 13/);
+
+  const pagination = { dataset: { processQueueTotalPages: "2" } };
+  const next = { dataset: { action: "process-queue-page", processQueuePage: "next" }, closest: (selector) => selector === "[data-action]" ? next : pagination };
+  contentListeners.click({ target: next });
+  assert.match(content.innerHTML, /Page 2 of 2/);
+  assert.match(content.innerHTML, /Book 13/);
+
+  const remove = { dataset: { action: "remove-process-queue-book", bookId: "Book 13" }, closest: () => remove };
+  contentListeners.click({ target: remove });
+  assert.equal(status.textContent, "Book 13 removed from selected queue");
+  assert.match(content.innerHTML, /Selected queue <span>12<\/span>/);
+  assert.match(content.innerHTML, /Page 1 of 1/);
+});
+
 for (const [status, serializedStatus, detail] of [["Completed", 4, null], ["Failed", 2, "PDF export failed"], ["Cancelled", 3, "Cancelled"]]) {
   test(`${status.toLowerCase()} terminal processing remains visible and allows a new session`, () => {
     const { messageHandler, content, intervals, messages } = loadBridge("process");
@@ -468,9 +499,9 @@ for (const [status, serializedStatus, detail] of [["Completed", 4, null], ["Fail
     } } });
 
     assert.match(content.innerHTML, /Last Interior Processing session/);
-    assert.match(content.innerHTML, /Last session/);
+    assert.match(content.innerHTML, /Summary/);
     assert.match(content.innerHTML, new RegExp(status));
-    assert.doesNotMatch(content.innerHTML, /Selected queue/);
+    assert.match(content.innerHTML, /Selected queue/);
     assert.match(content.innerHTML, /Start New Interior Processing/);
     const messageCount = messages.length;
     intervals[0]();
@@ -521,7 +552,8 @@ test("a mixed terminal queue retains the most severe terminal step", () => {
   } } });
 
   assert.match(content.innerHTML, /Book failed/);
-  assert.match(content.innerHTML, /<strong>Last session<\/strong><span>Failed<\/span>/);
+  assert.match(content.innerHTML, /Summary/);
+  assert.match(content.innerHTML, /Failed/);
   assert.match(content.innerHTML, /Run needs review/);
   assert.match(content.innerHTML, /PDF export failed/);
 });
