@@ -38,4 +38,6 @@
 
 ## Capture review gate
 
+Đã capture và review đủ 18 PNG từ portable build `0.1.0`: không có username, dữ liệu khách hàng hoặc artwork production. Các ảnh bao gồm session Interior thực tế đã hoàn tất, thumbnail cover được discovery và PDF Library có output thực.
+
 Sau mỗi PNG: mở file, kiểm tra không broken image/cursor che nội dung, tên app và `Version 0.1` còn đúng, không có path/user private. Chỉ commit toàn bộ bộ 18 ảnh sau khi review đủ.
