@@ -5,7 +5,7 @@
 ## Source và CI
 
 - [x] Release baseline recorded: `db8e192`.
-- [ ] Build and test CI green for release commit.
+- [x] Build and test CI green for release commit `0ae3708`.
 - [x] Repository-owned release gate PASS: Core 188, Infrastructure 252, Desktop 89, bridge 72 and production UI certification 16.
 
 ## Documentation và branding
@@ -27,7 +27,7 @@
 ## Publish
 
 - [x] `release.yml` validated locally against the release gate and packaging command.
-- [ ] `main` clean and current CI green.
-- [ ] Annotated tag `v0.1.0` pushed.
-- [ ] GitHub Release includes ZIP and SHA256.
-- [ ] Downloaded published ZIP smoke-tested.
+- [x] `main` clean and release-commit CI green before tag.
+- [x] Annotated tag `v0.1.0` pushed.
+- [x] GitHub Release includes ZIP and SHA256.
+- [x] Downloaded published ZIP smoke-tested (checksum `eb1288ec…3d75`; clean launch PASS).
