@@ -24,6 +24,22 @@ public sealed class CacheCleanupWorkerTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_clears_published_preview_manifest_when_rendered_pages_are_removed()
+    {
+        var book = CreateBook("completed");
+        var state = Completed(book, "output.pdf")
+            .RecordPublishedInteriorPreviews([new PublishedInteriorPreview("page-0001", "processed/interior/page-0001.png")]);
+        var stateStore = new StubStateStore([state]);
+        var worker = new CacheCleanupWorker(
+            new StubDiscovery([book]), stateStore, new StubFileSystem(["output.pdf"]), new StubStorage());
+
+        var result = Assert.IsType<CacheCleanupResult>(await ((IBackgroundTaskWorker)worker).ExecuteAsync(new CacheCleanupRequest(), new StubContext(), CancellationToken.None));
+
+        Assert.Equal("Cleaned", Assert.Single(result.Books).Status);
+        Assert.Empty((await stateStore.LoadAsync(book.Workspace))!.PublishedInteriorPreviews!);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_skips_completed_book_when_output_is_missing()
     {
         var book = CreateBook("missing");
@@ -144,10 +160,20 @@ public sealed class CacheCleanupWorkerTests
         }
     }
 
-    private sealed class StubStateStore(IReadOnlyList<BookProcessingState> states) : IBookWorkspaceStateStore
+    private sealed class StubStateStore : IBookWorkspaceStateStore
     {
-        public ValueTask<BookProcessingState?> LoadAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) => ValueTask.FromResult<BookProcessingState?>(states.SingleOrDefault(state => state.BookId == workspace.BookId));
-        public ValueTask SaveAsync(BookWorkspace workspace, BookProcessingState state, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        private readonly Dictionary<BookId, BookProcessingState> states;
+
+        public StubStateStore(IReadOnlyList<BookProcessingState> states) => this.states = states.ToDictionary(state => state.BookId);
+
+        public ValueTask<BookProcessingState?> LoadAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<BookProcessingState?>(states.GetValueOrDefault(workspace.BookId));
+
+        public ValueTask SaveAsync(BookWorkspace workspace, BookProcessingState state, CancellationToken cancellationToken = default)
+        {
+            states[workspace.BookId] = state;
+            return ValueTask.CompletedTask;
+        }
         public ValueTask AppendLogAsync(BookWorkspace workspace, BookProcessingLogEntry entry, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask<IReadOnlyList<BookProcessingLogEntry>> LoadLogsAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<BookProcessingLogEntry>>([]);
         public ValueTask SaveErrorAsync(BookWorkspace workspace, ProcessingFailure failure, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;

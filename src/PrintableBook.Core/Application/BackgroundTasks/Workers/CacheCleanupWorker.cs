@@ -75,6 +75,7 @@ public sealed class CacheCleanupWorker(
                 }
 
                 var released = await storageMaintenance.ClearHeavyProcessingCacheAsync(book.Workspace, cancellationToken);
+                await stateStore.SaveAsync(book.Workspace, state.ClearPublishedInteriorPreviews(), cancellationToken);
                 cleaned++;
                 freedBytes += released;
                 results.Add(new CacheCleanupBookResult(book.Id, "Cleaned", released, null));

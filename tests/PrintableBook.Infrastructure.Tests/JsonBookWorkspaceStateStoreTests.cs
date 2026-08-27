@@ -11,13 +11,14 @@ public sealed class JsonBookWorkspaceStateStoreTests : IAsyncLifetime
     private readonly string root = Path.Combine(Path.GetTempPath(), $"PrintableBook.StateStore.{Guid.NewGuid():N}");
 
     [Fact]
-    public async Task LoadAsync_defaults_new_fields_when_legacy_json_omits_them()
+    public async Task LoadAsync_uses_current_defaults_when_legacy_json_omits_new_fields()
     {
         var workspace = await CreateWorkspaceAsync();
         await File.WriteAllTextAsync(Path.Combine(workspace.WorkingDirectory.Value, "state", "book-state.json"), "{\"bookId\":{\"value\":\"book\"},\"status\":\"notStarted\",\"updatedAt\":\"0001-01-01T00:00:00+00:00\",\"mayResume\":false,\"inactiveInteriorSourceKeys\":[\"B.PNG\",\"b.png\",\" \",\"a.png\"]}");
         var state = await new JsonBookWorkspaceStateStore(new PhysicalFileSystem()).LoadAsync(workspace);
-        Assert.False(state!.HasBackground);
+        Assert.True(state!.HasBackground);
         Assert.Equal(["a.png", "B.PNG"], state.InactiveInteriorSourceKeys);
+        Assert.Null(state.PublishedInteriorPreviews);
     }
 
     [Fact]

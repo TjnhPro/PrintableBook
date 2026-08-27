@@ -266,11 +266,51 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.True(File.Exists(secondCache));
         var inactiveMap = (await new JsonInteriorShuffleStore(fileSystem).LoadAsync(workspace))!;
         Assert.Equal([Path.Combine(bookDirectory.Value, "Book interior", "page-01.png")], inactiveMap.Entries.Select(entry => entry.Page.Value));
+        Assert.Equal(["page-0001"], (await stateStore.LoadAsync(workspace))!.PublishedInteriorPreviews!.Select(preview => preview.PageId));
 
         state = (await stateStore.LoadAsync(workspace))!;
         await stateStore.SaveAsync(workspace, state.SetInteriorActive(InteriorSourceKey.FromBookRoot(bookDirectory, secondSource), true));
         Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
         Assert.True(File.Exists(secondProcessed));
+    }
+
+    [Fact]
+    public async Task ProcessBookAsync_replaces_the_preview_manifest_when_a_previous_interior_page_becomes_a_custom_intro()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "CustomIntroPreviewBook"));
+        await CreateInteriorOnlyBookFixtureAsync(bookDirectory);
+        var firstSource = new FileReference(Path.Combine(bookDirectory.Value, "Book interior", "page-01.png"));
+        await WriteImageAsync(firstSource.Value, 40, 20, 980, 980, 1024, 1024);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem), CreatePagePipeline(),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new MagickPrintableBookPdfExporter(),
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+        var command = CreateCommand("custom-intro-preview-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+
+        Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
+        Assert.Equal(["page-0001", "page-0002"], (await stateStore.LoadAsync(workspace))!.PublishedInteriorPreviews!.Select(preview => preview.PageId));
+
+        var state = (await stateStore.LoadAsync(workspace))!
+            .SetHasIntro(true)
+            .SetIntroInteriorSourceKeys([InteriorSourceKey.FromBookRoot(bookDirectory, firstSource)]);
+        await stateStore.SaveAsync(workspace, state);
+
+        var customIntroRun = await processor.ProcessBookAsync(command with
+        {
+            CustomIntroFromBookInterior = true,
+            IntroTemplatePages = [firstSource]
+        });
+
+        Assert.Equal(BookProcessingStatus.Completed, customIntroRun.Status);
+        Assert.True(File.Exists(Path.Combine(workspace.ProcessedDirectory.Value, "interior", "page-0001.png")));
+        var publishedPreviews = (await stateStore.LoadAsync(workspace))!.PublishedInteriorPreviews!;
+        Assert.Equal(["page-0002"], publishedPreviews.Select(preview => preview.PageId));
+        Assert.True(File.Exists(Path.Combine(workspace.ProcessedDirectory.Value, "intro", "intro-0001.png")));
     }
 
     [Fact]

@@ -149,6 +149,8 @@ public sealed record BookProcessingState(
         return this with { PublishedInteriorPreviews = published };
     }
 
+    public BookProcessingState ClearPublishedInteriorPreviews() => this with { PublishedInteriorPreviews = [] };
+
     public BookProcessingState SelectCover(string coverReference)
     {
         if (string.IsNullOrWhiteSpace(coverReference))
