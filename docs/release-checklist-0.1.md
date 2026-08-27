@@ -6,27 +6,27 @@
 
 - [x] Release baseline recorded: `db8e192`.
 - [ ] Build and test CI green for release commit.
-- [ ] Repository-owned release gate PASS.
+- [x] Repository-owned release gate PASS: Core 188, Infrastructure 252, Desktop 89, bridge 72 and production UI certification 16.
 
 ## Documentation và branding
 
 - [x] Architecture và technical docs aligned with v0.1.
-- [ ] README/user guide/release notes reviewed.
-- [ ] Approved PNG/ICO committed and EXE/window/sidebar icon verified.
-- [ ] Visible `Version 0.1`; project `0.1.0`; FileVersion `0.1.0.0`.
-- [ ] 18 demo-only screenshots reviewed: no personal paths, usernames or production/customer art.
+- [x] README/user guide/release notes reviewed.
+- [x] Approved PNG/ICO committed and EXE/window/sidebar icon verified.
+- [x] Visible `Version 0.1`; project `0.1.0`; FileVersion `0.1.0.0`.
+- [x] 18 demo-only screenshots reviewed: no personal paths, usernames or production/customer art.
 
 ## Artifact và smoke
 
-- [ ] Portable `win-x64` package created with ZIP and SHA256.
-- [ ] ZIP has one versioned top-level folder and required Frontend/Assets files.
-- [ ] Clean writable folder launch PASS.
-- [ ] Path-with-spaces launch/Refresh PASS.
+- [x] Portable `win-x64` package created with ZIP and SHA256.
+- [x] ZIP has one versioned top-level folder and required Frontend/Assets files.
+- [x] Clean writable folder launch PASS.
+- [x] Path-with-spaces launch/Refresh PASS.
 - [ ] CUSTOM Intro, Active/Frame, process, cancel, PDF Library, Open/Reveal/Copy, Clear Cache and restart PASS.
 
 ## Publish
 
-- [ ] `release.yml` validated.
+- [x] `release.yml` validated locally against the release gate and packaging command.
 - [ ] `main` clean and current CI green.
 - [ ] Annotated tag `v0.1.0` pushed.
 - [ ] GitHub Release includes ZIP and SHA256.
