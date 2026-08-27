@@ -1226,6 +1226,8 @@ test("PDF Library Grid uses compact Book cards and the documented desktop column
   assert.match(css, /\.pdf-library-book-grid \.pdf-library-title-row \{ display:grid; grid-template-columns:minmax\(0,1fr\) auto; min-width:0;/);
   assert.match(css, /\.pdf-library-book-grid \.pdf-library-title-row h2 \{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;/);
   assert.match(css, /\.pdf-library-grid-scroll \{ min-height:0; overflow-y:auto;/);
+  assert.match(css, /\.pdf-library-results \{ display:grid; grid-template-rows:minmax\(0,1fr\) auto; min-height:0; margin-top:12px; padding:12px; border:1px solid var\(--pb-border\); border-radius:10px; background:var\(--pb-surface\);/);
+  assert.match(css, /\.pdf-library-toolbar \{ display:grid; grid-template-columns:minmax\(220px,1fr\) minmax\(160px,220px\) auto auto;/);
   assert.match(css, /\.pdf-library-file-title \{ display:grid; grid-template-columns:minmax\(0,1fr\) auto;/);
   assert.match(css, /\.pdf-library-book-grid \.pdf-library-file-copy \{ grid-template-rows:20px 18px 32px;/);
   assert.match(css, /@media \(min-width:1450px\) \{ \.pdf-library-grid \{ grid-template-columns:repeat\(4,/);
@@ -1242,8 +1244,10 @@ test("PDF Library List uses bounded thumbnails and verbose output actions", () =
   assert.match(content.innerHTML, /Open PDF/);
   assert.match(content.innerHTML, /Reveal in Explorer/);
   assert.match(content.innerHTML, /Copy path/);
-  assert.match(css, /\.pdf-library-book-list \{ display:grid; grid-template-columns:96px/);
-  assert.match(css, /\.pdf-library-book-list \.pdf-library-book-preview \{ width:96px; height:100%;/);
+  assert.match(css, /\.pdf-library-book-list \{ display:grid; grid-template-columns:112px/);
+  assert.match(css, /\.pdf-library-book-list \.pdf-library-book-preview \{ width:112px; height:112px; min-height:112px;/);
+  assert.match(css, /\.pdf-library-book-list \.pdf-library-book-preview img \{ object-fit:contain;/);
+  assert.match(css, /\.pdf-library-pagination \{ position:static; justify-content:space-between; margin:0; padding:12px 0 0; border-top:1px solid var\(--pb-border\);/);
 });
 
 test("PDF Library keeps paging local, preserves it across view changes, and opens an artifact from page two", () => {
