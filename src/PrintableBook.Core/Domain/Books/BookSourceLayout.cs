@@ -22,6 +22,7 @@ public static class BookSourceLayout
         ("Interior", BookAssetKind.Interior),
         ("Colored", BookAssetKind.Colored),
         ("Source cover", BookAssetKind.Cover),
+        ("Book cover", BookAssetKind.Cover),
         ("Book interior", BookAssetKind.Interior),
         ("Book colored", BookAssetKind.Colored)
     ];

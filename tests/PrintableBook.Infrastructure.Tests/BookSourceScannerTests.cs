@@ -80,6 +80,18 @@ public sealed class BookSourceScannerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ScanAsync_discovers_book_cover_assets_for_ui_previews()
+    {
+        await CreateFileAsync("Book cover", "cover.png");
+        await CreateFileAsync("Book interior", "page-01.png");
+
+        var result = await CreateScanner().ScanAsync(new BookId("book-one"), new DirectoryReference(rootPath));
+
+        var cover = Assert.Single(result.Source!.GetAssets(BookAssetKind.Cover));
+        Assert.Equal("cover.png", Path.GetFileName(cover.Reference));
+    }
+
+    [Fact]
     public async Task ScanAsync_succeeds_when_interior_folder_is_empty()
     {
         await CreateFileAsync("Cover", "cover.png");
