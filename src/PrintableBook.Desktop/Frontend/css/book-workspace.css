@@ -201,7 +201,7 @@ button.process-queue-card-main:hover { background:var(--pb-surface-muted); }
 .pdf-library-book-grid .pdf-library-file-mark { display:none; }
 .pdf-library-book-grid .pdf-library-file-copy { grid-template-rows:20px 18px 32px; }
 .pdf-library-book-grid .pdf-library-file-copy small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.pdf-library-book-grid .output-actions { flex-wrap:nowrap; min-height:32px; }
+.pdf-library-book-grid .output-actions { margin-top:0; flex-wrap:nowrap; min-height:32px; }
 .pdf-library-book-grid .output-actions button { min-height:32px; padding:6px 10px; font-size:12px; }
 .pdf-library-list { display:grid; gap:10px; }
 .pdf-library-book-list { display:grid; grid-template-columns:112px minmax(220px,.8fr) minmax(0,1.7fr); align-items:stretch; min-height:112px; }
