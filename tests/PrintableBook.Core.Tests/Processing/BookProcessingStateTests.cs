@@ -98,6 +98,28 @@ public sealed class BookProcessingStateTests
         var state = BookProcessingState.NotStarted(new BookId("book")).SetInteriorActive("Book interior/a.png", false).SetInteriorActive("BOOK INTERIOR/A.PNG", false);
         Assert.Single(state.InactiveInteriorSourceKeys!);
     }
+
+    [Fact]
+    public void RecordPublishedInteriorPreviews_replaces_the_successful_run_manifest()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book"))
+            .RecordPublishedInteriorPreviews([new PublishedInteriorPreview("page-0001", "processed/interior/page-0001.png")])
+            .RecordPublishedInteriorPreviews([new PublishedInteriorPreview("page-0002", "processed/interior/page-0002.png")]);
+
+        var preview = Assert.Single(state.PublishedInteriorPreviews!);
+        Assert.Equal("page-0002", preview.PageId);
+    }
+
+    [Fact]
+    public void RecordPublishedInteriorPreviews_rejects_duplicate_page_ids()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book"));
+
+        Assert.Throws<ArgumentException>(() => state.RecordPublishedInteriorPreviews([
+            new PublishedInteriorPreview("page-0001", "processed/interior/page-0001.png"),
+            new PublishedInteriorPreview("PAGE-0001", "processed/interior/page-0001-copy.png")
+        ]));
+    }
     [Fact]
     public void Interior_frame_modes_persist_only_explicit_overrides_immutably()
     {

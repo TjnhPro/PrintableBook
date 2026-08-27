@@ -202,6 +202,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 await PersistStateAsync(state, "step.completed", "interior-publish", CancellationToken.None);
                 state = state
                     .RecordPublishedArtifacts([publishedInterior.InteriorPdf.Value])
+                    .RecordPublishedInteriorPreviews(pageResults.Select(page => new PublishedInteriorPreview(page.PageId, page.FinalPage.Value)))
                     .Complete(DateTimeOffset.UtcNow);
                 await PersistStateAsync(state, "book.completed", command.BookId.Value, CancellationToken.None);
                 return BookProcessingQueueBookResult.CompletedInterior(command.BookId, publishedInterior);
@@ -230,6 +231,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             await PersistStateAsync(state, "step.completed", "publish", CancellationToken.None);
             state = state
                 .RecordPublishedArtifacts([published.CoverPdf.Value, published.InteriorPdf.Value])
+                .RecordPublishedInteriorPreviews(pageResults.Select(page => new PublishedInteriorPreview(page.PageId, page.FinalPage.Value)))
                 .Complete(DateTimeOffset.UtcNow);
             await PersistStateAsync(state, "book.completed", command.BookId.Value, CancellationToken.None);
             return BookProcessingQueueBookResult.Completed(command.BookId, published);

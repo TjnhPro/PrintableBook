@@ -81,6 +81,10 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.Equal(BookProcessingStatus.Completed, state!.Status);
         Assert.NotNull(state.ConfigurationFingerprint);
         Assert.Equal([bookResult.PublishedOutputs.CoverPdf.Value, bookResult.PublishedOutputs.InteriorPdf.Value], state.PublishedArtifactReferences);
+        var publishedPreviews = state.PublishedInteriorPreviews!;
+        Assert.Equal(["page-0001", "page-0002"], publishedPreviews.Select(preview => preview.PageId));
+        Assert.All(publishedPreviews, preview =>
+            Assert.Equal(Path.Combine(workspace.WorkingDirectory.Value, "processed", "interior", $"{preview.PageId}.png"), preview.FinalPagePath));
         var processingLog = await stateStore.LoadLogsAsync(workspace);
         Assert.Contains(processingLog, entry => entry.Event == "step.completed" && entry.Step == "publish");
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "state", "interior-shuffle.json")));

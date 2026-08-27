@@ -4,6 +4,11 @@ using PrintableBook.Core.Application.Processing;
 namespace PrintableBook.Core.Domain.Processing;
 
 /// <summary>
+/// A rendered Interior page belonging to the most recently published successful run.
+/// </summary>
+public sealed record PublishedInteriorPreview(string PageId, string FinalPagePath);
+
+/// <summary>
 /// Persistable state of a book project. Step names remain opaque to keep processing rules configurable.
 /// </summary>
 public sealed record BookProcessingState(
@@ -22,7 +27,8 @@ public sealed record BookProcessingState(
     bool HasBackground = true,
     IReadOnlyList<string>? InactiveInteriorSourceKeys = null,
     bool HasIntro = false,
-    IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null)
+    IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null,
+    IReadOnlyList<PublishedInteriorPreview>? PublishedInteriorPreviews = null)
 {
     public static BookProcessingState NotStarted(BookId bookId) => new(
         bookId,
@@ -124,6 +130,23 @@ public sealed record BookProcessingState(
     {
         ArgumentNullException.ThrowIfNull(artifactReferences);
         return this with { PublishedArtifactReferences = artifactReferences.ToArray() };
+    }
+
+    public BookProcessingState RecordPublishedInteriorPreviews(IEnumerable<PublishedInteriorPreview> previews)
+    {
+        ArgumentNullException.ThrowIfNull(previews);
+        var published = previews.ToArray();
+        if (published.Any(preview => string.IsNullOrWhiteSpace(preview.PageId) || string.IsNullOrWhiteSpace(preview.FinalPagePath)))
+        {
+            throw new ArgumentException("Each published Interior preview requires a page ID and final page path.", nameof(previews));
+        }
+
+        if (published.Select(preview => preview.PageId).Distinct(StringComparer.OrdinalIgnoreCase).Count() != published.Length)
+        {
+            throw new ArgumentException("Published Interior preview page IDs must be unique.", nameof(previews));
+        }
+
+        return this with { PublishedInteriorPreviews = published };
     }
 
     public BookProcessingState SelectCover(string coverReference)
