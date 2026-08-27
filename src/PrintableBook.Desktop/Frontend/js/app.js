@@ -1120,7 +1120,6 @@
       }
       updateGlobalProcessStatus();
       if (document.querySelector(".nav-item-active")?.dataset.route === "process") render("process", false);
-      if (document.querySelector(".nav-item-active")?.dataset.route === "books") render("books", false);
       status.textContent = "Connected";
     } else if (ok && command === "brand.settings") {
       state.brandSettings = valueFor(response, "payload", "{}");
@@ -1192,7 +1191,6 @@
     state.selectedBrand = brandSelect.value;
     render(document.querySelector(".nav-item-active")?.dataset.route ?? "books", false);
   });
-  window.setInterval(() => { if (valueFor(window.processSnapshot, "isActive", false) || valueFor(window.processSnapshot, "isCancelling", false)) send("process.get"); }, 1000);
   send("app.ping");
   state.applicationLoadState = "loading";
   render("books", false);
