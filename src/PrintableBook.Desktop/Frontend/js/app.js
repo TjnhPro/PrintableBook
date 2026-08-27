@@ -484,6 +484,17 @@
     return `<div class="book-drawer-layer"><section class="book-drawer" role="dialog" aria-labelledby="book-drawer-title"><header class="book-drawer-header"><span class="book-drawer-preview">${localImageMarkup(cover, `Cover for ${valueFor(book, "name", "")}`)}</span><div><p class="eyebrow">Book detail</p><h2 id="book-drawer-title" tabindex="-1">${escapeHtml(valueFor(book, "name", ""))}</h2><div>${badge(productionStatus(summary, book))} ${badge(bookFrameState(summary))}</div></div><div class="book-drawer-actions"><span data-book-interior-unsaved role="status" ${dirty ? "" : "hidden"}>Unsaved changes</span><button class="button-primary" data-action="save-book-interior-settings" data-book-id="${escapeHtml(bookId(book))}" ${saveDisabled ? "disabled" : ""} aria-busy="${state.bookInteriorSavePending}">${state.bookInteriorSavePending ? "Saving…" : "Save changes"}</button><button class="button-secondary" data-action="close-book-drawer" aria-label="Close Book detail">Close</button></div></header><div class="book-drawer-body">${renderBookTabs(book, summary)}</div></section></div>`;
   };
 
+  const filteredBooks = () => books().filter((book) => {
+    const summary = summaryFor(book);
+    return valueFor(book, "name", "").toLowerCase().includes(state.bookFilter.toLowerCase()) &&
+      (state.bookStatus === "All" || productionStatus(summary, book) === state.bookStatus);
+  }).sort((left, right) => {
+    const leftSummary = summaryFor(left);
+    const rightSummary = summaryFor(right);
+    if (state.bookSort === "name") return valueFor(left, "name", "").localeCompare(valueFor(right, "name", ""));
+    return new Date(valueFor(rightSummary, "lastRunAt", 0)).getTime() - new Date(valueFor(leftSummary, "lastRunAt", 0)).getTime();
+  });
+
   const renderBooks = () => {
     const existingDrawerBody = document.querySelector(".book-drawer-body");
     if (existingDrawerBody && Number.isFinite(existingDrawerBody.scrollTop)) state.bookDrawerScrollTop = existingDrawerBody.scrollTop;
@@ -497,16 +508,7 @@
     const allBooks = books();
     const statuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
     const statusCounts = statuses.map((name) => ({ name, count: name === "All" ? allBooks.length : allBooks.filter((book) => productionStatus(summaryFor(book), book) === name).length }));
-    const filtered = allBooks.filter((book) => {
-      const summary = summaryFor(book);
-      return valueFor(book, "name", "").toLowerCase().includes(state.bookFilter.toLowerCase()) &&
-        (state.bookStatus === "All" || productionStatus(summary, book) === state.bookStatus);
-    }).sort((left, right) => {
-      const leftSummary = summaryFor(left);
-      const rightSummary = summaryFor(right);
-      if (state.bookSort === "name") return valueFor(left, "name", "").localeCompare(valueFor(right, "name", ""));
-      return new Date(valueFor(rightSummary, "lastRunAt", 0)).getTime() - new Date(valueFor(leftSummary, "lastRunAt", 0)).getTime();
-    });
+    const filtered = filteredBooks();
     const pageSize = 12;
     const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
     state.bookPage = Math.min(Math.max(1, state.bookPage), totalPages);
@@ -526,7 +528,15 @@
     };
     const start = filtered.length ? (state.bookPage - 1) * pageSize + 1 : 0;
     const end = Math.min(state.bookPage * pageSize, filtered.length);
-    content.innerHTML = `<section class="book-library-page"><div class="page-header"><div><h1>Books</h1><p>Filter local Books, validate only what needs review, and send selected Books to Interior Processing.</p></div><div class="page-actions">${refreshAction()}<button class="button-secondary" data-action="clear-cache" ${cacheCleanupBlocked() ? "disabled" : ""}>${state.cacheCleanupActive ? "Clearing…" : "Clear Cache"}</button><button class="button-secondary" data-action="validate-all">Validate all</button><button class="button-primary" data-action="go-process">Process Interior</button></div></div><section class="book-toolbar"><label class="field"><span>Search books</span><input class="control" data-action="filter-books" value="${escapeHtml(state.bookFilter)}" placeholder="Book name"></label><label class="field"><span>Sort</span><select class="control" data-action="book-sort"><option value="activity" ${state.bookSort === "activity" ? "selected" : ""}>Last activity</option><option value="name" ${state.bookSort === "name" ? "selected" : ""}>Book name</option></select></label><div class="status-filters book-status-filters" role="group" aria-label="Book status filters">${statusCounts.map(({ name, count }) => `<button class="${state.bookStatus === name ? "active" : ""}" data-action="book-status" data-book-status="${name}" aria-pressed="${state.bookStatus === name}">${name}<strong>${count}</strong></button>`).join("")}</div><div class="asset-view-toggle" aria-label="Book view"><button class="${state.bookView === "grid" ? "active" : ""}" data-action="book-view" data-book-view="grid" aria-pressed="${state.bookView === "grid"}">Grid</button><button class="${state.bookView === "list" ? "active" : ""}" data-action="book-view" data-book-view="list" aria-pressed="${state.bookView === "list"}">Compact list</button></div></section><section class="book-library-results"><div class="book-library-grid-scroll"><section class="${state.bookView === "grid" ? "book-grid" : "book-compact-list"}">${pageItems.length ? pageItems.map(card).join("") : `<div class="book-grid-empty"><strong>No Books match this view.</strong><span>Adjust the search or status filter, or refresh the local source folders.</span></div>`}</section></div><footer class="book-pagination" data-book-total-pages="${totalPages}"><span>${start}–${end} of ${filtered.length}</span><div><button class="button-secondary" data-action="book-page" data-book-page="first" ${state.bookPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="book-page" data-book-page="previous" ${state.bookPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.bookPage} of ${totalPages}</span><button class="button-secondary" data-action="book-page" data-book-page="next" ${state.bookPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="book-page" data-book-page="last" ${state.bookPage === totalPages ? "disabled" : ""}>Last</button></div></footer></section></section>`;
+    const selectedCount = state.selectedBookIds.size;
+    const pageSelectedCount = pageItems.filter((item) => state.selectedBookIds.has(bookId(item))).length;
+    const allPageSelected = pageItems.length > 0 && pageSelectedCount === pageItems.length;
+    const processLabel = selectedCount ? `Process Interior · ${selectedCount} selected` : "Process Interior";
+    const allFilteredSelected = filtered.length > 0 && filtered.every((item) => state.selectedBookIds.has(bookId(item)));
+    const selectionToolbar = `<section class="book-selection-toolbar" aria-label="Book selection"><label class="book-selection-page"><input type="checkbox" data-action="toggle-book-page-selection" ${allPageSelected ? "checked" : ""} ${pageItems.length ? "" : "disabled"}> Select page <span>(${pageItems.length})</span></label><button class="button-secondary" data-action="select-all-filtered-books" ${filtered.length && !allFilteredSelected ? "" : "disabled"}>Select all ${filtered.length} matching</button><span class="book-selection-count" role="status" aria-live="polite">${selectedCount} selected</span><button class="button-secondary" data-action="clear-book-selection" ${selectedCount ? "" : "disabled"}>Clear selection</button></section>`;
+    content.innerHTML = `<section class="book-library-page"><div class="page-header"><div><h1>Books</h1><p>Filter local Books, validate only what needs review, and send selected Books to Interior Processing.</p></div><div class="page-actions">${refreshAction()}<button class="button-secondary" data-action="clear-cache" ${cacheCleanupBlocked() ? "disabled" : ""}>${state.cacheCleanupActive ? "Clearing…" : "Clear Cache"}</button><button class="button-secondary" data-action="validate-all">Validate all</button><button class="button-primary" data-action="go-process">${processLabel}</button></div></div><section class="book-toolbar"><label class="field"><span>Search books</span><input class="control" data-action="filter-books" value="${escapeHtml(state.bookFilter)}" placeholder="Book name"></label><label class="field"><span>Sort</span><select class="control" data-action="book-sort"><option value="activity" ${state.bookSort === "activity" ? "selected" : ""}>Last activity</option><option value="name" ${state.bookSort === "name" ? "selected" : ""}>Book name</option></select></label><div class="status-filters book-status-filters" role="group" aria-label="Book status filters">${statusCounts.map(({ name, count }) => `<button class="${state.bookStatus === name ? "active" : ""}" data-action="book-status" data-book-status="${name}" aria-pressed="${state.bookStatus === name}">${name}<strong>${count}</strong></button>`).join("")}</div><div class="asset-view-toggle" aria-label="Book view"><button class="${state.bookView === "grid" ? "active" : ""}" data-action="book-view" data-book-view="grid" aria-pressed="${state.bookView === "grid"}">Grid</button><button class="${state.bookView === "list" ? "active" : ""}" data-action="book-view" data-book-view="list" aria-pressed="${state.bookView === "list"}">Compact list</button></div></section>${selectionToolbar}<section class="book-library-results"><div class="book-library-grid-scroll"><section class="${state.bookView === "grid" ? "book-grid" : "book-compact-list"}">${pageItems.length ? pageItems.map(card).join("") : `<div class="book-grid-empty"><strong>No Books match this view.</strong><span>Adjust the search or status filter, or refresh the local source folders.</span></div>`}</section></div><footer class="book-pagination" data-book-total-pages="${totalPages}"><span>${start}–${end} of ${filtered.length}</span><div><button class="button-secondary" data-action="book-page" data-book-page="first" ${state.bookPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="book-page" data-book-page="previous" ${state.bookPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.bookPage} of ${totalPages}</span><button class="button-secondary" data-action="book-page" data-book-page="next" ${state.bookPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="book-page" data-book-page="last" ${state.bookPage === totalPages ? "disabled" : ""}>Last</button></div></footer></section></section>`;
+    const pageSelection = document.querySelector('[data-action="toggle-book-page-selection"]');
+    if (pageSelection) pageSelection.indeterminate = pageSelectedCount > 0 && !allPageSelected;
     const selected = selectedBook();
     if (selected) content.insertAdjacentHTML("beforeend", renderBookDrawer(selected, summaryFor(selected)));
     if (state.drawerFocusTitle) {
@@ -834,6 +844,23 @@
       const id = target.dataset.bookId;
       if (state.selectedBookIds.has(id)) state.selectedBookIds.delete(id); else state.selectedBookIds.add(id);
       status.textContent = state.selectedBookIds.size ? `${state.selectedBookIds.size} Book${state.selectedBookIds.size === 1 ? "" : "s"} selected` : "Selection cleared";
+      render("books", false);
+    }
+    if (action === "toggle-book-page-selection") {
+      const pageSize = 12;
+      const pageItems = filteredBooks().slice((state.bookPage - 1) * pageSize, state.bookPage * pageSize);
+      pageItems.forEach((book) => { if (target.checked) state.selectedBookIds.add(bookId(book)); else state.selectedBookIds.delete(bookId(book)); });
+      status.textContent = state.selectedBookIds.size ? `${state.selectedBookIds.size} Book${state.selectedBookIds.size === 1 ? "" : "s"} selected` : "Selection cleared";
+      render("books", false);
+    }
+    if (action === "select-all-filtered-books") {
+      filteredBooks().forEach((book) => state.selectedBookIds.add(bookId(book)));
+      status.textContent = `${state.selectedBookIds.size} Book${state.selectedBookIds.size === 1 ? "" : "s"} selected`;
+      render("books", false);
+    }
+    if (action === "clear-book-selection") {
+      state.selectedBookIds.clear();
+      status.textContent = "Selection cleared";
       render("books", false);
     }
     if (action === "queue-book") { const id = target.dataset.bookId; if (target.checked) state.selectedBookIds.add(id); else state.selectedBookIds.delete(id); }
