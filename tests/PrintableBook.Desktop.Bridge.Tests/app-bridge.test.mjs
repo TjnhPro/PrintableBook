@@ -285,7 +285,7 @@ test("Book card selection and detail entry do not redraw the Book Library", () =
   assert.equal(getFullRenderCount(), rendersBeforeDetail, "opening Book detail must preserve the grid and its scroll position");
 });
 
-test("Book Library selects a page or every matching Book and always clears the selection", () => {
+test("Book Library keeps page selection beside its compact search control", () => {
   const { messageHandler, content, contentListeners, status, getFullRenderCount } = loadBridge("books");
   const books = Array.from({ length: 13 }, (_, index) => ({ id: { value: `Book ${index + 1}` }, name: `Book ${index + 1}` }));
   messageHandler({ data: { version: 1, id: "book-bulk-selection", ok: true, command: "app.snapshot", payload: {
@@ -293,9 +293,11 @@ test("Book Library selects a page or every matching Book and always clears the s
     bookSummaries: books.map((book) => ({ bookId: book.id, interiorSourcePageCount: 12, activeInteriorSourcePageCount: 12, validationStatus: "Ready", workspaceStatus: "Not started", assets: [] }))
   } } });
 
+  assert.match(content.innerHTML, /class="book-selection-page book-toolbar-selection"/);
   assert.match(content.innerHTML, /Select page <span>\(12\)<\/span>/);
-  assert.match(content.innerHTML, /Select all 13 matching/);
-  assert.match(content.innerHTML, /data-action="clear-book-selection" disabled/);
+  assert.doesNotMatch(content.innerHTML, /book-selection-toolbar/);
+  assert.doesNotMatch(content.innerHTML, /select-all-filtered-books/);
+  assert.doesNotMatch(content.innerHTML, /clear-book-selection/);
 
   const rendersBeforeBulkSelection = getFullRenderCount();
   const selectPage = { dataset: { action: "toggle-book-page-selection" }, checked: true, closest: () => selectPage };
@@ -303,15 +305,6 @@ test("Book Library selects a page or every matching Book and always clears the s
   assert.match(status.textContent, /12 Books selected/);
   assert.equal(getFullRenderCount(), rendersBeforeBulkSelection);
 
-  const selectAll = { dataset: { action: "select-all-filtered-books" }, closest: () => selectAll };
-  contentListeners.click({ target: selectAll });
-  assert.match(status.textContent, /13 Books selected/);
-  assert.equal(getFullRenderCount(), rendersBeforeBulkSelection);
-
-  const clear = { dataset: { action: "clear-book-selection" }, closest: () => clear };
-  contentListeners.click({ target: clear });
-  assert.equal(status.textContent, "Selection cleared");
-  assert.equal(getFullRenderCount(), rendersBeforeBulkSelection);
 });
 
 test("books toolbar starts one confirmed cache cleanup and polls it", () => {
