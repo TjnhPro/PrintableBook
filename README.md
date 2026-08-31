@@ -87,6 +87,16 @@ node src/PrintableBook.Desktop/Frontend/test-production-ui.mjs
 
 Corpus ảnh do user cung cấp ở `TestResults/` thuộc `LocalCorpus`, chỉ chạy local opt-in và không phải dependency của CI. Xem [Testing policy](docs/architecture.md#kiểm-thử).
 
+## Kiểm thử artifact với Book mẫu
+
+`.booksample/` là dữ liệu local bị Git ignore, chỉ dùng để smoke test **artifact đã publish hoặc giải nén**; không được copy vào Debug output hay đóng gói mặc định trong bản phát hành. Sau khi publish hoặc giải nén artifact vào một thư mục riêng, cài Brand và Book mẫu bằng:
+
+```powershell
+pwsh ./scripts/install-artifact-samples.ps1 -ArtifactRoot "C:\PrintableBook-test"
+```
+
+Script mặc định không ghi đè Brand hoặc Book mẫu cùng tên đã có. Với một artifact test sạch nhưng cần cập nhật lại sample cùng tên, dùng `-Force`. Sau đó chạy `PrintableBook.exe` từ artifact root, nhấn **Refresh**, validate Brand `demo`, rồi kiểm tra Book `book-sample` trong Books và Process Interior.
+
 ## Tài liệu kỹ thuật
 
 - [Kiến trúc v0.1](docs/architecture.md)
