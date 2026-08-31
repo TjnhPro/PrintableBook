@@ -6,6 +6,7 @@ using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Services;
+using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 using PrintableBook.Desktop.BackgroundTasks;
@@ -20,7 +21,7 @@ public sealed class ProcessingSessionTaskManagerIntegrationTests
         var application = new CancellationResultApplication();
         var services = new ServiceCollection()
             .AddKeyedSingleton<IBackgroundTaskWorker>(BackgroundTaskKind.LibraryRefresh, new UnusedWorker(BackgroundTaskKind.LibraryRefresh))
-            .AddKeyedSingleton<IBackgroundTaskWorker>(BackgroundTaskKind.ProcessingSession, new ProcessingSessionWorker(new SnapshotProvider(CreateSnapshot()), application, new NoFrameResolver(), new NoFileSystem(), new NoImageInspector()))
+            .AddKeyedSingleton<IBackgroundTaskWorker>(BackgroundTaskKind.ProcessingSession, new ProcessingSessionWorker(new SnapshotProvider(CreateSnapshot()), application, new NoFileSystem(), new NoImageInspector(), new ValidatedBrand()))
             .BuildServiceProvider();
         using var manager = new BackgroundTaskManager(services, new NullDiagnostics());
 
@@ -89,6 +90,15 @@ public sealed class ProcessingSessionTaskManagerIntegrationTests
     {
         public ValueTask<ImageSize> GetSizeAsync(FileReference image, CancellationToken cancellationToken = default) => ValueTask.FromResult(new ImageSize(1024, 1024));
         public ValueTask<ImageInfo> GetInfoAsync(FileReference image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class ValidatedBrand : IBrandValidationService
+    {
+        public ValueTask<BrandValidationState> CheckStateAsync(DirectoryReference brandDirectory, GlobalSettings settings, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(new BrandValidationState(BrandValidationStatus.Validated));
+
+        public ValueTask<BrandValidationResult> ValidateAsync(DirectoryReference brandDirectory, GlobalSettings settings, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class CancellationResultApplication : IPrintableBookApplication

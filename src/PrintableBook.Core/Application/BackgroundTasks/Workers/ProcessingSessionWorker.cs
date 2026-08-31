@@ -3,6 +3,7 @@ using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Services;
+using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 
@@ -11,9 +12,9 @@ namespace PrintableBook.Core.Application.BackgroundTasks.Workers;
 public sealed class ProcessingSessionWorker(
     IApplicationSnapshotProvider snapshotProvider,
     IPrintableBookApplication application,
-    IBrandFrameResolver brandFrameResolver,
     IFileSystem fileSystem,
-    IImageInspector imageInspector) : BackgroundTaskWorker<ProcessingSessionWorkerRequest, BookProcessingQueueResult>
+    IImageInspector imageInspector,
+    IBrandValidationService brandValidationService) : BackgroundTaskWorker<ProcessingSessionWorkerRequest, BookProcessingQueueResult>
 {
     public override BackgroundTaskKind Kind => BackgroundTaskKind.ProcessingSession;
 
@@ -45,10 +46,16 @@ public sealed class ProcessingSessionWorker(
 
         Publish();
         var brand = snapshot.Discovery.Brands.First(item => string.Equals(item.Name, request.BrandName, StringComparison.Ordinal));
-        var frame = await brandFrameResolver.ResolveCompatibleFrameAsync(
-            brand,
-            new ImageSize(settings.ArtworkMaximumSide, settings.ArtworkMaximumSide),
-            cancellationToken);
+        var brandState = await brandValidationService.CheckStateAsync(brand.Directory, settings, cancellationToken);
+        if (brandState.Status != BrandValidationStatus.Validated)
+        {
+            Fail(request, context, "process_brand_not_validated", $"Brand '{brand.Name}' must be validated before processing.");
+        }
+
+        // Brand validation already performed the expensive frame and background checks.
+        // Processing receives only the certified Brand-owned files; Book-owned custom Intro
+        // sources remain validated below because they are outside the Brand contract.
+        var frame = new FileReference(Path.Combine(brand.Directory.Value, "frame.png"));
 
         var summaries = snapshot.BookSummaries.ToDictionary(summary => summary.BookId.Value, StringComparer.Ordinal);
         var introTemplatePagesByBook = new Dictionary<string, IReadOnlyList<FileReference>>(StringComparer.Ordinal);
@@ -100,6 +107,11 @@ public sealed class ProcessingSessionWorker(
                 pages = selection.Assets.Select(asset => new FileReference(asset.SourceReference)).ToArray();
                 customIntroFromBookInteriorByBook[book.Id.Value] = false;
             }
+            if (!summary.HasIntro)
+            {
+                introTemplatePagesByBook[book.Id.Value] = pages;
+                continue;
+            }
             foreach (var page in pages)
             {
                 if (!validatedIntroSources.Add(page.Value)) continue;
@@ -134,35 +146,7 @@ public sealed class ProcessingSessionWorker(
         FileReference? background = null;
         if (books.Any(book => summaries[book.Id.Value].HasBackground))
         {
-            var candidate = new FileReference(Path.Combine(brand.Directory.Value, "background.png"));
-            if (!await fileSystem.FileExistsAsync(candidate, cancellationToken))
-            {
-                Fail(request, context, "process_background_missing", "The selected Brand does not contain background.png.");
-            }
-
-            try
-            {
-                var size = await imageInspector.GetSizeAsync(candidate, cancellationToken);
-                var expected = new ImageSize(settings.FinalPageWidth, settings.FinalPageHeight);
-                if (size != expected)
-                {
-                    Fail(request, context, "process_background_invalid", $"Brand background.png must be {expected.Width}×{expected.Height} pixels.");
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (BackgroundTaskFailureException)
-            {
-                throw;
-            }
-            catch (Exception)
-            {
-                Fail(request, context, "process_background_invalid", "The selected Brand background.png cannot be read.");
-            }
-
-            background = candidate;
+            background = new FileReference(Path.Combine(brand.Directory.Value, "background.png"));
         }
 
         var processingRequest = new BookProcessingQueueRequest(books.Select(book => new PrintableBookProcessingCommand(
