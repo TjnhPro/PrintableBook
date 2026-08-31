@@ -60,20 +60,34 @@ public sealed class PhysicalApplicationRootDiscovery(IFileSystem fileSystem, IBo
         var templateDirectory = new DirectoryReference(Path.Combine(brandDirectory.Value, "IntroTemplate"));
         if (!await fileSystem.DirectoryExistsAsync(templateDirectory, cancellationToken)) return [];
 
-        var assets = new List<DiscoveredIntroTemplateAsset>();
-        await foreach (var source in fileSystem.EnumerateFilesAsync(templateDirectory, cancellationToken))
-        {
-            var sourceReference = source.Value;
-            assets.Add(new DiscoveredIntroTemplateAsset(
-                IntroTemplateSourceKey.FromTemplateRoot(templateDirectory, source),
-                sourceReference,
-                Path.GetFileName(sourceReference),
-                new Uri(Path.GetFullPath(sourceReference)).AbsoluteUri));
-        }
+        var files = new List<FileReference>();
+        await CollectIntroImagesAsync(templateDirectory, files, cancellationToken);
+        var assets = files.Select(source => new DiscoveredIntroTemplateAsset(
+            IntroTemplateSourceKey.FromTemplateRoot(templateDirectory, source),
+            source.Value,
+            Path.GetFileName(source.Value),
+            new Uri(Path.GetFullPath(source.Value)).AbsoluteUri)).ToList();
 
         return assets
             .OrderBy(asset => asset.FileName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(asset => asset.Key, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
+
+    private async ValueTask CollectIntroImagesAsync(DirectoryReference directory, List<FileReference> files, CancellationToken cancellationToken)
+    {
+        await foreach (var file in fileSystem.EnumerateFilesAsync(directory, cancellationToken))
+        {
+            if (IsSupportedIntroImage(file.Value)) files.Add(file);
+        }
+        await foreach (var child in fileSystem.EnumerateDirectoriesAsync(directory, cancellationToken))
+        {
+            await CollectIntroImagesAsync(child, files, cancellationToken);
+        }
+    }
+
+    private static bool IsSupportedIntroImage(string path) =>
+        string.Equals(Path.GetExtension(path), ".png", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Path.GetExtension(path), ".jpg", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Path.GetExtension(path), ".jpeg", StringComparison.OrdinalIgnoreCase);
 }
