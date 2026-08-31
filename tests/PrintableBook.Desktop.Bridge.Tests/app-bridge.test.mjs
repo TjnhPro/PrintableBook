@@ -484,6 +484,28 @@ test("saved brand settings survive the application refresh", () => {
   assert.match(content.innerHTML, /frame.*true/);
 });
 
+test("Brands displays certification state and validates the selected Brand", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("brands");
+  messageHandler({ data: { version: 1, id: "initial-refresh", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [{ name: "Brand One", assets: [] }], books: [] }, globalSettings: {}, bookSummaries: [],
+    brandSummaries: [{ brandName: "Brand One", validationStatus: 2 }]
+  } } });
+
+  assert.match(content.innerHTML, /Needs validation/);
+  assert.match(content.innerHTML, /Validate Brand/);
+  const validate = { dataset: { action: "validate-brand" }, closest: () => validate };
+  contentListeners.click({ target: validate });
+  assert.equal(messages.at(-1).command, "brand.validate");
+  assert.equal(messages.at(-1).payload.brandName, "Brand One");
+
+  const request = messages.at(-1);
+  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "brand.validation.result", payload: { isSuccess: false, failures: [{ message: "frame.png is missing" }] } } });
+  assert.match(content.innerHTML, /frame\.png is missing/);
+
+  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "brand.validation.result", payload: { isSuccess: true, failures: [] } } });
+  assert.equal(messages.at(-1).command, "app.refresh");
+});
+
 test("Books ignores background process snapshots while Process polling stays active", () => {
   const { messageHandler, content, getFullRenderCount, intervals, messages, routeButtons } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "books", ok: true, command: "app.snapshot", payload: {

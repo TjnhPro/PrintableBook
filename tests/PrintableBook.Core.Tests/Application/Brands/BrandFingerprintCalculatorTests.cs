@@ -50,8 +50,18 @@ public sealed class BrandFingerprintCalculatorTests
             ("C:\\brands\\demo\\background.png", 11),
             ("C:\\brands\\demo\\IntroTemplate\\a.png", 12),
             ("C:\\brands\\demo\\AppPlus\\ignored.png", 500));
+        var excludedOnly = new MetadataFileSystem(
+            ("C:\\brands\\demo\\frame.png", 10),
+            ("C:\\brands\\demo\\background.png", 11),
+            ("C:\\brands\\demo\\IntroTemplate\\a.png", 12),
+            ("C:\\brands\\demo\\AppPlus\\ignored.png", 500),
+            ("C:\\brands\\demo\\BackCover.psd", 501),
+            ("C:\\brands\\demo\\brand.json", 502),
+            ("C:\\brands\\demo\\brand.validation.json", 503),
+            ("C:\\brands\\demo\\untracked.png", 504));
 
         Assert.NotEqual(await CalculateAsync(baseline), await CalculateAsync(changed));
+        Assert.Equal(await CalculateAsync(baseline), await CalculateAsync(excludedOnly));
         Assert.NotEqual(await CalculateAsync(baseline), await CalculateAsync(baseline, GlobalSettings.Default with { ArtworkMaximumSide = 2000 }));
     }
 

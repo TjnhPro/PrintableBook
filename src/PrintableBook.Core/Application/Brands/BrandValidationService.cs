@@ -60,6 +60,10 @@ public sealed class BrandValidationService(
                     var size = await imageInspector.GetSizeAsync(file, cancellationToken);
                     if (!dimensionRule.AllowedSizes.Contains(size)) failures.Add(new(BrandValidationTargetResolver.NormalizeRelativePath(brandDirectory, file), "dimensions", "brand_image_dimensions_invalid", "Brand image dimensions do not match the required size."));
                 }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
                 catch (Exception)
                 {
                     failures.Add(new(BrandValidationTargetResolver.NormalizeRelativePath(brandDirectory, file), "dimensions", "brand_image_unreadable", "Brand image could not be read."));

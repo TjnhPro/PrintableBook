@@ -131,6 +131,14 @@ interior-shuffled-2
 background
 ```
 
+## Brand validation contract
+
+Brand assets have an explicit two-stage contract, independent from Book workspace state. **Brand Validate** is the deep certification action: it verifies the V1 tracked scope (`IntroTemplate/**` supported images, `frame.png`, and `background.png`) and their required image dimensions, then persists `brand.validation.json` beside the Brand.
+
+**Brand CheckState** is deliberately cheap and state-first. With no state it returns `NotValidated` without scanning image content. For a current certification it compares only the validation definition and a metadata fingerprint (normalized tracked path, file length, and last-write UTC); it never decodes images or reads their bytes. A changed metadata fingerprint, explicit invalidation, or a changed `DefinitionChangedAtUtc` returns `NeedsValidation`.
+
+Interior processing performs this cheap state check again immediately after obtaining its fresh snapshot. It accepts only `Validated` Brands. Certified Brand-owned frame/background/automatic Intro assets are not deeply inspected again at process start; custom Intro pages selected from a Book remain Book-owned and continue to receive their own validation. Any semantic change to tracked scope or validation rules must update `DefinitionChangedAtUtc` so prior certifications cannot be reused.
+
 ## Thực thi nền và concurrency
 
 `BackgroundTaskManager` của Desktop là scheduling/task boundary. Nó áp policy lane, duplicate/conflict và lifecycle cho `ProcessingSessionWorker`; UI hay WebView polling không sở hữu worker thread. Worker tạo snapshot queue, kiểm tra Brand/Intro/background, sau đó gọi orchestration của Core.
