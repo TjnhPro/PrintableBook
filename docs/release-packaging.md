@@ -28,6 +28,15 @@ PrintableBook-<version>-win-x64/
 
 `brands/`, `sources/`, `settings.json`, `.workspace/` và output của người dùng không nằm trong ZIP. Chúng được tạo hoặc đặt cạnh executable sau khi giải nén vào thư mục có quyền ghi.
 
+## Dữ liệu WebView2 lúc chạy
+
+Chromium profile, GPU cache và crash data của WebView2 được lưu cố định tại
+`%LOCALAPPDATA%\PrintableBook\WebView2`, không phải cạnh `PrintableBook.exe`.
+Vì vậy gói portable giữ nguyên contract chỉ gồm EXE và `Frontend/`, đồng thời
+profile vẫn được giữ lại qua các lần cập nhật ZIP. Ứng dụng không tự di chuyển
+hay xóa các thư mục `PrintableBook.exe.WebView2` cũ để tránh làm mất dữ liệu
+trong profile hiện có.
+
 ## Điều kiện chạy
 
 - Windows x64.
