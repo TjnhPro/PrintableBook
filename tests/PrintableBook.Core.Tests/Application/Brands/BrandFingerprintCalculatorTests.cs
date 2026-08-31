@@ -65,6 +65,39 @@ public sealed class BrandFingerprintCalculatorTests
         Assert.NotEqual(await CalculateAsync(baseline), await CalculateAsync(baseline, GlobalSettings.Default with { ArtworkMaximumSide = 2000 }));
     }
 
+    [Fact]
+    public async Task Fingerprint_changes_when_a_tracked_intro_file_is_added_removed_renamed_or_touched()
+    {
+        var baseline = new MetadataFileSystem(
+            ("C:\\brands\\demo\\frame.png", 10),
+            ("C:\\brands\\demo\\background.png", 11),
+            ("C:\\brands\\demo\\IntroTemplate\\a.png", 12));
+        var added = new MetadataFileSystem(
+            ("C:\\brands\\demo\\frame.png", 10),
+            ("C:\\brands\\demo\\background.png", 11),
+            ("C:\\brands\\demo\\IntroTemplate\\a.png", 12),
+            ("C:\\brands\\demo\\IntroTemplate\\b.png", 13));
+        var removed = new MetadataFileSystem(
+            ("C:\\brands\\demo\\frame.png", 10),
+            ("C:\\brands\\demo\\background.png", 11));
+        var renamed = new MetadataFileSystem(
+            ("C:\\brands\\demo\\frame.png", 10),
+            ("C:\\brands\\demo\\background.png", 11),
+            ("C:\\brands\\demo\\IntroTemplate\\renamed.png", 12));
+        var touched = new MetadataFileSystem(
+            ("C:\\brands\\demo\\frame.png", 10),
+            ("C:\\brands\\demo\\background.png", 11),
+            ("C:\\brands\\demo\\IntroTemplate\\a.png", 12));
+        touched.Touch("C:\\brands\\demo\\IntroTemplate\\a.png");
+
+        var baselineFingerprint = await CalculateAsync(baseline);
+
+        Assert.NotEqual(baselineFingerprint, await CalculateAsync(added));
+        Assert.NotEqual(baselineFingerprint, await CalculateAsync(removed));
+        Assert.NotEqual(baselineFingerprint, await CalculateAsync(renamed));
+        Assert.NotEqual(baselineFingerprint, await CalculateAsync(touched));
+    }
+
     private static ValueTask<string> CalculateAsync(MetadataFileSystem files, GlobalSettings? settings = null)
     {
         var resolver = new BrandValidationTargetResolver(files);
@@ -77,6 +110,12 @@ public sealed class BrandFingerprintCalculatorTests
             value => value.Path,
             value => new FileMetadata(value.Length, new DateTimeOffset(2026, 8, 31, 4, 32, 0, TimeSpan.Zero)),
             StringComparer.OrdinalIgnoreCase);
+
+        public void Touch(string path)
+        {
+            var current = metadata[path];
+            metadata[path] = current with { LastWriteTimeUtc = current.LastWriteTimeUtc.AddSeconds(1) };
+        }
 
         public ValueTask<bool> FileExistsAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult(metadata.ContainsKey(file.Value));
         public ValueTask<FileMetadata?> GetFileMetadataAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult(metadata.TryGetValue(file.Value, out var value) ? (FileMetadata?)value : null);
