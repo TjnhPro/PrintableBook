@@ -10,6 +10,7 @@ using PrintableBook.Core.Application.Storage;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
+using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 
@@ -275,6 +276,24 @@ public sealed class BridgeMessageContractTests
         Assert.Equal("brand.settings.saved", saved.Command);
         Assert.Equal(json, Assert.IsType<string>(saved.Payload));
         Assert.Equal(json, settings.SavedJson);
+        Assert.Equal(0, manager.Starts);
+    }
+
+    [Fact]
+    public async Task Brand_validate_uses_the_retained_snapshot_and_returns_the_validation_result()
+    {
+        var validation = new StubBrandValidationService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(manager),
+            brandValidationService: validation);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"brand-validate","command":"brand.validate","payload":{"brandName":"Brand One"}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("brand.validation.result", response.Command);
+        Assert.True(Assert.IsType<BrandValidationResult>(response.Payload).IsSuccess);
+        Assert.Equal(new DirectoryReference("brands/Brand One"), validation.Directory);
         Assert.Equal(0, manager.Starts);
     }
 
@@ -767,6 +786,20 @@ public sealed class BridgeMessageContractTests
             LoadedDirectory = brandDirectory;
             SavedJson = json;
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class StubBrandValidationService : IBrandValidationService
+    {
+        public DirectoryReference? Directory { get; private set; }
+
+        public ValueTask<BrandValidationState> CheckStateAsync(DirectoryReference brandDirectory, GlobalSettings settings, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(new BrandValidationState(BrandValidationStatus.Validated));
+
+        public ValueTask<BrandValidationResult> ValidateAsync(DirectoryReference brandDirectory, GlobalSettings settings, CancellationToken cancellationToken = default)
+        {
+            Directory = brandDirectory;
+            return ValueTask.FromResult(new BrandValidationResult(new BrandValidationState(BrandValidationStatus.Validated), []));
         }
     }
 
