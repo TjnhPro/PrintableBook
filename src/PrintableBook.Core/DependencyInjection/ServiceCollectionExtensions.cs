@@ -7,6 +7,7 @@ using PrintableBook.Core.Application.BackgroundTasks.Workers;
 using PrintableBook.Core.Application.Pipelines;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Services;
+using PrintableBook.Core.Application.Brands;
 
 namespace PrintableBook.Core.DependencyInjection;
 
@@ -19,6 +20,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IProcessingSessionGate, ProcessingSessionGate>();
         services.AddSingleton<IArtworkClassifier, ArtworkClassifier>();
         services.AddSingleton<IApplicationSnapshotService, ApplicationSnapshotService>();
+        services.AddSingleton<BrandValidationTargetResolver>();
+        services.AddSingleton<BrandFingerprintCalculator>();
+        services.AddSingleton<IBrandValidationService, BrandValidationService>();
         services.AddSingleton<IBookCoverSelectionService, BookCoverSelectionService>();
         services.AddSingleton<IInteriorFrameModeService, InteriorFrameModeService>();
         services.AddSingleton<IBookInteriorSettingsService, BookInteriorSettingsService>();
