@@ -85,7 +85,13 @@ public partial class MainWindow : Window
     {
         try
         {
-            await Browser.EnsureCoreWebView2Async();
+            var userDataFolder = GetWebViewUserDataFolder();
+            Directory.CreateDirectory(userDataFolder);
+            var environment = await CoreWebView2Environment.CreateAsync(
+                browserExecutableFolder: null,
+                userDataFolder: userDataFolder);
+
+            await Browser.EnsureCoreWebView2Async(environment);
             Browser.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
 
             var pagePath = Path.Combine(AppContext.BaseDirectory, "Frontend", "index.html");
@@ -99,6 +105,16 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
+    }
+
+    internal static string GetWebViewUserDataFolder(string localApplicationData)
+    {
+        return Path.Combine(localApplicationData, "PrintableBook", "WebView2");
+    }
+
+    private static string GetWebViewUserDataFolder()
+    {
+        return GetWebViewUserDataFolder(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
     }
 
     private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)

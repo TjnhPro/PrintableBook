@@ -13,6 +13,18 @@ public sealed class DesktopStartupContractTests
     }
 
     [Fact]
+    public void MainWindow_builds_the_webview_profile_under_the_supplied_local_application_data_root()
+    {
+        var localApplicationData = Path.Combine("C:", "Users", "PrintableBookTest", "AppData", "Local");
+
+        var profilePath = MainWindow.GetWebViewUserDataFolder(localApplicationData);
+
+        Assert.Equal(
+            Path.Combine(localApplicationData, "PrintableBook", "WebView2"),
+            profilePath);
+    }
+
+    [Fact]
     public void MainWindow_navigates_the_webview_without_waiting_for_interrupted_processing_recovery()
     {
         var repositoryRoot = Path.GetFullPath(Path.Combine(
