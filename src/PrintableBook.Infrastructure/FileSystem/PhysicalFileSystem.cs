@@ -10,6 +10,16 @@ public sealed class PhysicalFileSystem : IFileSystem
         return ValueTask.FromResult(File.Exists(file.Value));
     }
 
+    public ValueTask<FileMetadata?> GetFileMetadataAsync(FileReference file, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var info = new FileInfo(file.Value);
+        return ValueTask.FromResult(
+            info.Exists
+                ? new FileMetadata(info.Length, new DateTimeOffset(info.LastWriteTimeUtc))
+                : (FileMetadata?)null);
+    }
+
     public ValueTask<bool> DirectoryExistsAsync(DirectoryReference directory, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

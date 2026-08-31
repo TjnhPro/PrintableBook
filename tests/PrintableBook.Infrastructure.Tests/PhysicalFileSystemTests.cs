@@ -38,6 +38,29 @@ public sealed class PhysicalFileSystemTests : IAsyncLifetime
         Assert.Equal("new", await fileSystem.ReadTextAsync(target));
     }
 
+    [Fact]
+    public async Task GetFileMetadataAsync_returns_length_and_utc_last_write_time()
+    {
+        var file = new FileReference(Path.Combine(rootPath, "metadata.txt"));
+        await fileSystem.CreateDirectoryAsync(new DirectoryReference(rootPath));
+        await fileSystem.WriteTextAtomicallyAsync(file, "metadata");
+        var expectedLastWrite = new DateTimeOffset(2026, 8, 31, 4, 32, 0, TimeSpan.Zero);
+        File.SetLastWriteTimeUtc(file.Value, expectedLastWrite.UtcDateTime);
+
+        var metadata = await fileSystem.GetFileMetadataAsync(file);
+
+        Assert.Equal(8, metadata!.Value.LengthBytes);
+        Assert.Equal(expectedLastWrite, metadata.Value.LastWriteTimeUtc);
+    }
+
+    [Fact]
+    public async Task GetFileMetadataAsync_returns_null_when_file_is_missing()
+    {
+        var metadata = await fileSystem.GetFileMetadataAsync(new FileReference(Path.Combine(rootPath, "missing.txt")));
+
+        Assert.Null(metadata);
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
 
     public Task DisposeAsync()
