@@ -4,6 +4,8 @@ public interface IFileSystem
 {
     ValueTask<bool> FileExistsAsync(FileReference file, CancellationToken cancellationToken = default);
 
+    ValueTask<FileMetadata?> GetFileMetadataAsync(FileReference file, CancellationToken cancellationToken = default);
+
     ValueTask<bool> DirectoryExistsAsync(DirectoryReference directory, CancellationToken cancellationToken = default);
 
     ValueTask CreateDirectoryAsync(DirectoryReference directory, CancellationToken cancellationToken = default);
@@ -28,3 +30,5 @@ public interface IFileSystem
 
     ValueTask DeleteDirectoryAsync(DirectoryReference directory, bool recursive, CancellationToken cancellationToken = default);
 }
+
+public readonly record struct FileMetadata(long LengthBytes, DateTimeOffset LastWriteTimeUtc);

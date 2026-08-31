@@ -8,6 +8,7 @@ using PrintableBook.Desktop.Diagnostics;
 using PrintableBook.Core.Application.BackgroundTasks;
 using PrintableBook.Core.Application.BackgroundTasks.Workers;
 using PrintableBook.Core.Application.Storage;
+using PrintableBook.Core.Application.Brands;
 using PrintableBook.Desktop.BackgroundTasks;
 
 namespace PrintableBook.Desktop.Bridge;
@@ -27,7 +28,8 @@ internal sealed class WebViewBridgeRouter(
     IOperationDiagnostics? diagnostics = null,
     UiDiagnosticsService? uiDiagnosticsService = null,
     IBackgroundTaskManager? backgroundTaskManager = null,
-    ProcessingMutationGate? processingMutationGate = null)
+    ProcessingMutationGate? processingMutationGate = null,
+    IBrandValidationService? brandValidationService = null)
 {
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
     private readonly ProcessingMutationGate processingMutationGate = processingMutationGate ?? new ProcessingMutationGate();
@@ -500,6 +502,30 @@ internal sealed class WebViewBridgeRouter(
                 }
             }
 
+            if (request.Command == "brand.validate")
+            {
+                if (applicationLoadCoordinator is null || brandValidationService is null || request.Payload is not { } validationPayload ||
+                    !validationPayload.TryGetProperty("brandName", out var brandNameElement) || string.IsNullOrWhiteSpace(brandNameElement.GetString()))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_validation");
+                }
+
+                await using (await processingMutationGate.EnterAsync(cancellationToken))
+                {
+                    if (await IsProcessingActiveAsync(cancellationToken)) return new BridgeResponse(Version, request.Id, false, null, "processing_active");
+
+                    var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                    if (snapshot is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+                    var brand = snapshot.Discovery.Brands.FirstOrDefault(item => string.Equals(item.Name, brandNameElement.GetString(), StringComparison.Ordinal));
+                    if (brand is null) return new BridgeResponse(Version, request.Id, false, null, "brand_not_found");
+
+                    return BridgeResponse.Succeeded(
+                        request.Id,
+                        "brand.validation.result",
+                        await brandValidationService.ValidateAsync(brand.Directory, snapshot.GlobalSettings, cancellationToken));
+                }
+            }
+
             if (request.Command != "settings.save" || settingsStore is null || request.Payload is not { } payload)
             {
                 return BridgeResponse.UnsupportedCommand(request.Id);
@@ -541,7 +567,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

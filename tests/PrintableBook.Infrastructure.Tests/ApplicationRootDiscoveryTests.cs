@@ -45,6 +45,23 @@ public sealed class ApplicationRootDiscoveryTests : IAsyncLifetime
         Assert.All(brand.IntroTemplateAssets!, asset => Assert.StartsWith("file:", asset.LocalImageUrl, StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task DiscoverAsync_uses_the_validation_intro_extension_policy_for_nested_assets_and_collision_safe_keys()
+    {
+        var template = Path.Combine(rootPath, "brands", "Amazon", "IntroTemplate");
+        Directory.CreateDirectory(Path.Combine(template, "nested"));
+        await File.WriteAllTextAsync(Path.Combine(template, "cover.jpeg"), "test");
+        await File.WriteAllTextAsync(Path.Combine(template, "nested", "cover.png"), "test");
+        await File.WriteAllTextAsync(Path.Combine(template, "nested", "ignored.gif"), "test");
+        var fileSystem = new PhysicalFileSystem();
+        var discovery = new PhysicalApplicationRootDiscovery(fileSystem, new PhysicalBookWorkspaceFactory(fileSystem), () => rootPath);
+
+        var assets = Assert.Single((await discovery.DiscoverAsync()).Brands).IntroTemplateAssets!;
+
+        Assert.Equal(["cover.jpeg", "nested/cover.png"], assets.Select(asset => asset.Key));
+        Assert.Equal(assets.Count, assets.Select(asset => asset.Key).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
     public Task DisposeAsync()
     {

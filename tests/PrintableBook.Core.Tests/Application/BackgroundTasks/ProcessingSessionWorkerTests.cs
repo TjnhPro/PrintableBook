@@ -6,6 +6,7 @@ using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Services;
 using PrintableBook.Core.Application.Results;
+using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 
@@ -19,13 +20,13 @@ public sealed class ProcessingSessionWorkerTests
         var provider = new Provider(Snapshot());
         var application = new Application();
         var frame = new FrameResolver();
-        IBackgroundTaskWorker worker = new ProcessingSessionWorker(provider, application, frame, new FileSystem(), new ImageInspector());
+        IBackgroundTaskWorker worker = CreateWorker(provider, application, frame, new FileSystem(), new ImageInspector());
         var context = new Context();
 
         await worker.ExecuteAsync(Request(), context, CancellationToken.None);
 
         Assert.Equal(1, provider.Calls);
-        Assert.Equal(1, frame.Calls);
+        Assert.Equal(0, frame.Calls);
         Assert.NotNull(application.Request);
         Assert.False(context.View!.IsActive);
         Assert.Equal("Completed", context.View.CurrentStep);
@@ -35,7 +36,7 @@ public sealed class ProcessingSessionWorkerTests
     public async Task Validation_failure_uses_a_safe_code_and_terminal_view_before_resolving_a_frame()
     {
         var context = new Context();
-        IBackgroundTaskWorker worker = new ProcessingSessionWorker(new Provider(Snapshot() with { Discovery = Snapshot().Discovery with { Brands = [] } }), new Application(), new FrameResolver(), new FileSystem(), new ImageInspector());
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(Snapshot() with { Discovery = Snapshot().Discovery with { Brands = [] } }), new Application(), new FrameResolver(), new FileSystem(), new ImageInspector());
 
         var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(Request(), context, CancellationToken.None).AsTask());
 
@@ -44,13 +45,42 @@ public sealed class ProcessingSessionWorkerTests
         Assert.Equal("Failed", context.View.CurrentStep);
     }
 
+    [Theory]
+    [InlineData(BrandValidationStatus.NotValidated)]
+    [InlineData(BrandValidationStatus.NeedsValidation)]
+    public async Task Processing_stops_before_output_work_when_brand_is_not_certified(BrandValidationStatus status)
+    {
+        var application = new Application();
+        var validation = new Validation(status);
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(Snapshot()), application, new FrameResolver(), new FileSystem(), new ImageInspector(), validation);
+
+        var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(Request(), new Context(), CancellationToken.None).AsTask());
+
+        Assert.Equal("process_brand_not_validated", failure.Code);
+        Assert.Null(application.Request);
+        Assert.Equal(1, validation.CheckCalls);
+    }
+
+    [Fact]
+    public async Task Processing_gate_uses_the_fresh_snapshot_settings()
+    {
+        var settings = GlobalSettings.Default with { FinalPageWidth = 901 };
+        var validation = new Validation();
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(Snapshot(settings: settings)), new Application(), new FrameResolver(), new FileSystem(), new ImageInspector(), validation);
+
+        await worker.ExecuteAsync(Request(), new Context(), CancellationToken.None);
+
+        Assert.Equal(settings, validation.Settings);
+        Assert.Equal(new DirectoryReference("brand"), validation.Directory);
+    }
+
     [Fact]
     public async Task Requested_cancellation_with_a_cancelled_book_publishes_the_terminal_view_then_throws()
     {
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var context = new Context();
-        IBackgroundTaskWorker worker = new ProcessingSessionWorker(
+        IBackgroundTaskWorker worker = CreateWorker(
             new Provider(Snapshot()),
             new Application(new BookProcessingQueueResult(false, [new BookProcessingQueueBookResult(new BookId("book-one"), BookProcessingStatus.Cancelled, null, null)])),
             new FrameResolver(), new FileSystem(), new ImageInspector());
@@ -64,58 +94,63 @@ public sealed class ProcessingSessionWorkerTests
 
     private static ProcessingSessionWorkerRequest Request() => new(["book-one"], "Brand", BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow);
 
+    private static ProcessingSessionWorker CreateWorker(
+        IApplicationSnapshotProvider provider,
+        IPrintableBookApplication application,
+        IBrandFrameResolver ignoredFrameResolver,
+        IFileSystem fileSystem,
+        IImageInspector imageInspector,
+        IBrandValidationService? validation = null) =>
+        new(provider, application, fileSystem, imageInspector, validation ?? new Validation());
+
     [Fact]
     public async Task Background_disabled_does_not_require_or_inspect_a_file()
     {
         var files = new FileSystem(false);
         var inspector = new ImageInspector(new InvalidDataException("must not be called"));
         var application = new Application();
-        IBackgroundTaskWorker worker = new ProcessingSessionWorker(new Provider(Snapshot()), application, new FrameResolver(), files, inspector);
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(Snapshot()), application, new FrameResolver(), files, inspector);
 
         await worker.ExecuteAsync(Request(), new Context(), CancellationToken.None);
 
         Assert.NotNull(application.Request);
-        Assert.Equal(1, files.Calls);
-        Assert.Equal(1, inspector.Calls);
+        Assert.Equal(0, files.Calls);
+        Assert.Equal(0, inspector.Calls);
         Assert.Null(Assert.Single(application.Request!.Books).BackgroundPage);
     }
 
     [Fact]
-    public async Task Background_enabled_missing_blocks_before_application_execution()
+    public async Task Background_enabled_uses_the_certified_brand_file_without_reinspection()
     {
         var application = new Application();
-        IBackgroundTaskWorker worker = new ProcessingSessionWorker(new Provider(Snapshot(hasBackground: true)), application, new FrameResolver(), new FileSystem(false), new ImageInspector());
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(Snapshot(hasBackground: true)), application, new FrameResolver(), new FileSystem(false), new ImageInspector());
 
-        var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(Request(), new Context(), CancellationToken.None).AsTask());
+        await worker.ExecuteAsync(Request(), new Context(), CancellationToken.None);
 
-        Assert.Equal("process_background_missing", failure.Code);
-        Assert.Null(application.Request);
+        Assert.Equal(new FileReference(Path.Combine("brand", "background.png")), Assert.Single(application.Request!.Books).BackgroundPage);
     }
 
     [Fact]
-    public async Task Background_enabled_invalid_or_wrong_size_blocks_before_application_execution()
+    public async Task Background_enabled_does_not_reinspect_the_certified_brand_file()
     {
-        var wrongSizeApplication = new Application();
-        IBackgroundTaskWorker wrongSizeWorker = new ProcessingSessionWorker(new Provider(Snapshot(hasBackground: true)), wrongSizeApplication, new FrameResolver(), new FileSystem(true), new ImageInspector(new ImageSize(10, 10)));
-        var wrongSizeFailure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => wrongSizeWorker.ExecuteAsync(Request(), new Context(), CancellationToken.None).AsTask());
-        Assert.Equal("process_background_invalid", wrongSizeFailure.Code);
-        Assert.Null(wrongSizeApplication.Request);
+        var application = new Application();
+        var inspector = new ImageInspector(new InvalidDataException("must not inspect Brand files"));
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(Snapshot(hasBackground: true)), application, new FrameResolver(), new FileSystem(false), inspector);
 
-        var unreadableApplication = new Application();
-        IBackgroundTaskWorker unreadableWorker = new ProcessingSessionWorker(new Provider(Snapshot(hasBackground: true)), unreadableApplication, new FrameResolver(), new FileSystem(true), new ImageInspector(new InvalidDataException("bad image")));
-        var unreadableFailure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => unreadableWorker.ExecuteAsync(Request(), new Context(), CancellationToken.None).AsTask());
-        Assert.Equal("process_background_invalid", unreadableFailure.Code);
-        Assert.Null(unreadableApplication.Request);
+        await worker.ExecuteAsync(Request(), new Context(), CancellationToken.None);
+
+        Assert.NotNull(application.Request);
+        Assert.Equal(0, inspector.Calls);
     }
 
     [Fact]
-    public async Task Background_validation_cancellation_propagates_as_cancellation()
+    public async Task Custom_intro_validation_cancellation_propagates_as_cancellation()
     {
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var application = new Application();
-        IBackgroundTaskWorker worker = new ProcessingSessionWorker(
-            new Provider(Snapshot(hasBackground: true)),
+        IBackgroundTaskWorker worker = CreateWorker(
+            new Provider(Snapshot() with { BookSummaries = [Snapshot().BookSummaries[0] with { HasIntro = true, SelectedIntroInteriorSourceKeys = ["Book interior/page-001.png"] }] }),
             application,
             new FrameResolver(),
             new FileSystem(true),
@@ -132,7 +167,7 @@ public sealed class ProcessingSessionWorkerTests
     {
         var settings = GlobalSettings.Default with { FinalPageWidth = 901, FinalPageHeight = 902 };
         var application = new Application();
-        IBackgroundTaskWorker worker = new ProcessingSessionWorker(new Provider(Snapshot(hasBackground: true, settings)), application, new FrameResolver(), new FileSystem(true), new ImageInspector(new ImageSize(901, 902)));
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(Snapshot(hasBackground: true, settings)), application, new FrameResolver(), new FileSystem(true), new ImageInspector(new ImageSize(901, 902)));
 
         await worker.ExecuteAsync(Request(), new Context(), CancellationToken.None);
 
@@ -145,12 +180,12 @@ public sealed class ProcessingSessionWorkerTests
         var application = new Application();
         var files = new FileSystem(true);
         var inspector = new ImageInspector();
-        IBackgroundTaskWorker worker = new ProcessingSessionWorker(new Provider(MixedSnapshot()), application, new FrameResolver(), files, inspector);
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(MixedSnapshot()), application, new FrameResolver(), files, inspector);
 
         await worker.ExecuteAsync(new ProcessingSessionWorkerRequest(["book-one", "book-two"], "Brand", BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow), new Context(), CancellationToken.None);
 
-        Assert.Equal(2, files.Calls);
-        Assert.Equal(2, inspector.Calls);
+        Assert.Equal(0, files.Calls);
+        Assert.Equal(0, inspector.Calls);
         Assert.Collection(application.Request!.Books,
             first => Assert.Equal(new FileReference(Path.Combine("brand", "background.png")), first.BackgroundPage),
             second => Assert.Null(second.BackgroundPage));
@@ -169,7 +204,7 @@ public sealed class ProcessingSessionWorkerTests
             ]
         };
         var application = new Application();
-        IBackgroundTaskWorker worker = new ProcessingSessionWorker(
+        IBackgroundTaskWorker worker = CreateWorker(
             new Provider(initial with { Discovery = initial.Discovery with { Brands = [brand] } }),
             application,
             new FrameResolver(),
@@ -196,7 +231,7 @@ public sealed class ProcessingSessionWorkerTests
             SelectedIntroInteriorSourceKeys = ["Book interior/page-002.png", "Book interior/page-001.png"]
         };
         var application = new Application();
-        IBackgroundTaskWorker worker = new ProcessingSessionWorker(
+        IBackgroundTaskWorker worker = CreateWorker(
             new Provider(initial with { BookSummaries = [summary] }),
             application,
             new FrameResolver(),
@@ -221,7 +256,7 @@ public sealed class ProcessingSessionWorkerTests
     {
         var initial = Snapshot();
         var summary = initial.BookSummaries[0] with { HasIntro = hasIntro, SelectedIntroInteriorSourceKeys = keys };
-        IBackgroundTaskWorker worker = new ProcessingSessionWorker(
+        IBackgroundTaskWorker worker = CreateWorker(
             new Provider(initial with { BookSummaries = [summary] }),
             new Application(),
             new FrameResolver(),
@@ -292,6 +327,7 @@ public sealed class ProcessingSessionWorkerTests
     {
         public int Calls { get; private set; }
         public ValueTask<bool> FileExistsAsync(FileReference file, CancellationToken cancellationToken = default) { Calls++; return ValueTask.FromResult(exists || file.Value.Contains("IntroTemplate", StringComparison.OrdinalIgnoreCase) || file.Value.Contains("Book interior", StringComparison.OrdinalIgnoreCase)); }
+        public ValueTask<FileMetadata?> GetFileMetadataAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult<FileMetadata?>(null);
         public ValueTask<bool> DirectoryExistsAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
         public ValueTask CreateDirectoryAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public async IAsyncEnumerable<DirectoryReference> EnumerateDirectoriesAsync(DirectoryReference directory, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) { await Task.CompletedTask; yield break; }
@@ -311,11 +347,29 @@ public sealed class ProcessingSessionWorkerTests
         public ValueTask<ImageSize> GetSizeAsync(FileReference image, CancellationToken cancellationToken = default)
         {
             Calls++;
-            if (image.Value.Contains("IntroTemplate", StringComparison.OrdinalIgnoreCase) || image.Value.Contains("Book interior", StringComparison.OrdinalIgnoreCase)) return ValueTask.FromResult(new ImageSize(1024, 1024));
             if (exception is not null) throw exception;
+            if (image.Value.Contains("IntroTemplate", StringComparison.OrdinalIgnoreCase) || image.Value.Contains("Book interior", StringComparison.OrdinalIgnoreCase)) return ValueTask.FromResult(new ImageSize(1024, 1024));
             return ValueTask.FromResult(size ?? new ImageSize(GlobalSettings.Default.FinalPageWidth, GlobalSettings.Default.FinalPageHeight));
         }
         public ValueTask<ImageInfo> GetInfoAsync(FileReference image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class Validation(BrandValidationStatus status = BrandValidationStatus.Validated) : IBrandValidationService
+    {
+        public int CheckCalls { get; private set; }
+        public DirectoryReference? Directory { get; private set; }
+        public GlobalSettings? Settings { get; private set; }
+
+        public ValueTask<BrandValidationState> CheckStateAsync(DirectoryReference brandDirectory, GlobalSettings settings, CancellationToken cancellationToken = default)
+        {
+            CheckCalls++;
+            Directory = brandDirectory;
+            Settings = settings;
+            return ValueTask.FromResult(new BrandValidationState(status));
+        }
+
+        public ValueTask<BrandValidationResult> ValidateAsync(DirectoryReference brandDirectory, GlobalSettings settings, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class Application(BookProcessingQueueResult? result = null) : IPrintableBookApplication

@@ -10,6 +10,7 @@ using PrintableBook.Desktop.Loading;
 using PrintableBook.Desktop.Diagnostics;
 using PrintableBook.Core.Application.Diagnostics;
 using PrintableBook.Core.Application.BackgroundTasks;
+using PrintableBook.Core.Application.Brands;
 using System.Windows;
 
 namespace PrintableBook.Desktop;
@@ -27,13 +28,13 @@ public partial class MainWindow : Window
     private bool closeFlowRunning;
     private bool systemShutdown;
 
-    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookInteriorSettingsService bookInteriorSettingsService, ILocalOutputActionService outputActionService, IOperationDiagnostics diagnostics, UiDiagnosticsService uiDiagnosticsService, IBackgroundTaskManager backgroundTaskManager, DispatcherStallMonitor dispatcherStallMonitor, ProcessWindowShutdownCoordinator shutdownCoordinator)
+    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IBrandSettingsStore brandSettingsStore, IBrandValidationService brandValidationService, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookInteriorSettingsService bookInteriorSettingsService, ILocalOutputActionService outputActionService, IOperationDiagnostics diagnostics, UiDiagnosticsService uiDiagnosticsService, IBackgroundTaskManager backgroundTaskManager, DispatcherStallMonitor dispatcherStallMonitor, ProcessWindowShutdownCoordinator shutdownCoordinator)
     {
         Application = application;
         this.diagnostics = diagnostics;
         this.shutdownCoordinator = shutdownCoordinator;
         this.dispatcherStallMonitor = dispatcherStallMonitor;
-        bridgeRouter = new WebViewBridgeRouter(applicationLoadCoordinator, settingsStore, processSessionService, brandSettingsStore, coverSelectionService, interiorFrameModeService, bookInteriorSettingsService, outputActionService, diagnostics, uiDiagnosticsService, backgroundTaskManager);
+        bridgeRouter = new WebViewBridgeRouter(applicationLoadCoordinator, settingsStore, processSessionService, brandSettingsStore, coverSelectionService, interiorFrameModeService, bookInteriorSettingsService, outputActionService, diagnostics, uiDiagnosticsService, backgroundTaskManager, brandValidationService: brandValidationService);
         InitializeComponent();
         dispatcherStallMonitor.Start();
         Closing += OnClosing;
