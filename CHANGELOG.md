@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.1
+
+### Added
+
+- Brand validation certificate với fast metadata fingerprint, deep Validate và processing gate trước khi xử lý.
+- Trạng thái Brand validation cùng thao tác **Validate Brand** trong ứng dụng desktop.
+- Script local cài Brand/Book mẫu vào artifact đã publish để smoke test, không đưa sample vào Debug hoặc ZIP release mặc định.
+
+### Changed
+
+- Gói Windows x64 portable dùng framework-dependent single-file executable; WebView2 profile được lưu trong `%LOCALAPPDATA%\PrintableBook\WebView2`.
+
 ## 0.1.0
 
 ### Added

@@ -3,7 +3,7 @@
 Release hiện tại của Printable Book là gói portable Windows x64 **framework-dependent** trên .NET 10. Lệnh đóng gói chính thức là:
 
 ```powershell
-scripts/publish-release.ps1 -ExpectedVersion 0.1.0
+scripts/publish-release.ps1 -ExpectedVersion 0.1.1
 ```
 
 ## Mô hình publish
