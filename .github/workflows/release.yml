@@ -47,7 +47,7 @@ jobs:
       - name: Run production UI contract tests
         run: node src/PrintableBook.Desktop/Frontend/test-production-ui.mjs
 
-      - name: Package portable artifact
+      - name: Package single-file portable artifact
         shell: pwsh
         run: ./scripts/publish-release.ps1 -ExpectedVersion $env:GITHUB_REF_NAME.Substring(1)
 

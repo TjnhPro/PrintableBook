@@ -29,11 +29,7 @@
     <Content Include="Frontend\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Resource Include="Frontend\assets\printable-book-logo.png" />
     <Resource Include="Assets\app-icon.ico" />
-    <Content Include="Assets\app-icon-source.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
 
 </Project>

@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     private static readonly Size PreferredWindowSize = new(1650, 950);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly WebViewBridgeRouter bridgeRouter;
+    private readonly IOperationDiagnostics diagnostics;
     private readonly ProcessWindowShutdownCoordinator shutdownCoordinator;
     private readonly DispatcherStallMonitor dispatcherStallMonitor;
     private readonly CancellationTokenSource closeFlowCancellation = new();
@@ -29,6 +30,7 @@ public partial class MainWindow : Window
     public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IBrandSettingsStore brandSettingsStore, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookInteriorSettingsService bookInteriorSettingsService, ILocalOutputActionService outputActionService, IOperationDiagnostics diagnostics, UiDiagnosticsService uiDiagnosticsService, IBackgroundTaskManager backgroundTaskManager, DispatcherStallMonitor dispatcherStallMonitor, ProcessWindowShutdownCoordinator shutdownCoordinator)
     {
         Application = application;
+        this.diagnostics = diagnostics;
         this.shutdownCoordinator = shutdownCoordinator;
         this.dispatcherStallMonitor = dispatcherStallMonitor;
         bridgeRouter = new WebViewBridgeRouter(applicationLoadCoordinator, settingsStore, processSessionService, brandSettingsStore, coverSelectionService, interiorFrameModeService, bookInteriorSettingsService, outputActionService, diagnostics, uiDiagnosticsService, backgroundTaskManager);
@@ -85,7 +87,14 @@ public partial class MainWindow : Window
     {
         try
         {
-            await Browser.EnsureCoreWebView2Async();
+            var userDataFolder = GetWebViewUserDataFolder();
+            Directory.CreateDirectory(userDataFolder);
+            diagnostics.Record("webview.profile", "WebView2", userDataFolder);
+            var environment = await CoreWebView2Environment.CreateAsync(
+                browserExecutableFolder: null,
+                userDataFolder: userDataFolder);
+
+            await Browser.EnsureCoreWebView2Async(environment);
             Browser.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
 
             var pagePath = Path.Combine(AppContext.BaseDirectory, "Frontend", "index.html");
@@ -99,6 +108,16 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
+    }
+
+    internal static string GetWebViewUserDataFolder(string localApplicationData)
+    {
+        return Path.Combine(localApplicationData, "PrintableBook", "WebView2");
+    }
+
+    private static string GetWebViewUserDataFolder()
+    {
+        return GetWebViewUserDataFolder(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
     }
 
     private async void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)

@@ -9,6 +9,8 @@ Printable Book là phần mềm Windows chạy local để tổ chức Book Colo
 - Windows x64.
 - Bản portable v0.1: giải nén vào thư mục có quyền ghi, ví dụ `C:\PrintableBook\`.
 - Không đặt bản chạy chính trong `Program Files`: `brands/`, `sources/`, `settings.json` và `.workspace/` được quản lý cạnh executable.
+- Release hiện tại yêu cầu .NET Desktop Runtime 10 x64 đã được cài trên máy.
+- Microsoft Edge WebView2 Runtime phải có sẵn trên Windows.
 - Để build source: .NET 10 SDK, Node.js 24 và Windows (WPF/WebView2 host).
 
 ## Cấu trúc thư mục
@@ -17,7 +19,6 @@ Printable Book là phần mềm Windows chạy local để tổ chức Book Colo
 PrintableBook/
 ├─ PrintableBook.exe
 ├─ Frontend/
-├─ Assets/
 ├─ brands/
 ├─ sources/
 └─ settings.json
@@ -95,6 +96,7 @@ Corpus ảnh do user cung cấp ở `TestResults/` thuộc `LocalCorpus`, chỉ 
 - [BorderPixel V1](docs/borderpixel-detector-spec.md)
 - [Interior pipeline](docs/interior-shared-pipeline-integration.md)
 - [Intro processing](docs/intro-template-processing.md)
+- [Release packaging](docs/release-packaging.md)
 
 ## Release
 

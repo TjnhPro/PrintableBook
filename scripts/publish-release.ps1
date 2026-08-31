@@ -44,8 +44,14 @@ New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null
 dotnet publish $project `
     --configuration $Configuration `
     --runtime $RuntimeIdentifier `
-    --self-contained true `
-    -p:PublishSingleFile=false `
+    --self-contained false `
+    -p:PublishSingleFile=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:WebView2LoaderPreference=Static `
+    -p:PublishTrimmed=false `
+    -p:PublishReadyToRun=false `
+    -p:EnableCompressionInSingleFile=false `
+    -p:CopyDocumentationFilesFromPackages=false `
     -p:DebugSymbols=false `
     -p:DebugType=None `
     --output $publishDirectory
@@ -54,11 +60,39 @@ if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed."
 }
 
+# WebView2 package reference documentation is not required at runtime and is
+# emitted alongside the bundle by the package targets. Remove only these known
+# documentation files before enforcing the release-root contract below.
+Get-ChildItem `
+    -LiteralPath $publishDirectory `
+    -File `
+    -Filter "Microsoft.Web.WebView2*.xml" |
+    Remove-Item -Force
+
+# Frontend development tooling is copied by the Desktop project's broad content
+# glob for normal developer builds. It is not part of the physical frontend
+# runtime contract, so remove it only from the release publish output.
+$releaseOnlyFrontendExclusions = @(
+    "Frontend/node_modules",
+    "Frontend/package-lock.json",
+    "Frontend/package.json",
+    "Frontend/tailwind.config.js",
+    "Frontend/test-production-ui.mjs",
+    "Frontend/test-ui.mjs"
+)
+
+foreach ($relativePath in $releaseOnlyFrontendExclusions) {
+    $fullPath = Join-Path $publishDirectory $relativePath
+    if (Test-Path -LiteralPath $fullPath) {
+        Remove-Item -LiteralPath $fullPath -Recurse -Force
+    }
+}
+
 $requiredFiles = @(
     "PrintableBook.exe",
     "Frontend/index.html",
     "Frontend/js/app.js",
-    "Assets/app-icon-source.png"
+    "Frontend/assets/printable-book-logo.png"
 )
 
 foreach ($relativePath in $requiredFiles) {
@@ -66,6 +100,53 @@ foreach ($relativePath in $requiredFiles) {
     if (-not (Test-Path -LiteralPath $fullPath)) {
         throw "Published artifact is missing '$relativePath'."
     }
+}
+
+$requiredFrontendDirectories = @(
+    "Frontend/css",
+    "Frontend/js",
+    "Frontend/assets"
+)
+
+foreach ($relativePath in $requiredFrontendDirectories) {
+    $fullPath = Join-Path $publishDirectory $relativePath
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Container)) {
+        throw "Published artifact is missing frontend directory '$relativePath'."
+    }
+}
+
+$externalAssetsDirectory = Join-Path $publishDirectory "Assets"
+if (Test-Path -LiteralPath $externalAssetsDirectory) {
+    throw "Single-file release must not contain an external Assets directory."
+}
+
+$externalBinaryPatterns = @(
+    "*.dll",
+    "*.pdb",
+    "*.deps.json",
+    "*.runtimeconfig.json"
+)
+
+$externalBinaries = foreach ($pattern in $externalBinaryPatterns) {
+    Get-ChildItem -LiteralPath $publishDirectory -File -Filter $pattern
+}
+
+if ($externalBinaries) {
+    $binaryNames = $externalBinaries.Name -join ", "
+    throw "Single-file release leaked external binary/runtime files: $binaryNames"
+}
+
+$allowedRootEntries = @(
+    "PrintableBook.exe",
+    "Frontend"
+)
+
+$unexpectedRootEntries = Get-ChildItem -LiteralPath $publishDirectory |
+    Where-Object { $_.Name -notin $allowedRootEntries }
+
+if ($unexpectedRootEntries) {
+    $names = $unexpectedRootEntries.Name -join ", "
+    throw "Published artifact contains unexpected root entries: $names"
 }
 
 New-Item -ItemType Directory -Path $packageDirectory -Force | Out-Null
