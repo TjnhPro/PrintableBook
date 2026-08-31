@@ -487,8 +487,8 @@ test("saved brand settings survive the application refresh", () => {
 test("Brands displays certification state and validates the selected Brand", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("brands");
   messageHandler({ data: { version: 1, id: "initial-refresh", ok: true, command: "app.snapshot", payload: {
-    discovery: { brands: [{ name: "Brand One", assets: [] }], books: [] }, globalSettings: {}, bookSummaries: [],
-    brandSummaries: [{ brandName: "Brand One", validationStatus: 2 }]
+    discovery: { brands: [{ name: "Brand One", assets: [] }, { name: "Brand Two", assets: [] }], books: [] }, globalSettings: {}, bookSummaries: [],
+    brandSummaries: [{ brandName: "Brand One", validationStatus: 2 }, { brandName: "Brand Two", validationStatus: 0 }]
   } } });
 
   assert.match(content.innerHTML, /Needs validation/);
@@ -501,6 +501,10 @@ test("Brands displays certification state and validates the selected Brand", () 
   const request = messages.at(-1);
   messageHandler({ data: { version: 1, id: request.id, ok: true, command: "brand.validation.result", payload: { isSuccess: false, failures: [{ message: "frame.png is missing" }] } } });
   assert.match(content.innerHTML, /frame\.png is missing/);
+
+  const selectSecondBrand = { dataset: { action: "select-brand", brandName: "Brand Two" }, closest: () => selectSecondBrand };
+  contentListeners.click({ target: selectSecondBrand });
+  assert.doesNotMatch(content.innerHTML, /frame\.png is missing/);
 
   messageHandler({ data: { version: 1, id: request.id, ok: true, command: "brand.validation.result", payload: { isSuccess: true, failures: [] } } });
   assert.equal(messages.at(-1).command, "app.refresh");

@@ -1,4 +1,5 @@
 using PrintableBook.Core.Abstractions;
+using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Domain.Books;
@@ -78,16 +79,11 @@ public sealed class PhysicalApplicationRootDiscovery(IFileSystem fileSystem, IBo
     {
         await foreach (var file in fileSystem.EnumerateFilesAsync(directory, cancellationToken))
         {
-            if (IsSupportedIntroImage(file.Value)) files.Add(file);
+            if (BrandValidationDefinition.SupportedIntroExtensions.Contains(Path.GetExtension(file.Value))) files.Add(file);
         }
         await foreach (var child in fileSystem.EnumerateDirectoriesAsync(directory, cancellationToken))
         {
             await CollectIntroImagesAsync(child, files, cancellationToken);
         }
     }
-
-    private static bool IsSupportedIntroImage(string path) =>
-        string.Equals(Path.GetExtension(path), ".png", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(Path.GetExtension(path), ".jpg", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(Path.GetExtension(path), ".jpeg", StringComparison.OrdinalIgnoreCase);
 }

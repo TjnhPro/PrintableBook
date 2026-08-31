@@ -31,7 +31,7 @@ public sealed record BrandValidationDefinition(
     DateTimeOffset DefinitionChangedAtUtc,
     IReadOnlyList<BrandValidationEntry> Entries)
 {
-    private static readonly IReadOnlySet<string> SupportedIntroExtensions =
+    public static readonly IReadOnlySet<string> SupportedIntroExtensions =
         new HashSet<string>([".png", ".jpg", ".jpeg"], StringComparer.OrdinalIgnoreCase);
 
     // Any future tracked-scope or rule semantic change must update this to its real UTC change time.

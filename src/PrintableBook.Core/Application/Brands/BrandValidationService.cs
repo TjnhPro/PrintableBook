@@ -48,25 +48,31 @@ public sealed class BrandValidationService(
             }
             foreach (var file in entry.Files)
             {
-                if (!await fileSystem.FileExistsAsync(file, cancellationToken))
+                var exists = true;
+                foreach (var rule in entry.Entry.Rules)
                 {
-                    failures.Add(new(BrandValidationTargetResolver.NormalizeRelativePath(brandDirectory, file), "exists", "brand_asset_missing", "Required Brand asset is missing."));
-                    continue;
-                }
-                var dimensionRule = entry.Entry.Rules.OfType<BrandImageDimensionsRule>().SingleOrDefault();
-                if (dimensionRule is null) continue;
-                try
-                {
-                    var size = await imageInspector.GetSizeAsync(file, cancellationToken);
-                    if (!dimensionRule.AllowedSizes.Contains(size)) failures.Add(new(BrandValidationTargetResolver.NormalizeRelativePath(brandDirectory, file), "dimensions", "brand_image_dimensions_invalid", "Brand image dimensions do not match the required size."));
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception)
-                {
-                    failures.Add(new(BrandValidationTargetResolver.NormalizeRelativePath(brandDirectory, file), "dimensions", "brand_image_unreadable", "Brand image could not be read."));
+                    switch (rule)
+                    {
+                        case BrandFileExistsRule:
+                            exists = await fileSystem.FileExistsAsync(file, cancellationToken);
+                            if (!exists) failures.Add(new(BrandValidationTargetResolver.NormalizeRelativePath(brandDirectory, file), "exists", "brand_asset_missing", "Required Brand asset is missing."));
+                            break;
+                        case BrandImageDimensionsRule dimensionRule when exists:
+                            try
+                            {
+                                var size = await imageInspector.GetSizeAsync(file, cancellationToken);
+                                if (!dimensionRule.AllowedSizes.Contains(size)) failures.Add(new(BrandValidationTargetResolver.NormalizeRelativePath(brandDirectory, file), "dimensions", "brand_image_dimensions_invalid", "Brand image dimensions do not match the required size."));
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                throw;
+                            }
+                            catch (Exception)
+                            {
+                                failures.Add(new(BrandValidationTargetResolver.NormalizeRelativePath(brandDirectory, file), "dimensions", "brand_image_unreadable", "Brand image could not be read."));
+                            }
+                            break;
+                    }
                 }
             }
         }
