@@ -35,7 +35,11 @@ public sealed class DesktopStartupContractTests
             "src", "PrintableBook.Desktop", "MainWindow.xaml.cs"));
 
         Assert.DoesNotContain("await interruptedRecoveryService.RecoverAsync", source, StringComparison.Ordinal);
-        Assert.Contains("await Browser.EnsureCoreWebView2Async", source, StringComparison.Ordinal);
+        Assert.Contains("CoreWebView2Environment.CreateAsync(", source, StringComparison.Ordinal);
+        Assert.Contains("userDataFolder: userDataFolder", source, StringComparison.Ordinal);
+        Assert.Contains("await Browser.EnsureCoreWebView2Async(environment)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("await Browser.EnsureCoreWebView2Async();", source, StringComparison.Ordinal);
+        Assert.Contains("diagnostics.Record(\"webview.profile\"", source, StringComparison.Ordinal);
         Assert.Contains("Browser.CoreWebView2.Navigate", source, StringComparison.Ordinal);
     }
 }
