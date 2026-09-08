@@ -239,7 +239,7 @@ test("desktop navigation names the outputs route PDF Library", () => {
 test("snapshot rendering opens the Book Library and keeps discovery and brand data in the bridge response", () => {
   const { messageHandler, status, content, brandSelect, messages } = loadBridge();
 
-  assert.deepEqual(messages.map((message) => message.command), ["app.ping", "app.refresh"]);
+  assert.deepEqual(messages.map((message) => message.command), ["app.ping", "updates.check", "app.refresh"]);
   messageHandler({
     data: {
       version: 1,
@@ -385,7 +385,7 @@ test("cache cleanup active refresh error does not replace a usable library with 
 test("startup shows a loading library view while the first application refresh is pending", () => {
   const { content, messages } = loadBridge();
 
-  assert.deepEqual(messages.map((message) => message.command), ["app.ping", "app.refresh"]);
+  assert.deepEqual(messages.map((message) => message.command), ["app.ping", "updates.check", "app.refresh"]);
   assert.match(content.innerHTML, /Loading library…/);
   assert.match(content.innerHTML, /Discovering Books, workspace state and local outputs/);
 });
