@@ -41,6 +41,21 @@ public sealed class ReleasePackageContractVerifierTests : IDisposable
         Assert.Throws<InvalidDataException>(() => new ReleasePackageContractVerifier().Verify(multiple, new Version(0, 2, 0), "win-x64"));
     }
 
+    [Fact]
+    public void RejectsEmptyUnexpectedRootDirectories()
+    {
+        foreach (var directory in new[] { "brands/", "evil/" })
+        {
+            var archive = CreateArchive(false, ValidFiles);
+            using (var zip = ZipFile.Open(archive, ZipArchiveMode.Update))
+            {
+                zip.CreateEntry(directory);
+            }
+
+            Assert.Throws<InvalidDataException>(() => new ReleasePackageContractVerifier().Verify(archive, new Version(0, 2, 0), "win-x64"));
+        }
+    }
+
     private string CreateArchive(bool wrapped, IEnumerable<string> files)
     {
         Directory.CreateDirectory(_root);

@@ -31,7 +31,15 @@ public sealed class ReleaseVerifierTests : IDisposable
         Assert.Throws<ArgumentException>(() => new ReleaseVerifier().Verify(paths, new Version(0, 2, 0), "linux-x64", Ed25519UpdateSignature.DerivePublicKey(TestSeed)));
     }
 
-    private ReleaseArtifactPaths CreateSignedFixture()
+    [Fact]
+    public void RejectsSignedArchiveWithAnUnexpectedEmptyRootDirectory()
+    {
+        var paths = CreateSignedFixture("brands/");
+
+        Assert.Throws<InvalidDataException>(() => Verify(paths));
+    }
+
+    private ReleaseArtifactPaths CreateSignedFixture(string? extraEntry = null)
     {
         Directory.CreateDirectory(_root);
         var paths = ReleaseArtifactPaths.Create(_root, new Version(0, 2, 0), "win-x64");
@@ -42,6 +50,7 @@ public sealed class ReleaseVerifierTests : IDisposable
                 using var writer = new StreamWriter(archive.CreateEntry(file).Open());
                 writer.Write("fixture");
             }
+            if (extraEntry is not null) archive.CreateEntry(extraEntry);
         }
 
         var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(paths.ArchivePath))).ToLowerInvariant();
