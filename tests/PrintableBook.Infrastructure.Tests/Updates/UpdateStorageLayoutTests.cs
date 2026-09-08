@@ -30,6 +30,17 @@ public sealed class UpdateStorageLayoutTests
     }
 
     [Fact]
+    public void BackupPathsUseThreePartVersion()
+    {
+        var root = Path.Combine("C:", "test-root");
+        var layout = new UpdateStorageLayout(new StubRootProvider(root));
+
+        Assert.Equal(root, layout.RootPath);
+        Assert.Equal(Path.Combine(root, "backup", "0.1.1"), layout.GetBackupDirectory(new Version(0, 1, 1)));
+        Assert.EndsWith(Path.Combine("backup", "0.1.1"), layout.GetBackupDirectory(new Version(0, 1, 1, 99)));
+    }
+
+    [Fact]
     public void TemporaryExtractionDirectoriesAreUniqueStagingChildren()
     {
         var layout = new UpdateStorageLayout(new StubRootProvider("test-root"));
