@@ -64,6 +64,19 @@ public sealed class DesktopUpdateInstallHandoffTests
         Assert.Equal(["launch", "force"], events);
     }
 
+    [Fact]
+    public async Task Launcher_failure_keeps_the_desktop_open()
+    {
+        var events = new List<string>();
+        var launcher = new RecordingLauncher(events) { Exception = new InvalidOperationException("launch failed") };
+        var lifetime = new RecordingLifetime(events);
+        var handoff = CreateHandoff(new StubProcessSessionService(), new StubPrompt(), launcher, lifetime);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => handoff.BeginAsync(new PreparedUpdate(new Version(0, 2, 0), "D:\\updates\\staging\\0.2.0\\payload")).AsTask());
+
+        Assert.Equal(["launch"], events);
+    }
+
     private static DesktopUpdateInstallHandoff CreateHandoff(
         StubProcessSessionService process,
         StubPrompt prompt,
@@ -101,11 +114,13 @@ public sealed class DesktopUpdateInstallHandoffTests
     private sealed class RecordingLauncher(List<string> events) : IUpdaterProcessLauncher
     {
         public UpdaterLaunchRequest? Request { get; private set; }
+        public Exception? Exception { get; init; }
 
         public void Launch(UpdaterLaunchRequest request)
         {
             Request = request;
             events.Add("launch");
+            if (Exception is not null) throw Exception;
         }
     }
 

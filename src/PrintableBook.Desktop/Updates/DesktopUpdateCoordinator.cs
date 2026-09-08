@@ -84,7 +84,7 @@ public sealed class DesktopUpdateCoordinator(
                 if (latestRelease is null || preparedUpdate is not null || phase is not (DesktopUpdatePhase.Available or DesktopUpdatePhase.Error)) return GetState();
                 update = latestRelease;
             }
-            SetState(DesktopUpdatePhase.Downloading, null, null, null, 0, null);
+            StartPreparation();
             var result = await preparationService.PrepareAsync(update, new DelegateProgress<UpdatePreparationProgress>(ApplyPreparationProgress), cancellationToken);
             lock (stateSync)
             {
@@ -145,6 +145,19 @@ public sealed class DesktopUpdateCoordinator(
     {
         var mappedPhase = progress.Stage is UpdatePreparationStage.DownloadingArchive or UpdatePreparationStage.DownloadingChecksum ? DesktopUpdatePhase.Downloading : progress.Stage is UpdatePreparationStage.Ready ? DesktopUpdatePhase.Ready : DesktopUpdatePhase.Verifying;
         SetState(mappedPhase, null, null, progress.Stage, progress.BytesReceived, progress.TotalBytes);
+    }
+
+    private void StartPreparation()
+    {
+        lock (stateSync)
+        {
+            phase = DesktopUpdatePhase.Downloading;
+            preparationStage = null;
+            bytesReceived = 0;
+            totalBytes = null;
+            errorCode = null;
+            errorMessage = null;
+        }
     }
 
     private void SetState(DesktopUpdatePhase value, string? code, string? message, UpdatePreparationStage? stage = null, long? received = null, long? total = null)

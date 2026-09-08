@@ -60,6 +60,32 @@ public sealed class DesktopUpdateCoordinatorTests
     }
 
     [Fact]
+    public async Task Failed_download_can_retry_with_a_fresh_progress_state()
+    {
+        var preparation = new StubPreparationService { Exception = new InvalidDataException("bad archive") };
+        var coordinator = CreateCoordinator(new StubUpdateService { Result = AvailableResult() }, preparation);
+        await coordinator.CheckAsync(UpdateCheckTrigger.Manual);
+
+        var failed = await coordinator.DownloadAsync();
+        preparation.Exception = null;
+        preparation.ReportProgress = false;
+        preparation.Completion = new TaskCompletionSource<PreparedUpdate>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var retry = coordinator.DownloadAsync().AsTask();
+        await preparation.Started.Task;
+
+        var retrying = coordinator.GetState();
+        Assert.Equal(DesktopUpdatePhase.Error, failed.Phase);
+        Assert.Equal("update_download_failed", failed.ErrorCode);
+        Assert.True(failed.CanDownload);
+        Assert.Equal(DesktopUpdatePhase.Downloading, retrying.Phase);
+        Assert.Null(retrying.PreparationStage);
+        Assert.Equal(0, retrying.BytesReceived);
+
+        preparation.Completion.SetResult(new PreparedUpdate(new Version(0, 2, 0), "D:\\updates\\payload"));
+        await retry;
+    }
+
+    [Fact]
     public async Task Get_state_and_duplicate_download_return_promptly_while_preparation_is_running()
     {
         var updates = new StubUpdateService { Result = AvailableResult() };
@@ -135,6 +161,19 @@ public sealed class DesktopUpdateCoordinatorTests
         Assert.Equal("invalid_update_check_trigger", response.Error);
     }
 
+    [Fact]
+    public async Task Bridge_requires_an_update_coordinator_and_defaults_a_missing_trigger_to_manual()
+    {
+        var unavailable = await new WebViewBridgeRouter().HandleAsync("""{"version":1,"id":"none","command":"updates.getState"}""");
+        var coordinator = new RecordingCoordinator(CreateCoordinator().GetState());
+        var response = await new WebViewBridgeRouter(updateCoordinator: coordinator)
+            .HandleAsync("""{"version":1,"id":"check","command":"updates.check"}""");
+
+        Assert.Equal("unsupported_command", unavailable.Error);
+        Assert.True(response.Ok);
+        Assert.Equal(UpdateCheckTrigger.Manual, coordinator.LastTrigger);
+    }
+
     private static async Task<DesktopUpdateCoordinator> CreateReadyCoordinatorAsync(StubInstallHandoff handoff)
     {
         var coordinator = CreateCoordinator(
@@ -184,14 +223,17 @@ public sealed class DesktopUpdateCoordinatorTests
     {
         public int CallCount { get; private set; }
         public PreparedUpdate Result { get; init; } = new(new Version(0, 2, 0), "D:\\updates\\payload");
-        public TaskCompletionSource<PreparedUpdate>? Completion { get; init; }
+        public TaskCompletionSource<PreparedUpdate>? Completion { get; set; }
+        public Exception? Exception { get; set; }
+        public bool ReportProgress { get; set; } = true;
         public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async ValueTask<PreparedUpdate> PrepareAsync(UpdateInfo update, IProgress<UpdatePreparationProgress>? progress = null, CancellationToken cancellationToken = default)
         {
             CallCount++;
-            progress?.Report(new UpdatePreparationProgress(UpdatePreparationStage.DownloadingArchive, 512, 1024));
+            if (ReportProgress) progress?.Report(new UpdatePreparationProgress(UpdatePreparationStage.DownloadingArchive, 512, 1024));
             Started.TrySetResult(true);
+            if (Exception is not null) throw Exception;
             return Completion is null ? Result : await Completion.Task.WaitAsync(cancellationToken);
         }
     }
@@ -208,5 +250,19 @@ public sealed class DesktopUpdateCoordinatorTests
             if (Exception is not null) throw Exception;
             return ValueTask.FromResult(Outcome);
         }
+    }
+
+    private sealed class RecordingCoordinator(DesktopUpdateSnapshot snapshot) : IDesktopUpdateCoordinator
+    {
+        public UpdateCheckTrigger? LastTrigger { get; private set; }
+
+        public DesktopUpdateSnapshot GetState() => snapshot;
+        public ValueTask<DesktopUpdateSnapshot> CheckAsync(UpdateCheckTrigger trigger, CancellationToken cancellationToken = default)
+        {
+            LastTrigger = trigger;
+            return ValueTask.FromResult(snapshot);
+        }
+        public ValueTask<DesktopUpdateSnapshot> DownloadAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
+        public ValueTask<DesktopUpdateSnapshot> InstallAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(snapshot);
     }
 }
