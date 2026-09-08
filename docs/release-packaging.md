@@ -56,6 +56,37 @@ PR2 không ghi đè AppRoot, không cài đặt, và không restart ứng dụng
 sidecar chỉ kiểm tra tính toàn vẹn; code signing và xác thực chữ ký chưa có ở
 giai đoạn này.
 
+## Sidecar updater trong tương lai
+
+Contract package đã phát hành ở `v0.1.1` vẫn chỉ gồm `PrintableBook.exe` và
+`Frontend/` như mô tả phía trên. Với các release có updater trong tương lai,
+contract sẽ là:
+
+```text
+PrintableBook-<version>-win-x64/
+├─ PrintableBook.exe
+├─ PrintableBook.Updater.exe
+└─ Frontend/
+```
+
+PR3 yêu cầu `PrintableBook.Updater.exe` trong staged payload, nhưng
+`scripts/publish-release.ps1` được cố ý giữ nguyên cho đến PR5. Worker phải
+chạy từ `Updates\staging\...\payload\PrintableBook.Updater.exe`, thay vì từ
+AppRoot, để updater đã cài đặt có thể được thay thế mà không tự khóa file.
+
+Khi updater được bật, storage update sẽ có các khu vực sau:
+
+```text
+Updates/
+├─ downloads/
+├─ staging/
+├─ backup/<previous-version>/
+└─ logs/
+```
+
+`v0.1.1` không thể tự cập nhật chính nó. `v0.2.0` dự kiến là release đầu tiên
+có updater và phải được cài thủ công; các version sau đó mới có thể tự cập nhật.
+
 ## Dữ liệu WebView2 lúc chạy
 
 Chromium profile, GPU cache và crash data của WebView2 được lưu cố định tại
