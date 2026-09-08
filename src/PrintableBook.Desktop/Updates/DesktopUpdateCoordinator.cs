@@ -8,6 +8,9 @@ public sealed class DesktopUpdateCoordinator(
     IApplicationVersionProvider versionProvider,
     IUpdateInstallHandoff installHandoff) : IDesktopUpdateCoordinator
 {
+    private const string CheckFailureCode = "update_check_failed";
+    private const string DownloadFailureCode = "update_download_failed";
+    private const string InstallFailureCode = "update_install_failed";
     private readonly SemaphoreSlim operationGate = new(1, 1);
     private readonly object stateSync = new();
     private DesktopUpdatePhase phase = DesktopUpdatePhase.Idle;
@@ -33,7 +36,133 @@ public sealed class DesktopUpdateCoordinator(
         }
     }
 
-    public ValueTask<DesktopUpdateSnapshot> CheckAsync(UpdateCheckTrigger trigger, CancellationToken cancellationToken = default) => ValueTask.FromResult(GetState());
-    public ValueTask<DesktopUpdateSnapshot> DownloadAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(GetState());
-    public ValueTask<DesktopUpdateSnapshot> InstallAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(GetState());
+    public async ValueTask<DesktopUpdateSnapshot> CheckAsync(UpdateCheckTrigger trigger, CancellationToken cancellationToken = default)
+    {
+        if (!await TryEnterOperationAsync(cancellationToken)) return GetState();
+        var previous = GetState();
+        try
+        {
+            SetState(DesktopUpdatePhase.Checking, null, null, null, 0, null);
+            var result = await updateService.CheckAsync(cancellationToken);
+            lock (stateSync)
+            {
+                latestRelease = result.Availability == UpdateAvailability.Available ? result.LatestRelease : null;
+                preparedUpdate = null;
+                preparationStage = null;
+                bytesReceived = 0;
+                totalBytes = null;
+                lastCheckedAtUtc = DateTimeOffset.UtcNow;
+                errorCode = null;
+                errorMessage = null;
+                phase = result.Availability == UpdateAvailability.Available ? DesktopUpdatePhase.Available : DesktopUpdatePhase.UpToDate;
+            }
+            return GetState();
+        }
+        catch (OperationCanceledException)
+        {
+            Restore(previous);
+            throw;
+        }
+        catch (Exception)
+        {
+            if (trigger == UpdateCheckTrigger.Automatic) Restore(previous);
+            else SetState(DesktopUpdatePhase.Error, CheckFailureCode, "Could not check for updates. Check your internet connection and try again.");
+            return GetState();
+        }
+        finally { operationGate.Release(); }
+    }
+
+    public async ValueTask<DesktopUpdateSnapshot> DownloadAsync(CancellationToken cancellationToken = default)
+    {
+        if (!await TryEnterOperationAsync(cancellationToken)) return GetState();
+        try
+        {
+            UpdateInfo update;
+            lock (stateSync)
+            {
+                if (latestRelease is null || preparedUpdate is not null || phase is not (DesktopUpdatePhase.Available or DesktopUpdatePhase.Error)) return GetState();
+                update = latestRelease;
+            }
+            SetState(DesktopUpdatePhase.Downloading, null, null, null, 0, null);
+            var result = await preparationService.PrepareAsync(update, new DelegateProgress<UpdatePreparationProgress>(ApplyPreparationProgress), cancellationToken);
+            lock (stateSync)
+            {
+                preparedUpdate = result;
+                preparationStage = UpdatePreparationStage.Ready;
+                phase = DesktopUpdatePhase.Ready;
+                errorCode = null;
+                errorMessage = null;
+            }
+            return GetState();
+        }
+        catch (OperationCanceledException)
+        {
+            lock (stateSync) { phase = DesktopUpdatePhase.Available; preparationStage = null; bytesReceived = 0; totalBytes = null; }
+            throw;
+        }
+        catch (Exception)
+        {
+            lock (stateSync) { phase = DesktopUpdatePhase.Error; preparedUpdate = null; errorCode = DownloadFailureCode; errorMessage = "Could not download or verify the update. Try again."; }
+            return GetState();
+        }
+        finally { operationGate.Release(); }
+    }
+
+    public async ValueTask<DesktopUpdateSnapshot> InstallAsync(CancellationToken cancellationToken = default)
+    {
+        if (!await TryEnterOperationAsync(cancellationToken)) return GetState();
+        try
+        {
+            PreparedUpdate update;
+            lock (stateSync)
+            {
+                if (preparedUpdate is null || phase is not (DesktopUpdatePhase.Ready or DesktopUpdatePhase.Error)) return GetState();
+                update = preparedUpdate;
+            }
+            SetState(DesktopUpdatePhase.Installing, null, null);
+            var outcome = await installHandoff.BeginAsync(update, cancellationToken);
+            if (outcome == UpdateInstallHandoffOutcome.Cancelled) SetState(DesktopUpdatePhase.Ready, null, null);
+            return GetState();
+        }
+        catch (OperationCanceledException)
+        {
+            SetState(DesktopUpdatePhase.Ready, null, null);
+            throw;
+        }
+        catch (Exception)
+        {
+            SetState(DesktopUpdatePhase.Error, InstallFailureCode, "Could not start the updater. Printable Book remains open and the prepared update can be retried.");
+            return GetState();
+        }
+        finally { operationGate.Release(); }
+    }
+
+    private async ValueTask<bool> TryEnterOperationAsync(CancellationToken cancellationToken) => await operationGate.WaitAsync(TimeSpan.Zero, cancellationToken);
+
+    private void ApplyPreparationProgress(UpdatePreparationProgress progress)
+    {
+        var mappedPhase = progress.Stage is UpdatePreparationStage.DownloadingArchive or UpdatePreparationStage.DownloadingChecksum ? DesktopUpdatePhase.Downloading : progress.Stage is UpdatePreparationStage.Ready ? DesktopUpdatePhase.Ready : DesktopUpdatePhase.Verifying;
+        SetState(mappedPhase, null, null, progress.Stage, progress.BytesReceived, progress.TotalBytes);
+    }
+
+    private void SetState(DesktopUpdatePhase value, string? code, string? message, UpdatePreparationStage? stage = null, long? received = null, long? total = null)
+    {
+        lock (stateSync)
+        {
+            phase = value; errorCode = code; errorMessage = message;
+            if (stage is not null) preparationStage = stage;
+            if (received is not null) bytesReceived = received.Value;
+            if (total is not null || received is not null) totalBytes = total;
+        }
+    }
+
+    private void Restore(DesktopUpdateSnapshot snapshot)
+    {
+        lock (stateSync)
+        {
+            phase = snapshot.Phase; latestRelease = snapshot.LatestRelease; preparationStage = snapshot.PreparationStage; bytesReceived = snapshot.BytesReceived; totalBytes = snapshot.TotalBytes; lastCheckedAtUtc = snapshot.LastCheckedAtUtc; errorCode = snapshot.ErrorCode; errorMessage = snapshot.ErrorMessage;
+        }
+    }
+
+    private sealed class DelegateProgress<T>(Action<T> report) : IProgress<T> { public void Report(T value) => report(value); }
 }
