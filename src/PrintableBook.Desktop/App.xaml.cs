@@ -6,7 +6,9 @@ using PrintableBook.Desktop.Loading;
 using PrintableBook.Desktop.Diagnostics;
 using PrintableBook.Core.Application.Diagnostics;
 using PrintableBook.Core.Application.BackgroundTasks;
+using PrintableBook.Core.Application.Updates;
 using PrintableBook.Desktop.BackgroundTasks;
+using PrintableBook.Desktop.Updates;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -29,6 +31,7 @@ public partial class App : Application
         services.AddSingleton<UiDiagnosticsService>();
         services.AddSingleton<IOperationDiagnostics>(provider => provider.GetRequiredService<UiDiagnosticsService>());
         services.AddSingleton<IBackgroundTaskManager, BackgroundTaskManager>();
+        services.AddSingleton<IApplicationVersionProvider, DesktopApplicationVersionProvider>();
         services.AddSingleton(provider => new DispatcherStallMonitor(Dispatcher.CurrentDispatcher, provider.GetRequiredService<UiDiagnosticsService>()));
         services.AddSingleton<ApplicationLoadCoordinator>();
         services.AddSingleton<IApplicationSnapshotProvider>(provider => provider.GetRequiredService<ApplicationLoadCoordinator>());

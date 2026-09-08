@@ -8,6 +8,7 @@ using PrintableBook.Core.Application.Pipelines;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Services;
 using PrintableBook.Core.Application.Brands;
+using PrintableBook.Core.Application.Updates;
 
 namespace PrintableBook.Core.DependencyInjection;
 
@@ -35,6 +36,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBookProcessingQueueBookProcessor, WorkspaceBookProcessingQueueBookProcessor>();
         services.AddSingleton<BookProcessingQueueProcessor>();
         services.AddSingleton<IPrintableBookApplication, PrintableBookApplication>();
+        services.AddSingleton<IUpdateService, UpdateService>();
         return services;
     }
 }
