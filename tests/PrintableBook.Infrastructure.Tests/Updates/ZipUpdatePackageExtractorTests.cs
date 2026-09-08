@@ -62,6 +62,19 @@ public sealed class ZipUpdatePackageExtractorTests
     }
 
     [Fact]
+    public async Task ExtractAsyncRejectsDuplicateFileDestinations()
+    {
+        using var directory = new TemporaryDirectory();
+        var archivePath = Path.Combine(directory.Path, "package.zip");
+        CreateZip(
+            archivePath,
+            ("PrintableBook.exe", Bytes("first")),
+            ("PrintableBook.exe", Bytes("second")));
+
+        await Assert.ThrowsAsync<InvalidDataException>(async () => await new ZipUpdatePackageExtractor().ExtractAsync(archivePath, Path.Combine(directory.Path, "extraction")).AsTask());
+    }
+
+    [Fact]
     public async Task ExtractAsyncClassifiesMalformedZipAsInvalidData()
     {
         using var directory = new TemporaryDirectory();

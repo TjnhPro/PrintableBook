@@ -48,6 +48,12 @@ public sealed class ZipUpdatePackageExtractor
                 }
 
                 Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+                if (File.Exists(destinationPath))
+                {
+                    throw new InvalidDataException(
+                        $"ZIP archive contains duplicate file destination: '{entry.FullName}'.");
+                }
+
                 await using var source = entry.Open();
                 await using var destination = new FileStream(
                     destinationPath,
