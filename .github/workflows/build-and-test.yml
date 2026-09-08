@@ -37,6 +37,9 @@ jobs:
       - name: Run repository-owned Infrastructure integration tests
         run: dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "TestScope!=LocalCorpus"
 
+      - name: Run Updater tests
+        run: dotnet test tests/PrintableBook.Updater.Tests/PrintableBook.Updater.Tests.csproj --configuration Release --no-build
+
       - name: Run Desktop bridge tests
         run: dotnet test tests/PrintableBook.Desktop.Tests/PrintableBook.Desktop.Tests.csproj --configuration Release --no-build
 
