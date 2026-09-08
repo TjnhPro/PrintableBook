@@ -8,7 +8,7 @@ namespace PrintableBook.Infrastructure.Tests.Updates;
 public sealed class UpdateDependencyInjectionTests
 {
     [Fact]
-    public void AddPrintableBookInfrastructureRegistersGitHubUpdateFeed()
+    public void AddPrintableBookInfrastructureRegistersUpdateServices()
     {
         var services = new ServiceCollection();
 
@@ -16,7 +16,12 @@ public sealed class UpdateDependencyInjectionTests
 
         using var provider = services.BuildServiceProvider();
         var feed = provider.GetRequiredService<IUpdateFeed>();
+        var preparation = provider.GetRequiredService<IUpdatePreparationService>();
+        var factory = provider.GetRequiredService<IHttpClientFactory>();
+        using var downloadClient = factory.CreateClient(HttpUpdateAssetDownloader.HttpClientName);
 
         Assert.IsType<GitHubReleaseUpdateFeed>(feed);
+        Assert.IsType<UpdatePreparationService>(preparation);
+        Assert.Equal(TimeSpan.FromMinutes(5), downloadClient.Timeout);
     }
 }

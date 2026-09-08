@@ -6,4 +6,5 @@ public sealed record UpdateInfo(
     string Name,
     string? ReleaseNotes,
     DateTimeOffset PublishedAtUtc,
-    Uri ReleasePageUri);
+    Uri ReleasePageUri,
+    UpdatePackageInfo Package);

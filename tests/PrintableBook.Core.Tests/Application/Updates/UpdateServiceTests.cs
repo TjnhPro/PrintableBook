@@ -76,13 +76,24 @@ public sealed class UpdateServiceTests
 
     private static UpdateInfo Release(string version)
     {
+        var archiveName = $"PrintableBook-{version}-win-x64.zip";
+
         return new UpdateInfo(
             Version.Parse(version),
             $"v{version}",
             $"Printable Book v{version}",
             null,
             new DateTimeOffset(2026, 9, 8, 0, 0, 0, TimeSpan.Zero),
-            new Uri($"https://github.com/TjnhPro/PrintableBook/releases/tag/v{version}"));
+            new Uri($"https://github.com/TjnhPro/PrintableBook/releases/tag/v{version}"),
+            new UpdatePackageInfo(
+                new UpdateAssetInfo(
+                    archiveName,
+                    new Uri($"https://example.test/{archiveName}"),
+                    14_000_000),
+                new UpdateAssetInfo(
+                    $"{archiveName}.sha256",
+                    new Uri($"https://example.test/{archiveName}.sha256"),
+                    99)));
     }
 
     private sealed class StubVersionProvider(Version currentVersion)

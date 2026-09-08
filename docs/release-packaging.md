@@ -28,6 +28,34 @@ PrintableBook-<version>-win-x64/
 
 `brands/`, `sources/`, `settings.json`, `.workspace/` và output của người dùng không nằm trong ZIP. Chúng được tạo hoặc đặt cạnh executable sau khi giải nén vào thư mục có quyền ghi.
 
+## Update preparation assets and storage
+
+Mỗi release xuất hai asset phục vụ quá trình chuẩn bị cập nhật:
+
+```text
+PrintableBook-<version>-win-x64.zip
+PrintableBook-<version>-win-x64.zip.sha256
+```
+
+Sidecar SHA256 chứa đúng một dòng theo định dạng:
+
+```text
+<64-hex-sha256>  PrintableBook-<version>-win-x64.zip
+```
+
+Trước khi có updater riêng, ứng dụng chỉ tải, kiểm tra SHA256, giải nén và
+stage payload đã kiểm chứng tại vị trí ngoài AppRoot:
+
+```text
+%LOCALAPPDATA%\PrintableBook\Updates\
+├─ downloads\
+└─ staging\
+```
+
+PR2 không ghi đè AppRoot, không cài đặt, và không restart ứng dụng. SHA256
+sidecar chỉ kiểm tra tính toàn vẹn; code signing và xác thực chữ ký chưa có ở
+giai đoạn này.
+
 ## Dữ liệu WebView2 lúc chạy
 
 Chromium profile, GPU cache và crash data của WebView2 được lưu cố định tại

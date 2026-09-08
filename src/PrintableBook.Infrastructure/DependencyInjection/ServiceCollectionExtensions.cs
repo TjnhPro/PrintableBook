@@ -67,6 +67,17 @@ public static class ServiceCollectionExtensions
             client.Timeout = TimeSpan.FromSeconds(10);
         });
         services.AddSingleton<IUpdateFeed, GitHubReleaseUpdateFeed>();
+        services.AddHttpClient(HttpUpdateAssetDownloader.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(5);
+        });
+        services.AddSingleton<IUpdateStorageRootProvider, LocalAppDataUpdateStorageRootProvider>();
+        services.AddSingleton<UpdateStorageLayout>();
+        services.AddSingleton<HttpUpdateAssetDownloader>();
+        services.AddSingleton<Sha256PackageVerifier>();
+        services.AddSingleton<ZipUpdatePackageExtractor>();
+        services.AddSingleton<UpdatePackageContractValidator>();
+        services.AddSingleton<IUpdatePreparationService, UpdatePreparationService>();
         return services;
     }
 }
