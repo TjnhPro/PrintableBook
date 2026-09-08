@@ -1,0 +1,87 @@
+name: Build release candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout main candidate
+        uses: actions/checkout@v5
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+
+      - name: Restore
+        run: dotnet restore PrintableBook.sln
+
+      - name: Build
+        run: dotnet build PrintableBook.sln --configuration Release --no-restore
+
+      - name: Run Core tests
+        run: dotnet test tests/PrintableBook.Core.Tests/PrintableBook.Core.Tests.csproj --configuration Release --no-build
+
+      - name: Run UpdateSecurity tests
+        run: dotnet test tests/PrintableBook.UpdateSecurity.Tests/PrintableBook.UpdateSecurity.Tests.csproj --configuration Release --no-build
+
+      - name: Run repository-owned Infrastructure integration tests
+        run: dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "TestScope!=LocalCorpus"
+
+      - name: Run Updater tests
+        run: dotnet test tests/PrintableBook.Updater.Tests/PrintableBook.Updater.Tests.csproj --configuration Release --no-build
+
+      - name: Run Desktop tests
+        run: dotnet test tests/PrintableBook.Desktop.Tests/PrintableBook.Desktop.Tests.csproj --configuration Release --no-build
+
+      - name: Run ReleaseTool tests
+        run: dotnet test tests/PrintableBook.ReleaseTool.Tests/PrintableBook.ReleaseTool.Tests.csproj --configuration Release --no-build
+
+      - name: Run frontend bridge tests
+        run: node --test tests/PrintableBook.Desktop.Bridge.Tests/app-bridge.test.mjs
+
+      - name: Run production UI contract tests
+        run: node src/PrintableBook.Desktop/Frontend/test-production-ui.mjs
+
+      - name: Read candidate version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (& dotnet msbuild src/PrintableBook.Desktop/PrintableBook.Desktop.csproj -nologo -getProperty:Version).Trim()
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Desktop Version is empty."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Package signed release candidate
+        shell: pwsh
+        env:
+          PRINTABLEBOOK_UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.PRINTABLEBOOK_UPDATE_SIGNING_PRIVATE_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:PRINTABLEBOOK_UPDATE_SIGNING_PRIVATE_KEY)) {
+            throw "PRINTABLEBOOK_UPDATE_SIGNING_PRIVATE_KEY is not configured."
+          }
+          ./scripts/publish-release.ps1 -ExpectedVersion "${{ steps.version.outputs.version }}"
+
+      - name: Upload signed release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrintableBook-${{ steps.version.outputs.version }}-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            artifacts/release/PrintableBook-${{ steps.version.outputs.version }}-win-x64.zip
+            artifacts/release/PrintableBook-${{ steps.version.outputs.version }}-win-x64.zip.sha256
+            artifacts/release/PrintableBook-${{ steps.version.outputs.version }}-win-x64.manifest.json
+            artifacts/release/PrintableBook-${{ steps.version.outputs.version }}-win-x64.manifest.json.sig
