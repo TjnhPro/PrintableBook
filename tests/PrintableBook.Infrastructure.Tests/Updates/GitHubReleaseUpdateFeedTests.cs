@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using PrintableBook.Core.Application.Updates;
 using PrintableBook.Infrastructure.Updates;
 
 namespace PrintableBook.Infrastructure.Tests.Updates;
@@ -34,6 +35,13 @@ public sealed class GitHubReleaseUpdateFeedTests
         Assert.Equal("release notes", result.ReleaseNotes);
         Assert.Equal(new DateTimeOffset(2026, 9, 8, 0, 0, 0, TimeSpan.Zero), result.PublishedAtUtc);
         Assert.Equal(new Uri("https://github.com/TjnhPro/PrintableBook/releases/tag/v0.1.2"), result.ReleasePageUri);
+        Assert.Equal("PrintableBook-0.1.2-win-x64.zip", result.Package.Archive.Name);
+        Assert.Equal(14_227_311, result.Package.Archive.SizeBytes);
+        Assert.Equal(
+            new Uri("https://github.com/TjnhPro/PrintableBook/releases/download/v0.1.2/PrintableBook-0.1.2-win-x64.zip"),
+            result.Package.Archive.DownloadUri);
+        Assert.Equal("PrintableBook-0.1.2-win-x64.zip.sha256", result.Package.Checksum.Name);
+        Assert.Equal(99, result.Package.Checksum.SizeBytes);
         Assert.Equal(HttpMethod.Get, method);
         Assert.Equal("/repos/TjnhPro/PrintableBook/releases/latest", path);
         Assert.Contains("PrintableBook", userAgent, StringComparison.Ordinal);
@@ -118,6 +126,46 @@ public sealed class GitHubReleaseUpdateFeedTests
         Assert.Equal(2, factory.CreateClientCallCount);
     }
 
+    [Theory]
+    [MemberData(nameof(InvalidPackageAssets))]
+    public async Task GetLatestStableAsyncRejectsMissingOrInvalidRequiredPackageAssets(string assetsJson)
+    {
+        var factory = CreateFactory((_, _) => JsonResponse(ReleaseJson(assetsJson: assetsJson)));
+        var feed = new GitHubReleaseUpdateFeed(factory);
+
+        await Assert.ThrowsAsync<InvalidDataException>(async () => await feed.GetLatestStableAsync().AsTask());
+    }
+
+    [Fact]
+    public async Task GetLatestStableAsyncIgnoresUnrelatedAssets()
+    {
+        var assets = AssetsJson(
+            ArchiveAsset(),
+            ChecksumAsset(),
+            AssetJson("notes.txt", 42, "https://example.test/notes.txt"),
+            AssetJson("update-manifest.json", 99, "https://example.test/update-manifest.json"));
+        var factory = CreateFactory((_, _) => JsonResponse(ReleaseJson(assetsJson: assets)));
+        var feed = new GitHubReleaseUpdateFeed(factory);
+
+        var result = await feed.GetLatestStableAsync();
+
+        Assert.Equal("PrintableBook-0.1.2-win-x64.zip", result!.Package.Archive.Name);
+    }
+
+    public static IEnumerable<object[]> InvalidPackageAssets()
+    {
+        yield return [AssetsJson(ChecksumAsset())];
+        yield return [AssetsJson(ArchiveAsset())];
+        yield return [AssetsJson(ArchiveAsset(size: 0), ChecksumAsset())];
+        yield return [AssetsJson(ArchiveAsset(), ChecksumAsset(size: 0))];
+        yield return [AssetsJson(ArchiveAsset(downloadUrl: null), ChecksumAsset())];
+        yield return [AssetsJson(ArchiveAsset(), ChecksumAsset(downloadUrl: "not-a-url"))];
+        yield return [AssetsJson(
+            AssetJson("PrintableBook-9.9.9-win-x64.zip", 14_000_000, "https://example.test/other.zip"),
+            AssetJson("PrintableBook-9.9.9-win-x64.zip.sha256", 99, "https://example.test/other.zip.sha256"))];
+        yield return [AssetsJson(ArchiveAsset(), ArchiveAsset(), ChecksumAsset())];
+    }
+
     private static IHttpClientFactory CreateFactory(
         Func<HttpRequestMessage, CancellationToken, HttpResponseMessage> responder)
     {
@@ -141,7 +189,7 @@ public sealed class GitHubReleaseUpdateFeedTests
         };
     }
 
-    private static string ReleaseJson(string? replacement = null)
+    private static string ReleaseJson(string? replacement = null, string? assetsJson = null)
     {
         var properties = new[]
         {
@@ -152,6 +200,7 @@ public sealed class GitHubReleaseUpdateFeedTests
             "\"prerelease\": false",
             "\"published_at\": \"2026-09-08T00:00:00Z\"",
             "\"html_url\": \"https://github.com/TjnhPro/PrintableBook/releases/tag/v0.1.2\"",
+            $"\"assets\": {assetsJson ?? AssetsJson(ArchiveAsset(), ChecksumAsset())}",
         };
 
         if (replacement is not null)
@@ -161,6 +210,31 @@ public sealed class GitHubReleaseUpdateFeedTests
         }
 
         return $"{{{string.Join(',', properties)}}}";
+    }
+
+    private static string ArchiveAsset(long size = 14_227_311, string? downloadUrl = "https://github.com/TjnhPro/PrintableBook/releases/download/v0.1.2/PrintableBook-0.1.2-win-x64.zip")
+    {
+        return AssetJson("PrintableBook-0.1.2-win-x64.zip", size, downloadUrl);
+    }
+
+    private static string ChecksumAsset(long size = 99, string? downloadUrl = "https://github.com/TjnhPro/PrintableBook/releases/download/v0.1.2/PrintableBook-0.1.2-win-x64.zip.sha256")
+    {
+        return AssetJson("PrintableBook-0.1.2-win-x64.zip.sha256", size, downloadUrl);
+    }
+
+    private static string AssetJson(string name, long size, string? downloadUrl)
+    {
+        return JsonSerializer.Serialize(new
+        {
+            name,
+            size,
+            browser_download_url = downloadUrl,
+        });
+    }
+
+    private static string AssetsJson(params string[] assets)
+    {
+        return $"[{string.Join(',', assets)}]";
     }
 
     private sealed class StubHttpMessageHandler(

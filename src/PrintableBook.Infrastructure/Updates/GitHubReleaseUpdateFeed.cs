@@ -44,6 +44,12 @@ public sealed class GitHubReleaseUpdateFeed(IHttpClientFactory httpClientFactory
         var version = ParseStableVersion(tagName);
         var publishedAt = ParsePublishedAt(dto.PublishedAt);
         var releasePageUri = ParseReleasePageUri(dto.HtmlUrl);
+        var archiveName = $"PrintableBook-{version.ToString(3)}-win-x64.zip";
+        var checksumName = $"{archiveName}.sha256";
+        var assets = dto.Assets ?? [];
+        var package = new UpdatePackageInfo(
+            GetRequiredAsset(assets, archiveName),
+            GetRequiredAsset(assets, checksumName));
 
         return new UpdateInfo(
             version,
@@ -51,7 +57,8 @@ public sealed class GitHubReleaseUpdateFeed(IHttpClientFactory httpClientFactory
             dto.Name ?? tagName,
             dto.Body,
             publishedAt,
-            releasePageUri);
+            releasePageUri,
+            package);
     }
 
     private static Version ParseStableVersion(string tagName)
@@ -100,6 +107,34 @@ public sealed class GitHubReleaseUpdateFeed(IHttpClientFactory httpClientFactory
         return uri;
     }
 
+    private static UpdateAssetInfo GetRequiredAsset(
+        IReadOnlyCollection<GitHubReleaseAssetDto> assets,
+        string expectedName)
+    {
+        var matches = assets
+            .Where(asset => string.Equals(asset.Name, expectedName, StringComparison.Ordinal))
+            .ToArray();
+
+        if (matches.Length != 1)
+        {
+            throw new InvalidDataException($"GitHub release must contain exactly one '{expectedName}' asset.");
+        }
+
+        var asset = matches[0];
+        if (asset.Size <= 0)
+        {
+            throw new InvalidDataException($"GitHub release asset '{expectedName}' has an invalid size.");
+        }
+
+        if (string.IsNullOrWhiteSpace(asset.BrowserDownloadUrl) ||
+            !Uri.TryCreate(asset.BrowserDownloadUrl, UriKind.Absolute, out var downloadUri))
+        {
+            throw new InvalidDataException($"GitHub release asset '{expectedName}' has an invalid browser_download_url.");
+        }
+
+        return new UpdateAssetInfo(expectedName, downloadUri, asset.Size);
+    }
+
     private sealed record GitHubReleaseDto(
         [property: JsonPropertyName("tag_name")] string? TagName,
         [property: JsonPropertyName("name")] string? Name,
@@ -107,5 +142,11 @@ public sealed class GitHubReleaseUpdateFeed(IHttpClientFactory httpClientFactory
         [property: JsonPropertyName("draft")] bool Draft,
         [property: JsonPropertyName("prerelease")] bool Prerelease,
         [property: JsonPropertyName("published_at")] string? PublishedAt,
-        [property: JsonPropertyName("html_url")] string? HtmlUrl);
+        [property: JsonPropertyName("html_url")] string? HtmlUrl,
+        [property: JsonPropertyName("assets")] GitHubReleaseAssetDto[]? Assets);
+
+    private sealed record GitHubReleaseAssetDto(
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("size")] long Size,
+        [property: JsonPropertyName("browser_download_url")] string? BrowserDownloadUrl);
 }
