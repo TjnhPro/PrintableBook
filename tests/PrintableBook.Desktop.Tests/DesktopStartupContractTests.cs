@@ -42,4 +42,28 @@ public sealed class DesktopStartupContractTests
         Assert.Contains("diagnostics.Record(\"webview.profile\"", source, StringComparison.Ordinal);
         Assert.Contains("Browser.CoreWebView2.Navigate", source, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Desktop_composition_registers_and_passes_the_update_lifecycle()
+    {
+        var repositoryRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var appSource = File.ReadAllText(Path.Combine(repositoryRoot, "src", "PrintableBook.Desktop", "App.xaml.cs"));
+        var windowSource = File.ReadAllText(Path.Combine(repositoryRoot, "src", "PrintableBook.Desktop", "MainWindow.xaml.cs"));
+
+        foreach (var registration in new[]
+        {
+            "services.AddSingleton<UpdateShutdownState>();",
+            "services.AddSingleton<IUpdateRuntimeInfo, UpdateRuntimeInfo>();",
+            "services.AddSingleton<IUpdaterProcessLauncher, UpdaterProcessLauncher>();",
+            "services.AddSingleton<IUpdateApplicationLifetime, WpfUpdateApplicationLifetime>();",
+            "services.AddSingleton<IUpdateInstallHandoff, DesktopUpdateInstallHandoff>();",
+            "services.AddSingleton<IDesktopUpdateCoordinator, DesktopUpdateCoordinator>();"
+        })
+        {
+            Assert.Contains(registration, appSource, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("IDesktopUpdateCoordinator updateCoordinator", windowSource, StringComparison.Ordinal);
+        Assert.Contains("updateCoordinator: updateCoordinator", windowSource, StringComparison.Ordinal);
+    }
 }

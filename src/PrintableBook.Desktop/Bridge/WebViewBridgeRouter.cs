@@ -10,6 +10,7 @@ using PrintableBook.Core.Application.BackgroundTasks.Workers;
 using PrintableBook.Core.Application.Storage;
 using PrintableBook.Core.Application.Brands;
 using PrintableBook.Desktop.BackgroundTasks;
+using PrintableBook.Desktop.Updates;
 
 namespace PrintableBook.Desktop.Bridge;
 
@@ -29,7 +30,8 @@ internal sealed class WebViewBridgeRouter(
     UiDiagnosticsService? uiDiagnosticsService = null,
     IBackgroundTaskManager? backgroundTaskManager = null,
     ProcessingMutationGate? processingMutationGate = null,
-    IBrandValidationService? brandValidationService = null)
+    IBrandValidationService? brandValidationService = null,
+    IDesktopUpdateCoordinator? updateCoordinator = null)
 {
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
     private readonly ProcessingMutationGate processingMutationGate = processingMutationGate ?? new ProcessingMutationGate();
@@ -50,6 +52,35 @@ internal sealed class WebViewBridgeRouter(
 
         try
         {
+            if (request.Command == "updates.getState")
+            {
+                return updateCoordinator is null ? BridgeResponse.UnsupportedCommand(request.Id) : BridgeResponse.Succeeded(request.Id, "updates.state", UpdateBridgeSnapshot.From(updateCoordinator.GetState()));
+            }
+            if (request.Command == "updates.check")
+            {
+                if (updateCoordinator is null) return BridgeResponse.UnsupportedCommand(request.Id);
+                var trigger = UpdateCheckTrigger.Manual;
+                if (request.Payload is { } updatePayload && updatePayload.TryGetProperty("trigger", out var triggerElement))
+                {
+                    var triggerValue = triggerElement.ValueKind == JsonValueKind.String ? triggerElement.GetString() : null;
+                    if (triggerValue is null ||
+                        (!string.Equals(triggerValue, "automatic", StringComparison.OrdinalIgnoreCase) &&
+                         !string.Equals(triggerValue, "manual", StringComparison.OrdinalIgnoreCase)) ||
+                        !Enum.TryParse<UpdateCheckTrigger>(triggerValue, true, out trigger))
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "invalid_update_check_trigger");
+                    }
+                }
+                return BridgeResponse.Succeeded(request.Id, "updates.state", UpdateBridgeSnapshot.From(await updateCoordinator.CheckAsync(trigger, cancellationToken)));
+            }
+            if (request.Command == "updates.download")
+            {
+                return updateCoordinator is null ? BridgeResponse.UnsupportedCommand(request.Id) : BridgeResponse.Succeeded(request.Id, "updates.state", UpdateBridgeSnapshot.From(await updateCoordinator.DownloadAsync(cancellationToken)));
+            }
+            if (request.Command == "updates.install")
+            {
+                return updateCoordinator is null ? BridgeResponse.UnsupportedCommand(request.Id) : BridgeResponse.Succeeded(request.Id, "updates.state", UpdateBridgeSnapshot.From(await updateCoordinator.InstallAsync(cancellationToken)));
+            }
             using var operation = diagnostics.Begin($"bridge.{request.Command}");
             var response = RouteSynchronous(request);
             if (response.Error is not null || response.Command is not null) return response;

@@ -32,6 +32,12 @@ public partial class App : Application
         services.AddSingleton<IOperationDiagnostics>(provider => provider.GetRequiredService<UiDiagnosticsService>());
         services.AddSingleton<IBackgroundTaskManager, BackgroundTaskManager>();
         services.AddSingleton<IApplicationVersionProvider, DesktopApplicationVersionProvider>();
+        services.AddSingleton<UpdateShutdownState>();
+        services.AddSingleton<IUpdateRuntimeInfo, UpdateRuntimeInfo>();
+        services.AddSingleton<IUpdaterProcessLauncher, UpdaterProcessLauncher>();
+        services.AddSingleton<IUpdateApplicationLifetime, WpfUpdateApplicationLifetime>();
+        services.AddSingleton<IUpdateInstallHandoff, DesktopUpdateInstallHandoff>();
+        services.AddSingleton<IDesktopUpdateCoordinator, DesktopUpdateCoordinator>();
         services.AddSingleton(provider => new DispatcherStallMonitor(Dispatcher.CurrentDispatcher, provider.GetRequiredService<UiDiagnosticsService>()));
         services.AddSingleton<ApplicationLoadCoordinator>();
         services.AddSingleton<IApplicationSnapshotProvider>(provider => provider.GetRequiredService<ApplicationLoadCoordinator>());

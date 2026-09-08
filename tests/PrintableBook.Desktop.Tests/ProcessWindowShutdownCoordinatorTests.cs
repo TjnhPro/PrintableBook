@@ -11,13 +11,19 @@ public sealed class ProcessWindowShutdownCoordinatorTests
     [Fact]
     public void ShouldHandleInteractiveClose_keeps_normal_user_close_on_the_coordinator_path()
     {
-        Assert.True(MainWindow.ShouldHandleInteractiveClose(allowClose: false, systemShutdown: false));
+        Assert.True(MainWindow.ShouldHandleInteractiveClose(allowClose: false, systemShutdown: false, updateShutdownRequested: false));
     }
 
     [Fact]
     public void ShouldHandleInteractiveClose_bypasses_the_coordinator_during_system_shutdown()
     {
-        Assert.False(MainWindow.ShouldHandleInteractiveClose(allowClose: false, systemShutdown: true));
+        Assert.False(MainWindow.ShouldHandleInteractiveClose(allowClose: false, systemShutdown: true, updateShutdownRequested: false));
+    }
+
+    [Fact]
+    public void ShouldHandleInteractiveClose_bypasses_the_coordinator_after_an_update_shutdown_is_requested()
+    {
+        Assert.False(MainWindow.ShouldHandleInteractiveClose(allowClose: false, systemShutdown: false, updateShutdownRequested: true));
     }
 
     [Fact]
@@ -87,12 +93,27 @@ public sealed class ProcessWindowShutdownCoordinatorTests
         Assert.Equal(0, prompt.TimeoutPromptCount);
     }
 
+    [Fact]
+    public async Task RequestUpdateRestartAsync_uses_the_existing_shutdown_algorithm_with_update_intent()
+    {
+        var prompt = new StubPrompt(ActiveProcessCloseDecision.StopAndExit, ProcessStopTimeoutDecision.KeepWaiting);
+        var session = new StubSession(true, [false, true]);
+
+        var outcome = await new ProcessWindowShutdownCoordinator(session, prompt).RequestUpdateRestartAsync();
+
+        Assert.Equal(ProcessWindowCloseOutcome.Close, outcome);
+        Assert.All(prompt.ActiveIntents, intent => Assert.Equal(ProcessShutdownIntent.RestartForUpdate, intent));
+        Assert.All(prompt.TimeoutIntents, intent => Assert.Equal(ProcessShutdownIntent.RestartForUpdate, intent));
+    }
+
     private sealed class StubPrompt(ActiveProcessCloseDecision activeDecision = ActiveProcessCloseDecision.StopAndExit, ProcessStopTimeoutDecision timeoutDecision = ProcessStopTimeoutDecision.ForceExit) : IProcessShutdownPrompt
     {
         public int ActivePromptCount { get; private set; }
         public int TimeoutPromptCount { get; private set; }
-        public ActiveProcessCloseDecision ConfirmActiveProcessClose() { ActivePromptCount++; return activeDecision; }
-        public ProcessStopTimeoutDecision ConfirmStopTimeout() { TimeoutPromptCount++; return timeoutDecision; }
+        public List<ProcessShutdownIntent> ActiveIntents { get; } = [];
+        public List<ProcessShutdownIntent> TimeoutIntents { get; } = [];
+        public ActiveProcessCloseDecision ConfirmActiveProcessClose(ProcessShutdownIntent intent) { ActivePromptCount++; ActiveIntents.Add(intent); return activeDecision; }
+        public ProcessStopTimeoutDecision ConfirmStopTimeout(ProcessShutdownIntent intent) { TimeoutPromptCount++; TimeoutIntents.Add(intent); return timeoutDecision; }
     }
 
     private sealed class StubSession(bool active, IReadOnlyList<bool> stopResults) : IProcessSessionService

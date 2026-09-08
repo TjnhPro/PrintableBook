@@ -63,8 +63,23 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     addEventListener: () => { },
     setAttribute: (name, value) => { refreshButton.attributes[name] = value; }
   };
+  const updateCheckButton = {
+    disabled: false,
+    listeners: {},
+    addEventListener: (eventName, handler) => { updateCheckButton.listeners[eventName] = handler; }
+  };
+  let updateBannerMarkup = "";
+  const updateBanner = {
+    hidden: true,
+    listeners: {},
+    get innerHTML() { return updateBannerMarkup; },
+    set innerHTML(markup) { updateBannerMarkup = markup; },
+    addEventListener: (eventName, handler) => { updateBanner.listeners[eventName] = handler; }
+  };
+  const versionLabel = { textContent: "Version 0.1" };
   const messages = [];
   const intervals = [];
+  const intervalDelays = [];
   const routeButtons = ["configuration", "brands", "books", "process", "outputs", "diagnostics"].map((route) => {
     const listeners = {};
     return { dataset: { route }, listeners, classList: { toggle: () => { } }, addEventListener: (eventName, handler) => { listeners[eventName] = handler; } };
@@ -80,8 +95,8 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
         postMessage: (message) => { messages.push(JSON.parse(message)); }
       }
     },
-    setInterval: (callback) => { intervals.push(callback); return intervals.length; },
-    clearInterval: () => { },
+    setInterval: (callback, delay) => { intervals.push(callback); intervalDelays.push(delay); return intervals.length; },
+    clearInterval: (id) => { intervals[id - 1] = null; },
     confirm: () => true,
     requestAnimationFrame: (callback) => { callback(); return 1; }
   };
@@ -89,7 +104,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   vm.runInNewContext(readFileSync(appScriptPath, "utf8"), {
     crypto: { randomUUID: () => "request-1" },
     document: {
-      getElementById: (id) => ({ "bridge-status": status, "app-content": content, "brand-select": brandSelect, "refresh-button": refreshButton }[id]),
+      getElementById: (id) => ({ "bridge-status": status, "app-content": content, "brand-select": brandSelect, "refresh-button": refreshButton, "update-check-button": updateCheckButton, "update-banner": updateBanner }[id]),
       createElement: (tagName) => ({ tagName, className: "", textContent: "", attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } }),
       querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : [],
       querySelector: (selector) => {
@@ -99,6 +114,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
         if (selector === ".book-drawer-body" && contentMarkup.includes('class="book-drawer-body"')) return bookDrawerBody;
         if (selector === ".interior-artwork-grid-scroll" && contentMarkup.includes('class="interior-artwork-grid-scroll"')) return artworkGrid;
         if (selector.startsWith('[data-action="intro-template-page"]')) return introPaginationFocus;
+        if (selector === ".pb-brand-version") return versionLabel;
         return selector === ".nav-item-active" && activeRoute ? { dataset: { route: activeRoute } } : null;
       },
       addEventListener: (eventName, handler) => { documentListeners[eventName] = handler; }
@@ -107,7 +123,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSelect, brandSelectListeners, brandSettingsEditor, refreshButton, contentListeners, documentListeners, routeButtons, intervals, messages, browserWindow, searchInput, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, brandSelect, brandSelectListeners, brandSettingsEditor, refreshButton, updateCheckButton, updateBanner, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, browserWindow, searchInput, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -188,6 +204,26 @@ const diagnosticsSnapshot = () => ({
   }]
 });
 
+const updateSnapshot = (phase, overrides = {}) => ({
+  phase,
+  currentVersion: "0.1.1",
+  latestVersion: "0.2.0",
+  releaseName: "Printable Book 0.2.0",
+  releaseNotes: "Bug fixes",
+  preparationStage: null,
+  bytesReceived: 0,
+  totalBytes: null,
+  errorMessage: null,
+  canCheck: false,
+  canDownload: false,
+  canInstall: false,
+  ...overrides
+});
+
+const applyUpdateResponse = (bridge, snapshot) => {
+  bridge.messageHandler({ data: { version: 1, id: "update-state", ok: true, command: "updates.state", payload: snapshot } });
+};
+
 test("bridge accepts the JSON response emitted by the .NET host", () => {
   const { messageHandler, status } = loadBridge();
 
@@ -239,7 +275,7 @@ test("desktop navigation names the outputs route PDF Library", () => {
 test("snapshot rendering opens the Book Library and keeps discovery and brand data in the bridge response", () => {
   const { messageHandler, status, content, brandSelect, messages } = loadBridge();
 
-  assert.deepEqual(messages.map((message) => message.command), ["app.ping", "app.refresh"]);
+  assert.deepEqual(messages.map((message) => message.command), ["app.ping", "updates.check", "app.refresh"]);
   messageHandler({
     data: {
       version: 1,
@@ -260,6 +296,109 @@ test("snapshot rendering opens the Book Library and keeps discovery and brand da
   assert.match(content.innerHTML, /Book 001/);
   assert.match(content.innerHTML, /Process Interior/);
   assert.doesNotMatch(content.innerHTML, /Paths \(Read Only\)/);
+});
+
+test("update responses render stable phases, escaped release notes, and archive progress", () => {
+  const bridge = loadBridge();
+
+  applyUpdateResponse(bridge, updateSnapshot("Available", { canDownload: true, releaseNotes: "<script>window.__updateXss = true</script>" }));
+  assert.match(bridge.updateBanner.innerHTML, /Printable Book 0\.2\.0 is available\./);
+  assert.match(bridge.updateBanner.innerHTML, /&lt;script&gt;window\.__updateXss = true&lt;\/script&gt;/);
+  assert.doesNotMatch(bridge.updateBanner.innerHTML, /<script>/);
+  assert.match(bridge.updateBanner.innerHTML, /Download update/);
+
+  applyUpdateResponse(bridge, updateSnapshot("Downloading", { preparationStage: "DownloadingArchive", bytesReceived: 524288, totalBytes: 1048576 }));
+  assert.match(bridge.updateBanner.innerHTML, /aria-valuenow="50"/);
+  assert.match(bridge.updateBanner.innerHTML, />50%/);
+
+  applyUpdateResponse(bridge, updateSnapshot("Downloading", { preparationStage: "DownloadingChecksum", bytesReceived: 524288, totalBytes: 1048576 }));
+  assert.match(bridge.updateBanner.innerHTML, /Downloading checksum…/);
+  assert.doesNotMatch(bridge.updateBanner.innerHTML, /aria-valuenow/);
+
+  applyUpdateResponse(bridge, updateSnapshot("Verifying", { preparationStage: "Extracting" }));
+  assert.match(bridge.updateBanner.innerHTML, /Extracting update…/);
+  applyUpdateResponse(bridge, updateSnapshot("Ready", { canInstall: true }));
+  assert.match(bridge.updateBanner.innerHTML, /Update 0\.2\.0 is ready\./);
+  assert.match(bridge.updateBanner.innerHTML, /Restart &amp; Update/);
+  applyUpdateResponse(bridge, updateSnapshot("UpToDate", { latestVersion: null, canCheck: true }));
+  assert.match(bridge.updateBanner.innerHTML, /Printable Book 0\.1\.1 is up to date\./);
+  applyUpdateResponse(bridge, updateSnapshot("Error", { errorMessage: "Could not start the updater.", canInstall: true }));
+  assert.match(bridge.updateBanner.innerHTML, /Could not start the updater\./);
+});
+
+test("update commands perform one automatic check, manual check, polling, and retry routing", () => {
+  const bridge = loadBridge();
+  assert.deepEqual(bridge.messages.filter((message) => message.command === "updates.check"), [{ version: 1, id: "request-1", command: "updates.check", payload: { trigger: "automatic" } }]);
+
+  applyUpdateResponse(bridge, updateSnapshot("UpToDate", { latestVersion: null, canCheck: true }));
+  bridge.updateCheckButton.listeners.click();
+  assert.deepEqual(bridge.messages.at(-1), { version: 1, id: "request-1", command: "updates.check", payload: { trigger: "manual" } });
+  assert.match(bridge.updateBanner.innerHTML, /Checking for updates…/);
+  bridge.updateCheckButton.listeners.click();
+  assert.equal(bridge.messages.filter((message) => message.command === "updates.check").length, 2);
+
+  applyUpdateResponse(bridge, updateSnapshot("Available", { canDownload: true }));
+  const download = { dataset: { updateAction: "download" }, closest: () => download };
+  const intervalCount = bridge.intervals.length;
+  bridge.updateBanner.listeners.click({ target: download });
+  assert.equal(bridge.messages.filter((message) => message.command === "updates.download").length, 1);
+  assert.equal(bridge.intervals.length, intervalCount + 1);
+  const updateIntervalIndex = bridge.intervals.length - 1;
+  assert.equal(bridge.intervalDelays[updateIntervalIndex], 250);
+  bridge.intervals[updateIntervalIndex]();
+  assert.equal(bridge.messages.at(-1).command, "updates.getState");
+
+  applyUpdateResponse(bridge, updateSnapshot("Ready", { canInstall: true }));
+  assert.equal(bridge.intervals[updateIntervalIndex], null);
+  const install = { dataset: { updateAction: "install" }, closest: () => install };
+  bridge.updateBanner.listeners.click({ target: install });
+  assert.equal(bridge.messages.at(-1).command, "updates.install");
+
+  applyUpdateResponse(bridge, updateSnapshot("Error", { canInstall: true }));
+  bridge.updateBanner.listeners.click({ target: install });
+  assert.equal(bridge.messages.at(-1).command, "updates.install");
+  applyUpdateResponse(bridge, updateSnapshot("Error", { canDownload: true }));
+  bridge.updateBanner.listeners.click({ target: download });
+  assert.equal(bridge.messages.at(-1).command, "updates.download");
+  applyUpdateResponse(bridge, updateSnapshot("Error", { canCheck: true }));
+  const check = { dataset: { updateAction: "check" }, closest: () => check };
+  bridge.updateBanner.listeners.click({ target: check });
+  assert.deepEqual(bridge.messages.at(-1), { version: 1, id: "request-1", command: "updates.check", payload: { trigger: "manual" } });
+});
+
+test("update polling stops when an active download reports an error", () => {
+  const bridge = loadBridge();
+  applyUpdateResponse(bridge, updateSnapshot("Available", { canDownload: true }));
+  const download = { dataset: { updateAction: "download" }, closest: () => download };
+  bridge.updateBanner.listeners.click({ target: download });
+  const updateIntervalIndex = bridge.intervals.length - 1;
+
+  applyUpdateResponse(bridge, updateSnapshot("Error", { canDownload: true }));
+
+  assert.equal(bridge.intervals[updateIntervalIndex], null);
+});
+
+test("update install posts once while pending and only retries after a host response", () => {
+  const bridge = loadBridge();
+  applyUpdateResponse(bridge, updateSnapshot("Ready", { canInstall: true }));
+  const install = { dataset: { updateAction: "install" }, closest: () => install };
+
+  bridge.updateBanner.listeners.click({ target: install });
+  bridge.updateBanner.listeners.click({ target: install });
+
+  assert.equal(bridge.messages.filter((message) => message.command === "updates.install").length, 1);
+  assert.match(bridge.updateBanner.innerHTML, /Restarting to install 0\.2\.0…/);
+  assert.doesNotMatch(bridge.updateBanner.innerHTML, /data-update-action="install"/);
+
+  applyUpdateResponse(bridge, updateSnapshot("Ready", { canInstall: true }));
+  bridge.updateBanner.listeners.click({ target: install });
+  assert.equal(bridge.messages.filter((message) => message.command === "updates.install").length, 2);
+
+  applyUpdateResponse(bridge, updateSnapshot("Error", { errorMessage: "Could not start the updater.", canInstall: true }));
+  const beforeRetry = bridge.messages.filter((message) => message.command === "updates.install").length;
+  bridge.updateBanner.listeners.click({ target: install });
+  bridge.updateBanner.listeners.click({ target: install });
+  assert.equal(bridge.messages.filter((message) => message.command === "updates.install").length, beforeRetry + 1);
 });
 
 test("Books display the active Interior page count without local folder size", () => {
@@ -385,7 +524,7 @@ test("cache cleanup active refresh error does not replace a usable library with 
 test("startup shows a loading library view while the first application refresh is pending", () => {
   const { content, messages } = loadBridge();
 
-  assert.deepEqual(messages.map((message) => message.command), ["app.ping", "app.refresh"]);
+  assert.deepEqual(messages.map((message) => message.command), ["app.ping", "updates.check", "app.refresh"]);
   assert.match(content.innerHTML, /Loading library…/);
   assert.match(content.innerHTML, /Discovering Books, workspace state and local outputs/);
 });

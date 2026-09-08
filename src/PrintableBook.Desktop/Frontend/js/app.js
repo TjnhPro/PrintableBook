@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "auto", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map() };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "auto", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateCheckWasManual: false };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -71,6 +71,56 @@
     state.pendingCommands.set(id, command);
     window.chrome.webview.postMessage(JSON.stringify({ version: 1, id, command, ...(payload ? { payload } : {}) }));
     return id;
+  };
+  const updatePhase = () => valueFor(state.updateSnapshot, "phase", "Idle");
+  const updateIsBusy = () => ["Checking", "Downloading", "Verifying", "Installing"].includes(updatePhase());
+  const stopUpdatePolling = () => { if (state.updatePollTimer !== null && window.clearInterval) window.clearInterval(state.updatePollTimer); state.updatePollTimer = null; };
+  const startUpdatePolling = () => { if (state.updatePollTimer === null) state.updatePollTimer = window.setInterval(() => send("updates.getState"), 250); };
+  const updateStageLabel = () => ({
+    DownloadingArchive: "Downloading update…",
+    DownloadingChecksum: "Downloading checksum…",
+    Verifying: "Verifying update…",
+    Extracting: "Extracting update…",
+    Validating: "Validating update…",
+    Ready: "Update ready"
+  })[valueFor(state.updateSnapshot, "preparationStage", "")] ?? "";
+  const renderUpdateBanner = () => {
+    const banner = document.getElementById("update-banner"); if (!banner) return;
+    const snapshot = state.updateSnapshot; const phase = updatePhase();
+    if (!snapshot || phase === "Idle" || (phase === "Checking" && !state.updateCheckWasManual)) { banner.hidden = true; banner.innerHTML = ""; return; }
+    const version = escapeHtml(valueFor(snapshot, "latestVersion", valueFor(snapshot, "currentVersion", "")));
+    const releaseName = escapeHtml(valueFor(snapshot, "releaseName", ""));
+    const notes = escapeHtml(valueFor(snapshot, "releaseNotes", ""));
+    const canCheck = valueFor(snapshot, "canCheck", false);
+    const canDownload = valueFor(snapshot, "canDownload", false);
+    const canInstall = valueFor(snapshot, "canInstall", false);
+    const retryAction = canInstall ? "install" : canDownload ? "download" : canCheck ? "check" : "";
+    const actions = phase === "UpToDate" && canCheck ? '<button class="button-secondary" data-update-action="check">Check again</button>'
+      : phase === "Available" && canDownload ? '<button class="button-primary" data-update-action="download">Download update</button>'
+      : phase === "Ready" && canInstall ? '<button class="button-primary" data-update-action="install">Restart &amp; Update</button>'
+      : phase === "Error" && retryAction ? `<button class="button-secondary" data-update-action="${retryAction}">${retryAction === "install" ? "Restart &amp; Update" : retryAction === "download" ? "Retry download" : "Check again"}</button>` : "";
+    const archiveTotal = Number(valueFor(snapshot, "totalBytes", 0));
+    const archiveStage = valueFor(snapshot, "preparationStage", "") === "DownloadingArchive";
+    const percent = archiveStage && archiveTotal > 0 ? Math.max(0, Math.min(100, Math.round(Number(valueFor(snapshot, "bytesReceived", 0)) / archiveTotal * 100))) : null;
+    const progress = percent === null ? "" : `<div class="update-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><span style="width:${percent}%"></span></div><span>${percent}%</span>`;
+    const message = phase === "Checking" ? "Checking for updates…" : phase === "UpToDate" ? `Printable Book ${version} is up to date.` : phase === "Available" ? `Printable Book ${version} is available.` : phase === "Ready" ? `Update ${version} is ready.` : phase === "Installing" ? `Restarting to install ${version}…` : phase === "Error" ? escapeHtml(valueFor(snapshot, "errorMessage", "Could not complete the update.")) : escapeHtml(updateStageLabel() || "Verifying update…");
+    banner.hidden = false; banner.innerHTML = `<div class="update-banner-inner"><div class="update-banner-copy"><strong>${message}</strong>${releaseName ? `<div>${releaseName}</div>` : ""}${progress}${notes ? `<div class="update-release-notes">${notes}</div>` : ""}</div><div class="update-banner-actions">${actions}</div></div>`;
+  };
+  const updateUpdateControls = () => {
+    const checkButton = document.getElementById("update-check-button");
+    const snapshot = state.updateSnapshot;
+    if (checkButton) checkButton.disabled = updateIsBusy() || state.updateCommandPending !== "" || valueFor(snapshot, "canCheck", false) === false;
+    const versionLabel = document.querySelector(".pb-brand-version");
+    const currentVersion = valueFor(snapshot, "currentVersion", "");
+    if (versionLabel && currentVersion) versionLabel.textContent = `Version ${currentVersion}`;
+  };
+  const applyUpdateSnapshot = (snapshot) => { state.updateSnapshot = snapshot ?? null; state.updateCommandPending = ""; renderUpdateBanner(); updateUpdateControls(); if (!["Downloading", "Verifying", "Installing"].includes(updatePhase())) stopUpdatePolling(); };
+  const beginUpdateCheck = (trigger = "manual") => { if (state.updateCommandPending !== "" || updateIsBusy()) return; state.updateCheckWasManual = trigger === "manual"; state.updateCommandPending = "check"; if (state.updateCheckWasManual) { state.updateSnapshot = { ...(state.updateSnapshot ?? {}), phase: "Checking", canCheck: false, canDownload: false, canInstall: false }; renderUpdateBanner(); } updateUpdateControls(); send("updates.check", { trigger }); };
+  const beginUpdateAction = (action) => {
+    if (state.updateCommandPending !== "" || updateIsBusy()) return;
+    if (action === "check") return beginUpdateCheck("manual");
+    if (action === "download") { state.updateCommandPending = "download"; state.updateSnapshot = { ...(state.updateSnapshot ?? {}), phase: "Downloading", canCheck: false, canDownload: false, canInstall: false }; renderUpdateBanner(); updateUpdateControls(); startUpdatePolling(); send("updates.download"); }
+    if (action === "install") { state.updateCommandPending = "install"; state.updateSnapshot = { ...(state.updateSnapshot ?? {}), phase: "Installing", canCheck: false, canDownload: false, canInstall: false }; renderUpdateBanner(); updateUpdateControls(); send("updates.install"); }
   };
   const dateTime = (value) => value ? new Date(value).toLocaleString() : "—";
   const elapsedTime = (value) => {
@@ -854,6 +904,8 @@
     closeBookDrawer();
   });
   content.addEventListener("click", (event) => {
+    const updateAction = event.target.closest("[data-update-action]")?.dataset.updateAction;
+    if (updateAction) { beginUpdateAction(updateAction); return; }
     const target = event.target.closest("[data-action]");
     if (!target) return;
     const action = target.dataset.action;
@@ -1070,7 +1122,9 @@
     state.brandValidationRequestBrands.delete(responseId);
     const ok = valueFor(response, "ok", false);
     const command = valueFor(response, "command", "");
-    if (ok && command === "app.pong") {
+    if (ok && command === "updates.state") {
+      applyUpdateSnapshot(valueFor(response, "payload", {}));
+    } else if (ok && command === "app.pong") {
       status.textContent = "Connected";
     } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "LibraryRefresh") {
       if (requestCommand === "book.interior.settings.save") {
@@ -1158,6 +1212,11 @@
       state.backgroundTasks = valueFor(response, "payload", []);
       if (currentRoute() === "diagnostics") render("diagnostics", false);
     } else {
+      if (requestCommand.startsWith("updates.")) {
+        state.updateCommandPending = "";
+        updateUpdateControls();
+        stopUpdatePolling();
+      }
       const error = valueFor(response, "error", "unexpected response");
       if (requestCommand === "book.interior.settings.save") {
         state.bookInteriorSavePending = false;
@@ -1202,6 +1261,12 @@
 
   const refreshButton = document.getElementById("refresh-button");
   if (refreshButton) refreshButton.addEventListener("click", beginApplicationRefresh);
+  const updateCheckButton = document.getElementById("update-check-button");
+  if (updateCheckButton) updateCheckButton.addEventListener("click", () => beginUpdateCheck("manual"));
+  document.getElementById("update-banner")?.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-update-action]")?.dataset.updateAction;
+    if (action) beginUpdateAction(action);
+  });
   const globalProcessStatus = document.getElementById("global-process-status");
   if (globalProcessStatus) globalProcessStatus.addEventListener("click", () => render("process"));
   updateGlobalProcessStatus();
@@ -1211,6 +1276,7 @@
   });
   window.setInterval(() => { if (valueFor(window.processSnapshot, "isActive", false) || valueFor(window.processSnapshot, "isCancelling", false)) send("process.get"); }, 1000);
   send("app.ping");
+  beginUpdateCheck("automatic");
   state.applicationLoadState = "loading";
   render("books", false);
   send("app.refresh");

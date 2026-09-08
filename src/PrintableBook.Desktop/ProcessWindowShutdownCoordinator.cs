@@ -15,11 +15,17 @@ public sealed class ProcessWindowShutdownCoordinator(
 {
     public static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(5);
 
-    public async ValueTask<ProcessWindowCloseOutcome> RequestCloseAsync(CancellationToken cancellationToken = default)
+    public ValueTask<ProcessWindowCloseOutcome> RequestCloseAsync(CancellationToken cancellationToken = default) =>
+        RequestAsync(ProcessShutdownIntent.ExitApplication, cancellationToken);
+
+    public ValueTask<ProcessWindowCloseOutcome> RequestUpdateRestartAsync(CancellationToken cancellationToken = default) =>
+        RequestAsync(ProcessShutdownIntent.RestartForUpdate, cancellationToken);
+
+    private async ValueTask<ProcessWindowCloseOutcome> RequestAsync(ProcessShutdownIntent intent, CancellationToken cancellationToken)
     {
         var current = await processSessionService.GetAsync(cancellationToken);
         if (!current.IsActive) return ProcessWindowCloseOutcome.Close;
-        if (prompt.ConfirmActiveProcessClose() == ActiveProcessCloseDecision.ContinueUsingApp)
+        if (prompt.ConfirmActiveProcessClose(intent) == ActiveProcessCloseDecision.ContinueUsingApp)
         {
             return ProcessWindowCloseOutcome.KeepOpen;
         }
@@ -31,7 +37,7 @@ public sealed class ProcessWindowShutdownCoordinator(
                 return ProcessWindowCloseOutcome.Close;
             }
 
-            if (prompt.ConfirmStopTimeout() == ProcessStopTimeoutDecision.ForceExit)
+            if (prompt.ConfirmStopTimeout(intent) == ProcessStopTimeoutDecision.ForceExit)
             {
                 return ProcessWindowCloseOutcome.ForceExit;
             }
