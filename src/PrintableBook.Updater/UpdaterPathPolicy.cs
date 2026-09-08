@@ -59,6 +59,11 @@ public sealed class UpdaterPathPolicy
         return Path.GetFullPath(path);
     }
 
-    private static bool IsUnder(string candidate, string parent) =>
-        candidate.StartsWith(parent + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    private static bool IsUnder(string candidate, string parent)
+    {
+        var parentWithSeparator = parent.EndsWith(Path.DirectorySeparatorChar) || parent.EndsWith(Path.AltDirectorySeparatorChar)
+            ? parent
+            : parent + Path.DirectorySeparatorChar;
+        return candidate.StartsWith(parentWithSeparator, StringComparison.OrdinalIgnoreCase);
+    }
 }

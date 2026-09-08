@@ -53,6 +53,20 @@ public sealed class UpdaterPathPolicyTests : IDisposable
         }
     }
 
+    [Fact]
+    public void ValidateRejectsAppRootUnderDriveRootUpdatesDirectory()
+    {
+        var driveRoot = Path.GetPathRoot(root)!;
+        var command = new UpdaterCommand(
+            1,
+            Path.Combine(driveRoot, "PrintableBook-App"),
+            Path.Combine(driveRoot, "staging", "0.2.1", "payload"),
+            driveRoot,
+            new Version(0, 2, 0));
+
+        Assert.Throws<ArgumentException>(() => new UpdaterPathPolicy().Validate(command, Path.Combine(command.PayloadDirectory, "PrintableBook.Updater.exe")));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
