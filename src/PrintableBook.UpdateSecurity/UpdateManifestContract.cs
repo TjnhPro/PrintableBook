@@ -1,5 +1,7 @@
 namespace PrintableBook.UpdateSecurity;
 
+using System.Globalization;
+
 public static class UpdateManifestContract
 {
     public const int CurrentSchemaVersion = 1;
@@ -23,7 +25,7 @@ public static class UpdateManifestContract
     private static bool TryParseThreePartVersion(string? value, out Version version)
     {
         version = default!;
-        if (value?.Split('.') is not [var major, var minor, var build] || !int.TryParse(major, out _) || !int.TryParse(minor, out _) || !int.TryParse(build, out _) || !Version.TryParse(value, out var parsed) || parsed is null || parsed.Build < 0 || parsed.Revision >= 0) return false;
+        if (value?.Split('.') is not [var major, var minor, var build] || !int.TryParse(major, NumberStyles.None, CultureInfo.InvariantCulture, out _) || !int.TryParse(minor, NumberStyles.None, CultureInfo.InvariantCulture, out _) || !int.TryParse(build, NumberStyles.None, CultureInfo.InvariantCulture, out _) || !Version.TryParse(value, out var parsed) || parsed is null || parsed.Build < 0 || parsed.Revision >= 0) return false;
         version = parsed;
         return true;
     }
