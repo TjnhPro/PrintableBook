@@ -55,10 +55,10 @@ public sealed class UpdatePreparationService(
             await downloader.DownloadAsync(
                 update.Package.Archive,
                 archivePath,
-                new Progress<long>(received => progress?.Report(new UpdatePreparationProgress(
+                new ByteProgressReporter(
+                    progress,
                     UpdatePreparationStage.DownloadingArchive,
-                    received,
-                    update.Package.Archive.SizeBytes))),
+                    update.Package.Archive.SizeBytes),
                 cancellationToken);
 
             var checksumPath = Path.Combine(downloadDirectory, update.Package.Checksum.Name);
@@ -69,10 +69,10 @@ public sealed class UpdatePreparationService(
             await downloader.DownloadAsync(
                 update.Package.Checksum,
                 checksumPath,
-                new Progress<long>(received => progress?.Report(new UpdatePreparationProgress(
+                new ByteProgressReporter(
+                    progress,
                     UpdatePreparationStage.DownloadingChecksum,
-                    received,
-                    update.Package.Checksum.SizeBytes))),
+                    update.Package.Checksum.SizeBytes),
                 cancellationToken);
 
             progress?.Report(new UpdatePreparationProgress(UpdatePreparationStage.Verifying));
@@ -113,6 +113,17 @@ public sealed class UpdatePreparationService(
         if (Directory.Exists(path))
         {
             Directory.Delete(path, recursive: true);
+        }
+    }
+
+    private sealed class ByteProgressReporter(
+        IProgress<UpdatePreparationProgress>? progress,
+        UpdatePreparationStage stage,
+        long totalBytes) : IProgress<long>
+    {
+        public void Report(long bytesReceived)
+        {
+            progress?.Report(new UpdatePreparationProgress(stage, bytesReceived, totalBytes));
         }
     }
 }
