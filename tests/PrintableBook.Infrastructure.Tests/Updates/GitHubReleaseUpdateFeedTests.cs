@@ -30,11 +30,14 @@ public sealed class GitHubReleaseUpdateFeedTests
     public async Task GetLatestStableAsyncRequiresExactlyOneOfEachSignedAsset()
     {
         var fixture = Fixture.For("0.2.0");
-        var missingManifest = fixture.Assets.Where(asset => !asset.Contains("manifest.json\"", StringComparison.Ordinal)).ToArray();
-        var duplicateSignature = fixture.Assets.Append(fixture.Assets.Single(asset => asset.Contains("manifest.json.sig", StringComparison.Ordinal))).ToArray();
-
-        await Assert.ThrowsAsync<InvalidDataException>(() => CreateFeed(CreateFactory(fixture, missingManifest)).GetLatestStableAsync().AsTask());
-        await Assert.ThrowsAsync<InvalidDataException>(() => CreateFeed(CreateFactory(fixture, duplicateSignature)).GetLatestStableAsync().AsTask());
+        foreach (var name in new[] { ".manifest.json\"", ".manifest.json.sig" })
+        {
+            var matchingAsset = fixture.Assets.Single(asset => asset.Contains(name, StringComparison.Ordinal));
+            var missing = fixture.Assets.Where(asset => !asset.Contains(name, StringComparison.Ordinal)).ToArray();
+            var duplicate = fixture.Assets.Append(matchingAsset).ToArray();
+            await Assert.ThrowsAsync<InvalidDataException>(() => CreateFeed(CreateFactory(fixture, missing)).GetLatestStableAsync().AsTask());
+            await Assert.ThrowsAsync<InvalidDataException>(() => CreateFeed(CreateFactory(fixture, duplicate)).GetLatestStableAsync().AsTask());
+        }
     }
 
     [Fact]

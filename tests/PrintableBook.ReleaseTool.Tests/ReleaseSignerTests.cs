@@ -45,6 +45,25 @@ public sealed class ReleaseSignerTests : IDisposable
         Assert.Throws<InvalidDataException>(() => signer.Sign(paths, new Version(0, 2, 0), "win-x64", TestSeed, new byte[32]));
     }
 
+    [Theory]
+    [InlineData("archive")]
+    [InlineData("checksum")]
+    [InlineData("filename")]
+    [InlineData("hash")]
+    public void RejectsMissingAndMismatchedReleaseArtifacts(string mutation)
+    {
+        var paths = CreateValidFixture();
+        switch (mutation)
+        {
+            case "archive": File.Delete(paths.ArchivePath); break;
+            case "checksum": File.Delete(paths.ChecksumPath); break;
+            case "filename": File.WriteAllText(paths.ChecksumPath, $"{Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(paths.ArchivePath))).ToLowerInvariant()}  other.zip\n", Encoding.ASCII); break;
+            case "hash": File.WriteAllText(paths.ChecksumPath, $"{new string('a', 64)}  {Path.GetFileName(paths.ArchivePath)}\n", Encoding.ASCII); break;
+        }
+
+        Assert.Throws<InvalidDataException>(() => new ReleaseSigner().Sign(paths, new Version(0, 2, 0), "win-x64", TestSeed, Ed25519UpdateSignature.DerivePublicKey(TestSeed)));
+    }
+
     internal ReleaseArtifactPaths CreateValidFixture()
     {
         Directory.CreateDirectory(_root);
