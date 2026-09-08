@@ -14,6 +14,8 @@ using PrintableBook.Infrastructure.Processing;
 using PrintableBook.Infrastructure.Pdf;
 using PrintableBook.Infrastructure.Scanning;
 using PrintableBook.Infrastructure.Workspaces;
+using PrintableBook.Core.Application.Updates;
+using PrintableBook.Infrastructure.Updates;
 
 namespace PrintableBook.Infrastructure.DependencyInjection;
 
@@ -59,6 +61,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBookWorkspaceStateStore, JsonBookWorkspaceStateStore>();
         services.AddSingleton<IBookStorageMaintenance, PhysicalBookStorageMaintenance>();
         services.AddSingleton<IInteriorShuffleStore, JsonInteriorShuffleStore>();
+        services.AddHttpClient<IUpdateFeed, GitHubReleaseUpdateFeed>(client =>
+        {
+            client.BaseAddress = new Uri("https://api.github.com/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
         return services;
     }
 }
