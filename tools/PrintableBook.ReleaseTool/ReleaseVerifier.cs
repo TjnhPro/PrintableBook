@@ -29,7 +29,7 @@ internal sealed class ReleaseVerifier
 
         VerifyFile(paths.ArchivePath, manifest.Archive);
         VerifyFile(paths.ChecksumPath, manifest.Checksum);
-        var checksumArchiveHash = ReleaseChecksumFile.Parse(File.ReadAllBytes(paths.ChecksumPath), names.Archive);
+        var checksumArchiveHash = UpdateChecksumFileCodec.Parse(File.ReadAllBytes(paths.ChecksumPath), names.Archive);
         if (!CryptographicOperations.FixedTimeEquals(Convert.FromHexString(checksumArchiveHash), Convert.FromHexString(manifest.Archive.Sha256))) throw new InvalidDataException("Release checksum does not match the signed archive hash.");
         new ReleasePackageContractVerifier().Verify(paths.ArchivePath, version, runtimeIdentifier);
     }

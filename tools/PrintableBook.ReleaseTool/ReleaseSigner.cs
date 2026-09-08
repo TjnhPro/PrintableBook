@@ -14,7 +14,7 @@ internal sealed class ReleaseSigner
         if (expectedPublicKey.Length != Ed25519UpdateSignature.PublicKeySize) throw new ArgumentException("Expected public key must be 32 bytes.", nameof(expectedPublicKey));
         var archiveHash = HashFile(paths.ArchivePath);
         var checksumBytes = File.ReadAllBytes(paths.ChecksumPath);
-        var checksumHash = ReleaseChecksumFile.Parse(checksumBytes, names.Archive);
+        var checksumHash = UpdateChecksumFileCodec.Parse(checksumBytes, names.Archive);
         if (!CryptographicOperations.FixedTimeEquals(Convert.FromHexString(checksumHash), archiveHash.Hash)) throw new InvalidDataException("Checksum file does not match the release archive.");
 
         var derivedPublicKey = Ed25519UpdateSignature.DerivePublicKey(privateSeed);
