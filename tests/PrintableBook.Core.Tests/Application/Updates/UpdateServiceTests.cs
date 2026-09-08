@@ -93,7 +93,9 @@ public sealed class UpdateServiceTests
                 new UpdateAssetInfo(
                     $"{archiveName}.sha256",
                     new Uri($"https://example.test/{archiveName}.sha256"),
-                    99)));
+                    99),
+                new string('a', 64),
+                new string('b', 64)));
     }
 
     private sealed class StubVersionProvider(Version currentVersion)
