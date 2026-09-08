@@ -14,7 +14,7 @@ public sealed class UpdaterEngine(
 
     public async ValueTask<UpdaterExitCode> RunAsync(UpdaterCommand command, CancellationToken cancellationToken = default)
     {
-        logger.Info("Waiting for PrintableBook to exit.");
+        TryLogInfo("Waiting for PrintableBook to exit.");
         if (!await processWaiter.WaitForExitAsync(command.WaitPid, MainProcessWaitTimeout, cancellationToken))
             return UpdaterExitCode.WaitTimeout;
 
@@ -25,7 +25,7 @@ public sealed class UpdaterEngine(
         }
         catch (Exception exception) when (IsExpectedFailure(exception))
         {
-            logger.Error("Updater preflight failed.", exception);
+            TryLogError("Updater preflight failed.", exception);
             TryRestartUnchangedApplication(command.AppRoot);
             return UpdaterExitCode.PreflightFailed;
         }
@@ -33,7 +33,7 @@ public sealed class UpdaterEngine(
         try { backupService.CreateBackup(command.AppRoot, command.BackupDirectory); }
         catch (Exception exception) when (IsExpectedFailure(exception))
         {
-            logger.Error("Creating backup failed.", exception);
+            TryLogError("Creating backup failed.", exception);
             TryRestartUnchangedApplication(command.AppRoot);
             return UpdaterExitCode.BackupFailed;
         }
@@ -41,11 +41,11 @@ public sealed class UpdaterEngine(
         try { installer.Install(command.PayloadDirectory, command.AppRoot); }
         catch (Exception exception) when (IsExpectedFailure(exception))
         {
-            logger.Error("Installing payload failed.", exception);
+            TryLogError("Installing payload failed.", exception);
             try { backupService.RestoreBackup(command.BackupDirectory, command.AppRoot); }
             catch (Exception rollbackException) when (IsExpectedFailure(rollbackException))
             {
-                logger.Error("Rollback failed.", rollbackException);
+                TryLogError("Rollback failed.", rollbackException);
                 return UpdaterExitCode.RollbackFailed;
             }
             TryRestartUnchangedApplication(command.AppRoot);
@@ -59,7 +59,7 @@ public sealed class UpdaterEngine(
         }
         catch (Exception exception) when (IsExpectedFailure(exception))
         {
-            logger.Error("Restarting updated application failed.", exception);
+            TryLogError("Restarting updated application failed.", exception);
             return UpdaterExitCode.RestartFailed;
         }
     }
@@ -67,7 +67,25 @@ public sealed class UpdaterEngine(
     private void TryRestartUnchangedApplication(string appRoot)
     {
         try { restarter.Restart(appRoot); }
-        catch (Exception exception) when (IsExpectedFailure(exception)) { logger.Error("Restarting unchanged application failed.", exception); }
+        catch (Exception exception) when (IsExpectedFailure(exception)) { TryLogError("Restarting unchanged application failed.", exception); }
+    }
+
+    private void TryLogInfo(string message)
+    {
+        try { logger.Info(message); }
+        catch
+        {
+            // Logging is best-effort and must never interrupt updater state transitions.
+        }
+    }
+
+    private void TryLogError(string message, Exception exception)
+    {
+        try { logger.Error(message, exception); }
+        catch
+        {
+            // Logging is best-effort and must never interrupt updater state transitions.
+        }
     }
 
     private static bool IsExpectedFailure(Exception exception) =>

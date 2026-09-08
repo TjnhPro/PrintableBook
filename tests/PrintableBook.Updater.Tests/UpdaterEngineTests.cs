@@ -60,8 +60,84 @@ public sealed class UpdaterEngineTests : IDisposable
         Assert.Equal("wait,restart", string.Join(',', recording));
     }
 
-    private UpdaterEngine CreateEngine(List<string> calls, bool timeout, bool backupFails, bool installFails, bool rollbackFails, bool restartFails) => new(
-        new UpdaterPayloadContractValidator(), new Waiter(calls, timeout), new Backup(calls, backupFails, rollbackFails), new Installer(calls, installFails), new Restarter(calls, restartFails), new Logger());
+    [Fact]
+    public async Task RunAsyncRestartsUnchangedAppWhenPreflightLoggingFails()
+    {
+        var recording = new List<string>();
+        var command = CreateCommand();
+        File.Delete(Path.Combine(command.AppRoot, "PrintableBook.exe"));
+
+        var result = await CreateEngine(recording, false, false, false, false, false, loggerErrorFails: true).RunAsync(command);
+
+        Assert.Equal(UpdaterExitCode.PreflightFailed, result);
+        Assert.Equal("wait,restart", string.Join(',', recording));
+    }
+
+    [Fact]
+    public async Task RunAsyncRollsBackEvenWhenFailureLoggingThrows()
+    {
+        var recording = new List<string>();
+        var result = await CreateEngine(recording, false, false, true, false, false, loggerErrorFails: true).RunAsync(CreateCommand());
+        Assert.Equal(UpdaterExitCode.InstallFailedRolledBack, result);
+        Assert.Equal("wait,backup,install,restore,restart", string.Join(',', recording));
+    }
+
+    [Fact]
+    public async Task RunAsyncRestartsUnchangedAppWhenBackupAndLoggingFail()
+    {
+        var recording = new List<string>();
+        var result = await CreateEngine(recording, false, true, false, false, false, loggerErrorFails: true).RunAsync(CreateCommand());
+        Assert.Equal(UpdaterExitCode.BackupFailed, result);
+        Assert.Equal("wait,backup,restart", string.Join(',', recording));
+    }
+
+    [Fact]
+    public async Task RunAsyncReturnsRollbackFailedEvenWhenRollbackLoggingThrows()
+    {
+        var recording = new List<string>();
+        var result = await CreateEngine(recording, false, false, true, true, false, loggerErrorFails: true).RunAsync(CreateCommand());
+        Assert.Equal(UpdaterExitCode.RollbackFailed, result);
+        Assert.Equal("wait,backup,install,restore", string.Join(',', recording));
+    }
+
+    [Fact]
+    public async Task RunAsyncKeepsInstalledUpdateWhenRestartAndLoggingFail()
+    {
+        var recording = new List<string>();
+        var result = await CreateEngine(recording, false, false, false, false, true, loggerErrorFails: true).RunAsync(CreateCommand());
+        Assert.Equal(UpdaterExitCode.RestartFailed, result);
+        Assert.Equal("wait,backup,install,restart", string.Join(',', recording));
+        Assert.DoesNotContain("restore", recording);
+    }
+
+    [Fact]
+    public async Task RunAsyncContinuesWhenInitialInfoLoggingThrows()
+    {
+        var recording = new List<string>();
+        var result = await CreateEngine(recording, true, false, false, false, false, loggerInfoFails: true).RunAsync(CreateCommand());
+        Assert.Equal(UpdaterExitCode.WaitTimeout, result);
+        Assert.Equal("wait", string.Join(',', recording));
+    }
+
+    [Fact]
+    public async Task RunAsyncPreservesPrimaryFailureWhenFallbackRestartLoggingAlsoFails()
+    {
+        var recording = new List<string>();
+        var result = await CreateEngine(recording, false, true, false, false, true, loggerErrorFails: true).RunAsync(CreateCommand());
+        Assert.Equal(UpdaterExitCode.BackupFailed, result);
+        Assert.Equal("wait,backup,restart", string.Join(',', recording));
+    }
+
+    private UpdaterEngine CreateEngine(
+        List<string> calls,
+        bool timeout,
+        bool backupFails,
+        bool installFails,
+        bool rollbackFails,
+        bool restartFails,
+        bool loggerInfoFails = false,
+        bool loggerErrorFails = false) => new(
+        new UpdaterPayloadContractValidator(), new Waiter(calls, timeout), new Backup(calls, backupFails, rollbackFails), new Installer(calls, installFails), new Restarter(calls, restartFails), new Logger(loggerInfoFails, loggerErrorFails));
 
     private UpdaterCommand CreateCommand()
     {
@@ -74,5 +150,16 @@ public sealed class UpdaterEngineTests : IDisposable
     private sealed class Backup(List<string> calls, bool fails, bool restoreFails) : IUpdaterBackupService { public void CreateBackup(string _, string __) { calls.Add("backup"); if (fails) throw new IOException(); } public void RestoreBackup(string _, string __) { calls.Add("restore"); if (restoreFails) throw new IOException(); } }
     private sealed class Installer(List<string> calls, bool fails) : IUpdaterPayloadInstaller { public void Install(string _, string __) { calls.Add("install"); if (fails) throw new IOException(); } }
     private sealed class Restarter(List<string> calls, bool fails) : IApplicationRestarter { public void Restart(string _) { calls.Add("restart"); if (fails) throw new InvalidOperationException(); } }
-    private sealed class Logger : IUpdaterLogger { public void Error(string _, Exception __) { } public void Info(string _) { } }
+    private sealed class Logger(bool throwOnInfo = false, bool throwOnError = false) : IUpdaterLogger
+    {
+        public void Info(string _)
+        {
+            if (throwOnInfo) throw new IOException("Simulated info log failure.");
+        }
+
+        public void Error(string _, Exception __)
+        {
+            if (throwOnError) throw new IOException("Simulated error log failure.");
+        }
+    }
 }
