@@ -21,6 +21,12 @@ public sealed class ProcessWindowShutdownCoordinatorTests
     }
 
     [Fact]
+    public void ShouldHandleInteractiveClose_bypasses_the_coordinator_after_an_update_shutdown_is_requested()
+    {
+        Assert.False(MainWindow.ShouldHandleInteractiveClose(allowClose: false, systemShutdown: false, updateShutdownRequested: true));
+    }
+
+    [Fact]
     public async Task RequestCloseAsync_closes_an_inactive_session_without_prompting()
     {
         var prompt = new StubPrompt();

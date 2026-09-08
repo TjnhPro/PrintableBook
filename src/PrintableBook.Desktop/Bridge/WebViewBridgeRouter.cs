@@ -62,7 +62,14 @@ internal sealed class WebViewBridgeRouter(
                 var trigger = UpdateCheckTrigger.Manual;
                 if (request.Payload is { } updatePayload && updatePayload.TryGetProperty("trigger", out var triggerElement))
                 {
-                    if (!Enum.TryParse<UpdateCheckTrigger>(triggerElement.GetString(), true, out trigger)) return new BridgeResponse(Version, request.Id, false, null, "invalid_update_check_trigger");
+                    var triggerValue = triggerElement.ValueKind == JsonValueKind.String ? triggerElement.GetString() : null;
+                    if (triggerValue is null ||
+                        (!string.Equals(triggerValue, "automatic", StringComparison.OrdinalIgnoreCase) &&
+                         !string.Equals(triggerValue, "manual", StringComparison.OrdinalIgnoreCase)) ||
+                        !Enum.TryParse<UpdateCheckTrigger>(triggerValue, true, out trigger))
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "invalid_update_check_trigger");
+                    }
                 }
                 return BridgeResponse.Succeeded(request.Id, "updates.state", UpdateBridgeSnapshot.From(await updateCoordinator.CheckAsync(trigger, cancellationToken)));
             }

@@ -75,6 +75,7 @@ public sealed class DesktopUpdateCoordinator(
     public async ValueTask<DesktopUpdateSnapshot> DownloadAsync(CancellationToken cancellationToken = default)
     {
         if (!await TryEnterOperationAsync(cancellationToken)) return GetState();
+        var previous = GetState();
         try
         {
             UpdateInfo update;
@@ -97,7 +98,7 @@ public sealed class DesktopUpdateCoordinator(
         }
         catch (OperationCanceledException)
         {
-            lock (stateSync) { phase = DesktopUpdatePhase.Available; preparationStage = null; bytesReceived = 0; totalBytes = null; }
+            Restore(previous);
             throw;
         }
         catch (Exception)
@@ -111,6 +112,7 @@ public sealed class DesktopUpdateCoordinator(
     public async ValueTask<DesktopUpdateSnapshot> InstallAsync(CancellationToken cancellationToken = default)
     {
         if (!await TryEnterOperationAsync(cancellationToken)) return GetState();
+        var previous = GetState();
         try
         {
             PreparedUpdate update;
@@ -126,7 +128,7 @@ public sealed class DesktopUpdateCoordinator(
         }
         catch (OperationCanceledException)
         {
-            SetState(DesktopUpdatePhase.Ready, null, null);
+            Restore(previous);
             throw;
         }
         catch (Exception)
