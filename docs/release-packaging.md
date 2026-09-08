@@ -87,6 +87,11 @@ Updates/
 `v0.1.1` không thể tự cập nhật chính nó. `v0.2.0` dự kiến là release đầu tiên
 có updater và phải được cài thủ công; các version sau đó mới có thể tự cập nhật.
 
+PR4 chỉ nối Desktop UI với staged sidecar: người dùng phải tự chọn download và
+`Restart & Update`; không có automatic download hoặc install. Package `v0.1.1`
+vẫn chưa chứa updater và `scripts/publish-release.ps1` vẫn được giữ nguyên cho
+đến PR5, nên khả năng này chưa phải contract release phát hành được.
+
 ## Dữ liệu WebView2 lúc chạy
 
 Chromium profile, GPU cache và crash data của WebView2 được lưu cố định tại

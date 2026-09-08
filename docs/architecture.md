@@ -44,6 +44,19 @@ PrintableBook.Infrastructure
 
 `PrintableBook.Core` giữ domain model, use case, orchestration và các port trung lập. `PrintableBook.Infrastructure` triển khai filesystem, Magick.NET, PDFsharp và persistence. `PrintableBook.Desktop` là composition root WPF/WebView2; frontend chỉ render snapshot và gửi command qua JSON bridge v1, không nắm business logic hay raster processing.
 
+## Desktop update lifecycle
+
+Desktop owns update UI state and bridge commands while Core continues to own
+discovery and preparation. The bridge exposes `updates.getState`,
+`updates.check`, `updates.download`, and `updates.install`; it never exposes
+download URLs or staged paths to the WebView.
+
+The flow is `Idle → Checking → UpToDate | Available → Downloading → Verifying
+→ Ready → Installing`; recoverable failures enter `Error`. Before handoff,
+Desktop reuses `ProcessWindowShutdownCoordinator` and its five-second
+cooperative stop/retry/force behavior, launches the staged sidecar, then
+performs update-authorized WPF shutdown.
+
 Các test kiến trúc bảo vệ hướng phụ thuộc: Core không tham chiếu Infrastructure/Desktop/WPF/WebView2/Windows APIs; Infrastructure không tham chiếu Desktop.
 
 ## Discovery, Book và workspace
