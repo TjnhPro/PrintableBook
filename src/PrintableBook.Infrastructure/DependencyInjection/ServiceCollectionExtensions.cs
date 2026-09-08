@@ -66,6 +66,8 @@ public static class ServiceCollectionExtensions
             client.BaseAddress = new Uri("https://api.github.com/");
             client.Timeout = TimeSpan.FromSeconds(10);
         });
+        services.AddSingleton<IUpdateManifestPublicKeyProvider, ProductionUpdateManifestPublicKeyProvider>();
+        services.AddSingleton<SignedReleaseManifestClient>();
         services.AddSingleton<IUpdateFeed, GitHubReleaseUpdateFeed>();
         services.AddHttpClient(HttpUpdateAssetDownloader.HttpClientName, client =>
         {
