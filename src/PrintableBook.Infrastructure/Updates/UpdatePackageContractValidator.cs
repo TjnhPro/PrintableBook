@@ -5,6 +5,7 @@ public sealed class UpdatePackageContractValidator
     private static readonly string[] RequiredFiles =
     [
         "PrintableBook.exe",
+        "PrintableBook.Updater.exe",
         Path.Combine("Frontend", "index.html"),
         Path.Combine("Frontend", "js", "app.js"),
         Path.Combine("Frontend", "assets", "printable-book-logo.png"),
@@ -22,6 +23,7 @@ public sealed class UpdatePackageContractValidator
         new(StringComparer.OrdinalIgnoreCase)
         {
             "PrintableBook.exe",
+            "PrintableBook.Updater.exe",
             "Frontend",
         };
 

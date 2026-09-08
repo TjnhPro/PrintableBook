@@ -15,6 +15,7 @@ public sealed class UpdatePackageContractValidatorTests
 
     [Theory]
     [InlineData("PrintableBook.exe")]
+    [InlineData("PrintableBook.Updater.exe")]
     [InlineData("Frontend")]
     [InlineData("Frontend/index.html")]
     [InlineData("Frontend/js")]
@@ -73,6 +74,7 @@ public sealed class UpdatePackageContractValidatorTests
     private static void CreateValidPayload(string root)
     {
         File.WriteAllText(Path.Combine(root, "PrintableBook.exe"), "exe");
+        File.WriteAllText(Path.Combine(root, "PrintableBook.Updater.exe"), "updater");
         Directory.CreateDirectory(Path.Combine(root, "Frontend", "css"));
         Directory.CreateDirectory(Path.Combine(root, "Frontend", "js"));
         Directory.CreateDirectory(Path.Combine(root, "Frontend", "assets"));

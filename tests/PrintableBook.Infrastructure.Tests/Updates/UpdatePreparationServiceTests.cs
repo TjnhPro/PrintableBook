@@ -192,6 +192,7 @@ public sealed class UpdatePreparationServiceTests
     private static (string Path, byte[] Content)[] ValidEntries() =>
     [
         ("PrintableBook.exe", Bytes("exe")),
+        ("PrintableBook.Updater.exe", Bytes("updater")),
         ("Frontend/index.html", Bytes("html")),
         ("Frontend/js/app.js", Bytes("js")),
         ("Frontend/assets/printable-book-logo.png", Bytes("logo")),

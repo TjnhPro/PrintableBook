@@ -2,6 +2,8 @@ namespace PrintableBook.Infrastructure.Updates;
 
 public sealed class UpdateStorageLayout(IUpdateStorageRootProvider rootProvider)
 {
+    public string RootPath => rootProvider.RootPath;
+
     public string GetDownloadDirectory(Version version)
     {
         return Path.Combine(rootProvider.RootPath, "downloads", VersionDirectoryName(version));
@@ -15,6 +17,11 @@ public sealed class UpdateStorageLayout(IUpdateStorageRootProvider rootProvider)
     public string GetReadyPayloadDirectory(Version version)
     {
         return Path.Combine(GetStagingVersionDirectory(version), "payload");
+    }
+
+    public string GetBackupDirectory(Version version)
+    {
+        return Path.Combine(RootPath, "backup", VersionDirectoryName(version));
     }
 
     public string CreateTemporaryExtractionDirectory(Version version)
