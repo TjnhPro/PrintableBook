@@ -6,7 +6,11 @@ The embedded Ed25519 public key is the update authenticity trust root. The commi
 
 ## Threat model
 
-Signed metadata detects a tampered manifest, archive, checksum sidecar, an archive/checksum pair replaced together, and GitHub release metadata altered without the private signing key.
+The Ed25519-signed manifest authenticates the update-critical product, version, runtime, archive filename/size/SHA256, and checksum filename/size/SHA256. It detects tampering with the manifest, archive, checksum sidecar, or a mutually replaced archive/checksum pair when the attacker does not possess the production private signing seed.
+
+GitHub release display and transport metadata that is not present in the signed manifest remains outside the signature trust boundary. This includes the release title/name, release notes/body, publish time, release page URL, download URLs, GitHub release identifiers, and unrelated release metadata. The application must continue to treat those values as untrusted display or transport data rather than authenticated release claims.
+
+Release title and release notes are not authentication inputs. If shown in the Desktop UI they must remain escaped/text-rendered and must never be treated as trusted HTML or executable bridge content merely because the update package itself has a valid manifest signature.
 
 ## Manifest schema
 
