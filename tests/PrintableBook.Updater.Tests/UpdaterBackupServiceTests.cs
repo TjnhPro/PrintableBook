@@ -40,5 +40,19 @@ public sealed class UpdaterBackupServiceTests : IDisposable
         Assert.Equal("old-main", File.ReadAllText(Path.Combine(app, "PrintableBook.exe")));
     }
 
+    [Fact]
+    public void CreateBackupKeepsExistingFinalBackupWhenNewSourceIsInvalid()
+    {
+        var app = Path.Combine(root, "App");
+        var backup = Path.Combine(root, "Updates", "backup", "0.2.0");
+        UpdaterPayloadContractValidatorTests.CreateValidPayload(app);
+        UpdaterPayloadContractValidatorTests.CreateValidPayload(backup);
+        File.WriteAllText(Path.Combine(backup, "PrintableBook.exe"), "previous-backup");
+        File.Delete(Path.Combine(app, "PrintableBook.Updater.exe"));
+
+        Assert.Throws<InvalidDataException>(() => new UpdaterBackupService(new UpdaterPayloadContractValidator()).CreateBackup(app, backup));
+        Assert.Equal("previous-backup", File.ReadAllText(Path.Combine(backup, "PrintableBook.exe")));
+    }
+
     public void Dispose() { if (Directory.Exists(root)) Directory.Delete(root, true); }
 }

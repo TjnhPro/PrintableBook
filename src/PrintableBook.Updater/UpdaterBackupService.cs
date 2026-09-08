@@ -18,7 +18,14 @@ public sealed class UpdaterBackupService(UpdaterPayloadContractValidator payload
         }
         catch
         {
-            if (Directory.Exists(temporary)) Directory.Delete(temporary, recursive: true);
+            try
+            {
+                if (Directory.Exists(temporary)) Directory.Delete(temporary, recursive: true);
+            }
+            catch (Exception)
+            {
+                // Cleanup is best-effort; preserve the original backup failure.
+            }
             throw;
         }
     }

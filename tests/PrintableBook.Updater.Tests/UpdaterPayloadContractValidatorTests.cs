@@ -30,6 +30,18 @@ public sealed class UpdaterPayloadContractValidatorTests : IDisposable
         Assert.Throws<InvalidDataException>(() => validator.ValidateInstalledPayload(root));
     }
 
+    [Theory]
+    [InlineData("Frontend/css")]
+    [InlineData("Frontend/js")]
+    [InlineData("Frontend/assets")]
+    public void BothContractsRejectMissingRequiredDirectories(string relativePath)
+    {
+        CreateValidPayload(root);
+        Directory.Delete(Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar)), true);
+        Assert.Throws<InvalidDataException>(() => validator.ValidateStagedPayload(root));
+        Assert.Throws<InvalidDataException>(() => validator.ValidateInstalledPayload(root));
+    }
+
     [Fact]
     public void InstalledPayloadPermitsUserData()
     {

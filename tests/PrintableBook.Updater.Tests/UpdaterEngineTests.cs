@@ -49,6 +49,17 @@ public sealed class UpdaterEngineTests : IDisposable
         Assert.Equal("wait,backup,install,restore", string.Join(',', recording));
     }
 
+    [Fact]
+    public async Task RunAsyncMapsInvalidPreflightAndRestartsUnchangedApp()
+    {
+        var recording = new List<string>();
+        var command = CreateCommand();
+        File.Delete(Path.Combine(command.AppRoot, "PrintableBook.exe"));
+        var result = await CreateEngine(recording, false, false, false, false, false).RunAsync(command);
+        Assert.Equal(UpdaterExitCode.PreflightFailed, result);
+        Assert.Equal("wait,restart", string.Join(',', recording));
+    }
+
     private UpdaterEngine CreateEngine(List<string> calls, bool timeout, bool backupFails, bool installFails, bool rollbackFails, bool restartFails) => new(
         new UpdaterPayloadContractValidator(), new Waiter(calls, timeout), new Backup(calls, backupFails, rollbackFails), new Installer(calls, installFails), new Restarter(calls, restartFails), new Logger());
 
