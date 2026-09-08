@@ -7,41 +7,33 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$project = Join-Path $repoRoot "src/PrintableBook.Desktop/PrintableBook.Desktop.csproj"
-$version = (& dotnet msbuild $project -nologo -getProperty:Version).Trim()
-
-if ($LASTEXITCODE -ne 0) {
-    throw "Could not read Desktop project version."
-}
-
-if ([string]::IsNullOrWhiteSpace($version)) {
-    throw "Desktop project Version is empty."
-}
-
-if (-not [string]::IsNullOrWhiteSpace($ExpectedVersion) -and $version -ne $ExpectedVersion) {
-    throw "Project version '$version' does not match expected '$ExpectedVersion'."
-}
+$desktopProject = Join-Path $repoRoot "src/PrintableBook.Desktop/PrintableBook.Desktop.csproj"
+$updaterProject = Join-Path $repoRoot "src/PrintableBook.Updater/PrintableBook.Updater.csproj"
+$version = (& dotnet msbuild $desktopProject -nologo -getProperty:Version).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($version)) { throw "Could not read Desktop project version." }
+$updaterVersion = (& dotnet msbuild $updaterProject -nologo -getProperty:Version).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($updaterVersion)) { throw "Could not read Updater project version." }
+if ($updaterVersion -ne $version) { throw "Desktop version '$version' does not match Updater version '$updaterVersion'." }
+if (-not [string]::IsNullOrWhiteSpace($ExpectedVersion) -and $version -ne $ExpectedVersion) { throw "Project version '$version' does not match expected '$ExpectedVersion'." }
+if ([string]::IsNullOrWhiteSpace($env:PRINTABLEBOOK_UPDATE_SIGNING_PRIVATE_KEY)) { throw "PRINTABLEBOOK_UPDATE_SIGNING_PRIVATE_KEY is required to publish a signed release." }
 
 $releaseRoot = Join-Path $repoRoot "artifacts/release"
 $packageName = "PrintableBook-$version-$RuntimeIdentifier"
-$publishDirectory = Join-Path $releaseRoot "_publish"
+$desktopPublishDirectory = Join-Path $releaseRoot "_desktop-publish"
+$updaterPublishDirectory = Join-Path $releaseRoot "_updater-publish"
 $packageDirectory = Join-Path $releaseRoot $packageName
 $zipPath = Join-Path $releaseRoot "$packageName.zip"
 $hashPath = "$zipPath.sha256"
+$manifestPath = Join-Path $releaseRoot "$packageName.manifest.json"
+$signaturePath = "$manifestPath.sig"
 
-foreach ($path in @($publishDirectory, $packageDirectory)) {
-    if (Test-Path -LiteralPath $path) {
-        Remove-Item -LiteralPath $path -Recurse -Force
-    }
+foreach ($path in @($desktopPublishDirectory, $updaterPublishDirectory, $packageDirectory)) {
+    if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force }
 }
-
-foreach ($path in @($zipPath, $hashPath)) {
-    Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
-}
-
+foreach ($path in @($zipPath, $hashPath, $manifestPath, $signaturePath)) { Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue }
 New-Item -ItemType Directory -Path $releaseRoot -Force | Out-Null
 
-dotnet publish $project `
+dotnet publish $desktopProject `
     --configuration $Configuration `
     --runtime $RuntimeIdentifier `
     --self-contained false `
@@ -54,110 +46,73 @@ dotnet publish $project `
     -p:CopyDocumentationFilesFromPackages=false `
     -p:DebugSymbols=false `
     -p:DebugType=None `
-    --output $publishDirectory
+    --output $desktopPublishDirectory
+if ($LASTEXITCODE -ne 0) { throw "Desktop publish failed." }
 
-if ($LASTEXITCODE -ne 0) {
-    throw "dotnet publish failed."
+Get-ChildItem -LiteralPath $desktopPublishDirectory -File -Filter "Microsoft.Web.WebView2*.xml" | Remove-Item -Force
+foreach ($relativePath in @("Frontend/node_modules", "Frontend/package-lock.json", "Frontend/package.json", "Frontend/tailwind.config.js", "Frontend/test-production-ui.mjs", "Frontend/test-ui.mjs")) {
+    $fullPath = Join-Path $desktopPublishDirectory $relativePath
+    if (Test-Path -LiteralPath $fullPath) { Remove-Item -LiteralPath $fullPath -Recurse -Force }
 }
 
-# WebView2 package reference documentation is not required at runtime and is
-# emitted alongside the bundle by the package targets. Remove only these known
-# documentation files before enforcing the release-root contract below.
-Get-ChildItem `
-    -LiteralPath $publishDirectory `
-    -File `
-    -Filter "Microsoft.Web.WebView2*.xml" |
-    Remove-Item -Force
-
-# Frontend development tooling is copied by the Desktop project's broad content
-# glob for normal developer builds. It is not part of the physical frontend
-# runtime contract, so remove it only from the release publish output.
-$releaseOnlyFrontendExclusions = @(
-    "Frontend/node_modules",
-    "Frontend/package-lock.json",
-    "Frontend/package.json",
-    "Frontend/tailwind.config.js",
-    "Frontend/test-production-ui.mjs",
-    "Frontend/test-ui.mjs"
-)
-
-foreach ($relativePath in $releaseOnlyFrontendExclusions) {
-    $fullPath = Join-Path $publishDirectory $relativePath
-    if (Test-Path -LiteralPath $fullPath) {
-        Remove-Item -LiteralPath $fullPath -Recurse -Force
-    }
+foreach ($relativePath in @("PrintableBook.exe", "Frontend/index.html", "Frontend/js/app.js", "Frontend/assets/printable-book-logo.png")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $desktopPublishDirectory $relativePath))) { throw "Published Desktop artifact is missing '$relativePath'." }
 }
-
-$requiredFiles = @(
-    "PrintableBook.exe",
-    "Frontend/index.html",
-    "Frontend/js/app.js",
-    "Frontend/assets/printable-book-logo.png"
-)
-
-foreach ($relativePath in $requiredFiles) {
-    $fullPath = Join-Path $publishDirectory $relativePath
-    if (-not (Test-Path -LiteralPath $fullPath)) {
-        throw "Published artifact is missing '$relativePath'."
-    }
+foreach ($relativePath in @("Frontend/css", "Frontend/js", "Frontend/assets")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $desktopPublishDirectory $relativePath) -PathType Container)) { throw "Published Desktop artifact is missing frontend directory '$relativePath'." }
 }
+if (Test-Path -LiteralPath (Join-Path $desktopPublishDirectory "Assets")) { throw "Single-file Desktop release must not contain an external Assets directory." }
+$externalBinaryPatterns = @("*.dll", "*.pdb", "*.deps.json", "*.runtimeconfig.json")
+$desktopExternalBinaries = foreach ($pattern in $externalBinaryPatterns) { Get-ChildItem -LiteralPath $desktopPublishDirectory -File -Filter $pattern }
+if ($desktopExternalBinaries) { throw "Single-file Desktop release leaked external binary/runtime files: $($desktopExternalBinaries.Name -join ', ')" }
+$desktopUnexpected = Get-ChildItem -LiteralPath $desktopPublishDirectory | Where-Object { $_.Name -notin @("PrintableBook.exe", "Frontend") }
+if ($desktopUnexpected) { throw "Published Desktop artifact contains unexpected root entries: $($desktopUnexpected.Name -join ', ')" }
 
-$requiredFrontendDirectories = @(
-    "Frontend/css",
-    "Frontend/js",
-    "Frontend/assets"
-)
-
-foreach ($relativePath in $requiredFrontendDirectories) {
-    $fullPath = Join-Path $publishDirectory $relativePath
-    if (-not (Test-Path -LiteralPath $fullPath -PathType Container)) {
-        throw "Published artifact is missing frontend directory '$relativePath'."
-    }
-}
-
-$externalAssetsDirectory = Join-Path $publishDirectory "Assets"
-if (Test-Path -LiteralPath $externalAssetsDirectory) {
-    throw "Single-file release must not contain an external Assets directory."
-}
-
-$externalBinaryPatterns = @(
-    "*.dll",
-    "*.pdb",
-    "*.deps.json",
-    "*.runtimeconfig.json"
-)
-
-$externalBinaries = foreach ($pattern in $externalBinaryPatterns) {
-    Get-ChildItem -LiteralPath $publishDirectory -File -Filter $pattern
-}
-
-if ($externalBinaries) {
-    $binaryNames = $externalBinaries.Name -join ", "
-    throw "Single-file release leaked external binary/runtime files: $binaryNames"
-}
-
-$allowedRootEntries = @(
-    "PrintableBook.exe",
-    "Frontend"
-)
-
-$unexpectedRootEntries = Get-ChildItem -LiteralPath $publishDirectory |
-    Where-Object { $_.Name -notin $allowedRootEntries }
-
-if ($unexpectedRootEntries) {
-    $names = $unexpectedRootEntries.Name -join ", "
-    throw "Published artifact contains unexpected root entries: $names"
-}
+dotnet publish $updaterProject `
+    --configuration $Configuration `
+    --runtime $RuntimeIdentifier `
+    --self-contained false `
+    -p:PublishSingleFile=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:PublishTrimmed=false `
+    -p:PublishReadyToRun=false `
+    -p:EnableCompressionInSingleFile=false `
+    -p:DebugSymbols=false `
+    -p:DebugType=None `
+    --output $updaterPublishDirectory
+if ($LASTEXITCODE -ne 0) { throw "Updater publish failed." }
+if (-not (Test-Path -LiteralPath (Join-Path $updaterPublishDirectory "PrintableBook.Updater.exe") -PathType Leaf)) { throw "Published Updater artifact is missing PrintableBook.Updater.exe." }
+$updaterExternalBinaries = foreach ($pattern in $externalBinaryPatterns) { Get-ChildItem -LiteralPath $updaterPublishDirectory -File -Filter $pattern }
+if ($updaterExternalBinaries) { throw "Single-file Updater release leaked external binary/runtime files: $($updaterExternalBinaries.Name -join ', ')" }
+$updaterUnexpected = Get-ChildItem -LiteralPath $updaterPublishDirectory | Where-Object { $_.Name -ne "PrintableBook.Updater.exe" }
+if ($updaterUnexpected) { throw "Published Updater artifact contains unexpected root entries: $($updaterUnexpected.Name -join ', ')" }
 
 New-Item -ItemType Directory -Path $packageDirectory -Force | Out-Null
-Copy-Item (Join-Path $publishDirectory "*") $packageDirectory -Recurse -Force
-Compress-Archive -Path $packageDirectory -DestinationPath $zipPath -CompressionLevel Optimal
+Copy-Item (Join-Path $desktopPublishDirectory "*") $packageDirectory -Recurse -Force
+Copy-Item (Join-Path $updaterPublishDirectory "PrintableBook.Updater.exe") (Join-Path $packageDirectory "PrintableBook.Updater.exe") -Force
+$allowedPackageRootEntries = @("PrintableBook.exe", "PrintableBook.Updater.exe", "Frontend")
+$unexpectedPackageEntries = Get-ChildItem -LiteralPath $packageDirectory | Where-Object { $_.Name -notin $allowedPackageRootEntries }
+if ($unexpectedPackageEntries) { throw "Release package contains unexpected root entries: $($unexpectedPackageEntries.Name -join ', ')" }
+foreach ($forbidden in @("brands", "sources", "settings.json", ".workspace", "Output")) {
+    if (Test-Path -LiteralPath (Join-Path $packageDirectory $forbidden)) { throw "Release package must not contain '$forbidden'." }
+}
 
+Compress-Archive -Path $packageDirectory -DestinationPath $zipPath -CompressionLevel Optimal
 $hash = Get-FileHash $zipPath -Algorithm SHA256
-"$($hash.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($zipPath))" |
-    Set-Content $hashPath -Encoding ascii
+"$($hash.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($zipPath))" | Set-Content $hashPath -Encoding ascii
+
+$releaseToolProject = Join-Path $repoRoot "tools/PrintableBook.ReleaseTool/PrintableBook.ReleaseTool.csproj"
+dotnet run --project $releaseToolProject --configuration $Configuration -- sign-release --release-root $releaseRoot --version $version --runtime $RuntimeIdentifier
+if ($LASTEXITCODE -ne 0) { throw "Release signing failed." }
+dotnet run --project $releaseToolProject --configuration $Configuration -- verify-release --release-root $releaseRoot --version $version --runtime $RuntimeIdentifier
+if ($LASTEXITCODE -ne 0) { throw "Release verification failed." }
+foreach ($path in @($zipPath, $hashPath, $manifestPath, $signaturePath)) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Expected release asset is missing: $path" }
+}
 
 Write-Host "Version: $version"
 Write-Host "Package: $packageDirectory"
 Write-Host "ZIP: $zipPath"
 Write-Host "SHA256: $hashPath"
+Write-Host "Manifest: $manifestPath"
+Write-Host "Signature: $signaturePath"
