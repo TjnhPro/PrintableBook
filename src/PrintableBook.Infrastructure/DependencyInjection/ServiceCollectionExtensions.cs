@@ -61,11 +61,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBookWorkspaceStateStore, JsonBookWorkspaceStateStore>();
         services.AddSingleton<IBookStorageMaintenance, PhysicalBookStorageMaintenance>();
         services.AddSingleton<IInteriorShuffleStore, JsonInteriorShuffleStore>();
-        services.AddHttpClient<IUpdateFeed, GitHubReleaseUpdateFeed>(client =>
+        services.AddHttpClient(GitHubReleaseUpdateFeed.HttpClientName, client =>
         {
             client.BaseAddress = new Uri("https://api.github.com/");
             client.Timeout = TimeSpan.FromSeconds(10);
         });
+        services.AddSingleton<IUpdateFeed, GitHubReleaseUpdateFeed>();
         return services;
     }
 }

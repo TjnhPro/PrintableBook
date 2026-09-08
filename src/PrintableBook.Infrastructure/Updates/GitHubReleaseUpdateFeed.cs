@@ -5,12 +5,15 @@ using PrintableBook.Core.Application.Updates;
 
 namespace PrintableBook.Infrastructure.Updates;
 
-public sealed class GitHubReleaseUpdateFeed(HttpClient httpClient) : IUpdateFeed
+public sealed class GitHubReleaseUpdateFeed(IHttpClientFactory httpClientFactory) : IUpdateFeed
 {
+    public const string HttpClientName = "PrintableBook.GitHub";
+
     public async ValueTask<UpdateInfo?> GetLatestStableAsync(
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(httpClient);
+        ArgumentNullException.ThrowIfNull(httpClientFactory);
+        using var httpClient = httpClientFactory.CreateClient(HttpClientName);
 
         using var request = new HttpRequestMessage(
             HttpMethod.Get,

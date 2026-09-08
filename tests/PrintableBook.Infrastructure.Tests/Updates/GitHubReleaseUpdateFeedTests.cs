@@ -15,7 +15,7 @@ public sealed class GitHubReleaseUpdateFeedTests
         string? userAgent = null;
         string? accept = null;
         string? apiVersion = null;
-        using var client = CreateClient((request, _) =>
+        var factory = CreateFactory((request, _) =>
         {
             method = request.Method;
             path = request.RequestUri!.AbsolutePath;
@@ -24,7 +24,7 @@ public sealed class GitHubReleaseUpdateFeedTests
             apiVersion = request.Headers.GetValues("X-GitHub-Api-Version").Single();
             return JsonResponse(ReleaseJson());
         });
-        var feed = new GitHubReleaseUpdateFeed(client);
+        var feed = new GitHubReleaseUpdateFeed(factory);
 
         var result = await feed.GetLatestStableAsync();
 
@@ -46,8 +46,8 @@ public sealed class GitHubReleaseUpdateFeedTests
     [InlineData("prerelease")]
     public async Task GetLatestStableAsyncReturnsNullForNonStableRelease(string field)
     {
-        using var client = CreateClient((_, _) => JsonResponse(ReleaseJson($"\"{field}\": true")));
-        var feed = new GitHubReleaseUpdateFeed(client);
+        var factory = CreateFactory((_, _) => JsonResponse(ReleaseJson($"\"{field}\": true")));
+        var feed = new GitHubReleaseUpdateFeed(factory);
 
         Assert.Null(await feed.GetLatestStableAsync());
     }
@@ -58,8 +58,8 @@ public sealed class GitHubReleaseUpdateFeedTests
     [InlineData("v0.1.2-beta.1")]
     public async Task GetLatestStableAsyncRejectsInvalidStableTag(string tagName)
     {
-        using var client = CreateClient((_, _) => JsonResponse(ReleaseJson($"\"tag_name\": \"{tagName}\"")));
-        var feed = new GitHubReleaseUpdateFeed(client);
+        var factory = CreateFactory((_, _) => JsonResponse(ReleaseJson($"\"tag_name\": \"{tagName}\"")));
+        var feed = new GitHubReleaseUpdateFeed(factory);
 
         await Assert.ThrowsAsync<InvalidDataException>(async () => await feed.GetLatestStableAsync().AsTask());
     }
@@ -71,8 +71,8 @@ public sealed class GitHubReleaseUpdateFeedTests
     [InlineData("\"html_url\": \"not-a-url\"")]
     public async Task GetLatestStableAsyncRejectsInvalidRequiredMetadata(string replacement)
     {
-        using var client = CreateClient((_, _) => JsonResponse(ReleaseJson(replacement)));
-        var feed = new GitHubReleaseUpdateFeed(client);
+        var factory = CreateFactory((_, _) => JsonResponse(ReleaseJson(replacement)));
+        var feed = new GitHubReleaseUpdateFeed(factory);
 
         await Assert.ThrowsAsync<InvalidDataException>(async () => await feed.GetLatestStableAsync().AsTask());
     }
@@ -80,8 +80,8 @@ public sealed class GitHubReleaseUpdateFeedTests
     [Fact]
     public async Task GetLatestStableAsyncPreservesHttpFailures()
     {
-        using var client = CreateClient((_, _) => new HttpResponseMessage(HttpStatusCode.InternalServerError));
-        var feed = new GitHubReleaseUpdateFeed(client);
+        var factory = CreateFactory((_, _) => new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        var feed = new GitHubReleaseUpdateFeed(factory);
 
         await Assert.ThrowsAsync<HttpRequestException>(async () => await feed.GetLatestStableAsync().AsTask());
     }
@@ -89,8 +89,8 @@ public sealed class GitHubReleaseUpdateFeedTests
     [Fact]
     public async Task GetLatestStableAsyncPreservesJsonSyntaxFailures()
     {
-        using var client = CreateClient((_, _) => JsonResponse("{ invalid json"));
-        var feed = new GitHubReleaseUpdateFeed(client);
+        var factory = CreateFactory((_, _) => JsonResponse("{ invalid json"));
+        var feed = new GitHubReleaseUpdateFeed(factory);
 
         await Assert.ThrowsAsync<JsonException>(async () => await feed.GetLatestStableAsync().AsTask());
     }
@@ -98,12 +98,30 @@ public sealed class GitHubReleaseUpdateFeedTests
     [Fact]
     public async Task GetLatestStableAsyncFallsBackToTagWhenNameIsMissing()
     {
-        using var client = CreateClient((_, _) => JsonResponse(ReleaseJson("\"name\": null")));
-        var feed = new GitHubReleaseUpdateFeed(client);
+        var factory = CreateFactory((_, _) => JsonResponse(ReleaseJson("\"name\": null")));
+        var feed = new GitHubReleaseUpdateFeed(factory);
 
         var result = await feed.GetLatestStableAsync();
 
         Assert.Equal("v0.1.2", result!.Name);
+    }
+
+    [Fact]
+    public async Task GetLatestStableAsyncCreatesAClientForEachCheck()
+    {
+        var factory = new StubHttpClientFactory(() => CreateClient((_, _) => JsonResponse(ReleaseJson())));
+        var feed = new GitHubReleaseUpdateFeed(factory);
+
+        await feed.GetLatestStableAsync();
+        await feed.GetLatestStableAsync();
+
+        Assert.Equal(2, factory.CreateClientCallCount);
+    }
+
+    private static IHttpClientFactory CreateFactory(
+        Func<HttpRequestMessage, CancellationToken, HttpResponseMessage> responder)
+    {
+        return new StubHttpClientFactory(() => CreateClient(responder));
     }
 
     private static HttpClient CreateClient(
@@ -154,6 +172,17 @@ public sealed class GitHubReleaseUpdateFeedTests
             CancellationToken cancellationToken)
         {
             return Task.FromResult(responder(request, cancellationToken));
+        }
+    }
+
+    private sealed class StubHttpClientFactory(Func<HttpClient> createClient) : IHttpClientFactory
+    {
+        public int CreateClientCallCount { get; private set; }
+
+        public HttpClient CreateClient(string name)
+        {
+            CreateClientCallCount++;
+            return createClient();
         }
     }
 }
