@@ -176,3 +176,24 @@ Clear Cache xóa raster nặng (canonical/processed cache) nhưng giữ Book sta
 CI chỉ chạy fixture repository-owned, deterministic và redistributable. Corpus ảnh thật do user cung cấp nằm trong `TestResults/`, được đánh dấu `TestScope=LocalCorpus`, chỉ chạy explicit local opt-in và không được yêu cầu trên clean checkout/CI. Real-output certification phải kiểm tra file/raster/PDF thật thay vì chỉ mock.
 
 Tài liệu liên quan: [processing background](background-process-session.md), [BorderLine V3](borderline-detector-v3.md), [shared Interior pipeline](interior-shared-pipeline-integration.md), [Intro](intro-template-processing.md) và [PDF engine](pdf-engine.md).
+
+## Authenticated updates
+
+`PrintableBook.UpdateSecurity` là boundary nhỏ cho contract manifest, Ed25519 và public key đã ghim. Nó không phụ thuộc các application layer:
+
+```text
+Infrastructure → UpdateSecurity
+ReleaseTool → UpdateSecurity
+
+UpdateSecurity ↛ Core / Infrastructure / Desktop / Updater
+```
+
+Luồng trust khi kiểm tra và chuẩn bị update là:
+
+```text
+GitHub release API → đúng bốn assets → tải manifest/signature có giới hạn
+→ xác minh Ed25519 bằng embedded public key → parse manifest nghiêm ngặt
+→ archive/checksum names, sizes, hashes đã ký → tải ZIP + sidecar
+→ xác minh hash file sidecar → declaration sidecar → hash ZIP
+→ extract, validate và stage payload
+```
