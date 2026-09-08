@@ -12,6 +12,7 @@ using PrintableBook.Core.Application.Diagnostics;
 using PrintableBook.Core.Application.BackgroundTasks;
 using PrintableBook.Core.Application.Brands;
 using System.Windows;
+using PrintableBook.Desktop.Updates;
 
 namespace PrintableBook.Desktop;
 
@@ -23,17 +24,19 @@ public partial class MainWindow : Window
     private readonly IOperationDiagnostics diagnostics;
     private readonly ProcessWindowShutdownCoordinator shutdownCoordinator;
     private readonly DispatcherStallMonitor dispatcherStallMonitor;
+    private readonly UpdateShutdownState updateShutdownState;
     private readonly CancellationTokenSource closeFlowCancellation = new();
     private bool allowClose;
     private bool closeFlowRunning;
     private bool systemShutdown;
 
-    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IBrandSettingsStore brandSettingsStore, IBrandValidationService brandValidationService, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookInteriorSettingsService bookInteriorSettingsService, ILocalOutputActionService outputActionService, IOperationDiagnostics diagnostics, UiDiagnosticsService uiDiagnosticsService, IBackgroundTaskManager backgroundTaskManager, DispatcherStallMonitor dispatcherStallMonitor, ProcessWindowShutdownCoordinator shutdownCoordinator)
+    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IBrandSettingsStore brandSettingsStore, IBrandValidationService brandValidationService, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookInteriorSettingsService bookInteriorSettingsService, ILocalOutputActionService outputActionService, IOperationDiagnostics diagnostics, UiDiagnosticsService uiDiagnosticsService, IBackgroundTaskManager backgroundTaskManager, DispatcherStallMonitor dispatcherStallMonitor, ProcessWindowShutdownCoordinator shutdownCoordinator, UpdateShutdownState updateShutdownState)
     {
         Application = application;
         this.diagnostics = diagnostics;
         this.shutdownCoordinator = shutdownCoordinator;
         this.dispatcherStallMonitor = dispatcherStallMonitor;
+        this.updateShutdownState = updateShutdownState;
         bridgeRouter = new WebViewBridgeRouter(applicationLoadCoordinator, settingsStore, processSessionService, brandSettingsStore, coverSelectionService, interiorFrameModeService, bookInteriorSettingsService, outputActionService, diagnostics, uiDiagnosticsService, backgroundTaskManager, brandValidationService: brandValidationService);
         InitializeComponent();
         dispatcherStallMonitor.Start();
@@ -57,8 +60,8 @@ public partial class MainWindow : Window
         }
     }
 
-    internal static bool ShouldHandleInteractiveClose(bool allowClose, bool systemShutdown) =>
-        !allowClose && !systemShutdown;
+    internal static bool ShouldHandleInteractiveClose(bool allowClose, bool systemShutdown, bool updateShutdownRequested) =>
+        !allowClose && !systemShutdown && !updateShutdownRequested;
 
     internal static Size ConstrainToWorkingArea(Size preferredSize, Size workingAreaSize) =>
         new(
@@ -142,7 +145,7 @@ public partial class MainWindow : Window
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {
-        if (!ShouldHandleInteractiveClose(allowClose, systemShutdown)) return;
+        if (!ShouldHandleInteractiveClose(allowClose, systemShutdown, updateShutdownState.IsRequested)) return;
         e.Cancel = true;
         if (closeFlowRunning) return;
         closeFlowRunning = true;

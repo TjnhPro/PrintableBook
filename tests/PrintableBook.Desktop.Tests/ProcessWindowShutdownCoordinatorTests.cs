@@ -11,13 +11,13 @@ public sealed class ProcessWindowShutdownCoordinatorTests
     [Fact]
     public void ShouldHandleInteractiveClose_keeps_normal_user_close_on_the_coordinator_path()
     {
-        Assert.True(MainWindow.ShouldHandleInteractiveClose(allowClose: false, systemShutdown: false));
+        Assert.True(MainWindow.ShouldHandleInteractiveClose(allowClose: false, systemShutdown: false, updateShutdownRequested: false));
     }
 
     [Fact]
     public void ShouldHandleInteractiveClose_bypasses_the_coordinator_during_system_shutdown()
     {
-        Assert.False(MainWindow.ShouldHandleInteractiveClose(allowClose: false, systemShutdown: true));
+        Assert.False(MainWindow.ShouldHandleInteractiveClose(allowClose: false, systemShutdown: true, updateShutdownRequested: false));
     }
 
     [Fact]
