@@ -115,11 +115,12 @@
     if (versionLabel && currentVersion) versionLabel.textContent = `Version ${currentVersion}`;
   };
   const applyUpdateSnapshot = (snapshot) => { state.updateSnapshot = snapshot ?? null; state.updateCommandPending = ""; renderUpdateBanner(); updateUpdateControls(); if (!["Downloading", "Verifying", "Installing"].includes(updatePhase())) stopUpdatePolling(); };
-  const beginUpdateCheck = (trigger = "manual") => { if (updateIsBusy()) return; state.updateCheckWasManual = trigger === "manual"; state.updateCommandPending = "check"; if (state.updateCheckWasManual) { state.updateSnapshot = { ...(state.updateSnapshot ?? {}), phase: "Checking", canCheck: false, canDownload: false, canInstall: false }; renderUpdateBanner(); } updateUpdateControls(); send("updates.check", { trigger }); };
+  const beginUpdateCheck = (trigger = "manual") => { if (state.updateCommandPending !== "" || updateIsBusy()) return; state.updateCheckWasManual = trigger === "manual"; state.updateCommandPending = "check"; if (state.updateCheckWasManual) { state.updateSnapshot = { ...(state.updateSnapshot ?? {}), phase: "Checking", canCheck: false, canDownload: false, canInstall: false }; renderUpdateBanner(); } updateUpdateControls(); send("updates.check", { trigger }); };
   const beginUpdateAction = (action) => {
+    if (state.updateCommandPending !== "" || updateIsBusy()) return;
     if (action === "check") return beginUpdateCheck("manual");
     if (action === "download") { state.updateCommandPending = "download"; state.updateSnapshot = { ...(state.updateSnapshot ?? {}), phase: "Downloading", canCheck: false, canDownload: false, canInstall: false }; renderUpdateBanner(); updateUpdateControls(); startUpdatePolling(); send("updates.download"); }
-    if (action === "install") { state.updateCommandPending = "install"; updateUpdateControls(); send("updates.install"); }
+    if (action === "install") { state.updateCommandPending = "install"; state.updateSnapshot = { ...(state.updateSnapshot ?? {}), phase: "Installing", canCheck: false, canDownload: false, canInstall: false }; renderUpdateBanner(); updateUpdateControls(); send("updates.install"); }
   };
   const dateTime = (value) => value ? new Date(value).toLocaleString() : "—";
   const elapsedTime = (value) => {

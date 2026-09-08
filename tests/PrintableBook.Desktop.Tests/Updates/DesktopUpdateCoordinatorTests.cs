@@ -1,6 +1,7 @@
 using PrintableBook.Core.Application.Updates;
 using PrintableBook.Desktop.Bridge;
 using PrintableBook.Desktop.Updates;
+using System.Text.Json;
 
 namespace PrintableBook.Desktop.Tests.Updates;
 
@@ -83,6 +84,104 @@ public sealed class DesktopUpdateCoordinatorTests
 
         preparation.Completion.SetResult(new PreparedUpdate(new Version(0, 2, 0), "D:\\updates\\payload"));
         await retry;
+    }
+
+    [Fact]
+    public async Task Duplicate_check_does_not_queue_a_second_service_call()
+    {
+        var updates = new StubUpdateService
+        {
+            Started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously),
+            Completion = new TaskCompletionSource<UpdateCheckResult>(TaskCreationOptions.RunContinuationsAsynchronously)
+        };
+        var coordinator = CreateCoordinator(updates);
+        var first = coordinator.CheckAsync(UpdateCheckTrigger.Manual).AsTask();
+        await updates.Started.Task;
+
+        var second = await coordinator.CheckAsync(UpdateCheckTrigger.Manual);
+
+        Assert.Equal(DesktopUpdatePhase.Checking, second.Phase);
+        Assert.Equal(1, updates.CallCount);
+        updates.Completion.SetResult(AvailableResult());
+        await first;
+    }
+
+    [Fact]
+    public async Task Check_cancellation_restores_the_previous_available_state()
+    {
+        var updates = new StubUpdateService { Result = AvailableResult() };
+        var coordinator = CreateCoordinator(updates);
+        await coordinator.CheckAsync(UpdateCheckTrigger.Manual);
+        updates.Started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        updates.Completion = new TaskCompletionSource<UpdateCheckResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellation = new CancellationTokenSource();
+        var checking = coordinator.CheckAsync(UpdateCheckTrigger.Manual, cancellation.Token).AsTask();
+        await updates.Started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => checking);
+        var restored = coordinator.GetState();
+        Assert.Equal(DesktopUpdatePhase.Available, restored.Phase);
+        Assert.Equal(new Version(0, 2, 0), restored.LatestRelease!.Version);
+        Assert.True(restored.CanDownload);
+    }
+
+    [Theory]
+    [InlineData(UpdatePreparationStage.DownloadingArchive, DesktopUpdatePhase.Downloading)]
+    [InlineData(UpdatePreparationStage.DownloadingChecksum, DesktopUpdatePhase.Downloading)]
+    [InlineData(UpdatePreparationStage.Verifying, DesktopUpdatePhase.Verifying)]
+    [InlineData(UpdatePreparationStage.Extracting, DesktopUpdatePhase.Verifying)]
+    [InlineData(UpdatePreparationStage.Validating, DesktopUpdatePhase.Verifying)]
+    [InlineData(UpdatePreparationStage.Ready, DesktopUpdatePhase.Ready)]
+    public async Task Preparation_stages_map_to_the_expected_desktop_phase(UpdatePreparationStage stage, DesktopUpdatePhase expectedPhase)
+    {
+        var preparation = new StubPreparationService
+        {
+            ReportProgress = false,
+            Progress = [new UpdatePreparationProgress(stage, 512, 1024)],
+            Completion = new TaskCompletionSource<PreparedUpdate>(TaskCreationOptions.RunContinuationsAsynchronously)
+        };
+        var coordinator = CreateCoordinator(new StubUpdateService { Result = AvailableResult() }, preparation);
+        await coordinator.CheckAsync(UpdateCheckTrigger.Manual);
+        var downloading = coordinator.DownloadAsync().AsTask();
+        await preparation.Started.Task;
+
+        Assert.Equal(expectedPhase, coordinator.GetState().Phase);
+        preparation.Completion.SetResult(new PreparedUpdate(new Version(0, 2, 0), "D:\\updates\\payload"));
+        await downloading;
+    }
+
+    [Fact]
+    public async Task Download_cancellation_restores_the_previous_available_state()
+    {
+        var preparation = new StubPreparationService { Completion = new TaskCompletionSource<PreparedUpdate>(TaskCreationOptions.RunContinuationsAsynchronously) };
+        var coordinator = CreateCoordinator(new StubUpdateService { Result = AvailableResult() }, preparation);
+        await coordinator.CheckAsync(UpdateCheckTrigger.Manual);
+        using var cancellation = new CancellationTokenSource();
+        var downloading = coordinator.DownloadAsync(cancellation.Token).AsTask();
+        await preparation.Started.Task;
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => downloading);
+        var restored = coordinator.GetState();
+        Assert.Equal(DesktopUpdatePhase.Available, restored.Phase);
+        Assert.Equal(new Version(0, 2, 0), restored.LatestRelease!.Version);
+        Assert.True(restored.CanDownload);
+    }
+
+    [Fact]
+    public void Serialized_update_bridge_snapshot_excludes_private_package_details()
+    {
+        var snapshot = new DesktopUpdateSnapshot(DesktopUpdatePhase.Available, new Version(0, 1, 1), Update(), null, 0, null, null, null, null, true, true, false);
+        var json = JsonSerializer.Serialize(UpdateBridgeSnapshot.From(snapshot), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.Contains("\"latestVersion\":\"0.2.0\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"releaseName\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("PrintableBook.zip", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("sha256", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PayloadDirectoryPath", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("staging", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("--wait-pid", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -208,14 +307,18 @@ public sealed class DesktopUpdateCoordinatorTests
     private sealed class StubUpdateService : IUpdateService
     {
         public int CallCount { get; private set; }
-        public UpdateCheckResult Result { get; init; } = new(new Version(0, 1, 1), null, UpdateAvailability.UpToDate);
-        public Exception? Exception { get; init; }
+        public UpdateCheckResult Result { get; set; } = new(new Version(0, 1, 1), null, UpdateAvailability.UpToDate);
+        public Exception? Exception { get; set; }
+        public TaskCompletionSource<bool>? Started { get; set; }
+        public TaskCompletionSource<UpdateCheckResult>? Completion { get; set; }
 
-        public ValueTask<UpdateCheckResult> CheckAsync(CancellationToken cancellationToken = default)
+        public async ValueTask<UpdateCheckResult> CheckAsync(CancellationToken cancellationToken = default)
         {
             CallCount++;
+            Started?.TrySetResult(true);
             if (Exception is not null) throw Exception;
-            return ValueTask.FromResult(Result);
+            if (Completion is not null) return await Completion.Task.WaitAsync(cancellationToken);
+            return Result;
         }
     }
 
@@ -226,12 +329,14 @@ public sealed class DesktopUpdateCoordinatorTests
         public TaskCompletionSource<PreparedUpdate>? Completion { get; set; }
         public Exception? Exception { get; set; }
         public bool ReportProgress { get; set; } = true;
+        public IReadOnlyList<UpdatePreparationProgress> Progress { get; set; } = [];
         public TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async ValueTask<PreparedUpdate> PrepareAsync(UpdateInfo update, IProgress<UpdatePreparationProgress>? progress = null, CancellationToken cancellationToken = default)
         {
             CallCount++;
             if (ReportProgress) progress?.Report(new UpdatePreparationProgress(UpdatePreparationStage.DownloadingArchive, 512, 1024));
+            foreach (var item in Progress) progress?.Report(item);
             Started.TrySetResult(true);
             if (Exception is not null) throw Exception;
             return Completion is null ? Result : await Completion.Task.WaitAsync(cancellationToken);
