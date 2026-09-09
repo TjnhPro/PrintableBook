@@ -33,7 +33,7 @@ public sealed class JsonGlobalSettingsStore(IApplicationRootDiscovery discovery,
 
     private static void Validate(GlobalSettings value)
     {
-        if (value.MaximumPageConcurrency is < 1 or > 12 || value.ArtworkMaximumSide <= 0 || value.WorkingPageWidth < value.ArtworkMaximumSide || value.WorkingPageHeight < value.ArtworkMaximumSide || value.FinalPageWidth < value.WorkingPageWidth || value.FinalPageHeight < value.WorkingPageHeight || value.Dpi <= 0 || value.InteriorPdfWidthInches <= 0 || value.InteriorPdfHeightInches <= 0) throw new ArgumentOutOfRangeException(nameof(value), "Global settings contain an invalid processing layout.");
+        if (value.MaximumPageConcurrency is < 1 or > 12 || value.ArtworkMaximumSide <= 0 || value.WorkingPageWidth < value.ArtworkMaximumSide || value.WorkingPageHeight < value.ArtworkMaximumSide || value.FinalPageWidth < value.WorkingPageWidth || value.FinalPageHeight < value.WorkingPageHeight || value.Dpi <= 0) throw new ArgumentOutOfRangeException(nameof(value), "Global settings contain an invalid processing layout.");
 
         var normalization = value.EffectiveArtworkSourceNormalization;
         var borderLine = value.EffectiveBorderLineDetection;

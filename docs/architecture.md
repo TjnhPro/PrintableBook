@@ -96,6 +96,8 @@ shuffle / assembly
 Interior PDF
 ```
 
+`Working 2550×2550` is the **Working Area**: a square intermediate canvas for centering the artwork. `Final 2588×2625` is the **Final Interior Page**: the printable raster embedded in the Interior PDF. They are different contracts. The Interior PDF MediaBox is derived only from `Final Interior Page ÷ DPI`; at the default 300 DPI it is `621.12×630 pt` (`8.6266667×8.75 in`). The Working Area must never define PDF geometry.
+
 Raw source chỉ được dùng để xác định/fingerprint và chuẩn hoá. Sau khi `normalized-source.png` đã có, detector, classifier, preparation, frame và page production đều đọc artifact này; không có stage sau đó mở lại raw source. Normalization tạo PNG vuông opaque-white trong cùng toạ độ chuẩn (mặc định `2048×2048`).
 
 `BorderLine V3` là detector hiện hành: pass 1 tìm viền nông (`200`), pass 2 sâu hơn (`320`) chỉ chạy khi pass 1 không có outer frame bốn cạnh coherent. Hai pass dùng cùng quality gates; `BorderPixel V1` chỉ là fallback khi BorderLine âm. Tuning BorderLine, version classification hoặc normalization làm invalid stage cache và các stage downstream tương ứng.

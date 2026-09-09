@@ -12,7 +12,7 @@ public sealed class JsonGlobalSettingsStoreTests : IAsyncLifetime
     private readonly string root = Path.Combine(Path.GetTempPath(), $"PrintableBook.Settings.{Guid.NewGuid():N}");
 
     [Fact]
-    public async Task LoadAsync_legacy_json_uses_and_materializes_detection_defaults()
+    public async Task LoadAsync_legacy_json_ignores_retired_interior_pdf_dimensions_and_materializes_detection_defaults()
     {
         var paths = CreatePaths();
         Directory.CreateDirectory(root);
@@ -24,6 +24,12 @@ public sealed class JsonGlobalSettingsStoreTests : IAsyncLifetime
         Assert.Equal(320, loaded.EffectiveBorderLineDetection.Pass2SearchDepth);
         Assert.NotNull(loaded.ArtworkSourceNormalization);
         Assert.NotNull(loaded.BorderLineDetection);
+
+        await CreateStore(paths).SaveAsync(loaded);
+        var saved = await File.ReadAllTextAsync(paths.SettingsFile.Value);
+        Assert.DoesNotContain("interiorPdfWidthInches", saved, StringComparison.Ordinal);
+        Assert.DoesNotContain("interiorPdfHeightInches", saved, StringComparison.Ordinal);
+        Assert.DoesNotContain("finalInteriorPdfPageSize", saved, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -11,12 +11,12 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
     private readonly string rootPath = Path.Combine(Path.GetTempPath(), $"PrintableBook.PdfTests.{Guid.NewGuid():N}");
 
     [Fact]
-    public async Task ExportAsync_writes_cover_and_interiors_at_their_independently_configured_physical_sizes()
+    public async Task ExportAsync_writes_final_interior_rasters_at_their_density_derived_physical_size()
     {
         Directory.CreateDirectory(rootPath);
         var cover = await CreatePngAsync("cover.png", 5242, 2626);
-        var pageOne = await CreatePngAsync("page-01.png");
-        var pageTwo = await CreatePngAsync("page-02.png");
+        var pageOne = await CreatePngAsync("page-01.png", 2588, 2625);
+        var pageTwo = await CreatePngAsync("page-02.png", 2588, 2625);
         var output = new DirectoryReference(Path.Combine(rootPath, "output"));
 
         var result = await new PdfSharpPrintableBookPdfExporter().ExportAsync(
@@ -27,7 +27,7 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
                 null,
                 output,
                 new PhysicalPageSize(5242d / 300d, 2626d / 300d),
-                new PhysicalPageSize(8.5, 8.5),
+                new PhysicalPageSize(2588d / 300d, 2625d / 300d),
                 MaximumPageConcurrency: 4));
 
         using var coverPdf = PdfReader.Open(result.CoverPdf.Value);
@@ -36,15 +36,15 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
         Assert.Equal(2, interiorPdf.Pages.Count);
         Assert.Equal(5242d / 300d * 72d, coverPdf.Pages[0].Width.Point, precision: 3);
         Assert.Equal(2626d / 300d * 72d, coverPdf.Pages[0].Height.Point, precision: 3);
-        Assert.Equal(612, interiorPdf.Pages[0].Width.Point, precision: 3);
-        Assert.Equal(612, interiorPdf.Pages[0].Height.Point, precision: 3);
-        Assert.Equal(612, interiorPdf.Pages[1].Width.Point, precision: 3);
-        Assert.Equal(612, interiorPdf.Pages[1].Height.Point, precision: 3);
+        Assert.Equal(2588d / 300d * 72d, interiorPdf.Pages[0].Width.Point, precision: 3);
+        Assert.Equal(2625d / 300d * 72d, interiorPdf.Pages[0].Height.Point, precision: 3);
+        Assert.Equal(2588d / 300d * 72d, interiorPdf.Pages[1].Width.Point, precision: 3);
+        Assert.Equal(2625d / 300d * 72d, interiorPdf.Pages[1].Height.Point, precision: 3);
         Assert.True(new FileInfo(result.InteriorPdf.Value).Length > 0);
 
         var interiorBytes = await File.ReadAllBytesAsync(result.InteriorPdf.Value);
         var interiorText = System.Text.Encoding.Latin1.GetString(interiorBytes);
-        Assert.Contains("/Width 2550", interiorText, StringComparison.Ordinal);
+        Assert.Contains("/Width 2588", interiorText, StringComparison.Ordinal);
     }
 
     [Fact]
