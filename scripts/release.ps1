@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+$')]
+    [ValidatePattern('^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$')]
     [string]$Version = ""
 )
 
@@ -13,7 +13,7 @@ function ConvertTo-StrictReleaseVersion {
         [string]$Value
     )
 
-    if ($Value -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$') {
+    if ($Value -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
         throw "Release version '$Value' must match M.m.p."
     }
 
@@ -127,11 +127,12 @@ function Assert-GreenMainCi {
 
     Invoke-Gh -Arguments @("auth", "status") | Out-Null
     $result = Invoke-Gh -Arguments @(
-        "run", "list", "--workflow", "build-and-test.yml", "--commit", $HeadSha,
-        "--limit", "20", "--json", "headSha,status,conclusion,databaseId,url")
+        "run", "list", "--workflow", "build-and-test.yml", "--branch", "main", "--commit", $HeadSha,
+        "--limit", "20", "--json", "headSha,headBranch,event,status,conclusion,databaseId,url")
     $runs = @(($result.Output -join [Environment]::NewLine) | ConvertFrom-Json)
     $success = $runs | Where-Object {
-        $_.headSha -eq $HeadSha -and $_.status -eq "completed" -and $_.conclusion -eq "success"
+        $_.headSha -eq $HeadSha -and $_.headBranch -eq "main" -and $_.event -eq "push" -and
+        $_.status -eq "completed" -and $_.conclusion -eq "success"
     } | Select-Object -First 1
 
     if ($null -eq $success) {
@@ -252,13 +253,19 @@ function Wait-ReleaseWorkflow {
 function Assert-PublishedRelease {
     param(
         [Parameter(Mandatory)]
-        [Version]$Version
+        [Version]$Version,
+
+        [psobject]$Release = $null
     )
 
     $value = $Version.ToString(3)
     $tag = "v$value"
-    $result = Invoke-Gh -Arguments @("release", "view", $tag, "--json", "tagName,isDraft,isPrerelease,url,assets")
-    $release = ($result.Output -join [Environment]::NewLine) | ConvertFrom-Json
+    if ($null -eq $Release) {
+        $result = Invoke-Gh -Arguments @("release", "view", $tag, "--json", "tagName,isDraft,isPrerelease,url,assets")
+        $Release = ($result.Output -join [Environment]::NewLine) | ConvertFrom-Json
+    }
+
+    $release = $Release
     if ($release.tagName -ne $tag) { throw "Published release tag mismatch." }
     if ($release.isDraft) { throw "Published release '$tag' is still a draft." }
     if ($release.isPrerelease) { throw "Published release '$tag' must be stable." }
@@ -285,7 +292,12 @@ function Try-GetPublishedRelease {
 
     $result = Invoke-Gh -Arguments @("release", "view", $TagName, "--json", "tagName,isDraft,isPrerelease,url,assets") -AllowFailure
     if ($result.ExitCode -ne 0) {
-        return $null
+        $errorText = $result.Output -join [Environment]::NewLine
+        if ($errorText -match '(?i)not found') {
+            return $null
+        }
+
+        throw "Could not inspect existing GitHub Release '$TagName': $errorText"
     }
 
     return ($result.Output -join [Environment]::NewLine) | ConvertFrom-Json
@@ -364,6 +376,8 @@ function Invoke-PrintableBookRelease {
             Write-Host $published.url
             return
         }
+
+        Assert-PublishedRelease -Version $currentVersion -Release $existingRelease | Out-Null
     }
 
     $targetVersion = Resolve-TargetVersion -CurrentVersion $currentVersion -RequestedVersion $RequestedVersion

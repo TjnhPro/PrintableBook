@@ -67,6 +67,7 @@ Assert-Equal "0.3.10" (Get-NextPatchVersion ([Version]"0.3.9")).ToString(3) "Mul
 Assert-Throws { ConvertTo-StrictReleaseVersion "0.2" } "M.m.p"
 Assert-Throws { ConvertTo-StrictReleaseVersion "v0.2.1" } "M.m.p"
 Assert-Throws { ConvertTo-StrictReleaseVersion "0.2.1-beta" } "M.m.p"
+Assert-Throws { ConvertTo-StrictReleaseVersion "01.2.3" } "M.m.p"
 
 Assert-Equal "0.2.1" (Resolve-TargetVersion -CurrentVersion ([Version]"0.2.0") -RequestedVersion "").ToString(3) "Empty requested version must bump patch."
 Assert-Equal "0.3.0" (Resolve-TargetVersion -CurrentVersion ([Version]"0.2.0") -RequestedVersion "0.3.0").ToString(3) "Explicit version was not honored."
@@ -158,7 +159,9 @@ if ($Arguments.Count -ge 2 -and $Arguments[0] -eq "run" -and $Arguments[1] -eq "
     $sha = Get-CurrentSha
     if ($workflow -eq "build-and-test.yml") {
         $conclusion = if ($env:FAKE_GH_BUILD_CONCLUSION) { $env:FAKE_GH_BUILD_CONCLUSION } else { "success" }
-        @(@{ headSha = $sha; status = "completed"; conclusion = $conclusion; databaseId = 1001; url = "https://example.invalid/build/1001" }) | ConvertTo-Json -Compress
+        $event = if ($env:FAKE_GH_BUILD_EVENT) { $env:FAKE_GH_BUILD_EVENT } else { "push" }
+        $branch = if ($env:FAKE_GH_BUILD_BRANCH) { $env:FAKE_GH_BUILD_BRANCH } else { "main" }
+        @(@{ headSha = $sha; headBranch = $branch; event = $event; status = "completed"; conclusion = $conclusion; databaseId = 1001; url = "https://example.invalid/build/1001" }) | ConvertTo-Json -Compress
         exit 0
     }
 
@@ -178,18 +181,21 @@ if ($Arguments.Count -ge 2 -and $Arguments[0] -eq "run" -and $Arguments[1] -eq "
 if ($Arguments.Count -ge 2 -and $Arguments[0] -eq "run" -and $Arguments[1] -eq "rerun") { exit 0 }
 
 if ($Arguments.Count -ge 2 -and $Arguments[0] -eq "release" -and $Arguments[1] -eq "view") {
-    if ($env:FAKE_GH_RELEASE_VISIBLE -eq "false") { exit 1 }
+    if ($env:FAKE_GH_RELEASE_ERROR) { Write-Output $env:FAKE_GH_RELEASE_ERROR; exit 1 }
+    if ($env:FAKE_GH_RELEASE_VISIBLE -eq "false") { Write-Output "release not found"; exit 1 }
     if ($env:FAKE_GH_RELEASE_VISIBLE -eq "after-watch") {
-        if (-not $env:FAKE_GH_RELEASE_STATE_FILE -or -not (Test-Path -LiteralPath $env:FAKE_GH_RELEASE_STATE_FILE) -or ([IO.File]::ReadAllText($env:FAKE_GH_RELEASE_STATE_FILE).Trim() -ne "visible")) { exit 1 }
+        if (-not $env:FAKE_GH_RELEASE_STATE_FILE -or -not (Test-Path -LiteralPath $env:FAKE_GH_RELEASE_STATE_FILE) -or ([IO.File]::ReadAllText($env:FAKE_GH_RELEASE_STATE_FILE).Trim() -ne "visible")) { Write-Output "release not found"; exit 1 }
     }
     $tag = $Arguments[2]
     $version = $tag.Substring(1)
-    @{ tagName = $tag; isDraft = $false; isPrerelease = $false; url = "https://example.invalid/releases/$tag"; assets = @(
+    $assets = @(
         @{ name = "PrintableBook-$version-win-x64.zip" },
         @{ name = "PrintableBook-$version-win-x64.zip.sha256" },
         @{ name = "PrintableBook-$version-win-x64.manifest.json" },
         @{ name = "PrintableBook-$version-win-x64.manifest.json.sig" }
-    ) } | ConvertTo-Json -Compress -Depth 4
+    )
+    if ($env:FAKE_GH_RELEASE_ASSET_SET -eq "missing") { $assets = @($assets | Select-Object -Skip 1) }
+    @{ tagName = $tag; isDraft = ($env:FAKE_GH_RELEASE_DRAFT -eq "true"); isPrerelease = ($env:FAKE_GH_RELEASE_PRERELEASE -eq "true"); url = "https://example.invalid/releases/$tag"; assets = $assets } | ConvertTo-Json -Compress -Depth 4
     exit 0
 }
 
@@ -202,7 +208,9 @@ throw "Unsupported fake gh invocation: $($Arguments -join ' ')"
 function New-ReleaseTestRepository {
     param(
         [Parameter(Mandatory)]
-        [string]$Root
+        [string]$Root,
+
+        [switch]$RejectAtomicPush
     )
 
     $origin = Join-Path $Root "origin.git"
@@ -224,6 +232,13 @@ function New-ReleaseTestRepository {
         & git commit -m "test: initial main" | Out-Null
         & git remote add origin $origin
         & git push -u origin main | Out-Null
+
+        if ($RejectAtomicPush) {
+            [IO.File]::WriteAllText(
+                (Join-Path $origin "hooks/pre-receive"),
+                "#!/bin/sh`nexit 1`n",
+                [Text.UTF8Encoding]::new($false))
+        }
     }
     finally {
         Pop-Location
@@ -347,6 +362,11 @@ Assert-True ($ciResult.ExitCode -ne 0) "Failed main CI was accepted."
 Assert-True ((Get-RemoteMainFile $ciRepository) -match '<Version>0.2.0</Version>') "Failed main CI changed source version."
 Assert-True ($null -eq (Get-RemoteTagSha $ciRepository "v0.2.1")) "Failed main CI created a tag."
 
+$wrongEventRepository = New-ReleaseTestRepository -Root (New-TestRoot)
+$wrongEventResult = Invoke-TestRelease -Repository $wrongEventRepository -Environment @{ FAKE_GH_BUILD_EVENT = "pull_request" }
+Assert-True ($wrongEventResult.ExitCode -ne 0) "Non-main-push CI was accepted."
+Assert-True ($null -eq (Get-RemoteTagSha $wrongEventRepository "v0.2.1")) "Non-main-push CI created a tag."
+
 foreach ($invalidVersion in @("0.2.0", "0.1.9")) {
     $invalidRepository = New-ReleaseTestRepository -Root (New-TestRoot)
     $invalidResult = Invoke-TestRelease -Repository $invalidRepository -Version $invalidVersion
@@ -371,6 +391,30 @@ Invoke-TestGit -WorkingDirectory $malformedRepository.Work -Arguments @("push", 
 $malformedResult = Invoke-TestRelease -Repository $malformedRepository
 Assert-True ($malformedResult.ExitCode -ne 0) "Malformed source version was accepted."
 Assert-True ($null -eq (Get-RemoteTagSha $malformedRepository "v0.2.1")) "Malformed source version created a tag."
+
+foreach ($incompleteReleaseEnvironment in @(
+    @{ FAKE_GH_RELEASE_DRAFT = "true" },
+    @{ FAKE_GH_RELEASE_PRERELEASE = "true" },
+    @{ FAKE_GH_RELEASE_ASSET_SET = "missing" },
+    @{ FAKE_GH_RELEASE_ERROR = "GitHub API unavailable" }
+)) {
+    $taggedRepository = New-ReleaseTestRepository -Root (New-TestRoot)
+    $initialPublication = Invoke-TestRelease -Repository $taggedRepository
+    Assert-Equal 0 $initialPublication.ExitCode "Could not create tagged release fixture."
+    $incompleteResult = Invoke-TestRelease -Repository $taggedRepository -Environment $incompleteReleaseEnvironment
+    Assert-True ($incompleteResult.ExitCode -ne 0) "Incomplete existing release was accepted for a new patch."
+    Assert-True ($null -eq (Get-RemoteTagSha $taggedRepository "v0.2.2")) "Incomplete existing release created a new patch tag."
+}
+
+$rollbackRepository = New-ReleaseTestRepository -Root (New-TestRoot) -RejectAtomicPush
+$rollbackOriginalSha = (Invoke-TestGit -WorkingDirectory $rollbackRepository.Work -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()
+$rollbackResult = Invoke-TestRelease -Repository $rollbackRepository
+Assert-True ($rollbackResult.ExitCode -ne 0) "Rejected atomic push was accepted."
+Assert-Equal $rollbackOriginalSha ((Invoke-TestGit -WorkingDirectory $rollbackRepository.Work -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()) "Atomic push failure did not restore local HEAD."
+Assert-True ((Get-RemoteMainFile $rollbackRepository) -match '<Version>0.2.0</Version>') "Atomic push failure changed remote main."
+Assert-True ($null -eq (Get-RemoteTagSha $rollbackRepository "v0.2.1")) "Atomic push failure created a remote tag."
+$localRollbackTag = & git -C $rollbackRepository.Work rev-parse -q --verify refs/tags/v0.2.1 2>$null
+Assert-True ($LASTEXITCODE -ne 0) "Atomic push failure left a local release tag."
 
 $releaseWorkflow = Get-Content (Join-Path $repoRoot ".github/workflows/release.yml") -Raw
 foreach ($requiredWorkflowText in @(
@@ -397,6 +441,8 @@ $buildWorkflow = Get-Content (Join-Path $repoRoot ".github/workflows/build-and-t
 foreach ($requiredBuildText in @(
     "github.event_name == 'pull_request'",
     "chore: release v",
+    "branches:",
+    "- main",
     "Run release orchestrator tests",
     "PrintableBook.Core.Tests",
     "PrintableBook.UpdateSecurity.Tests",
