@@ -145,6 +145,69 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
                 request with { MaximumPageConcurrency = 0 }).AsTask());
     }
 
+    [Fact]
+    public async Task ExportInteriorAsync_does_not_create_output_when_cancelled_before_start()
+    {
+        Directory.CreateDirectory(rootPath);
+        var page = await CreatePngAsync("art.png");
+        var request = new InteriorPdfExportRequest(
+            [],
+            [page],
+            null,
+            new DirectoryReference(Path.Combine(rootPath, "cancelled-output")),
+            new PhysicalPageSize(8.5, 8.5),
+            MaximumPageConcurrency: 4);
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => new PdfSharpPrintableBookPdfExporter().ExportInteriorAsync(
+                request,
+                cancellation.Token).AsTask());
+
+        Assert.False(File.Exists(Path.Combine(request.TemporaryOutputDirectory.Value, "interior.pdf")));
+    }
+
+    [Fact]
+    public async Task ExportInteriorAsync_releases_partial_worker_resources_when_an_artwork_is_missing()
+    {
+        Directory.CreateDirectory(rootPath);
+        var first = await CreatePngAsync("first.png", 100, 100);
+        var last = await CreatePngAsync("last.png", 100, 100);
+        var output = new DirectoryReference(Path.Combine(rootPath, "partial-failure-output"));
+        var request = new InteriorPdfExportRequest(
+            [],
+            [first, new FileReference(Path.Combine(rootPath, "missing.png")), last],
+            null,
+            output,
+            new PhysicalPageSize(8.5, 8.5),
+            MaximumPageConcurrency: 4);
+
+        await Assert.ThrowsAsync<FileNotFoundException>(
+            () => new PdfSharpPrintableBookPdfExporter().ExportInteriorAsync(request).AsTask());
+
+        Assert.False(File.Exists(Path.Combine(output.Value, "interior.pdf")));
+        Directory.Delete(output.Value, recursive: true);
+    }
+
+    [Fact]
+    public async Task ExportInteriorAsync_preserves_monochrome_png_artwork_that_pdfsharp_core_cannot_load_directly()
+    {
+        Directory.CreateDirectory(rootPath);
+        var page = await CreateMonochromePngAsync("monochrome.png");
+        var result = await new PdfSharpPrintableBookPdfExporter().ExportInteriorAsync(
+            new InteriorPdfExportRequest(
+                [],
+                [page],
+                null,
+                new DirectoryReference(Path.Combine(rootPath, "monochrome-output")),
+                new PhysicalPageSize(8.5, 8.5),
+                MaximumPageConcurrency: 1));
+
+        using var pdf = PdfReader.Open(result.InteriorPdf.Value);
+        Assert.Single(pdf.Pages);
+    }
+
     private async Task<FileReference> CreatePngAsync(string filename, uint width = 2550, uint height = 2550)
     {
         var path = Path.Combine(rootPath, filename);
@@ -153,6 +216,18 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
             image.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
             image.ColorType = ColorType.TrueColor;
             image.Format = MagickFormat.Png24;
+            image.Write(path);
+        }
+
+        await Task.CompletedTask;
+        return new FileReference(path);
+    }
+
+    private async Task<FileReference> CreateMonochromePngAsync(string filename)
+    {
+        var path = Path.Combine(rootPath, filename);
+        using (var image = new MagickImage(MagickColors.White, 100, 100))
+        {
             image.Write(path);
         }
 
