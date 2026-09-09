@@ -154,7 +154,7 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem), workspaceFactory, new JsonBookWorkspaceStateStore(fileSystem),
             new MagickCoverValidator(), new JsonInteriorShuffleStore(fileSystem), CreatePagePipeline(),
-            new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new MagickPrintableBookPdfExporter(),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new PdfSharpPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = new PrintableBookProcessingCommand(
             new BookId(bookId), bookDirectory, new DirectoryReference(Path.Combine(bookDirectory.Value, "Output")),

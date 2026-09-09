@@ -10,7 +10,15 @@ public sealed record OrderedBookAssemblyRequest(
     ImageSize ExpectedInteriorSize,
     FileReference? BackgroundPage = null);
 
-public sealed record OrderedBookAssembly(IReadOnlyList<FileReference> OrderedPages);
+public sealed record OrderedBookAssembly(
+    IReadOnlyList<FileReference> IntroPages,
+    IReadOnlyList<FileReference> OrderedInteriorPages,
+    FileReference? BackgroundPage)
+{
+    public int OutputPageCount =>
+        (IntroPages.Count + OrderedInteriorPages.Count) *
+        (BackgroundPage is null ? 1 : 2);
+}
 
 /// <summary>
 /// Produces an immutable export order without renaming or changing page raster files.

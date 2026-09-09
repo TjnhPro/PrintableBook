@@ -187,16 +187,19 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             {
                 state = await BeginStepAsync(state, "interior-pdf-export", cancellationToken);
                 var interiorPdf = await pdfExporter.ExportInteriorAsync(new InteriorPdfExportRequest(
-                    assembly.OrderedPages,
+                    assembly.IntroPages,
+                    assembly.OrderedInteriorPages,
+                    assembly.BackgroundPage,
                     workspace.TemporaryOutputDirectory,
-                    command.InteriorPdfPageSize), cancellationToken);
+                    command.InteriorPdfPageSize,
+                    command.MaximumPageConcurrency), cancellationToken);
                 state = await CompleteStepAsync(state, "interior-pdf-export", cancellationToken);
                 state = await BeginStepAsync(state, "interior-publish", cancellationToken);
                 var publishedInterior = await outputPublisher.PublishInteriorAsync(new InteriorOutputPublicationRequest(
                     command.BookId,
                     interiorPdf,
                     command.FinalOutputRoot,
-                    assembly.OrderedPages.Count,
+                    assembly.OutputPageCount,
                     command.InteriorPdfPageSize), cancellationToken);
                 state = state.CompleteStep("interior-publish", DateTimeOffset.UtcNow);
                 await PersistStateAsync(state, "step.completed", "interior-publish", CancellationToken.None);
@@ -211,10 +214,13 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             state = await BeginStepAsync(state, "pdf-export", cancellationToken);
             var pdfOutput = await pdfExporter.ExportAsync(new PrintableBookPdfExportRequest(
                 new FileReference(cover!),
-                assembly.OrderedPages,
+                assembly.IntroPages,
+                assembly.OrderedInteriorPages,
+                assembly.BackgroundPage,
                 workspace.TemporaryOutputDirectory,
                 command.CoverPdfPageSize,
-                command.InteriorPdfPageSize), cancellationToken);
+                command.InteriorPdfPageSize,
+                command.MaximumPageConcurrency), cancellationToken);
             state = await CompleteStepAsync(state, "pdf-export", cancellationToken);
             state = await BeginStepAsync(state, "publish", cancellationToken);
             var published = await outputPublisher.PublishAsync(new BookOutputPublicationRequest(
@@ -223,7 +229,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 command.FinalOutputRoot,
                 new PrintableBookPdfValidation(
                     1,
-                    assembly.OrderedPages.Count,
+                    assembly.OutputPageCount,
                     command.CoverPdfPageSize,
                     command.InteriorPdfPageSize)), cancellationToken);
             state = state

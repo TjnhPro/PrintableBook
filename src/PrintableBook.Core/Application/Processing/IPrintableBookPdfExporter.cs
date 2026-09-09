@@ -14,17 +14,23 @@ public readonly record struct PhysicalPageSize(double WidthInches, double Height
 
 public sealed record PrintableBookPdfExportRequest(
     FileReference Cover,
+    IReadOnlyList<FileReference> IntroPages,
     IReadOnlyList<FileReference> OrderedInteriorPages,
+    FileReference? BackgroundPage,
     DirectoryReference TemporaryOutputDirectory,
     PhysicalPageSize CoverPageSize,
-    PhysicalPageSize InteriorPageSize);
+    PhysicalPageSize InteriorPageSize,
+    int MaximumPageConcurrency);
 
 public sealed record PrintableBookPdfExportResult(FileReference CoverPdf, FileReference InteriorPdf);
 
 public sealed record InteriorPdfExportRequest(
+    IReadOnlyList<FileReference> IntroPages,
     IReadOnlyList<FileReference> OrderedInteriorPages,
+    FileReference? BackgroundPage,
     DirectoryReference TemporaryOutputDirectory,
-    PhysicalPageSize InteriorPageSize);
+    PhysicalPageSize InteriorPageSize,
+    int MaximumPageConcurrency);
 
 public sealed record InteriorPdfExportResult(FileReference InteriorPdf);
 

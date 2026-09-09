@@ -87,8 +87,8 @@ public sealed class ValidatedBookOutputPublisherTests : IAsyncLifetime
         await File.WriteAllTextAsync(cover, "old-cover");
         await File.WriteAllTextAsync(interior, "old-interior");
         var temporaryOutput = new DirectoryReference(Path.Combine(rootPath, "Book One", ".workspace", "output-temp"));
-        var exported = await new MagickPrintableBookPdfExporter().ExportInteriorAsync(
-            new InteriorPdfExportRequest([image], temporaryOutput, new PhysicalPageSize(8.5, 8.5)));
+        var exported = await new PdfSharpPrintableBookPdfExporter().ExportInteriorAsync(
+            new InteriorPdfExportRequest([], [image], null, temporaryOutput, new PhysicalPageSize(8.5, 8.5), 1));
 
         var published = await new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()).PublishInteriorAsync(
             new InteriorOutputPublicationRequest(new BookId("Book One"), exported, output, 1, new PhysicalPageSize(8.5, 8.5)));
@@ -100,8 +100,8 @@ public sealed class ValidatedBookOutputPublisherTests : IAsyncLifetime
     }
 
     private static ValueTask<PrintableBookPdfExportResult> ExportFullAsync(FileReference image, DirectoryReference temporaryOutput) =>
-        new MagickPrintableBookPdfExporter().ExportAsync(new PrintableBookPdfExportRequest(
-            image, [image], temporaryOutput, new PhysicalPageSize(2, 1), new PhysicalPageSize(8.5, 8.5)));
+        new PdfSharpPrintableBookPdfExporter().ExportAsync(new PrintableBookPdfExportRequest(
+            image, [], [image], null, temporaryOutput, new PhysicalPageSize(2, 1), new PhysicalPageSize(8.5, 8.5), 1));
 
     private async Task<FileReference> CreatePngAsync()
     {

@@ -39,7 +39,10 @@ public sealed class OrderedBookAssemblerTests : IAsyncLifetime
             map,
             new ImageSize(100, 100)));
 
-        Assert.Equal([intro, finalTwo, finalOne], assembly.OrderedPages);
+        Assert.Equal([intro], assembly.IntroPages);
+        Assert.Equal([finalTwo, finalOne], assembly.OrderedInteriorPages);
+        Assert.Null(assembly.BackgroundPage);
+        Assert.Equal(3, assembly.OutputPageCount);
     }
 
     [Fact]
@@ -62,7 +65,10 @@ public sealed class OrderedBookAssemblerTests : IAsyncLifetime
             workspace, [introOne, introTwo], [new InteriorPageProcessingResult("one", sourceOne, finalOne), new InteriorPageProcessingResult("two", sourceTwo, finalTwo)],
             map, new ImageSize(100, 100), background));
 
-        Assert.Equal([introOne, background, introTwo, background, finalTwo, background, finalOne, background], assembly.OrderedPages);
+        Assert.Equal([introOne, introTwo], assembly.IntroPages);
+        Assert.Equal([finalTwo, finalOne], assembly.OrderedInteriorPages);
+        Assert.Equal(background, assembly.BackgroundPage);
+        Assert.Equal(8, assembly.OutputPageCount);
     }
 
     [Fact]
