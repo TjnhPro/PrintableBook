@@ -173,7 +173,9 @@ public sealed class UpdatePreparationServiceTests
             new Uri("https://example.test/release"),
             new UpdatePackageInfo(
                 new UpdateAssetInfo(ArchiveName, new Uri("https://example.test/archive"), archive.Length),
-                new UpdateAssetInfo($"{ArchiveName}.sha256", new Uri("https://example.test/checksum"), Encoding.ASCII.GetByteCount(checksum))));
+                new UpdateAssetInfo($"{ArchiveName}.sha256", new Uri("https://example.test/checksum"), Encoding.ASCII.GetByteCount(checksum)),
+                Convert.ToHexString(SHA256.HashData(archive)).ToLowerInvariant(),
+                Convert.ToHexString(SHA256.HashData(Encoding.ASCII.GetBytes(checksum))).ToLowerInvariant()));
     }
 
     private static HttpResponseMessage ResponseFor(HttpRequestMessage request, UpdateInfo update, byte[] archive, string checksum)

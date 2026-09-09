@@ -297,7 +297,9 @@ public sealed class DesktopUpdateCoordinatorTests
         new Uri("https://example.test/releases/v0.2.0"),
         new UpdatePackageInfo(
             new UpdateAssetInfo("PrintableBook.zip", new Uri("https://example.test/PrintableBook.zip"), 1024),
-            new UpdateAssetInfo("PrintableBook.zip.sha256", new Uri("https://example.test/PrintableBook.zip.sha256"), 64)));
+            new UpdateAssetInfo("PrintableBook.zip.sha256", new Uri("https://example.test/PrintableBook.zip.sha256"), 64),
+            new string('a', 64),
+            new string('b', 64)));
 
     private sealed class StubVersionProvider(Version version) : IApplicationVersionProvider
     {

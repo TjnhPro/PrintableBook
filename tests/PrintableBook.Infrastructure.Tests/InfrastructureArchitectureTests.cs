@@ -23,6 +23,20 @@ public sealed class InfrastructureArchitectureTests
     }
 
     [Fact]
+    public void UpdateSecurityDoesNotReferenceProductLayers()
+    {
+        var referencedAssemblies = typeof(PrintableBook.UpdateSecurity.UpdateManifestContract)
+            .Assembly
+            .GetReferencedAssemblies()
+            .Select(assembly => assembly.Name);
+
+        foreach (var forbidden in new[] { "PrintableBook.Core", "PrintableBook.Infrastructure", "PrintableBook.Desktop", "PrintableBook.Updater" })
+        {
+            Assert.DoesNotContain(referencedAssemblies, name => string.Equals(name, forbidden, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    [Fact]
     public void Composition_resolves_the_cache_cleanup_worker_and_storage_maintenance()
     {
         var services = new ServiceCollection()

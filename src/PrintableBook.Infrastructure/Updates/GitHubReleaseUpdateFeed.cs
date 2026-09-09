@@ -2,10 +2,13 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PrintableBook.Core.Application.Updates;
+using PrintableBook.UpdateSecurity;
 
 namespace PrintableBook.Infrastructure.Updates;
 
-public sealed class GitHubReleaseUpdateFeed(IHttpClientFactory httpClientFactory) : IUpdateFeed
+public sealed class GitHubReleaseUpdateFeed(
+    IHttpClientFactory httpClientFactory,
+    SignedReleaseManifestClient signedReleaseManifestClient) : IUpdateFeed
 {
     public const string HttpClientName = "PrintableBook.GitHub";
 
@@ -44,12 +47,21 @@ public sealed class GitHubReleaseUpdateFeed(IHttpClientFactory httpClientFactory
         var version = ParseStableVersion(tagName);
         var publishedAt = ParsePublishedAt(dto.PublishedAt);
         var releasePageUri = ParseReleasePageUri(dto.HtmlUrl);
-        var archiveName = $"PrintableBook-{version.ToString(3)}-win-x64.zip";
-        var checksumName = $"{archiveName}.sha256";
         var assets = dto.Assets ?? [];
-        var package = new UpdatePackageInfo(
-            GetRequiredAsset(assets, archiveName),
-            GetRequiredAsset(assets, checksumName));
+        var names = UpdateReleaseNames.For(version, UpdateManifestContract.RuntimeIdentifier);
+        var archive = GetRequiredAsset(assets, names.Archive);
+        var checksum = GetRequiredAsset(assets, names.Checksum);
+        var manifestAsset = GetRequiredAsset(assets, names.Manifest);
+        var signatureAsset = GetRequiredAsset(assets, names.Signature);
+        var manifest = await signedReleaseManifestClient.GetVerifiedAsync(httpClient, manifestAsset, signatureAsset, cancellationToken);
+        if (manifest.Version != version.ToString(3) || manifest.RuntimeIdentifier != UpdateManifestContract.RuntimeIdentifier ||
+            manifest.Archive.Name != archive.Name || manifest.Archive.SizeBytes != archive.SizeBytes ||
+            manifest.Checksum.Name != checksum.Name || manifest.Checksum.SizeBytes != checksum.SizeBytes)
+        {
+            throw new InvalidDataException("Signed update manifest does not match the GitHub release assets.");
+        }
+
+        var package = new UpdatePackageInfo(archive, checksum, manifest.Archive.Sha256, manifest.Checksum.Sha256);
 
         return new UpdateInfo(
             version,

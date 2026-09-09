@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using System.Text;
+using PrintableBook.UpdateSecurity;
 
 namespace PrintableBook.Infrastructure.Updates;
 
@@ -9,37 +9,22 @@ public sealed class Sha256PackageVerifier
         string archivePath,
         string checksumPath,
         string expectedArchiveName,
+        string expectedArchiveSha256,
+        string expectedChecksumSha256,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(archivePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(checksumPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedArchiveName);
+        ValidateHash(expectedArchiveSha256, nameof(expectedArchiveSha256));
+        ValidateHash(expectedChecksumSha256, nameof(expectedChecksumSha256));
         cancellationToken.ThrowIfCancellationRequested();
 
-        var checksumText = await File.ReadAllTextAsync(
-            checksumPath,
-            Encoding.ASCII,
-            cancellationToken);
-        var lines = checksumText
-            .Split(['\r', '\n'], StringSplitOptions.TrimEntries)
-            .Where(line => !string.IsNullOrWhiteSpace(line))
-            .ToArray();
-
-        if (lines.Length != 1)
-        {
-            throw new InvalidDataException("Checksum sidecar must contain exactly one non-empty line.");
-        }
-
-        var tokens = lines[0].Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        if (tokens.Length != 2 ||
-            tokens[0].Length != 64 ||
-            !tokens[0].All(Uri.IsHexDigit) ||
-            !string.Equals(tokens[1], expectedArchiveName, StringComparison.Ordinal))
-        {
-            throw new InvalidDataException("Checksum sidecar format or archive filename is invalid.");
-        }
-
-        var expectedHash = Convert.FromHexString(tokens[0]);
+        var checksumBytes = await File.ReadAllBytesAsync(checksumPath, cancellationToken);
+        var checksumFileHash = SHA256.HashData(checksumBytes);
+        if (!CryptographicOperations.FixedTimeEquals(checksumFileHash, Convert.FromHexString(expectedChecksumSha256))) throw new InvalidDataException("Downloaded checksum sidecar does not match the signed checksum hash.");
+        var declaredArchiveHash = UpdateChecksumFileCodec.Parse(checksumBytes, expectedArchiveName);
+        if (!CryptographicOperations.FixedTimeEquals(Convert.FromHexString(declaredArchiveHash), Convert.FromHexString(expectedArchiveSha256))) throw new InvalidDataException("Checksum sidecar does not match the signed archive hash.");
         await using var stream = new FileStream(
             archivePath,
             FileMode.Open,
@@ -49,9 +34,14 @@ public sealed class Sha256PackageVerifier
             useAsync: true);
         var actualHash = await SHA256.HashDataAsync(stream, cancellationToken);
 
-        if (!CryptographicOperations.FixedTimeEquals(actualHash, expectedHash))
+        if (!CryptographicOperations.FixedTimeEquals(actualHash, Convert.FromHexString(expectedArchiveSha256)))
         {
             throw new InvalidDataException("Downloaded archive SHA256 does not match its checksum sidecar.");
         }
+    }
+
+    private static void ValidateHash(string value, string parameterName)
+    {
+        if (!UpdateChecksumFileCodec.IsLowercaseSha256(value)) throw new ArgumentException("Expected signed SHA256 must be exactly 64 lowercase hexadecimal characters.", parameterName);
     }
 }

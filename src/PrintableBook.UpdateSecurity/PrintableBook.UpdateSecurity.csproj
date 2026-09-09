@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.7.0" />
+  </ItemGroup>
+  <ItemGroup Condition="Exists('production-update-public-key.txt')">
+    <EmbeddedResource Include="production-update-public-key.txt" />
+  </ItemGroup>
+  <Target Name="RequireProductionUpdatePublicKey" BeforeTargets="BeforeBuild" Condition="'$(UpdateKeyBootstrap)' != 'true' and !Exists('production-update-public-key.txt')">
+    <Error Text="production-update-public-key.txt is required. Generate it once with PrintableBook.ReleaseTool keygen." />
+  </Target>
+</Project>

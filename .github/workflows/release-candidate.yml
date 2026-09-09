@@ -1,19 +1,18 @@
-name: Publish release
+name: Build release candidate
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  publish:
+  candidate:
+    if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
 
     steps:
-      - name: Checkout release tag
+      - name: Checkout main candidate
         uses: actions/checkout@v5
 
       - name: Set up .NET
@@ -56,18 +55,17 @@ jobs:
       - name: Run production UI contract tests
         run: node src/PrintableBook.Desktop/Frontend/test-production-ui.mjs
 
-      - name: Validate release tag
+      - name: Read candidate version
         id: version
         shell: pwsh
         run: |
-          $tag = $env:GITHUB_REF_NAME
-          if ($tag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$') {
-            throw "Release tag '$tag' must match vM.m.p."
+          $version = (& dotnet msbuild src/PrintableBook.Desktop/PrintableBook.Desktop.csproj -nologo -getProperty:Version).Trim()
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Desktop Version is empty."
           }
-          $version = $tag.Substring(1)
           "version=$version" >> $env:GITHUB_OUTPUT
 
-      - name: Package signed portable artifact
+      - name: Package signed release candidate
         shell: pwsh
         env:
           PRINTABLEBOOK_UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.PRINTABLEBOOK_UPDATE_SIGNING_PRIVATE_KEY }}
@@ -77,13 +75,13 @@ jobs:
           }
           ./scripts/publish-release.ps1 -ExpectedVersion "${{ steps.version.outputs.version }}"
 
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
+      - name: Upload signed release candidate
+        uses: actions/upload-artifact@v4
         with:
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-          files: |
-            artifacts/release/*.zip
-            artifacts/release/*.zip.sha256
-            artifacts/release/*.manifest.json
-            artifacts/release/*.manifest.json.sig
+          name: PrintableBook-${{ steps.version.outputs.version }}-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            artifacts/release/PrintableBook-${{ steps.version.outputs.version }}-win-x64.zip
+            artifacts/release/PrintableBook-${{ steps.version.outputs.version }}-win-x64.zip.sha256
+            artifacts/release/PrintableBook-${{ steps.version.outputs.version }}-win-x64.manifest.json
+            artifacts/release/PrintableBook-${{ steps.version.outputs.version }}-win-x64.manifest.json.sig

@@ -80,6 +80,8 @@ public sealed class UpdatePreparationService(
                 archivePath,
                 checksumPath,
                 update.Package.Archive.Name,
+                update.Package.ArchiveSha256,
+                update.Package.ChecksumSha256,
                 cancellationToken);
 
             progress?.Report(new UpdatePreparationProgress(UpdatePreparationStage.Extracting));
