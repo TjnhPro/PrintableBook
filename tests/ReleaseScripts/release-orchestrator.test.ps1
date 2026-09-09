@@ -171,6 +171,7 @@ if ($Arguments.Count -ge 2 -and $Arguments[0] -eq "run" -and $Arguments[1] -eq "
 if ($Arguments.Count -ge 2 -and $Arguments[0] -eq "run" -and $Arguments[1] -eq "watch") {
     $remainingFailures = Get-StateValue
     if ($remainingFailures -gt 0) { Set-StateValue ($remainingFailures - 1); exit 1 }
+    if ($env:FAKE_GH_RELEASE_STATE_FILE) { [IO.File]::WriteAllText($env:FAKE_GH_RELEASE_STATE_FILE, "visible", [Text.UTF8Encoding]::new($false)) }
     exit 0
 }
 
@@ -178,6 +179,9 @@ if ($Arguments.Count -ge 2 -and $Arguments[0] -eq "run" -and $Arguments[1] -eq "
 
 if ($Arguments.Count -ge 2 -and $Arguments[0] -eq "release" -and $Arguments[1] -eq "view") {
     if ($env:FAKE_GH_RELEASE_VISIBLE -eq "false") { exit 1 }
+    if ($env:FAKE_GH_RELEASE_VISIBLE -eq "after-watch") {
+        if (-not $env:FAKE_GH_RELEASE_STATE_FILE -or -not (Test-Path -LiteralPath $env:FAKE_GH_RELEASE_STATE_FILE) -or ([IO.File]::ReadAllText($env:FAKE_GH_RELEASE_STATE_FILE).Trim() -ne "visible")) { exit 1 }
+    }
     $tag = $Arguments[2]
     $version = $tag.Substring(1)
     @{ tagName = $tag; isDraft = $false; isPrerelease = $false; url = "https://example.invalid/releases/$tag"; assets = @(
@@ -299,3 +303,73 @@ Assert-True ((Get-RemoteMainFile $explicitRepository) -match '<Version>0.3.0</Ve
 Assert-True ($null -eq (Get-RemoteTagSha $explicitRepository "v0.2.1")) "Explicit release created default patch tag."
 Assert-True ($null -ne (Get-RemoteTagSha $explicitRepository "v0.3.0")) "Explicit release tag was not pushed."
 Assert-Equal "chore: release v0.3.0" ((Invoke-TestGit -WorkingDirectory $explicitRepository.Work -Arguments @("log", "-1", "--format=%s") | Select-Object -First 1).Trim()) "Explicit release commit message mismatch."
+
+$resumeRepository = New-ReleaseTestRepository -Root (New-TestRoot)
+$watchState = Join-Path (Split-Path $resumeRepository.Work -Parent) "watch-state.txt"
+$releaseState = Join-Path (Split-Path $resumeRepository.Work -Parent) "release-state.txt"
+[IO.File]::WriteAllText($watchState, "2", [Text.UTF8Encoding]::new($false))
+$failedPublication = Invoke-TestRelease -Repository $resumeRepository -Environment @{
+    FAKE_GH_STATE_FILE = $watchState
+    FAKE_GH_RELEASE_STATE_FILE = $releaseState
+    FAKE_GH_RELEASE_VISIBLE = "after-watch"
+}
+Assert-True ($failedPublication.ExitCode -ne 0) "Failed publication must exit non-zero."
+Assert-True ((Get-RemoteMainFile $resumeRepository) -match '<Version>0.2.1</Version>') "Failed publication did not preserve pushed target version."
+Assert-True ($null -ne (Get-RemoteTagSha $resumeRepository "v0.2.1")) "Failed publication did not preserve pushed tag."
+Assert-True ($null -eq (Get-RemoteTagSha $resumeRepository "v0.2.2")) "Failed publication created a next patch tag."
+
+$resumedPublication = Invoke-TestRelease -Repository $resumeRepository -Environment @{
+    FAKE_GH_STATE_FILE = $watchState
+    FAKE_GH_RELEASE_STATE_FILE = $releaseState
+    FAKE_GH_RELEASE_VISIBLE = "after-watch"
+}
+Assert-Equal 0 $resumedPublication.ExitCode "Existing tagged release did not resume."
+Assert-True ($null -eq (Get-RemoteTagSha $resumeRepository "v0.2.2")) "Resume created a next patch tag."
+Assert-Equal "chore: release v0.2.1" ((Invoke-TestGit -WorkingDirectory $resumeRepository.Work -Arguments @("log", "-1", "--format=%s") | Select-Object -First 1).Trim()) "Resume created a second version commit."
+
+$dirtyRepository = New-ReleaseTestRepository -Root (New-TestRoot)
+[IO.File]::WriteAllText((Join-Path $dirtyRepository.Work "untracked.txt"), "dirty", [Text.UTF8Encoding]::new($false))
+$dirtyResult = Invoke-TestRelease -Repository $dirtyRepository
+Assert-True ($dirtyResult.ExitCode -ne 0) "Dirty working tree was accepted."
+Assert-True ((Get-RemoteMainFile $dirtyRepository) -match '<Version>0.2.0</Version>') "Dirty working tree changed source version."
+Assert-True ($null -eq (Get-RemoteTagSha $dirtyRepository "v0.2.1")) "Dirty working tree created a tag."
+
+$branchRepository = New-ReleaseTestRepository -Root (New-TestRoot)
+Invoke-TestGit -WorkingDirectory $branchRepository.Work -Arguments @("checkout", "-b", "feature/test") | Out-Null
+$branchResult = Invoke-TestRelease -Repository $branchRepository
+Assert-True ($branchResult.ExitCode -ne 0) "Non-main branch was accepted."
+Assert-True (($branchResult.Output -join "`n") -like "*branch 'main'*") "Non-main branch error was unclear."
+Assert-True ($null -eq (Get-RemoteTagSha $branchRepository "v0.2.1")) "Non-main branch created a tag."
+
+$ciRepository = New-ReleaseTestRepository -Root (New-TestRoot)
+$ciResult = Invoke-TestRelease -Repository $ciRepository -Environment @{ FAKE_GH_BUILD_CONCLUSION = "failure" }
+Assert-True ($ciResult.ExitCode -ne 0) "Failed main CI was accepted."
+Assert-True ((Get-RemoteMainFile $ciRepository) -match '<Version>0.2.0</Version>') "Failed main CI changed source version."
+Assert-True ($null -eq (Get-RemoteTagSha $ciRepository "v0.2.1")) "Failed main CI created a tag."
+
+foreach ($invalidVersion in @("0.2.0", "0.1.9")) {
+    $invalidRepository = New-ReleaseTestRepository -Root (New-TestRoot)
+    $invalidResult = Invoke-TestRelease -Repository $invalidRepository -Version $invalidVersion
+    Assert-True ($invalidResult.ExitCode -ne 0) "Non-increasing version $invalidVersion was accepted."
+    Assert-True ($null -eq (Get-RemoteTagSha $invalidRepository "v0.2.1")) "Non-increasing version $invalidVersion created a tag."
+}
+
+$existingTagRepository = New-ReleaseTestRepository -Root (New-TestRoot)
+Invoke-TestGit -WorkingDirectory $existingTagRepository.Work -Arguments @("tag", "v0.2.1") | Out-Null
+Invoke-TestGit -WorkingDirectory $existingTagRepository.Work -Arguments @("push", "origin", "refs/tags/v0.2.1") | Out-Null
+$existingTagSha = Get-RemoteTagSha $existingTagRepository "v0.2.1"
+$existingTagResult = Invoke-TestRelease -Repository $existingTagRepository
+Assert-True ($existingTagResult.ExitCode -ne 0) "Existing target tag was accepted."
+Assert-Equal $existingTagSha (Get-RemoteTagSha $existingTagRepository "v0.2.1") "Existing target tag was moved."
+
+$malformedRepository = New-ReleaseTestRepository -Root (New-TestRoot)
+$malformedPath = Join-Path $malformedRepository.Work "Directory.Build.props"
+[IO.File]::WriteAllText($malformedPath, (([IO.File]::ReadAllText($malformedPath)).Replace('<Version>0.2.0</Version>', '<Version>0.2</Version>')), [Text.UTF8Encoding]::new($false))
+Invoke-TestGit -WorkingDirectory $malformedRepository.Work -Arguments @("add", "Directory.Build.props") | Out-Null
+Invoke-TestGit -WorkingDirectory $malformedRepository.Work -Arguments @("commit", "-m", "test: malformed version") | Out-Null
+Invoke-TestGit -WorkingDirectory $malformedRepository.Work -Arguments @("push", "origin", "main") | Out-Null
+$malformedResult = Invoke-TestRelease -Repository $malformedRepository
+Assert-True ($malformedResult.ExitCode -ne 0) "Malformed source version was accepted."
+Assert-True ($null -eq (Get-RemoteTagSha $malformedRepository "v0.2.1")) "Malformed source version created a tag."
+
+Write-Output "all release orchestrator tests passed"
