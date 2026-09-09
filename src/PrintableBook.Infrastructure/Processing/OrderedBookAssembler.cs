@@ -31,18 +31,11 @@ public sealed class OrderedBookAssembler(IFileSystem fileSystem, IImageInspector
             .OrderBy(entry => entry.OutputIndex)
             .Select(entry => finalPagesBySource[entry.Page])
             .ToArray();
-        var orderedPages = new List<FileReference>();
-        foreach (var intro in request.IntroPages)
-        {
-            orderedPages.Add(intro);
-            if (request.BackgroundPage is not null) orderedPages.Add(request.BackgroundPage);
-        }
-        foreach (var artwork in orderedInteriors)
-        {
-            orderedPages.Add(artwork);
-            if (request.BackgroundPage is not null) orderedPages.Add(request.BackgroundPage);
-        }
-        return new OrderedBookAssembly(orderedPages);
+
+        return new OrderedBookAssembly(
+            request.IntroPages.ToArray(),
+            orderedInteriors,
+            request.BackgroundPage);
     }
 
     private async ValueTask ValidateReadableAsync(FileReference page, CancellationToken cancellationToken)

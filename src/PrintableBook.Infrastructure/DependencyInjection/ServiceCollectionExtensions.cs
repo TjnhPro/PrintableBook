@@ -53,7 +53,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICoverValidator, MagickCoverValidator>();
         services.AddSingleton<IInteriorPagePipeline, DiskBackedInteriorPagePipeline>();
         services.AddSingleton<IOrderedBookAssembler, OrderedBookAssembler>();
-        services.AddSingleton<IPrintableBookPdfExporter, MagickPrintableBookPdfExporter>();
+        services.AddSingleton<IPrintableBookPdfExporter, PdfSharpPrintableBookPdfExporter>();
         services.AddSingleton<IPdfDocumentInspector, PdfSharpDocumentInspector>();
         services.AddSingleton<IBookOutputPublisher, ValidatedBookOutputPublisher>();
         services.AddSingleton<IBookSourceScanner, BookSourceScanner>();

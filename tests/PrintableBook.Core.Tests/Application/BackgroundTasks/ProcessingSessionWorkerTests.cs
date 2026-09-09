@@ -75,6 +75,30 @@ public sealed class ProcessingSessionWorkerTests
     }
 
     [Fact]
+    public async Task Execution_derives_the_interior_pdf_page_size_from_the_final_raster_and_density()
+    {
+        var settings = GlobalSettings.Default with
+        {
+            FinalPageWidth = 2588,
+            FinalPageHeight = 2625,
+            Dpi = 300
+        };
+        var application = new Application();
+        IBackgroundTaskWorker worker = CreateWorker(
+            new Provider(Snapshot(settings: settings)),
+            application,
+            new FrameResolver(),
+            new FileSystem(),
+            new ImageInspector());
+
+        await worker.ExecuteAsync(Request(), new Context(), CancellationToken.None);
+
+        var command = Assert.Single(application.Request!.Books);
+        Assert.Equal(new PhysicalPageSize(8.5, 8.5), command.CoverPdfPageSize);
+        Assert.Equal(new PhysicalPageSize(2588d / 300d, 2625d / 300d), command.InteriorPdfPageSize);
+    }
+
+    [Fact]
     public async Task Requested_cancellation_with_a_cancelled_book_publishes_the_terminal_view_then_throws()
     {
         using var cancellation = new CancellationTokenSource();

@@ -38,7 +38,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new JsonInteriorShuffleStore(fileSystem),
             pagePipeline,
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
-            new MagickPrintableBookPdfExporter(),
+            new PdfSharpPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var application = new PrintableBookApplication(
             new BookProcessingPipeline(Array.Empty<IBookProcessingStage>()),
@@ -148,7 +148,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new JsonInteriorShuffleStore(fileSystem),
             CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
-            new MagickPrintableBookPdfExporter(),
+            new PdfSharpPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var application = new PrintableBookApplication(
             new BookProcessingPipeline(Array.Empty<IBookProcessingStage>()),
@@ -187,7 +187,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new JsonInteriorShuffleStore(fileSystem),
             CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
-            new MagickPrintableBookPdfExporter(),
+            new PdfSharpPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("unsupported-interior-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
 
@@ -213,7 +213,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new JsonInteriorShuffleStore(fileSystem),
             CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
-            new MagickPrintableBookPdfExporter(),
+            new PdfSharpPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var application = new PrintableBookApplication(
             new BookProcessingPipeline(Array.Empty<IBookProcessingStage>()),
@@ -244,7 +244,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(),
             new JsonInteriorShuffleStore(fileSystem), CreatePagePipeline(),
-            new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new MagickPrintableBookPdfExporter(),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new PdfSharpPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("inactive-interior-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
         var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
@@ -287,7 +287,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(),
             new JsonInteriorShuffleStore(fileSystem), CreatePagePipeline(),
-            new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new MagickPrintableBookPdfExporter(),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new PdfSharpPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("custom-intro-preview-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
         var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
@@ -324,7 +324,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(),
             new JsonInteriorShuffleStore(fileSystem), CreatePagePipeline(),
-            new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new MagickPrintableBookPdfExporter(),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new PdfSharpPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("no-active-interior-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
         var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
@@ -351,7 +351,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(), shuffleStore,
             CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
-            new MagickPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+            new PdfSharpPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("stable-shuffle-seed-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly, ShuffleSeed = null };
         var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
 
@@ -400,7 +400,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(), shuffleStore,
             CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
-            new MagickPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+            new PdfSharpPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("background-book", bookDirectory) with { ShuffleSeed = 73, BackgroundPage = background };
 
         var first = await processor.ProcessBookAsync(command);
@@ -446,7 +446,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(), shuffleStore,
             CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
-            new MagickPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+            new PdfSharpPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("intro-book", bookDirectory) with
         {
             Mode = BookProcessingMode.InteriorOnly,
@@ -500,7 +500,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new JsonInteriorShuffleStore(fileSystem),
             blockingPipeline,
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
-            new MagickPrintableBookPdfExporter(),
+            new PdfSharpPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("interrupted-book", bookDirectory);
 
@@ -534,7 +534,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new JsonInteriorShuffleStore(fileSystem),
             CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
-            new MagickPrintableBookPdfExporter(),
+            new PdfSharpPrintableBookPdfExporter(),
             new CancellingAfterPublishOutputPublisher(
                 new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()),
                 cancellation));
@@ -569,7 +569,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new JsonInteriorShuffleStore(fileSystem),
             CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
-            new MagickPrintableBookPdfExporter(),
+            new PdfSharpPrintableBookPdfExporter(),
             blockingPublisher);
         var command = CreateCommand("cancelled-book", bookDirectory);
 

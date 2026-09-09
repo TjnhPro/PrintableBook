@@ -19,6 +19,6 @@ The workspace separates disposable intermediates from durable standardized pages
 
 After a validated publish, the Book workspace is retained. State, logs, processed PNGs, the shuffle map, and intermediate cache remain available for recovery, debugging, re-shuffling, PDF rebuilds, and future UI inspection. The publisher may move the temporary PDF set into the final versioned directory, but processing does not run an automatic workspace cleanup step. Cleanup will be exposed later as an explicit user action; a failed run likewise retains its diagnostic and reusable workspace data.
 
-Image processing uses Magick.NET in Infrastructure. Magick.NET's PDF encoder writes output; PDFsharp reopens documents for inspection. Their implementation types do not leak into Core or Desktop.
+Image processing uses Magick.NET in Infrastructure. PDFsharp writes and inspects output; Magick.NET is not used for PDF assembly. The square Working Area is an intermediate, while the non-square Final Interior Page is the printable raster. Interior PDF geometry is derived from Final Interior Page pixels and DPI, not from the Working Area.
 
 The integration fixture uses real temporary PNGs and checks completed state, 300 DPI final PNG output, persisted shuffle state, reopened PDF page counts, and physical page dimensions. The Phase 2 scope intentionally defers Intro generation/normalization, metadata cleaning, rich Desktop processing UI, and production naming rules.
