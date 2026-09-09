@@ -372,4 +372,25 @@ $malformedResult = Invoke-TestRelease -Repository $malformedRepository
 Assert-True ($malformedResult.ExitCode -ne 0) "Malformed source version was accepted."
 Assert-True ($null -eq (Get-RemoteTagSha $malformedRepository "v0.2.1")) "Malformed source version created a tag."
 
+$releaseWorkflow = Get-Content (Join-Path $repoRoot ".github/workflows/release.yml") -Raw
+foreach ($requiredWorkflowText in @(
+    "./scripts/publish-release.ps1",
+    "PRINTABLEBOOK_UPDATE_SIGNING_PRIVATE_KEY",
+    "softprops/action-gh-release@v2",
+    "fail_on_unmatched_files: true"
+)) {
+    Assert-True ($releaseWorkflow.Contains($requiredWorkflowText)) "Release workflow is missing '$requiredWorkflowText'."
+}
+
+foreach ($forbiddenWorkflowText in @(
+    "dotnet test tests/PrintableBook.Core.Tests",
+    "node --test tests/PrintableBook.Desktop.Bridge.Tests",
+    "test-production-ui.mjs"
+)) {
+    Assert-True (-not $releaseWorkflow.Contains($forbiddenWorkflowText)) "Release workflow still runs redundant test '$forbiddenWorkflowText'."
+}
+
+$candidateWorkflow = Get-Content (Join-Path $repoRoot ".github/workflows/release-candidate.yml") -Raw
+Assert-True ($candidateWorkflow.Contains("workflow_dispatch")) "Release candidate workflow must remain available."
+
 Write-Output "all release orchestrator tests passed"
