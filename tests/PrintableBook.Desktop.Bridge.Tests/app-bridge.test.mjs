@@ -312,7 +312,7 @@ test("startup update dialog renders only actionable available, active, ready, an
 
   applyUpdateResponse(bridge, updateSnapshot("Downloading", { preparationStage: "DownloadingArchive", bytesReceived: 524288, totalBytes: 1048576 }));
   assert.match(bridge.updateDialog.innerHTML, /aria-valuenow="50"/);
-  assert.match(bridge.updateDialog.innerHTML, />50%/);
+  assert.match(bridge.updateDialog.innerHTML, /50%/);
   assert.match(bridge.updateDialog.innerHTML, /512 KB of 1 MB/);
 
   applyUpdateResponse(bridge, updateSnapshot("Downloading", { preparationStage: "DownloadingChecksum", bytesReceived: 524288, totalBytes: 1048576 }));
