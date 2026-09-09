@@ -9,7 +9,7 @@ const workspaceCss = read("src/PrintableBook.Desktop/Frontend/css/book-workspace
 const window = read("src/PrintableBook.Desktop/MainWindow.xaml");
 const windowCode = read("src/PrintableBook.Desktop/MainWindow.xaml.cs");
 
-for (const [source, value] of [[html, 'id="global-process-status"'], [html, 'id="refresh-button"'], [html, 'id="update-check-button"'], [html, 'Check updates'], [html, 'id="update-banner"'], [html, 'aria-live="polite"'], [html, 'Version 0.1'], [html, 'assets/printable-book-logo.png'], [app, "aria-live=\"polite\""], [app, "role=\"alert\""], [app, "updateGlobalRefreshControl"], [app, "renderUpdateBanner"], [app, 'escapeHtml(valueFor(snapshot, "releaseNotes"'], [app, "Refreshing…"], [css, "prefers-reduced-motion"], [css, "aspect-square"], [css, '[data-theme="dark"]'], [workspaceCss, ".update-banner"], [workspaceCss, ".update-progress"], [workspaceCss, ".update-release-notes"], [window, 'Icon="Assets/app-icon.ico"'], [window, 'MinHeight="950"'], [window, 'MinWidth="1650"'], [windowCode, 'PreferredWindowSize = new(1650, 950)'], [windowCode, 'ConstrainToWorkingArea']]) {
+for (const [source, value] of [[html, 'id="global-process-status"'], [html, 'id="refresh-button"'], [html, 'id="update-dialog-root"'], [html, 'aria-live="polite"'], [html, 'Version 0.1'], [html, 'assets/printable-book-logo.png'], [app, "aria-live=\"polite\""], [app, "role=\"dialog\""], [app, "updateGlobalRefreshControl"], [app, "renderUpdateDialog"], [app, 'escapeHtml(valueFor(snapshot, "releaseNotes"'], [app, "Refreshing…"], [css, "prefers-reduced-motion"], [css, "aspect-square"], [css, '[data-theme="dark"]'], [workspaceCss, ".update-dialog"], [workspaceCss, ".update-progress"], [workspaceCss, ".update-release-notes"], [window, 'Icon="Assets/app-icon.ico"'], [window, 'MinHeight="950"'], [window, 'MinWidth="1650"'], [windowCode, 'PreferredWindowSize = new(1650, 950)'], [windowCode, 'ConstrainToWorkingArea']]) {
   if (!source.includes(value)) throw new Error(`Production UI certification failed: ${value}`);
 }
 
@@ -20,6 +20,10 @@ if (html.includes("../Assets/app-icon-source.png")) {
 
 if (app.includes("innerHTML = releaseNotes")) {
   throw new Error("Production UI certification failed: release notes are inserted without escaping.");
+}
+
+for (const value of ['id="update-check-button"', "Check updates", 'id="update-banner"', "renderUpdateBanner", "Check again"]) {
+  if (html.includes(value) || app.includes(value)) throw new Error(`Production UI certification failed: removed update UI remains: ${value}`);
 }
 
 console.log("Production UI certification passed (26 checks).");

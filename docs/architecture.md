@@ -57,6 +57,21 @@ Desktop reuses `ProcessWindowShutdownCoordinator` and its five-second
 cooperative stop/retry/force behavior, launches the staged sidecar, then
 performs update-authorized WPF shutdown.
 
+The desktop presentation policy sends exactly one automatic `updates.check`
+when the app starts. `Idle`, `Checking`, `UpToDate`, and an automatic-check
+failure without an available release have no visible update UI. A newer signed
+stable release opens one application-global modal above the shell; it is not a
+route banner and cannot displace Book, Process, or PDF Library content. There
+is intentionally no manual update-check button or periodic check.
+
+The modal owns the existing snapshot lifecycle. Archive download shows
+determinate received/total bytes and percentage only when the snapshot supplies
+a trustworthy total. Checksum download, verification, extraction, and
+validation instead show their truthful stage with indeterminate progress; the
+UI never invents a percentage. A user can defer an available or ready update
+for the current app session, while download, verification, installation, and
+recoverable errors remain visible and actionable through the existing commands.
+
 Các test kiến trúc bảo vệ hướng phụ thuộc: Core không tham chiếu Infrastructure/Desktop/WPF/WebView2/Windows APIs; Infrastructure không tham chiếu Desktop.
 
 ## Discovery, Book và workspace
