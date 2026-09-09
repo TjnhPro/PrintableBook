@@ -439,6 +439,7 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         using var output = new MemoryStream();
         output.Write([137, 80, 78, 71, 13, 10, 26, 10]);
         Span<byte> outputHeader = stackalloc byte[13];
+        outputHeader.Clear();
         WriteUInt32(outputHeader, 0, (uint)width);
         WriteUInt32(outputHeader, 4, (uint)height);
         outputHeader[8] = 8;

@@ -191,21 +191,29 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ExportInteriorAsync_preserves_monochrome_png_artwork_that_pdfsharp_core_cannot_load_directly()
+    public async Task ExportInteriorAsync_preserves_monochrome_png_artwork_repeatedly()
     {
         Directory.CreateDirectory(rootPath);
         var page = await CreateMonochromePngAsync("monochrome.png");
-        var result = await new PdfSharpPrintableBookPdfExporter().ExportInteriorAsync(
-            new InteriorPdfExportRequest(
-                [],
-                [page],
-                null,
-                new DirectoryReference(Path.Combine(rootPath, "monochrome-output")),
-                new PhysicalPageSize(8.5, 8.5),
-                MaximumPageConcurrency: 1));
+        var exporter = new PdfSharpPrintableBookPdfExporter();
 
-        using var pdf = PdfReader.Open(result.InteriorPdf.Value);
-        Assert.Single(pdf.Pages);
+        for (var iteration = 0; iteration < 20; iteration++)
+        {
+            var result = await exporter.ExportInteriorAsync(
+                new InteriorPdfExportRequest(
+                    IntroPages: [],
+                    OrderedInteriorPages: [page],
+                    BackgroundPage: null,
+                    TemporaryOutputDirectory: new DirectoryReference(
+                        Path.Combine(rootPath, $"monochrome-output-{iteration:D2}")),
+                    InteriorPageSize: new PhysicalPageSize(8.5, 8.5),
+                    MaximumPageConcurrency: 1));
+
+            using var pdf = PdfReader.Open(
+                result.InteriorPdf.Value,
+                PdfDocumentOpenMode.Import);
+            Assert.Single(pdf.Pages);
+        }
     }
 
     private async Task<FileReference> CreatePngAsync(string filename, uint width = 2550, uint height = 2550)
