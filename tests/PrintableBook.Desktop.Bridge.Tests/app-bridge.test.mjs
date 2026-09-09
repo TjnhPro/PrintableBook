@@ -359,6 +359,22 @@ test("startup update dialog performs one automatic check, polling, and retry rou
   assert.equal(bridge.messages.filter((message) => message.command === "updates.check").length, 1);
 });
 
+test("Later suppresses one available version for the current app session", () => {
+  const bridge = loadBridge();
+  applyUpdateResponse(bridge, updateSnapshot("Available", { canDownload: true }));
+  const dismiss = { dataset: { updateAction: "dismiss" }, closest: () => dismiss };
+
+  bridge.updateDialog.listeners.click({ target: dismiss });
+  assert.equal(bridge.updateDialog.hidden, true);
+  assert.equal(bridge.messages.filter((message) => message.command === "updates.check").length, 1);
+
+  applyUpdateResponse(bridge, updateSnapshot("Available", { canDownload: true }));
+  assert.equal(bridge.updateDialog.hidden, true);
+
+  applyUpdateResponse(bridge, updateSnapshot("Available", { latestVersion: "0.2.1", canDownload: true }));
+  assert.equal(bridge.updateDialog.hidden, false);
+});
+
 test("update polling stops when an active download reports an error", () => {
   const bridge = loadBridge();
   applyUpdateResponse(bridge, updateSnapshot("Available", { canDownload: true }));
