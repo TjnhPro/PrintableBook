@@ -63,7 +63,7 @@ function Invoke-Git {
         [switch]$AllowFailure
     )
 
-    $output = & git @Arguments 2>&1
+    $output = & git -c core.safecrlf=false @Arguments 2>&1
     $exitCode = $LASTEXITCODE
     if (-not $AllowFailure -and $exitCode -ne 0) {
         throw "git $($Arguments -join ' ') failed:`n$($output -join [Environment]::NewLine)"
@@ -141,6 +141,156 @@ function Assert-GreenMainCi {
     return $success
 }
 
+function Get-RemoteTagSha {
+    param(
+        [Parameter(Mandatory)]
+        [string]$TagName
+    )
+
+    $result = Invoke-Git -Arguments @("ls-remote", "--tags", "origin", "refs/tags/$TagName") -AllowFailure
+    if ($result.ExitCode -ne 0) {
+        throw "Could not inspect remote tag '$TagName'."
+    }
+
+    $line = @($result.Output | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -First 1)
+    if ($line.Count -eq 0) {
+        return $null
+    }
+
+    return (([string]$line[0]).Trim() -split '\s+')[0]
+}
+
+function Assert-ReleaseDiff {
+    $changedFiles = @((Invoke-Git -Arguments @("diff", "--name-only")).Output | Where-Object {
+        -not [string]::IsNullOrWhiteSpace([string]$_)
+    })
+    if ($changedFiles.Count -ne 1 -or $changedFiles[0].Trim() -ne "Directory.Build.props") {
+        throw "Release must change only Directory.Build.props. Changed: $($changedFiles -join ', ')"
+    }
+
+    Invoke-Git -Arguments @("diff", "--check") | Out-Null
+}
+
+function New-ReleaseCommitAndTag {
+    param(
+        [Parameter(Mandatory)]
+        [Version]$TargetVersion
+    )
+
+    $target = $TargetVersion.ToString(3)
+    $tag = "v$target"
+    Invoke-Git -Arguments @("add", "Directory.Build.props") | Out-Null
+    Invoke-Git -Arguments @("commit", "-m", "chore: release $tag") | Out-Null
+    $releaseSha = ((Invoke-Git -Arguments @("rev-parse", "HEAD")).Output -join "").Trim()
+    Invoke-Git -Arguments @("tag", $tag, $releaseSha) | Out-Null
+    return @{ Tag = $tag; Sha = $releaseSha }
+}
+
+function Push-ReleaseAtomically {
+    param(
+        [Parameter(Mandatory)]
+        [string]$TagName
+    )
+
+    Invoke-Git -Arguments @("push", "--atomic", "origin", "main", "refs/tags/$TagName`:refs/tags/$TagName") | Out-Null
+}
+
+function Restore-LocalPrePushState {
+    param(
+        [Parameter(Mandatory)]
+        [string]$OriginalSha,
+
+        [string]$LocalTag = ""
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($LocalTag)) {
+        Invoke-Git -Arguments @("tag", "-d", $LocalTag) -AllowFailure | Out-Null
+    }
+
+    Invoke-Git -Arguments @("reset", "--hard", $OriginalSha) | Out-Null
+}
+
+function Find-ReleaseWorkflowRun {
+    param(
+        [Parameter(Mandatory)]
+        [string]$ReleaseSha
+    )
+
+    for ($attempt = 0; $attempt -lt 60; $attempt++) {
+        $result = Invoke-Gh -Arguments @("run", "list", "--workflow", "release.yml", "--limit", "20", "--json", "databaseId,headSha,status,conclusion,url,createdAt")
+        $runs = @(($result.Output -join [Environment]::NewLine) | ConvertFrom-Json)
+        $run = $runs | Where-Object { $_.headSha -eq $ReleaseSha } | Sort-Object createdAt -Descending | Select-Object -First 1
+        if ($null -ne $run) {
+            return $run
+        }
+
+        Start-Sleep -Seconds 5
+    }
+
+    throw "Could not find Publish release workflow for SHA $ReleaseSha."
+}
+
+function Wait-ReleaseWorkflow {
+    param(
+        [Parameter(Mandatory)]
+        [long]$RunId
+    )
+
+    $watch = Invoke-Gh -Arguments @("run", "watch", "$RunId", "--exit-status") -AllowFailure
+    if ($watch.ExitCode -eq 0) {
+        return
+    }
+
+    Write-Host "[WARN] Publish release workflow failed once; rerunning same tag."
+    Invoke-Gh -Arguments @("run", "rerun", "$RunId") | Out-Null
+    $retry = Invoke-Gh -Arguments @("run", "watch", "$RunId", "--exit-status") -AllowFailure
+    if ($retry.ExitCode -ne 0) {
+        throw "Publish release workflow failed after one automatic retry. The tag remains fixed; rerun release.ps1 to resume this same release after fixing the cause."
+    }
+}
+
+function Assert-PublishedRelease {
+    param(
+        [Parameter(Mandatory)]
+        [Version]$Version
+    )
+
+    $value = $Version.ToString(3)
+    $tag = "v$value"
+    $result = Invoke-Gh -Arguments @("release", "view", $tag, "--json", "tagName,isDraft,isPrerelease,url,assets")
+    $release = ($result.Output -join [Environment]::NewLine) | ConvertFrom-Json
+    if ($release.tagName -ne $tag) { throw "Published release tag mismatch." }
+    if ($release.isDraft) { throw "Published release '$tag' is still a draft." }
+    if ($release.isPrerelease) { throw "Published release '$tag' must be stable." }
+
+    $expected = @(
+        "PrintableBook-$value-win-x64.zip",
+        "PrintableBook-$value-win-x64.zip.sha256",
+        "PrintableBook-$value-win-x64.manifest.json",
+        "PrintableBook-$value-win-x64.manifest.json.sig"
+    ) | Sort-Object
+    $actual = @($release.assets | ForEach-Object { $_.name } | Sort-Object)
+    if (Compare-Object $actual $expected) {
+        throw "Published release '$tag' does not contain exactly the four expected assets."
+    }
+
+    return $release
+}
+
+function Try-GetPublishedRelease {
+    param(
+        [Parameter(Mandatory)]
+        [string]$TagName
+    )
+
+    $result = Invoke-Gh -Arguments @("release", "view", $TagName, "--json", "tagName,isDraft,isPrerelease,url,assets") -AllowFailure
+    if ($result.ExitCode -ne 0) {
+        return $null
+    }
+
+    return ($result.Output -join [Environment]::NewLine) | ConvertFrom-Json
+}
+
 function Get-SourceVersion {
     param(
         [Parameter(Mandatory)]
@@ -191,7 +341,70 @@ function Invoke-PrintableBookRelease {
         [string]$RequestedVersion = ""
     )
 
-    throw "Release orchestration is not implemented yet."
+    $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+    Set-Location $repoRoot
+
+    Assert-MainBranch
+    Assert-CleanWorkingTree
+    $originalSha = Sync-Main
+    $ci = Assert-GreenMainCi -HeadSha $originalSha
+    $propsPath = Join-Path $repoRoot "Directory.Build.props"
+    $currentVersion = Get-SourceVersion -DirectoryBuildPropsPath $propsPath
+    $currentTag = "v$($currentVersion.ToString(3))"
+    $currentRemoteTag = Get-RemoteTagSha $currentTag
+
+    if ($null -ne $currentRemoteTag -and $currentRemoteTag -eq $originalSha) {
+        $existingRelease = Try-GetPublishedRelease -TagName $currentTag
+        if ($null -eq $existingRelease) {
+            Write-Host "Resuming publication for existing tag $currentTag."
+            $run = Find-ReleaseWorkflowRun -ReleaseSha $originalSha
+            Wait-ReleaseWorkflow -RunId ([long]$run.databaseId)
+            $published = Assert-PublishedRelease -Version $currentVersion
+            Write-Host "Released $currentTag"
+            Write-Host $published.url
+            return
+        }
+    }
+
+    $targetVersion = Resolve-TargetVersion -CurrentVersion $currentVersion -RequestedVersion $RequestedVersion
+    $tag = "v$($targetVersion.ToString(3))"
+    if ($null -ne (Get-RemoteTagSha $tag)) {
+        throw "Remote tag '$tag' already exists."
+    }
+
+    Write-Host "PrintableBook Release"
+    Write-Host "Current version: $($currentVersion.ToString(3))"
+    Write-Host "Target version:  $($targetVersion.ToString(3))"
+    Write-Host "[PASS] main CI $($ci.url)"
+
+    $remotePushSucceeded = $false
+    $createdTag = ""
+    try {
+        Set-SourceVersion -DirectoryBuildPropsPath $propsPath -TargetVersion $targetVersion
+        Assert-ReleaseDiff
+        $release = New-ReleaseCommitAndTag -TargetVersion $targetVersion
+        $createdTag = $release.Tag
+        Push-ReleaseAtomically -TagName $createdTag
+        $remotePushSucceeded = $true
+
+        $run = Find-ReleaseWorkflowRun -ReleaseSha $release.Sha
+        Write-Host "[PASS] atomic push"
+        Write-Host "Publish workflow: $($run.url)"
+        Wait-ReleaseWorkflow -RunId ([long]$run.databaseId)
+        $published = Assert-PublishedRelease -Version $targetVersion
+        Write-Host "[PASS] Publish release workflow"
+        Write-Host "[PASS] GitHub Release $createdTag"
+        Write-Host ""
+        Write-Host "Released $createdTag"
+        Write-Host $published.url
+    }
+    catch {
+        if (-not $remotePushSucceeded) {
+            Restore-LocalPrePushState -OriginalSha $originalSha -LocalTag $createdTag
+        }
+
+        throw
+    }
 }
 
 if ($MyInvocation.InvocationName -ne ".") {

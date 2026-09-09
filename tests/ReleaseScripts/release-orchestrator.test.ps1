@@ -265,12 +265,12 @@ function Invoke-TestRelease {
 
 function Get-RemoteMainFile {
     param([Parameter(Mandatory)][hashtable]$Repository)
-    return (& git --git-dir=$Repository.Origin show "refs/heads/main:Directory.Build.props") -join "`n"
+    return (& git "--git-dir=$($Repository.Origin)" show "refs/heads/main:Directory.Build.props") -join "`n"
 }
 
 function Get-RemoteTagSha {
     param([Parameter(Mandatory)][hashtable]$Repository, [Parameter(Mandatory)][string]$TagName)
-    $output = & git --git-dir=$Repository.Origin rev-parse "refs/tags/$TagName" 2>$null
+    $output = & git "--git-dir=$($Repository.Origin)" rev-parse "refs/tags/$TagName" 2>$null
     if ($LASTEXITCODE -ne 0) { return $null }
     return ($output -join "").Trim()
 }
@@ -283,17 +283,19 @@ function New-TestRoot {
 
 $defaultRepository = New-ReleaseTestRepository -Root (New-TestRoot)
 $defaultRelease = Invoke-TestRelease -Repository $defaultRepository
-Assert-Equal 0 $defaultRelease.ExitCode "Default patch release failed."
+if ($defaultRelease.ExitCode -ne 0) {
+    throw "Default patch release failed: $($defaultRelease.Output -join [Environment]::NewLine)"
+}
 Assert-True ((Get-RemoteMainFile $defaultRepository) -match '<Version>0.2.1</Version>') "Default release did not update Version."
 Assert-True ((Get-RemoteMainFile $defaultRepository) -match '<AssemblyVersion>0.2.1.0</AssemblyVersion>') "Default release did not update AssemblyVersion."
-Assert-Equal (Get-RemoteTagSha $defaultRepository "v0.2.1") ((Invoke-TestGit -WorkingDirectory $defaultRepository.Work -Arguments @("rev-parse", "HEAD"))[0].Trim()) "Default tag does not point to main."
-Assert-Equal "chore: release v0.2.1" ((Invoke-TestGit -WorkingDirectory $defaultRepository.Work -Arguments @("log", "-1", "--format=%s"))[0].Trim()) "Default release commit message mismatch."
+Assert-Equal (Get-RemoteTagSha $defaultRepository "v0.2.1") ((Invoke-TestGit -WorkingDirectory $defaultRepository.Work -Arguments @("rev-parse", "HEAD") | Select-Object -First 1).Trim()) "Default tag does not point to main."
+Assert-Equal "chore: release v0.2.1" ((Invoke-TestGit -WorkingDirectory $defaultRepository.Work -Arguments @("log", "-1", "--format=%s") | Select-Object -First 1).Trim()) "Default release commit message mismatch."
 Assert-True ($null -eq (Get-RemoteTagSha $defaultRepository "v0.2.2")) "Default release created an unexpected next tag."
 
 $explicitRepository = New-ReleaseTestRepository -Root (New-TestRoot)
 $explicitRelease = Invoke-TestRelease -Repository $explicitRepository -Version "0.3.0"
 Assert-Equal 0 $explicitRelease.ExitCode "Explicit release failed."
 Assert-True ((Get-RemoteMainFile $explicitRepository) -match '<Version>0.3.0</Version>') "Explicit release did not update Version."
-Assert-Equal $null (Get-RemoteTagSha $explicitRepository "v0.2.1") "Explicit release created default patch tag."
+Assert-True ($null -eq (Get-RemoteTagSha $explicitRepository "v0.2.1")) "Explicit release created default patch tag."
 Assert-True ($null -ne (Get-RemoteTagSha $explicitRepository "v0.3.0")) "Explicit release tag was not pushed."
-Assert-Equal "chore: release v0.3.0" ((Invoke-TestGit -WorkingDirectory $explicitRepository.Work -Arguments @("log", "-1", "--format=%s"))[0].Trim()) "Explicit release commit message mismatch."
+Assert-Equal "chore: release v0.3.0" ((Invoke-TestGit -WorkingDirectory $explicitRepository.Work -Arguments @("log", "-1", "--format=%s") | Select-Object -First 1).Trim()) "Explicit release commit message mismatch."
