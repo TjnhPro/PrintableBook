@@ -1,5 +1,7 @@
+using System.Collections.Concurrent;
 using PdfSharp.Drawing;
 using PdfSharp.Pdf;
+using PdfSharp.Pdf.IO;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Processing;
 
@@ -7,7 +9,7 @@ namespace PrintableBook.Infrastructure.Pdf;
 
 public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
 {
-    public ValueTask<PrintableBookPdfExportResult> ExportAsync(
+    public async ValueTask<PrintableBookPdfExportResult> ExportAsync(
         PrintableBookPdfExportRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -17,18 +19,19 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         var coverPdf = new FileReference(Path.Combine(request.TemporaryOutputDirectory.Value, "cover.pdf"));
         var interiorPdf = new FileReference(Path.Combine(request.TemporaryOutputDirectory.Value, "interior.pdf"));
         WriteSingleRasterPdf(coverPdf, request.Cover, request.CoverPageSize, cancellationToken);
-        WriteInteriorPdfSequential(
+        await WriteInteriorPdfAsync(
             interiorPdf,
             request.IntroPages,
             request.OrderedInteriorPages,
             request.BackgroundPage,
             request.InteriorPageSize,
+            request.MaximumPageConcurrency,
             cancellationToken);
 
-        return ValueTask.FromResult(new PrintableBookPdfExportResult(coverPdf, interiorPdf));
+        return new PrintableBookPdfExportResult(coverPdf, interiorPdf);
     }
 
-    public ValueTask<InteriorPdfExportResult> ExportInteriorAsync(
+    public async ValueTask<InteriorPdfExportResult> ExportInteriorAsync(
         InteriorPdfExportRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -36,15 +39,16 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         Directory.CreateDirectory(request.TemporaryOutputDirectory.Value);
 
         var interiorPdf = new FileReference(Path.Combine(request.TemporaryOutputDirectory.Value, "interior.pdf"));
-        WriteInteriorPdfSequential(
+        await WriteInteriorPdfAsync(
             interiorPdf,
             request.IntroPages,
             request.OrderedInteriorPages,
             request.BackgroundPage,
             request.InteriorPageSize,
+            request.MaximumPageConcurrency,
             cancellationToken);
 
-        return ValueTask.FromResult(new InteriorPdfExportResult(interiorPdf));
+        return new InteriorPdfExportResult(interiorPdf);
     }
 
     private static void Validate(PrintableBookPdfExportRequest request, CancellationToken cancellationToken)
@@ -105,36 +109,204 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         document.Save(target.Value);
     }
 
-    private static void WriteInteriorPdfSequential(
+    private static async ValueTask WriteInteriorPdfAsync(
         FileReference target,
         IReadOnlyList<FileReference> introPages,
         IReadOnlyList<FileReference> orderedInteriorPages,
         FileReference? backgroundPage,
         PhysicalPageSize pageSize,
+        int maximumPageConcurrency,
         CancellationToken cancellationToken)
     {
-        using var document = new PdfDocument();
+        var importedInteriors = new ConcurrentDictionary<int, PdfDocument>();
+        PdfDocument? introImport = null;
+        using var semaphore = new SemaphoreSlim(maximumPageConcurrency, maximumPageConcurrency);
+        using var remainingWorkCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Task[] importTasks = [];
 
+        try
+        {
+            if (introPages.Count > 0)
+            {
+                introImport = CreateImportDocument(
+                    BuildIntroRasterPages(introPages, backgroundPage),
+                    pageSize,
+                    cancellationToken);
+            }
+
+            importTasks = orderedInteriorPages
+                .Select((artwork, index) =>
+                    Task.Run(
+                        () => ImportInteriorAsync(
+                            index,
+                            artwork,
+                            backgroundPage,
+                            pageSize,
+                            importedInteriors,
+                            semaphore,
+                            remainingWorkCancellation),
+                        CancellationToken.None))
+                .ToArray();
+
+            try
+            {
+                await Task.WhenAll(importTasks);
+            }
+            catch
+            {
+                await remainingWorkCancellation.CancelAsync();
+
+                try
+                {
+                    await Task.WhenAll(importTasks);
+                }
+                catch
+                {
+                    // Preserve the original worker failure.
+                }
+
+                throw;
+            }
+
+            using var finalDocument = new PdfDocument();
+            if (introImport is not null)
+            {
+                finalDocument.Pages.InsertRange(finalDocument.Pages.Count, introImport);
+                CloseAndDispose(introImport);
+                introImport = null;
+            }
+
+            foreach (var index in importedInteriors.Keys.Order())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!importedInteriors.TryRemove(index, out var imported))
+                {
+                    throw new InvalidOperationException($"Interior import index {index} is missing.");
+                }
+
+                try
+                {
+                    finalDocument.Pages.InsertRange(finalDocument.Pages.Count, imported);
+                }
+                finally
+                {
+                    CloseAndDispose(imported);
+                }
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            finalDocument.Save(target.Value);
+        }
+        finally
+        {
+            if (introImport is not null)
+            {
+                CloseAndDispose(introImport);
+            }
+
+            foreach (var pair in importedInteriors)
+            {
+                if (importedInteriors.TryRemove(pair.Key, out var imported))
+                {
+                    CloseAndDispose(imported);
+                }
+            }
+        }
+    }
+
+    private static IReadOnlyList<FileReference> BuildIntroRasterPages(
+        IReadOnlyList<FileReference> introPages,
+        FileReference? backgroundPage)
+    {
+        var result = new List<FileReference>(introPages.Count * (backgroundPage is null ? 1 : 2));
         foreach (var intro in introPages)
         {
-            AddRasterPage(document, intro, pageSize, cancellationToken);
+            result.Add(intro);
             if (backgroundPage is not null)
             {
-                AddRasterPage(document, backgroundPage, pageSize, cancellationToken);
+                result.Add(backgroundPage);
             }
         }
 
-        foreach (var artwork in orderedInteriorPages)
+        return result;
+    }
+
+    private static PdfDocument CreateImportDocument(
+        IReadOnlyList<FileReference> rasterPages,
+        PhysicalPageSize pageSize,
+        CancellationToken cancellationToken)
+    {
+        using var buffer = new MemoryStream();
+        using (var staging = new PdfDocument())
         {
-            AddRasterPage(document, artwork, pageSize, cancellationToken);
-            if (backgroundPage is not null)
+            foreach (var source in rasterPages)
             {
-                AddRasterPage(document, backgroundPage, pageSize, cancellationToken);
+                AddRasterPage(staging, source, pageSize, cancellationToken);
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            staging.Save(buffer, closeStream: false);
         }
 
+        buffer.Position = 0;
         cancellationToken.ThrowIfCancellationRequested();
-        document.Save(target.Value);
+        return PdfReader.Open(buffer, PdfDocumentOpenMode.Import);
+    }
+
+    private static async Task ImportInteriorAsync(
+        int index,
+        FileReference artwork,
+        FileReference? backgroundPage,
+        PhysicalPageSize pageSize,
+        ConcurrentDictionary<int, PdfDocument> importedInteriors,
+        SemaphoreSlim semaphore,
+        CancellationTokenSource remainingWorkCancellation)
+    {
+        var enteredSemaphore = false;
+        PdfDocument? imported = null;
+
+        try
+        {
+            await semaphore.WaitAsync(remainingWorkCancellation.Token);
+            enteredSemaphore = true;
+            var pages = backgroundPage is null ? [artwork] : new[] { artwork, backgroundPage };
+            imported = CreateImportDocument(pages, pageSize, remainingWorkCancellation.Token);
+            if (!importedInteriors.TryAdd(index, imported))
+            {
+                throw new InvalidOperationException($"Interior import index {index} already exists.");
+            }
+
+            imported = null;
+        }
+        catch
+        {
+            if (imported is not null)
+            {
+                CloseAndDispose(imported);
+            }
+
+            await remainingWorkCancellation.CancelAsync();
+            throw;
+        }
+        finally
+        {
+            if (enteredSemaphore)
+            {
+                semaphore.Release();
+            }
+        }
+    }
+
+    private static void CloseAndDispose(PdfDocument document)
+    {
+        try
+        {
+            document.Close();
+        }
+        finally
+        {
+            document.Dispose();
+        }
     }
 
     private static void AddRasterPage(

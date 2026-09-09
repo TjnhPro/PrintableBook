@@ -93,6 +93,58 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
         Assert.Equal(8, interiorPdf.Pages.Count);
     }
 
+    [Fact]
+    public async Task ExportInteriorAsync_assembles_many_background_units_in_deterministic_page_count()
+    {
+        Directory.CreateDirectory(rootPath);
+        var artworks = new List<FileReference>();
+        for (var index = 0; index < 24; index++)
+        {
+            artworks.Add(await CreatePngAsync($"art-{index:D2}.png", 100, 100));
+        }
+
+        var background = await CreatePngAsync("background.png", 100, 100);
+        var request = new InteriorPdfExportRequest(
+            IntroPages: [],
+            OrderedInteriorPages: artworks,
+            BackgroundPage: background,
+            TemporaryOutputDirectory: new DirectoryReference(Path.Combine(rootPath, "many-output")),
+            InteriorPageSize: new PhysicalPageSize(8.5, 8.5),
+            MaximumPageConcurrency: 6);
+        var exporter = new PdfSharpPrintableBookPdfExporter();
+
+        var first = await exporter.ExportInteriorAsync(request);
+        using (var firstPdf = PdfReader.Open(first.InteriorPdf.Value))
+        {
+            Assert.Equal(48, firstPdf.Pages.Count);
+        }
+
+        var second = await exporter.ExportInteriorAsync(request with
+        {
+            TemporaryOutputDirectory = new DirectoryReference(Path.Combine(rootPath, "many-output-second"))
+        });
+        using var secondPdf = PdfReader.Open(second.InteriorPdf.Value);
+        Assert.Equal(48, secondPdf.Pages.Count);
+    }
+
+    [Fact]
+    public async Task ExportInteriorAsync_rejects_non_positive_concurrency()
+    {
+        Directory.CreateDirectory(rootPath);
+        var page = await CreatePngAsync("art.png");
+        var request = new InteriorPdfExportRequest(
+            [],
+            [page],
+            null,
+            new DirectoryReference(Path.Combine(rootPath, "invalid-concurrency-output")),
+            new PhysicalPageSize(8.5, 8.5),
+            MaximumPageConcurrency: 1);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => new PdfSharpPrintableBookPdfExporter().ExportInteriorAsync(
+                request with { MaximumPageConcurrency = 0 }).AsTask());
+    }
+
     private async Task<FileReference> CreatePngAsync(string filename, uint width = 2550, uint height = 2550)
     {
         var path = Path.Combine(rootPath, filename);
