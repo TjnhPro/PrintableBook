@@ -318,15 +318,19 @@ test("startup update dialog renders only actionable available, active, ready, an
   applyUpdateResponse(bridge, updateSnapshot("Downloading", { preparationStage: "DownloadingChecksum", bytesReceived: 524288, totalBytes: 1048576 }));
   assert.match(bridge.updateDialog.innerHTML, /Downloading checksum…/);
   assert.doesNotMatch(bridge.updateDialog.innerHTML, /aria-valuenow/);
+  assert.match(bridge.updateDialog.innerHTML, /update-progress-indeterminate/);
 
   applyUpdateResponse(bridge, updateSnapshot("Verifying", { preparationStage: "Extracting" }));
   assert.match(bridge.updateDialog.innerHTML, /Extracting update…/);
+  assert.match(bridge.updateDialog.innerHTML, /update-progress-indeterminate/);
   applyUpdateResponse(bridge, updateSnapshot("Ready", { canInstall: true }));
   assert.match(bridge.updateDialog.innerHTML, /Update 0\.2\.0 is ready\./);
   assert.match(bridge.updateDialog.innerHTML, /Restart &amp; Update/);
   applyUpdateResponse(bridge, updateSnapshot("Error", { errorMessage: "Could not start the updater.", canDownload: true }));
   assert.match(bridge.updateDialog.innerHTML, /Could not start the updater\./);
   assert.match(bridge.updateDialog.innerHTML, /Retry download/);
+  applyUpdateResponse(bridge, updateSnapshot("Error", { canDownload: false, canInstall: false }));
+  assert.equal(bridge.updateDialog.hidden, true);
 });
 
 test("startup update dialog performs one automatic check, polling, and retry routing", () => {
