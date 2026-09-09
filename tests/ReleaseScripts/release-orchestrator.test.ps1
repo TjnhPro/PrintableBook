@@ -393,4 +393,21 @@ foreach ($forbiddenWorkflowText in @(
 $candidateWorkflow = Get-Content (Join-Path $repoRoot ".github/workflows/release-candidate.yml") -Raw
 Assert-True ($candidateWorkflow.Contains("workflow_dispatch")) "Release candidate workflow must remain available."
 
+$buildWorkflow = Get-Content (Join-Path $repoRoot ".github/workflows/build-and-test.yml") -Raw
+foreach ($requiredBuildText in @(
+    "github.event_name == 'pull_request'",
+    "chore: release v",
+    "Run release orchestrator tests",
+    "PrintableBook.Core.Tests",
+    "PrintableBook.UpdateSecurity.Tests",
+    "PrintableBook.Infrastructure.Tests",
+    "PrintableBook.Updater.Tests",
+    "PrintableBook.ReleaseTool.Tests",
+    "PrintableBook.Desktop.Tests",
+    "app-bridge.test.mjs",
+    "test-production-ui.mjs"
+)) {
+    Assert-True ($buildWorkflow.Contains($requiredBuildText)) "Build workflow is missing '$requiredBuildText'."
+}
+
 Write-Output "all release orchestrator tests passed"

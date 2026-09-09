@@ -9,6 +9,9 @@ permissions:
 
 jobs:
   build-and-test:
+    if: >-
+      github.event_name == 'pull_request' ||
+      !startsWith(github.event.head_commit.message, 'chore: release v')
     runs-on: windows-latest
 
     steps:
@@ -24,6 +27,10 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 24.x
+
+      - name: Run release orchestrator tests
+        shell: pwsh
+        run: ./tests/ReleaseScripts/release-orchestrator.test.ps1
 
       - name: Restore
         run: dotnet restore PrintableBook.sln
