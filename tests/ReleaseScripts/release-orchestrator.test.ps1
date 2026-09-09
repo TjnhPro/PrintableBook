@@ -457,3 +457,4 @@ foreach ($requiredBuildText in @(
 }
 
 Write-Output "all release orchestrator tests passed"
+exit 0
