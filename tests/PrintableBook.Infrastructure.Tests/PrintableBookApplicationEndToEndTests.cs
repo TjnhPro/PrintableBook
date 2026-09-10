@@ -484,6 +484,41 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessBookAsync_assembles_a_final_sized_automatic_brand_intro_without_creating_intro_cache()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "FinalBrandIntroBook"));
+        await CreateBookFixtureAsync(bookDirectory);
+        var finalIntro = new FileReference(Path.Combine(rootPath, "final-brand-intro.png"));
+        await WriteImageAsync(finalIntro.Value, 100, 100, 2487, 2524, 2588, 2625);
+
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem), workspaceFactory, new JsonBookWorkspaceStateStore(fileSystem), new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem), CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new PdfSharpPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+        var command = CreateCommand("final-brand-intro-book", bookDirectory) with
+        {
+            Mode = BookProcessingMode.InteriorOnly,
+            PreparedArtworkSize = new ImageSize(2270, 2270),
+            WorkingPageSize = new ImageSize(2550, 2550),
+            FinalPageSize = new ImageSize(2588, 2625),
+            InteriorPdfPageSize = new PhysicalPageSize(2588d / 300d, 2625d / 300d),
+            IntroTemplatePages = [finalIntro]
+        };
+
+        var result = await processor.ProcessBookAsync(command);
+
+        Assert.Equal(BookProcessingStatus.Completed, result.Status);
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        Assert.False(Directory.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "intro-0001")));
+        using var interiorPdf = PdfReader.Open(result.PublishedInteriorOutput!.InteriorPdf.Value);
+        Assert.Equal(3, interiorPdf.Pages.Count);
+        Assert.Equal(2588d / 300d * 72d, interiorPdf.Pages[0].Width.Point, precision: 3);
+        Assert.Equal(2625d / 300d * 72d, interiorPdf.Pages[0].Height.Point, precision: 3);
+    }
+
+    [Fact]
     public async Task ProcessBookAsync_persists_the_active_interior_step_while_the_page_pipeline_is_running()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "InterruptedBook"));
