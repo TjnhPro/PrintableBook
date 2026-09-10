@@ -177,11 +177,30 @@
   .output-actions { @apply mt-4 flex flex-wrap gap-2; }
   .data-table .output-actions { @apply mt-0; }
   .data-table .output-actions button { @apply h-8 px-2 text-xs; }
-  .brand-asset-grid { @apply mt-4 grid grid-cols-2 gap-3; }
-  .brand-asset-grid > div { @apply grid gap-1 rounded-lg border border-slate-200 bg-slate-50 p-3; }
-  .brand-asset-grid strong { @apply text-sm text-slate-900; }
-  .brand-asset-grid small { @apply text-xs text-slate-500; }
-  .advanced-settings { @apply mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700; }
-  .advanced-settings summary { @apply cursor-pointer font-medium; }
+  .brand-search { @apply mb-4 grid gap-1.5 text-xs font-medium text-slate-600; }
+  .brand-search .control { @apply w-full; }
+  .brand-asset-inventory { @apply mt-5 grid gap-5; }
+  .brand-folder-list { @apply grid gap-4; }
+  .brand-folder, .brand-file-card { @apply rounded-xl border border-slate-200 bg-slate-50 p-4; }
+  .brand-asset-heading { @apply flex items-start justify-between gap-4; }
+  .brand-asset-heading h3 { @apply text-sm font-semibold text-slate-900; }
+  .brand-asset-heading p { @apply mt-1 text-xs text-slate-500; }
+  .brand-folder-table { @apply mt-3; }
+  .brand-folder-table td:first-child { @apply min-w-48 break-words; }
+  .brand-folder-table td:nth-child(2), .brand-folder-table td:nth-child(3) { @apply whitespace-nowrap font-mono text-xs; }
+  .brand-size-note { @apply mt-3 text-xs text-slate-600; }
+  .brand-file-grid { @apply grid grid-cols-2 gap-3; }
+  .brand-file-card dl { @apply mt-4 grid grid-cols-2 gap-3; }
+  .brand-file-card dl > div { @apply min-w-0 rounded-lg bg-white p-3; }
+  .brand-file-card dt { @apply text-xs font-medium text-slate-500; }
+  .brand-file-card dd { @apply mt-1 break-words text-sm font-medium text-slate-800; }
+  .brand-validation-summary { @apply mt-4 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900; }
+  .brand-validation-summary h3 { @apply font-semibold; }
+  .brand-validation-summary > p { @apply mt-1 text-xs text-rose-800; }
+  .brand-validation-summary ul { @apply mt-3 grid gap-2; }
+  .brand-validation-summary li { @apply rounded-md border border-rose-200 bg-white px-3 py-2; }
+  .brand-validation-summary li strong { @apply block break-words text-sm; }
+  .brand-validation-summary li span, .brand-asset-error { @apply mt-1 block break-words text-xs text-rose-800; }
+  @media (max-width: 900px) { .master-detail { @apply grid-cols-1; } .brand-file-grid { @apply grid-cols-1; } }
 }
 @keyframes pb-pulse { 50% { opacity: .45; } }

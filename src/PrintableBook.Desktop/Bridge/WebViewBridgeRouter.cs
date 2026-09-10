@@ -21,7 +21,6 @@ internal sealed class WebViewBridgeRouter(
     ApplicationLoadCoordinator? applicationLoadCoordinator = null,
     IGlobalSettingsStore? settingsStore = null,
     IProcessSessionService? processSessionService = null,
-    IBrandSettingsStore? brandSettingsStore = null,
     IBookCoverSelectionService? coverSelectionService = null,
     IInteriorFrameModeService? interiorFrameModeService = null,
     IBookInteriorSettingsService? bookInteriorSettingsService = null,
@@ -494,45 +493,6 @@ internal sealed class WebViewBridgeRouter(
                 }
             }
 
-            if (request.Command is "brand.settings.get" or "brand.settings.save")
-            {
-                if (applicationLoadCoordinator is null || brandSettingsStore is null || request.Payload is not { } brandPayload ||
-                    !brandPayload.TryGetProperty("brandName", out var brandNameElement) || string.IsNullOrWhiteSpace(brandNameElement.GetString()))
-                {
-                    return BridgeResponse.UnsupportedCommand(request.Id);
-                }
-
-                var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
-                if (snapshot is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
-                var brand = snapshot.Discovery.Brands
-                    .FirstOrDefault(item => string.Equals(item.Name, brandNameElement.GetString(), StringComparison.Ordinal));
-                if (brand is null) return new BridgeResponse(Version, request.Id, false, null, "brand_not_found");
-
-                try
-                {
-                    if (request.Command == "brand.settings.get")
-                    {
-                        return BridgeResponse.Succeeded(request.Id, "brand.settings", await brandSettingsStore.LoadAsync(brand.Directory, cancellationToken));
-                    }
-
-                    if (!brandPayload.TryGetProperty("json", out var jsonElement) || jsonElement.ValueKind != JsonValueKind.String)
-                    {
-                        return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_settings");
-                    }
-                    var savedJson = jsonElement.GetString()!;
-                    await brandSettingsStore.SaveAsync(brand.Directory, savedJson, cancellationToken);
-                    return BridgeResponse.Succeeded(request.Id, "brand.settings.saved", savedJson);
-                }
-                catch (JsonException)
-                {
-                    return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_settings");
-                }
-                catch (ArgumentException)
-                {
-                    return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_settings");
-                }
-            }
-
             if (request.Command == "brand.validate")
             {
                 if (applicationLoadCoordinator is null || brandValidationService is null || request.Payload is not { } validationPayload ||
@@ -598,7 +558,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.settings.get" or "brand.settings.save" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

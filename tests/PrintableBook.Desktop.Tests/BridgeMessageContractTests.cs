@@ -263,23 +263,6 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
-    public async Task Brand_settings_save_returns_the_exact_saved_json()
-    {
-        var settings = new StubBrandSettingsStore();
-        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
-        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), brandSettingsStore: settings);
-
-        const string json = "{\"frame\":true}";
-        var saved = await router.HandleAsync("""{"version":1,"id":"brand-save","command":"brand.settings.save","payload":{"brandName":"Brand One","json":"{\"frame\":true}"}}""");
-
-        Assert.True(saved.Ok);
-        Assert.Equal("brand.settings.saved", saved.Command);
-        Assert.Equal(json, Assert.IsType<string>(saved.Payload));
-        Assert.Equal(json, settings.SavedJson);
-        Assert.Equal(0, manager.Starts);
-    }
-
-    [Fact]
     public async Task Brand_validate_uses_the_retained_snapshot_and_returns_the_validation_result()
     {
         var validation = new StubBrandValidationService();
@@ -303,20 +286,15 @@ public sealed class BridgeMessageContractTests
         var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
         var cover = new StubCoverSelectionService();
         var frame = new StubInteriorFrameModeService();
-        var brands = new StubBrandSettingsStore();
-        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), brandSettingsStore: brands, coverSelectionService: cover, interiorFrameModeService: frame);
+        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), coverSelectionService: cover, interiorFrameModeService: frame);
 
         var coverResponse = await router.HandleAsync("""{"version":1,"id":"cover","command":"book.cover.select","payload":{"bookId":"Book One","coverReference":"cover-a.png"}}""");
         var frameResponse = await router.HandleAsync("""{"version":1,"id":"frame","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png","mode":"enabled"}}""");
-        var getResponse = await router.HandleAsync("""{"version":1,"id":"brand-get","command":"brand.settings.get","payload":{"brandName":"Brand One"}}""");
-        var saveResponse = await router.HandleAsync("""{"version":1,"id":"brand-save","command":"brand.settings.save","payload":{"brandName":"Brand One","json":"{}"}}""");
-
-        Assert.All([coverResponse, frameResponse, getResponse, saveResponse], response => Assert.True(response.Ok));
+        Assert.All([coverResponse, frameResponse], response => Assert.True(response.Ok));
         Assert.Equal(2, manager.Starts);
-        Assert.Equal(4, manager.Lists);
+        Assert.Equal(2, manager.Lists);
         Assert.Equal(("Book One", "cover-a.png"), cover.LastSelection);
         Assert.Equal(("Book One", "Book interior/page-001.png", FrameMode.Enabled), frame.LastSelection);
-        Assert.Equal("{}", brands.SavedJson);
     }
 
     [Fact]
@@ -325,28 +303,20 @@ public sealed class BridgeMessageContractTests
         var emptyManager = new RetainedSnapshotTaskManager(null);
         var cover = new StubCoverSelectionService();
         var frame = new StubInteriorFrameModeService();
-        var brands = new StubBrandSettingsStore();
-        var emptyRouter = new WebViewBridgeRouter(new ApplicationLoadCoordinator(emptyManager), brandSettingsStore: brands, coverSelectionService: cover, interiorFrameModeService: frame);
+        var emptyRouter = new WebViewBridgeRouter(new ApplicationLoadCoordinator(emptyManager), coverSelectionService: cover, interiorFrameModeService: frame);
 
         var missingCover = await emptyRouter.HandleAsync("""{"version":1,"id":"cover","command":"book.cover.select","payload":{"bookId":"Book One","coverReference":"cover-a.png"}}""");
         var missingFrame = await emptyRouter.HandleAsync("""{"version":1,"id":"frame","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png","mode":"auto"}}""");
-        var missingBrand = await emptyRouter.HandleAsync("""{"version":1,"id":"brand","command":"brand.settings.save","payload":{"brandName":"Brand One","json":"{}"}}""");
-
-        Assert.All([missingCover, missingFrame, missingBrand], response => Assert.Equal("snapshot_unavailable", response.Error));
+        Assert.All([missingCover, missingFrame], response => Assert.Equal("snapshot_unavailable", response.Error));
         Assert.Equal(0, emptyManager.Starts);
         Assert.Null(cover.LastSelection);
         Assert.Null(frame.LastSelection);
-        Assert.Null(brands.SavedJson);
-
         var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
-        var retainedRouter = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), brandSettingsStore: brands, coverSelectionService: cover, interiorFrameModeService: frame);
+        var retainedRouter = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), coverSelectionService: cover, interiorFrameModeService: frame);
         var invalidCover = await retainedRouter.HandleAsync("""{"version":1,"id":"invalid-cover","command":"book.cover.select","payload":{"bookId":"Book One","coverReference":"outside.png"}}""");
         var invalidFrame = await retainedRouter.HandleAsync("""{"version":1,"id":"invalid-frame","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","sourceReference":"outside.png","mode":"auto"}}""");
-        var missingNamedBrand = await retainedRouter.HandleAsync("""{"version":1,"id":"missing-brand","command":"brand.settings.get","payload":{"brandName":"Missing"}}""");
-
         Assert.Equal("invalid_cover_selection", invalidCover.Error);
         Assert.Equal("invalid_interior_frame_mode", invalidFrame.Error);
-        Assert.Equal("brand_not_found", missingNamedBrand.Error);
         Assert.Equal(0, manager.Starts);
     }
 
@@ -768,23 +738,6 @@ public sealed class BridgeMessageContractTests
         public ValueTask SaveAsync(GlobalSettings settings, CancellationToken cancellationToken = default)
         {
             Saved = settings;
-            return ValueTask.CompletedTask;
-        }
-    }
-
-    private sealed class StubBrandSettingsStore : IBrandSettingsStore
-    {
-        public DirectoryReference? LoadedDirectory { get; private set; }
-        public string? SavedJson { get; private set; }
-        public ValueTask<string> LoadAsync(DirectoryReference brandDirectory, CancellationToken cancellationToken = default)
-        {
-            LoadedDirectory = brandDirectory;
-            return ValueTask.FromResult("{}");
-        }
-        public ValueTask SaveAsync(DirectoryReference brandDirectory, string json, CancellationToken cancellationToken = default)
-        {
-            LoadedDirectory = brandDirectory;
-            SavedJson = json;
             return ValueTask.CompletedTask;
         }
     }

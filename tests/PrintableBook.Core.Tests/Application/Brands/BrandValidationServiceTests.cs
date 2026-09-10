@@ -102,6 +102,17 @@ public sealed class BrandValidationServiceTests
         Assert.Equal(0, files.MetadataReads);
     }
 
+    [Fact]
+    public async Task Invalid_dimensions_name_the_actual_and_permitted_pixel_sizes()
+    {
+        var files = FileSystem.ValidBrand();
+        var result = await CreateService(new StateStore(), files, new Images(new ImageSize(1500, 1500))).ValidateAsync(BrandDirectory, GlobalSettings.Default);
+
+        var failure = Assert.Single(result.Failures, failure => failure.Target == "introtemplate/intro.png");
+        Assert.Equal("brand_image_dimensions_invalid", failure.Code);
+        Assert.Equal("Image is 1500 × 1500 px. Required size: 1024 × 1024 px, 2048 × 2048 px, 2588 × 2625 px.", failure.Message);
+    }
+
     private static BrandValidationService CreateService(StateStore store, FileSystem files, Images images)
     {
         var resolver = new BrandValidationTargetResolver(files);
@@ -119,7 +130,7 @@ public sealed class BrandValidationServiceTests
         }
     }
 
-    private sealed class Images : IImageInspector
+    private sealed class Images(ImageSize? introSize = null) : IImageInspector
     {
         public int SizeReads { get; private set; }
         public ValueTask<ImageSize> GetSizeAsync(FileReference image, CancellationToken cancellationToken = default)
@@ -129,7 +140,7 @@ public sealed class BrandValidationServiceTests
                 ? new ImageSize(GlobalSettings.Default.ArtworkMaximumSide, GlobalSettings.Default.ArtworkMaximumSide)
                 : image.Value.EndsWith("background.png", StringComparison.OrdinalIgnoreCase)
                     ? new ImageSize(GlobalSettings.Default.FinalPageWidth, GlobalSettings.Default.FinalPageHeight)
-                    : new ImageSize(1024, 1024));
+                    : introSize ?? new ImageSize(1024, 1024));
         }
         public ValueTask<ImageInfo> GetInfoAsync(FileReference image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }

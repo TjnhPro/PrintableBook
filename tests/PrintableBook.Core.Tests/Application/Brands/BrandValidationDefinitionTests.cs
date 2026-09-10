@@ -48,6 +48,18 @@ public sealed class BrandValidationDefinitionTests
     }
 
     [Fact]
+    public void Image_size_requirements_are_derived_from_the_validation_definition()
+    {
+        var settings = GlobalSettings.Default with { ArtworkMaximumSide = 2000, FinalPageWidth = 2500, FinalPageHeight = 2600 };
+
+        var requirements = BrandValidationDefinition.GetImageSizeRequirements(settings);
+
+        Assert.Equal([new ImageSize(1024, 1024), new ImageSize(2048, 2048), new ImageSize(2500, 2600)], Assert.Single(requirements, requirement => requirement.Target == "IntroTemplate").AllowedSizes);
+        Assert.Equal([new ImageSize(2000, 2000)], Assert.Single(requirements, requirement => requirement.Target == "frame.png").AllowedSizes);
+        Assert.Equal([new ImageSize(2500, 2600)], Assert.Single(requirements, requirement => requirement.Target == "background.png").AllowedSizes);
+    }
+
+    [Fact]
     public void Definition_changed_at_is_the_locked_utc_timestamp()
     {
         var definition = BrandValidationDefinition.CreateCurrent(GlobalSettings.Default);

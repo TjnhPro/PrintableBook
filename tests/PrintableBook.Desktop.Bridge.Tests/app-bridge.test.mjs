@@ -18,6 +18,11 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   const contentListeners = {};
   const documentListeners = {};
   const searchInput = { focused: false, selection: null, focus() { this.focused = true; }, setSelectionRange(start, end) { this.selection = [start, end]; } };
+  const brandList = {
+    set innerHTML(markup) {
+      contentMarkup = contentMarkup.replace(/(<ul class="item-list" data-brand-list>).*?(<\/ul>)/, `$1${markup}$2`);
+    }
+  };
   let contentMarkup = "";
   let fullRenderCount = 0;
   let bookDrawerBodyRenderCount = 0;
@@ -30,7 +35,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     set innerHTML(markup) { fullRenderCount += 1; contentMarkup = markup; },
     addEventListener: (eventName, handler) => { contentListeners[eventName] = handler; },
     insertAdjacentHTML: (_position, markup) => { contentMarkup += markup; },
-    querySelector: (selector) => selector === '[data-action="pdf-library-search"]' ? searchInput : null
+    querySelector: (selector) => selector === '[data-action="pdf-library-search"]' ? searchInput : selector === "[data-brand-list]" ? brandList : null
   };
   const introWorkspace = {
     set outerHTML(markup) {
@@ -137,7 +142,7 @@ const pdfLibrarySnapshot = () => ({
       bookId: { value: "Book Alpha" }, workspaceStatus: "Completed", lastRunAt: "2026-08-25T10:00:00Z", interiorSourcePageCount: 40, activeInteriorSourcePageCount: 40,
       validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
       outputSummaries: [
-        { artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Interior.pdf", fileName: "Book Alpha - Interior.pdf", verificationStatus: "Verified", generatedAt: "2026-08-25T10:00:00Z", pageCount: 80, widthInches: 8.5, heightInches: 8.5, fileSizeBytes: 80 * 1024 * 1024 },
+        { artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Interior.pdf", fileName: "Book Alpha - Interior.pdf", verificationStatus: "Verified", generatedAt: "2026-08-25T10:00:00Z", pageCount: 80, widthInches: 8.626666666666667, heightInches: 8.75, fileSizeBytes: 80 * 1024 * 1024 },
         { artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Cover.pdf", fileName: "Book Alpha - Cover.pdf", verificationStatus: "Verified", generatedAt: "2026-08-25T10:00:00Z", pageCount: 1, widthInches: 17, heightInches: 11, fileSizeBytes: 12 * 1024 * 1024 }
       ]
     },
@@ -279,7 +284,8 @@ test("snapshot rendering opens the Book Library and keeps discovery and brand da
       command: "app.snapshot",
       payload: {
         discovery: { paths: { root: { value: "D:/PrintableBook" } }, brands: [{ name: "Amazon" }], books: [{ name: "Book 001" }] },
-        globalSettings: { maximumPageConcurrency: 6, dpi: 300 }
+        globalSettings: { maximumPageConcurrency: 6, dpi: 300 },
+        brandSummaries: [{ brandName: "Amazon", validationStatus: "Validated" }]
       }
     }
   });
@@ -291,6 +297,38 @@ test("snapshot rendering opens the Book Library and keeps discovery and brand da
   assert.match(content.innerHTML, /Book 001/);
   assert.match(content.innerHTML, /Process Interior/);
   assert.doesNotMatch(content.innerHTML, /Paths \(Read Only\)/);
+});
+
+test("global Brand selector offers only validated Brands after refresh", () => {
+  const { messageHandler, brandSelect, contentListeners, messages } = loadBridge("brands");
+  messageHandler({ data: { version: 1, id: "brand-selector", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [{ name: "Validated Brand" }, { name: "Needs validation Brand" }, { name: "Unreadable Brand" }], books: [] },
+    brandSummaries: [
+      { brandName: "Validated Brand", validationStatus: "Validated" },
+      { brandName: "Needs validation Brand", validationStatus: "NeedsValidation" },
+      { brandName: "Unreadable Brand", validationStatus: "NotValidated" }
+    ]
+  } } });
+
+  assert.match(brandSelect.innerHTML, /Validated Brand/);
+  assert.doesNotMatch(brandSelect.innerHTML, /Needs validation Brand/);
+  assert.doesNotMatch(brandSelect.innerHTML, /Unreadable Brand/);
+  assert.equal(brandSelect.value, "Validated Brand");
+
+  const inspectUnvalidated = { dataset: { action: "select-brand", brandName: "Needs validation Brand" }, closest: () => inspectUnvalidated };
+  contentListeners.click({ target: inspectUnvalidated });
+  assert.equal(brandSelect.value, "Validated Brand", "inspecting a failed Brand must not change the active Brand");
+  const validate = { dataset: { action: "validate-brand" }, closest: () => validate };
+  contentListeners.click({ target: validate });
+  assert.deepEqual(messages.at(-1).payload, { brandName: "Needs validation Brand" });
+
+  messageHandler({ data: { version: 1, id: "brand-selector-empty", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [{ name: "Validated Brand" }], books: [] },
+    brandSummaries: [{ brandName: "Validated Brand", validationStatus: "NeedsValidation" }]
+  } } });
+
+  assert.match(brandSelect.innerHTML, /No validated brands/);
+  assert.equal(brandSelect.value, "");
 });
 
 test("startup update dialog renders only actionable available, active, ready, and retry states", () => {
@@ -594,11 +632,11 @@ test("an initial refresh failure shows a retryable load failure panel", () => {
 test("phase 4 page markup includes the interior-only processing workflow", () => {
   const script = readFileSync(appScriptPath, "utf8");
 
-  for (const state of ["Selected queue", "Process Interior", "Settings saved", "Brand settings", "Interior processing", "Current stage", "Elapsed", "Interior settings"]) {
+  for (const state of ["Selected queue", "Process Interior", "Settings saved", "Interior processing", "Current stage", "Elapsed", "Interior settings"]) {
     assert.match(script, new RegExp(state));
   }
   assert.match(script, /send\("settings\.save"/);
-  assert.match(script, /send\("brand\.settings\.save"/);
+  assert.doesNotMatch(script, /brand\.settings/);
   assert.match(script, /send\("book\.validate"/);
   assert.match(script, /send\("process\.start"/);
   assert.match(script, /mode: "interior-only"/);
@@ -607,39 +645,10 @@ test("phase 4 page markup includes the interior-only processing workflow", () =>
   assert.match(script, /"Interrupted"/);
 });
 
-test("saved brand settings survive the application refresh", () => {
-  const { messageHandler, contentListeners, messages, brandSettingsEditor, content } = loadBridge("brands");
-  const oldJson = "{\"frame\":false}";
-  const newJson = "{\"frame\":true}";
-
-  messageHandler({ data: { version: 1, id: "initial-refresh", ok: true, command: "app.snapshot", payload: {
-    discovery: { brands: [{ name: "Brand One", assets: [] }], books: [] }, globalSettings: {}, bookSummaries: []
-  } } });
-  messageHandler({ data: { version: 1, id: "brand-get", ok: true, command: "brand.settings", payload: oldJson } });
-  brandSettingsEditor.value = newJson;
-  contentListeners.input({ target: brandSettingsEditor });
-
-  const save = { dataset: { action: "save-brand-settings" }, closest: () => save };
-  contentListeners.click({ target: save });
-
-  const saveRequest = messages.at(-1);
-  assert.equal(saveRequest.command, "brand.settings.save");
-  assert.equal(saveRequest.payload.json, newJson);
-
-  messageHandler({ data: { version: 1, id: saveRequest.id, ok: true, command: "brand.settings.saved", payload: newJson } });
-  assert.equal(messages.at(-1).command, "app.refresh");
-
-  messageHandler({ data: { version: 1, id: "refresh-result", ok: true, command: "app.snapshot", payload: {
-    discovery: { brands: [{ name: "Brand One", assets: [] }], books: [] }, globalSettings: {}, bookSummaries: []
-  } } });
-
-  assert.match(content.innerHTML, /frame.*true/);
-});
-
 test("Brands displays certification state and validates the selected Brand", () => {
-  const { messageHandler, content, contentListeners, messages } = loadBridge("brands");
+  const { messageHandler, content, contentListeners, getFullRenderCount, messages } = loadBridge("brands");
   messageHandler({ data: { version: 1, id: "initial-refresh", ok: true, command: "app.snapshot", payload: {
-    discovery: { brands: [{ name: "Brand One", assets: [] }, { name: "Brand Two", assets: [] }], books: [] }, globalSettings: {}, bookSummaries: [],
+    discovery: { brands: [{ name: "Brand One", assets: [{ name: "IntroTemplate", type: "Folder", status: "Present", entries: [{ name: "intro.png", extension: ".png", size: { width: 1500, height: 1500 }, status: "Present" }] }, { name: "frame.png", type: "Image", status: "Present", extension: ".png", size: { width: 2270, height: 2270 } }, { name: "background.png", type: "Image", status: "Present", extension: ".png", size: { width: 2588, height: 2625 } }] }, { name: "Brand Two", assets: [] }], books: [] }, globalSettings: { artworkMaximumSide: 2270, finalPageWidth: 2588, finalPageHeight: 2625 }, brandImageSizeRequirements: [{ target: "IntroTemplate", allowedSizes: [{ width: 1024, height: 1024 }, { width: 2048, height: 2048 }, { width: 2588, height: 2625 }] }, { target: "frame.png", allowedSizes: [{ width: 2270, height: 2270 }] }, { target: "background.png", allowedSizes: [{ width: 2588, height: 2625 }] }], bookSummaries: [],
     brandSummaries: [{ brandName: "Brand One", validationStatus: 2 }, { brandName: "Brand Two", validationStatus: 0 }]
   } } });
 
@@ -651,12 +660,27 @@ test("Brands displays certification state and validates the selected Brand", () 
   assert.equal(messages.at(-1).payload.brandName, "Brand One");
 
   const request = messages.at(-1);
-  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "brand.validation.result", payload: { isSuccess: false, failures: [{ message: "frame.png is missing" }] } } });
-  assert.match(content.innerHTML, /frame\.png is missing/);
+  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "brand.validation.result", payload: { isSuccess: false, failures: [{ target: "IntroTemplate/intro.png", message: "Image is 1500 × 1500 px. Required size: 1024 × 1024 px, 2048 × 2048 px, 2588 × 2625 px." }] } } });
+  assert.match(content.innerHTML, /Fix these Brand assets/);
+  assert.match(content.innerHTML, /IntroTemplate\/intro\.png/);
+  assert.match(content.innerHTML, /1500 × 1500 px/);
+  assert.match(content.innerHTML, /Name<\/th><th>Extension<\/th><th>Size<\/th><th>Status/);
+  assert.match(content.innerHTML, /Required size/);
+  assert.match(content.innerHTML, /<dt>Required size<\/dt><dd>2270 × 2270 px<\/dd>/);
+  assert.match(content.innerHTML, /<dt>Required size<\/dt><dd>2588 × 2625 px<\/dd>/);
+  assert.match(content.innerHTML, /Search Brands/);
+  assert.doesNotMatch(content.innerHTML, /Template settings/);
+
+  const rendersBeforeSearch = getFullRenderCount();
+  const brandSearch = { dataset: { action: "filter-brands" }, value: "Two" };
+  contentListeners.input({ target: brandSearch });
+  assert.equal(getFullRenderCount(), rendersBeforeSearch, "Brand search must update only its result list");
+  assert.match(content.innerHTML, /Brand Two/);
+  assert.doesNotMatch(content.innerHTML, /Brand One<\/span>/);
 
   const selectSecondBrand = { dataset: { action: "select-brand", brandName: "Brand Two" }, closest: () => selectSecondBrand };
   contentListeners.click({ target: selectSecondBrand });
-  assert.doesNotMatch(content.innerHTML, /frame\.png is missing/);
+  assert.doesNotMatch(content.innerHTML, /Fix these Brand assets/);
 
   messageHandler({ data: { version: 1, id: request.id, ok: true, command: "brand.validation.result", payload: { isSuccess: true, failures: [] } } });
   assert.equal(messages.at(-1).command, "app.refresh");
@@ -1123,6 +1147,7 @@ test("Interior settings pages Intro templates without redrawing the Book drawer"
   messageHandler({ data: { version: 1, id: "intro-page", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Demo", introTemplateAssets: templates }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
+    brandSummaries: [{ brandName: "Demo", validationStatus: "Validated" }],
     bookSummaries: [{ bookId: { value: "Book 001" }, hasIntro: false, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [] }]
   } } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
@@ -1206,6 +1231,7 @@ test("Automatic Intro template preview dimensions gate the current Brand readine
   messageHandler({ data: { version: 1, id: "intro-dimensions", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Demo", introTemplateAssets: [{ key: "intro.png", fileName: "intro.png", localImageUrl: "file:///intro.png" }] }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
+    brandSummaries: [{ brandName: "Demo", validationStatus: "Validated" }],
     bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Ready", hasIntro: false, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [] }]
   } } });
   const open = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => open };
@@ -1305,6 +1331,8 @@ test("PDF Library groups current Cover and Interior PDFs under one Book", () => 
   assert.match(alphaMarkup, />Open</);
   assert.match(alphaMarkup, />Reveal</);
   assert.match(alphaMarkup, />Copy</);
+  assert.match(alphaMarkup, /8\.63 × 8\.75 in/);
+  assert.doesNotMatch(alphaMarkup, /8\.626666666666667/);
 });
 
 test("PDF Library uses Book-centric copy and removes run history language", () => {

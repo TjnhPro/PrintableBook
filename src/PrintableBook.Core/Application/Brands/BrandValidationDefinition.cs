@@ -22,6 +22,8 @@ public sealed record BrandFileExistsRule : BrandValidationRule;
 public sealed record BrandImageDimensionsRule(IReadOnlyList<ImageSize> AllowedSizes)
     : BrandValidationRule;
 
+public sealed record BrandImageSizeRequirement(string Target, IReadOnlyList<ImageSize> AllowedSizes);
+
 public sealed record BrandValidationEntry(
     string Key,
     BrandValidationTarget Target,
@@ -68,4 +70,15 @@ public sealed record BrandValidationDefinition(
                     ])
             ]);
     }
+
+    public static IReadOnlyList<BrandImageSizeRequirement> GetImageSizeRequirements(GlobalSettings settings) =>
+        CreateCurrent(settings).Entries
+            .Select(entry => new
+            {
+                entry.Target.RelativePath,
+                Rule = entry.Rules.OfType<BrandImageDimensionsRule>().SingleOrDefault()
+            })
+            .Where(entry => entry.Rule is not null)
+            .Select(entry => new BrandImageSizeRequirement(entry.RelativePath, entry.Rule!.AllowedSizes))
+            .ToArray();
 }

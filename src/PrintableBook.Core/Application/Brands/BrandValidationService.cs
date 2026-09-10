@@ -61,7 +61,14 @@ public sealed class BrandValidationService(
                             try
                             {
                                 var size = await imageInspector.GetSizeAsync(file, cancellationToken);
-                                if (!dimensionRule.AllowedSizes.Contains(size)) failures.Add(new(BrandValidationTargetResolver.NormalizeRelativePath(brandDirectory, file), "dimensions", "brand_image_dimensions_invalid", "Brand image dimensions do not match the required size."));
+                                if (!dimensionRule.AllowedSizes.Contains(size))
+                                {
+                                    failures.Add(new(
+                                        BrandValidationTargetResolver.NormalizeRelativePath(brandDirectory, file),
+                                        "dimensions",
+                                        "brand_image_dimensions_invalid",
+                                        $"Image is {DescribeSize(size)}. Required size: {DescribeAllowedSizes(dimensionRule.AllowedSizes)}."));
+                                }
                             }
                             catch (OperationCanceledException)
                             {
@@ -87,4 +94,10 @@ public sealed class BrandValidationService(
         await stateStore.SaveAsync(brandDirectory, record, cancellationToken);
         return new(new(BrandValidationStatus.Validated, record.ValidatedAtUtc, fingerprint), []);
     }
+
+    private static string DescribeAllowedSizes(IReadOnlyList<ImageSize> sizes) => string.Join(
+        ", ",
+        sizes.OrderBy(size => size.Width).ThenBy(size => size.Height).Select(DescribeSize));
+
+    private static string DescribeSize(ImageSize size) => $"{size.Width} × {size.Height} px";
 }

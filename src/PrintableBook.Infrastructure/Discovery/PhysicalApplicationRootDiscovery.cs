@@ -6,7 +6,7 @@ using PrintableBook.Core.Domain.Books;
 
 namespace PrintableBook.Infrastructure.Discovery;
 
-public sealed class PhysicalApplicationRootDiscovery(IFileSystem fileSystem, IBookWorkspaceFactory workspaceFactory, Func<string>? baseDirectoryProvider = null) : IApplicationRootDiscovery
+public sealed class PhysicalApplicationRootDiscovery(IFileSystem fileSystem, IBookWorkspaceFactory workspaceFactory, Func<string>? baseDirectoryProvider = null, IImageInspector? imageInspector = null) : IApplicationRootDiscovery
 {
     public async ValueTask<ApplicationDiscovery> DiscoverAsync(CancellationToken cancellationToken = default)
     {
@@ -39,21 +39,65 @@ public sealed class PhysicalApplicationRootDiscovery(IFileSystem fileSystem, IBo
         {
             ("IntroTemplate", "Folder", true),
             ("AppPlus", "Folder", true),
-            ("BackCover.psd", "File", false),
             ("frame.png", "Image", false),
-            ("background.png", "Image", false),
-            ("brand.json", "Settings", false)
+            ("background.png", "Image", false)
         };
         var assets = new List<DiscoveredBrandAsset>(candidates.Length);
         foreach (var (name, type, isDirectory) in candidates)
         {
             var path = Path.Combine(brandDirectory.Value, name);
-            var exists = isDirectory
-                ? await fileSystem.DirectoryExistsAsync(new DirectoryReference(path), cancellationToken)
-                : await fileSystem.FileExistsAsync(new FileReference(path), cancellationToken);
-            assets.Add(new DiscoveredBrandAsset(name, type, exists ? "Present" : "Missing", path));
+            if (isDirectory)
+            {
+                var directory = new DirectoryReference(path);
+                var folderExists = await fileSystem.DirectoryExistsAsync(directory, cancellationToken);
+                assets.Add(new DiscoveredBrandAsset(name, type, folderExists ? "Present" : "Missing", path, Entries: folderExists ? await DiscoverFolderEntriesAsync(directory, cancellationToken) : []));
+                continue;
+            }
+
+            var file = new FileReference(path);
+            var exists = await fileSystem.FileExistsAsync(file, cancellationToken);
+            var (size, canRead) = exists ? await TryReadImageSizeAsync(file, cancellationToken) : (null, true);
+            assets.Add(new DiscoveredBrandAsset(name, type, !exists ? "Missing" : canRead ? "Present" : "Unreadable", path, Path.GetExtension(name), size));
         }
         return assets;
+    }
+
+    private async ValueTask<IReadOnlyList<DiscoveredBrandAssetEntry>> DiscoverFolderEntriesAsync(DirectoryReference directory, CancellationToken cancellationToken)
+    {
+        var files = new List<FileReference>();
+        await CollectFilesAsync(directory, files, cancellationToken);
+        var entries = new List<DiscoveredBrandAssetEntry>(files.Count);
+        foreach (var file in files)
+        {
+            var (size, canRead) = await TryReadImageSizeAsync(file, cancellationToken);
+            entries.Add(new(
+                IntroTemplateSourceKey.FromTemplateRoot(directory, file),
+                Path.GetExtension(file.Value),
+                size,
+                canRead ? "Present" : "Unreadable"));
+        }
+
+        return entries
+            .OrderBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private async ValueTask<(ImageSize? Size, bool CanRead)> TryReadImageSizeAsync(FileReference file, CancellationToken cancellationToken)
+    {
+        if (imageInspector is null || !BrandValidationDefinition.SupportedIntroExtensions.Contains(Path.GetExtension(file.Value))) return (null, true);
+
+        try
+        {
+            return (await imageInspector.GetSizeAsync(file, cancellationToken), true);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return (null, false);
+        }
     }
 
     private async ValueTask<IReadOnlyList<DiscoveredIntroTemplateAsset>> DiscoverIntroTemplateAssetsAsync(DirectoryReference brandDirectory, CancellationToken cancellationToken)
@@ -62,8 +106,10 @@ public sealed class PhysicalApplicationRootDiscovery(IFileSystem fileSystem, IBo
         if (!await fileSystem.DirectoryExistsAsync(templateDirectory, cancellationToken)) return [];
 
         var files = new List<FileReference>();
-        await CollectIntroImagesAsync(templateDirectory, files, cancellationToken);
-        var assets = files.Select(source => new DiscoveredIntroTemplateAsset(
+        await CollectFilesAsync(templateDirectory, files, cancellationToken);
+        var assets = files
+            .Where(source => BrandValidationDefinition.SupportedIntroExtensions.Contains(Path.GetExtension(source.Value)))
+            .Select(source => new DiscoveredIntroTemplateAsset(
             IntroTemplateSourceKey.FromTemplateRoot(templateDirectory, source),
             source.Value,
             Path.GetFileName(source.Value),
@@ -75,15 +121,9 @@ public sealed class PhysicalApplicationRootDiscovery(IFileSystem fileSystem, IBo
             .ToArray();
     }
 
-    private async ValueTask CollectIntroImagesAsync(DirectoryReference directory, List<FileReference> files, CancellationToken cancellationToken)
+    private async ValueTask CollectFilesAsync(DirectoryReference directory, List<FileReference> files, CancellationToken cancellationToken)
     {
-        await foreach (var file in fileSystem.EnumerateFilesAsync(directory, cancellationToken))
-        {
-            if (BrandValidationDefinition.SupportedIntroExtensions.Contains(Path.GetExtension(file.Value))) files.Add(file);
-        }
-        await foreach (var child in fileSystem.EnumerateDirectoriesAsync(directory, cancellationToken))
-        {
-            await CollectIntroImagesAsync(child, files, cancellationToken);
-        }
+        await foreach (var file in fileSystem.EnumerateFilesAsync(directory, cancellationToken)) files.Add(file);
+        await foreach (var child in fileSystem.EnumerateDirectoriesAsync(directory, cancellationToken)) await CollectFilesAsync(child, files, cancellationToken);
     }
 }
