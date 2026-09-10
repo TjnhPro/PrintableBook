@@ -246,6 +246,23 @@ public sealed class ProcessingSessionWorkerTests
     }
 
     [Fact]
+    public async Task Marks_only_final_sized_automatic_brand_intro_pages_for_direct_pdf_assembly()
+    {
+        var application = new Application();
+        var finalPage = new FileReference(Path.Combine("brand", "IntroTemplate", "intro.png"));
+        IBackgroundTaskWorker worker = CreateWorker(
+            new Provider(Snapshot()),
+            application,
+            new FrameResolver(),
+            new FileSystem(),
+            new ImageInspector(introTemplateSize: new ImageSize(2588, 2625)));
+
+        await worker.ExecuteAsync(Request(), new Context(), CancellationToken.None);
+
+        Assert.Contains(finalPage, Assert.Single(application.Request!.Books).EffectiveFinalIntroTemplatePages);
+    }
+
+    [Fact]
     public async Task Resolves_custom_book_interior_intro_pages_in_the_saved_order()
     {
         var initial = Snapshot();
@@ -364,7 +381,7 @@ public sealed class ProcessingSessionWorkerTests
         public ValueTask DeleteDirectoryAsync(DirectoryReference directory, bool recursive, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 
-    private sealed class ImageInspector(ImageSize? size = null, Exception? exception = null) : IImageInspector
+    private sealed class ImageInspector(ImageSize? size = null, Exception? exception = null, ImageSize? introTemplateSize = null) : IImageInspector
     {
         public ImageInspector(Exception exception) : this(null, exception) { }
         public int Calls { get; private set; }
@@ -372,7 +389,8 @@ public sealed class ProcessingSessionWorkerTests
         {
             Calls++;
             if (exception is not null) throw exception;
-            if (image.Value.Contains("IntroTemplate", StringComparison.OrdinalIgnoreCase) || image.Value.Contains("Book interior", StringComparison.OrdinalIgnoreCase)) return ValueTask.FromResult(new ImageSize(1024, 1024));
+            if (image.Value.Contains("IntroTemplate", StringComparison.OrdinalIgnoreCase)) return ValueTask.FromResult(introTemplateSize ?? new ImageSize(1024, 1024));
+            if (image.Value.Contains("Book interior", StringComparison.OrdinalIgnoreCase)) return ValueTask.FromResult(new ImageSize(1024, 1024));
             return ValueTask.FromResult(size ?? new ImageSize(GlobalSettings.Default.FinalPageWidth, GlobalSettings.Default.FinalPageHeight));
         }
         public ValueTask<ImageInfo> GetInfoAsync(FileReference image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
