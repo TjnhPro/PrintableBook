@@ -42,7 +42,7 @@ public sealed class BrandValidationDefinitionTests
 
         var definition = BrandValidationDefinition.CreateCurrent(settings);
 
-        Assert.Equal([new ImageSize(1024, 1024), new ImageSize(2048, 2048)], GetDimensions(definition, "intro"));
+        Assert.Equal([new ImageSize(1024, 1024), new ImageSize(2048, 2048), new ImageSize(2500, 2600)], GetDimensions(definition, "intro"));
         Assert.Equal([new ImageSize(2000, 2000)], GetDimensions(definition, "frame"));
         Assert.Equal([new ImageSize(2500, 2600)], GetDimensions(definition, "background"));
     }
@@ -53,7 +53,7 @@ public sealed class BrandValidationDefinitionTests
         var definition = BrandValidationDefinition.CreateCurrent(GlobalSettings.Default);
 
         Assert.Equal(
-            new DateTimeOffset(2026, 8, 31, 4, 32, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 9, 10, 0, 0, 0, TimeSpan.Zero),
             definition.DefinitionChangedAtUtc);
     }
 
