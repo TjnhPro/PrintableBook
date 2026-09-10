@@ -451,7 +451,21 @@
       const requirement = valueFor(window.appSnapshot, "brandImageSizeRequirements", [])
         .find((item) => valueFor(item, "target", "") === name);
       const allowedSizes = valueFor(requirement, "allowedSizes", []);
-      return allowedSizes.length ? allowedSizes.map(size).join(", ") : "Validate Brand to confirm the required size";
+      if (allowedSizes.length) return allowedSizes.map(size).join(", ");
+
+      // The desktop may show a cached snapshot while its host finishes loading.
+      // These two file contracts are direct projections of global settings.
+      const settings = valueFor(window.appSnapshot, "globalSettings", {});
+      if (name === "frame.png") {
+        const maximumSide = valueFor(settings, "artworkMaximumSide", null);
+        return maximumSide ? `${maximumSide} × ${maximumSide} px` : "—";
+      }
+      if (name === "background.png") {
+        const width = valueFor(settings, "finalPageWidth", null);
+        const height = valueFor(settings, "finalPageHeight", null);
+        return width && height ? `${width} × ${height} px` : "—";
+      }
+      return "Validate Brand to confirm the required size";
     };
     const validationMessage = validationResult && !valueFor(validationResult, "isSuccess", false)
       ? `<section class="brand-validation-summary" role="alert" tabindex="-1" data-brand-validation-summary aria-labelledby="brand-validation-title"><h3 id="brand-validation-title">Fix these Brand assets</h3><p>Each item names the file, its current size, and the size required before processing.</p><ul>${validationFailures.map((failure) => `<li><strong>${escapeHtml(valueFor(failure, "target", "Brand asset"))}</strong><span>${escapeHtml(valueFor(failure, "message", "Validation failed."))}</span></li>`).join("")}</ul></section>`
