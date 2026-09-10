@@ -3,14 +3,14 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "auto", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { selectedBrand: "", inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "auto", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
   const discovery = () => valueFor(window.appSnapshot, "discovery", {});
   const books = () => valueFor(discovery(), "books", []);
   const brands = () => valueFor(discovery(), "brands", []);
-  const activeBrand = () => brands().find((brand) => valueFor(brand, "name", "") === (state.selectedBrand || brandSelect?.value || "")) ?? null;
+  const activeBrand = () => selectableBrands().find((brand) => valueFor(brand, "name", "") === (state.selectedBrand || brandSelect?.value || "")) ?? null;
   const summaries = () => valueFor(window.appSnapshot, "bookSummaries", []);
   const bookId = (book) => valueFor(valueFor(book, "id", {}), "value", valueFor(book, "name", ""));
   const summaryFor = (book) => summaries().find((summary) => valueFor(valueFor(summary, "bookId", {}), "value", "") === bookId(book));
@@ -39,6 +39,8 @@
   const brandValidationStatus = (value) => typeof value === "number" ? ["Not validated", "Validated", "Needs validation"][value] ?? "Not validated" : String(value ?? "NotValidated").replace(/([a-z])([A-Z])/g, "$1 $2");
   const brandSummaries = () => valueFor(window.appSnapshot, "brandSummaries", []);
   const brandSummaryFor = (brand) => brandSummaries().find((summary) => valueFor(summary, "brandName", "") === valueFor(brand, "name", ""));
+  const isValidatedBrand = (brand) => brandValidationStatus(valueFor(brandSummaryFor(brand), "validationStatus", "NotValidated")) === "Validated";
+  const selectableBrands = () => brands().filter(isValidatedBrand);
   const frameModeValue = (value) => {
     if (typeof value === "number") return ["auto", "enabled", "disabled"][value] ?? "auto";
     const normalized = String(value ?? "auto").toLowerCase();
@@ -423,7 +425,7 @@
   };
 
   const brandListMarkup = (brands) => brands.length
-    ? brands.map((brand) => `<li class="${valueFor(brand, "name", "") === state.selectedBrand ? "selected" : ""}" data-action="select-brand" data-brand-name="${escapeHtml(valueFor(brand, "name", ""))}"><span>${escapeHtml(valueFor(brand, "name", ""))}</span>${badge(brandValidationStatus(valueFor(brandSummaryFor(brand), "validationStatus", "NotValidated")))}</li>`).join("")
+    ? brands.map((brand) => `<li class="${valueFor(brand, "name", "") === state.inspectedBrand ? "selected" : ""}" data-action="select-brand" data-brand-name="${escapeHtml(valueFor(brand, "name", ""))}"><span>${escapeHtml(valueFor(brand, "name", ""))}</span>${badge(brandValidationStatus(valueFor(brandSummaryFor(brand), "validationStatus", "NotValidated")))}</li>`).join("")
     : "<li class=\"empty-row\">No matching Brands found.</li>";
   const refreshBrandList = () => {
     const search = state.brandFilter.trim().toLocaleLowerCase();
@@ -434,14 +436,14 @@
 
   const renderBrands = () => {
     const availableBrands = valueFor(discovery(), "brands", []);
-    if (!state.selectedBrand && availableBrands.length) state.selectedBrand = valueFor(availableBrands[0], "name", "");
-    const selected = availableBrands.find((brand) => valueFor(brand, "name", "") === state.selectedBrand);
+    if (!state.inspectedBrand && availableBrands.length) state.inspectedBrand = valueFor(availableBrands[0], "name", "");
+    const selected = availableBrands.find((brand) => valueFor(brand, "name", "") === state.inspectedBrand);
     const search = state.brandFilter.trim().toLocaleLowerCase();
     const allBrands = availableBrands.filter((brand) => !search || valueFor(brand, "name", "").toLocaleLowerCase().includes(search));
     const assets = valueFor(selected, "assets", []);
     const selectedValidation = brandSummaryFor(selected);
     const validationStatus = brandValidationStatus(valueFor(selectedValidation, "validationStatus", "NotValidated"));
-    const validationResult = valueFor(state.brandValidationResult, "brandName", "") === state.selectedBrand ? state.brandValidationResult : null;
+    const validationResult = valueFor(state.brandValidationResult, "brandName", "") === state.inspectedBrand ? state.brandValidationResult : null;
     const validationFailures = valueFor(validationResult, "failures", []);
     const size = (asset) => {
       const value = valueFor(asset, "size", null);
@@ -1016,8 +1018,8 @@
     if (action === "refresh" || action === "validate-all") beginApplicationRefresh();
     if (action === "refresh-diagnostics") { send("diagnostics.get"); send("task.list"); }
     if (action === "save-settings") { const payload = {}; document.querySelectorAll("[data-setting]").forEach((input) => { const group = input.dataset.settingGroup; if (group) { payload[group] ??= {}; payload[group][input.dataset.setting] = Number(input.value); } else payload[input.dataset.setting] = Number(input.value); }); send("settings.save", payload); }
-    if (action === "select-brand") { state.selectedBrand = target.dataset.brandName; state.brandValidationResult = null; if (brandSelect) brandSelect.value = state.selectedBrand; render("brands"); }
-    if (action === "validate-brand") { const requestId = send("brand.validate", { brandName: state.selectedBrand }); state.brandValidationRequestBrands.set(requestId, state.selectedBrand); }
+    if (action === "select-brand") { state.inspectedBrand = target.dataset.brandName; state.brandValidationResult = null; render("brands"); }
+    if (action === "validate-brand") { const requestId = send("brand.validate", { brandName: state.inspectedBrand }); state.brandValidationRequestBrands.set(requestId, state.inspectedBrand); }
     if (action === "select-book" || action === "open-book-detail") openBookDrawer(target.dataset.bookId);
     if (action === "close-book-drawer") closeBookDrawer();
     if (action === "save-book-interior-settings" && !state.bookInteriorSavePending) {
@@ -1153,7 +1155,7 @@
       const blocked = [...state.selectedBookIds].map((id) => books().find((book) => bookId(book) === id)).filter(Boolean).map((book) => ({ book, readiness: processingReadiness(book, summaryFor(book)) })).find((item) => !item.readiness.ready);
       if (blocked) { status.textContent = `${valueFor(blocked.book, "name", "Book")}: ${blocked.readiness.reason}`; return; }
       state.processStartPending = true;
-      send("process.start", { bookIds: [...state.selectedBookIds], brandName: state.selectedBrand || brandSelect?.value || null, mode: "interior-only" });
+      send("process.start", { bookIds: [...state.selectedBookIds], brandName: valueFor(activeBrand(), "name", null), mode: "interior-only" });
     }
     if (action === "cancel-process") send("process.cancel");
     if (action === "open-output") send("book.output.open", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
@@ -1245,8 +1247,10 @@
       state.libraryRefreshTaskId = "";
       state.libraryRefreshResultRequested = false;
       const allBrands = valueFor(discovery(), "brands", []);
-      if (!state.selectedBrand && allBrands.length) state.selectedBrand = valueFor(allBrands[0], "name", "");
-      if (brandSelect) brandSelect.innerHTML = allBrands.length ? allBrands.map((brand) => `<option>${escapeHtml(valueFor(brand, "name", ""))}</option>`).join("") : "<option>No brands</option>";
+      const availableBrands = allBrands.filter(isValidatedBrand);
+      if (!availableBrands.some((brand) => valueFor(brand, "name", "") === state.selectedBrand)) state.selectedBrand = valueFor(availableBrands[0], "name", "");
+      if (!allBrands.some((brand) => valueFor(brand, "name", "") === state.inspectedBrand)) state.inspectedBrand = valueFor(allBrands[0], "name", "");
+      if (brandSelect) brandSelect.innerHTML = availableBrands.length ? availableBrands.map((brand) => `<option>${escapeHtml(valueFor(brand, "name", ""))}</option>`).join("") : "<option value=\"\">No validated brands</option>";
       if (brandSelect) brandSelect.value = state.selectedBrand;
       if (preserveBookDrawer) {
         if (state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();

@@ -284,7 +284,8 @@ test("snapshot rendering opens the Book Library and keeps discovery and brand da
       command: "app.snapshot",
       payload: {
         discovery: { paths: { root: { value: "D:/PrintableBook" } }, brands: [{ name: "Amazon" }], books: [{ name: "Book 001" }] },
-        globalSettings: { maximumPageConcurrency: 6, dpi: 300 }
+        globalSettings: { maximumPageConcurrency: 6, dpi: 300 },
+        brandSummaries: [{ brandName: "Amazon", validationStatus: "Validated" }]
       }
     }
   });
@@ -296,6 +297,38 @@ test("snapshot rendering opens the Book Library and keeps discovery and brand da
   assert.match(content.innerHTML, /Book 001/);
   assert.match(content.innerHTML, /Process Interior/);
   assert.doesNotMatch(content.innerHTML, /Paths \(Read Only\)/);
+});
+
+test("global Brand selector offers only validated Brands after refresh", () => {
+  const { messageHandler, brandSelect, contentListeners, messages } = loadBridge("brands");
+  messageHandler({ data: { version: 1, id: "brand-selector", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [{ name: "Validated Brand" }, { name: "Needs validation Brand" }, { name: "Unreadable Brand" }], books: [] },
+    brandSummaries: [
+      { brandName: "Validated Brand", validationStatus: "Validated" },
+      { brandName: "Needs validation Brand", validationStatus: "NeedsValidation" },
+      { brandName: "Unreadable Brand", validationStatus: "NotValidated" }
+    ]
+  } } });
+
+  assert.match(brandSelect.innerHTML, /Validated Brand/);
+  assert.doesNotMatch(brandSelect.innerHTML, /Needs validation Brand/);
+  assert.doesNotMatch(brandSelect.innerHTML, /Unreadable Brand/);
+  assert.equal(brandSelect.value, "Validated Brand");
+
+  const inspectUnvalidated = { dataset: { action: "select-brand", brandName: "Needs validation Brand" }, closest: () => inspectUnvalidated };
+  contentListeners.click({ target: inspectUnvalidated });
+  assert.equal(brandSelect.value, "Validated Brand", "inspecting a failed Brand must not change the active Brand");
+  const validate = { dataset: { action: "validate-brand" }, closest: () => validate };
+  contentListeners.click({ target: validate });
+  assert.deepEqual(messages.at(-1).payload, { brandName: "Needs validation Brand" });
+
+  messageHandler({ data: { version: 1, id: "brand-selector-empty", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [{ name: "Validated Brand" }], books: [] },
+    brandSummaries: [{ brandName: "Validated Brand", validationStatus: "NeedsValidation" }]
+  } } });
+
+  assert.match(brandSelect.innerHTML, /No validated brands/);
+  assert.equal(brandSelect.value, "");
 });
 
 test("startup update dialog renders only actionable available, active, ready, and retry states", () => {
@@ -1114,6 +1147,7 @@ test("Interior settings pages Intro templates without redrawing the Book drawer"
   messageHandler({ data: { version: 1, id: "intro-page", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Demo", introTemplateAssets: templates }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
+    brandSummaries: [{ brandName: "Demo", validationStatus: "Validated" }],
     bookSummaries: [{ bookId: { value: "Book 001" }, hasIntro: false, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [] }]
   } } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
@@ -1197,6 +1231,7 @@ test("Automatic Intro template preview dimensions gate the current Brand readine
   messageHandler({ data: { version: 1, id: "intro-dimensions", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Demo", introTemplateAssets: [{ key: "intro.png", fileName: "intro.png", localImageUrl: "file:///intro.png" }] }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
+    brandSummaries: [{ brandName: "Demo", validationStatus: "Validated" }],
     bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Ready", hasIntro: false, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [] }]
   } } });
   const open = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => open };
