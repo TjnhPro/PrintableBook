@@ -445,12 +445,12 @@
     const validationStatus = brandValidationStatus(valueFor(selectedValidation, "validationStatus", "NotValidated"));
     const validationResult = valueFor(state.brandValidationResult, "brandName", "") === state.inspectedBrand ? state.brandValidationResult : null;
     const validationFailures = valueFor(validationResult, "failures", []);
-    const size = (asset) => {
-      const value = valueFor(asset, "size", null);
+    const dimensions = (value) => {
       const width = valueFor(value, "width", 0);
       const height = valueFor(value, "height", 0);
       return width && height ? `${width} × ${height} px` : "—";
     };
+    const size = (asset) => dimensions(valueFor(asset, "size", null));
     const targetFor = (asset, entry = null) => entry ? `${valueFor(asset, "name", "")}/${valueFor(entry, "name", "")}` : valueFor(asset, "name", "");
     const failureFor = (asset, entry = null) => validationFailures.find((failure) => String(valueFor(failure, "target", "")).replaceAll("\\", "/").toLocaleLowerCase() === targetFor(asset, entry).toLocaleLowerCase());
     const statusFor = (asset, entry = null) => {
@@ -463,7 +463,7 @@
       const requirement = valueFor(window.appSnapshot, "brandImageSizeRequirements", [])
         .find((item) => valueFor(item, "target", "") === name);
       const allowedSizes = valueFor(requirement, "allowedSizes", []);
-      if (allowedSizes.length) return allowedSizes.map(size).join(", ");
+      if (allowedSizes.length) return allowedSizes.map(dimensions).join(", ");
 
       // The desktop may show a cached snapshot while its host finishes loading.
       // These two file contracts are direct projections of global settings.
