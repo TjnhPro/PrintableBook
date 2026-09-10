@@ -38,11 +38,18 @@ const expected = [
   ,"book.output.open"
   ,"book.output.copy-path"
   ,"Brands & templates"
-  ,"Advanced JSON settings"
+  ,"Search Brands"
+  ,"Fix these Brand assets"
+  ,"Required image size"
+  ,"Current size"
 ];
 
 for (const value of expected) {
   if (!app.includes(value)) throw new Error(`Missing UI contract: ${value}`);
+}
+
+if (app.includes("Advanced JSON settings") || app.includes("brand.settings")) {
+  throw new Error("Removed Brand settings UI must not remain in the bridge contract.");
 }
 
 console.log(`UI contract passed (${expected.length} checks).`);

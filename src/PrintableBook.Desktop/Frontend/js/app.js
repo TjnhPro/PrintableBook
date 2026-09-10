@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
-  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandSettings: "{}", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "auto", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { selectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "auto", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -62,7 +62,7 @@
     if (modes.includes("disabled")) return "No frame";
     return "Auto";
   };
-  const statusClass = (value) => value === "Ready" || value === "Completed" || value === "Present" || value === "Validated" ? "status-good" : value === "Invalid" || value === "Failed" ? "status-bad" : value === "Needs selection" || value === "Needs validation" || value === "Running" ? "status-warn" : "status-muted";
+  const statusClass = (value) => value === "Ready" || value === "Completed" || value === "Present" || value === "Validated" ? "status-good" : value === "Invalid" || value === "Failed" || value === "Unreadable" || value === "Needs attention" ? "status-bad" : value === "Needs selection" || value === "Needs validation" || value === "Running" ? "status-warn" : "status-muted";
   const badge = (value) => { const label = displayStatus(value); return `<span class="status-badge ${statusClass(label)}">${escapeHtml(label)}</span>`; };
   const bookSelectIcon = (selected) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="17" height="17" rx="4"></rect>${selected ? '<path d="m7.5 12.5 3 3 6-7"></path>' : ""}</svg>`;
   const bookEditIcon = () => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m4 20 4.1-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"></path><path d="m13.7 7.3 3 3"></path></svg>';
@@ -419,20 +419,52 @@
   };
 
   const renderBrands = () => {
-    const allBrands = valueFor(discovery(), "brands", []);
-    if (!state.selectedBrand && allBrands.length) state.selectedBrand = valueFor(allBrands[0], "name", "");
-    const selected = allBrands.find((brand) => valueFor(brand, "name", "") === state.selectedBrand);
+    const availableBrands = valueFor(discovery(), "brands", []);
+    if (!state.selectedBrand && availableBrands.length) state.selectedBrand = valueFor(availableBrands[0], "name", "");
+    const selected = availableBrands.find((brand) => valueFor(brand, "name", "") === state.selectedBrand);
+    const search = state.brandFilter.trim().toLocaleLowerCase();
+    const allBrands = availableBrands.filter((brand) => !search || valueFor(brand, "name", "").toLocaleLowerCase().includes(search));
     const assets = valueFor(selected, "assets", []);
     const selectedValidation = brandSummaryFor(selected);
     const validationStatus = brandValidationStatus(valueFor(selectedValidation, "validationStatus", "NotValidated"));
-    const validationResult = valueFor(state.brandValidationResult, "brandName", "") === state.selectedBrand
-      ? state.brandValidationResult
-      : null;
+    const validationResult = valueFor(state.brandValidationResult, "brandName", "") === state.selectedBrand ? state.brandValidationResult : null;
     const validationFailures = valueFor(validationResult, "failures", []);
+    const size = (asset) => {
+      const value = valueFor(asset, "size", null);
+      const width = valueFor(value, "width", 0);
+      const height = valueFor(value, "height", 0);
+      return width && height ? `${width} × ${height} px` : "—";
+    };
+    const targetFor = (asset, entry = null) => entry ? `${valueFor(asset, "name", "")}/${valueFor(entry, "name", "")}` : valueFor(asset, "name", "");
+    const failureFor = (asset, entry = null) => validationFailures.find((failure) => String(valueFor(failure, "target", "")).replaceAll("\\", "/").toLocaleLowerCase() === targetFor(asset, entry).toLocaleLowerCase());
+    const statusFor = (asset, entry = null) => {
+      if (failureFor(asset, entry)) return "Needs attention";
+      if (!entry && validationFailures.some((failure) => String(valueFor(failure, "target", "")).replaceAll("\\", "/").toLocaleLowerCase().startsWith(`${targetFor(asset).toLocaleLowerCase()}/`))) return "Needs attention";
+      return valueFor(entry ?? asset, "status", "Missing");
+    };
+    const expectedSize = (asset) => {
+      const name = valueFor(asset, "name", "");
+      const settings = valueFor(window.appSnapshot, "globalSettings", {});
+      if (name === "IntroTemplate") return `1024 × 1024 px, 2048 × 2048 px, or ${valueFor(settings, "finalPageWidth", 2588)} × ${valueFor(settings, "finalPageHeight", 2625)} px`;
+      if (name === "frame.png") return `${valueFor(settings, "artworkMaximumSide", 2550)} × ${valueFor(settings, "artworkMaximumSide", 2550)} px`;
+      if (name === "background.png") return `${valueFor(settings, "finalPageWidth", 2588)} × ${valueFor(settings, "finalPageHeight", 2625)} px`;
+      return "No fixed size requirement";
+    };
     const validationMessage = validationResult && !valueFor(validationResult, "isSuccess", false)
-      ? `<ul class="validation-failures">${validationFailures.map((failure) => `<li>${escapeHtml(valueFor(failure, "message", "Validation failed."))}</li>`).join("")}</ul>`
+      ? `<section class="brand-validation-summary" role="alert" tabindex="-1" data-brand-validation-summary aria-labelledby="brand-validation-title"><h3 id="brand-validation-title">Fix these Brand assets</h3><p>Each item names the file, its current size, and the size required before processing.</p><ul>${validationFailures.map((failure) => `<li><strong>${escapeHtml(valueFor(failure, "target", "Brand asset"))}</strong><span>${escapeHtml(valueFor(failure, "message", "Validation failed."))}</span></li>`).join("")}</ul></section>`
       : "";
-    content.innerHTML = `<div class="page-header"><div><h1>Brands & templates</h1><p>Keep reusable local brand assets ready for each Book.</p></div></div><div class="master-detail"><section class="panel list-panel"><div class="list-title">Brands</div><ul class="item-list">${allBrands.length ? allBrands.map((brand) => `<li class="${valueFor(brand, "name", "") === state.selectedBrand ? "selected" : ""}" data-action="select-brand" data-brand-name="${escapeHtml(valueFor(brand, "name", ""))}"><span>${escapeHtml(valueFor(brand, "name", ""))}</span>${badge(brandValidationStatus(valueFor(brandSummaryFor(brand), "validationStatus", "NotValidated")))}</li>`).join("") : "<li class=\"empty-row\">No Brands found.</li>"}</ul></section><section class="detail-pane">${selected ? `${panel(escapeHtml(valueFor(selected, "name", "")), `<div class="page-actions"><div>${badge(validationStatus)}<p class="panel-note">Validate IntroTemplate, frame.png, and background.png before processing.</p></div><button class="button-primary" data-action="validate-brand" ${processIsActive() ? "disabled" : ""}>Validate Brand</button></div>${validationMessage}<div class="brand-asset-grid">${assets.map((asset) => `<div><strong>${escapeHtml(valueFor(asset, "name", ""))}</strong><small>${escapeHtml(valueFor(asset, "type", ""))}</small>${badge(valueFor(asset, "status", "Missing"))}</div>`).join("") || "<p class=\"empty-copy\">No brand assets found.</p>"}</div>`) }${panel("Template settings", `<p class="panel-note">These settings apply only to ${escapeHtml(valueFor(selected, "name", "this Brand"))}.</p><div class="page-actions mt-3"><button class="button-secondary" data-action="load-brand-settings">Load advanced settings</button></div><details class="advanced-settings"><summary>Advanced JSON settings</summary><textarea class="control settings-editor" data-brand-settings>${escapeHtml(state.brandSettings)}</textarea><div class="page-actions mt-3"><button class="button-primary" data-action="save-brand-settings">Save advanced settings</button></div></details>`)} ` : panel("Brand detail", "<p class=\"empty-copy\">Select a Brand to inspect its assets.</p>")}</section></div>`;
+    const renderFolder = (asset) => {
+      const entries = valueFor(asset, "entries", []);
+      return `<section class="brand-folder"><div class="brand-asset-heading"><div><h3>${escapeHtml(valueFor(asset, "name", ""))}</h3><p>${escapeHtml(valueFor(asset, "type", "Folder"))} · ${entries.length} file${entries.length === 1 ? "" : "s"}</p></div>${badge(statusFor(asset))}</div><table class="data-table brand-folder-table"><thead><tr><th>Name</th><th>Extension</th><th>Size</th><th>Status</th></tr></thead><tbody>${entries.length ? entries.map((entry) => { const failure = failureFor(asset, entry); return `<tr><td>${escapeHtml(valueFor(entry, "name", ""))}${failure ? `<small class="brand-asset-error">${escapeHtml(valueFor(failure, "message", "Validation failed."))}</small>` : ""}</td><td>${escapeHtml(valueFor(entry, "extension", "—") || "—")}</td><td>${escapeHtml(size(entry))}</td><td>${badge(statusFor(asset, entry))}</td></tr>`; }).join("") : "<tr><td colspan=\"4\" class=\"empty-copy\">No files found.</td></tr>"}</tbody></table>${valueFor(asset, "name", "") === "IntroTemplate" ? `<p class="brand-size-note">Required image size: ${expectedSize(asset)}.</p>` : ""}</section>`;
+    };
+    const renderFile = (asset) => {
+      const failure = failureFor(asset);
+      return `<article class="brand-file-card"><div class="brand-asset-heading"><div><h3>${escapeHtml(valueFor(asset, "name", ""))}</h3><p>${escapeHtml(valueFor(asset, "extension", "") || "Image")}</p></div>${badge(statusFor(asset))}</div><dl><div><dt>Current size</dt><dd>${escapeHtml(size(asset))}</dd></div><div><dt>Required size</dt><dd>${escapeHtml(expectedSize(asset))}</dd></div></dl>${failure ? `<p class="brand-asset-error">${escapeHtml(valueFor(failure, "message", "Validation failed."))}</p>` : ""}</article>`;
+    };
+    const folders = assets.filter((asset) => valueFor(asset, "type", "") === "Folder");
+    const files = assets.filter((asset) => valueFor(asset, "type", "") !== "Folder");
+    const assetInventory = assets.length ? `<div class="brand-asset-inventory"><div class="brand-folder-list">${folders.map(renderFolder).join("")}</div><div class="brand-file-grid">${files.map(renderFile).join("")}</div></div>` : "<p class=\"empty-copy\">No brand assets found.</p>";
+    content.innerHTML = `<div class="page-header"><div><h1>Brands & templates</h1><p>Inspect reusable Brand assets and resolve exact file requirements before processing.</p></div></div><div class="master-detail"><section class="panel list-panel"><label class="brand-search"><span>Search Brands</span><input class="control" data-action="filter-brands" value="${escapeHtml(state.brandFilter)}" placeholder="Search by name" /></label><div class="list-title">Brands</div><ul class="item-list">${allBrands.length ? allBrands.map((brand) => `<li class="${valueFor(brand, "name", "") === state.selectedBrand ? "selected" : ""}" data-action="select-brand" data-brand-name="${escapeHtml(valueFor(brand, "name", ""))}"><span>${escapeHtml(valueFor(brand, "name", ""))}</span>${badge(brandValidationStatus(valueFor(brandSummaryFor(brand), "validationStatus", "NotValidated")))}</li>`).join("") : "<li class=\"empty-row\">No matching Brands found.</li>"}</ul></section><section class="detail-pane">${selected ? panel(escapeHtml(valueFor(selected, "name", "")), `<div class="page-actions"><div>${badge(validationStatus)}<p class="panel-note">Validate IntroTemplate, frame.png, and background.png before processing.</p></div><button class="button-primary" data-action="validate-brand" ${processIsActive() ? "disabled" : ""}>Validate Brand</button></div>${validationMessage}${assetInventory}`) : panel("Brand detail", "<p class=\"empty-copy\">Select a Brand to inspect its assets.</p>")}</section></div>`;
   };
 
   const renderProcessedInteriorPages = (summary) => {
@@ -959,8 +991,6 @@
     if (action === "save-settings") { const payload = {}; document.querySelectorAll("[data-setting]").forEach((input) => { const group = input.dataset.settingGroup; if (group) { payload[group] ??= {}; payload[group][input.dataset.setting] = Number(input.value); } else payload[input.dataset.setting] = Number(input.value); }); send("settings.save", payload); }
     if (action === "select-brand") { state.selectedBrand = target.dataset.brandName; state.brandValidationResult = null; if (brandSelect) brandSelect.value = state.selectedBrand; render("brands"); }
     if (action === "validate-brand") { const requestId = send("brand.validate", { brandName: state.selectedBrand }); state.brandValidationRequestBrands.set(requestId, state.selectedBrand); }
-    if (action === "load-brand-settings") send("brand.settings.get", { brandName: state.selectedBrand });
-    if (action === "save-brand-settings") send("brand.settings.save", { brandName: state.selectedBrand, json: state.brandSettings });
     if (action === "select-book" || action === "open-book-detail") openBookDrawer(target.dataset.bookId);
     if (action === "close-book-drawer") closeBookDrawer();
     if (action === "save-book-interior-settings" && !state.bookInteriorSavePending) {
@@ -1105,9 +1135,9 @@
   });
   content.addEventListener("input", (event) => {
     if (event.target.dataset.action === "filter-books") { state.bookFilter = event.target.value; state.bookPage = 1; render("books", false); }
+    if (event.target.dataset.action === "filter-brands") { state.brandFilter = event.target.value; render("brands", false); }
     if (event.target.dataset.action === "filter-assets") { state.assetFilter = event.target.value; state.artworkGridScrollTop = 0; refreshInteriorArtworkWorkspace(); }
     if (event.target.dataset.action === "pdf-library-search") { state.pdfLibrarySearch = event.target.value; state.pdfLibraryPage = 1; state.pdfLibrarySearchFocused = true; state.pdfLibrarySearchCaret = event.target.selectionStart ?? event.target.value.length; render("outputs", false); }
-    if (event.target.dataset.brandSettings !== undefined) state.brandSettings = event.target.value;
   });
   content.addEventListener("change", (event) => {
     if (event.target.dataset.action === "diagnostic-book") { state.selectedBookId = event.target.value; render("diagnostics", false); }
@@ -1228,18 +1258,10 @@
       updateGlobalProcessStatus();
       if (document.querySelector(".nav-item-active")?.dataset.route === "process") render("process", false);
       status.textContent = "Connected";
-    } else if (ok && command === "brand.settings") {
-      state.brandSettings = valueFor(response, "payload", "{}");
-      if (document.querySelector(".nav-item-active")?.dataset.route === "brands") render("brands", false);
-      status.textContent = "Connected";
-    } else if (ok && command === "brand.settings.saved") {
-      state.brandSettings = valueFor(response, "payload", "{}");
-      if (document.querySelector(".nav-item-active")?.dataset.route === "brands") render("brands", false);
-      status.textContent = "Brand settings saved";
-      beginApplicationRefresh();
     } else if (ok && command === "brand.validation.result") {
       state.brandValidationResult = { ...valueFor(response, "payload", {}), brandName: validationRequestBrand };
       if (currentRoute() === "brands") render("brands", false);
+      content.querySelector?.("[data-brand-validation-summary]")?.focus?.();
       status.textContent = valueFor(state.brandValidationResult, "isSuccess", false) ? "Brand validation completed" : "Brand validation needs attention";
       beginApplicationRefresh();
     } else if (ok && command === "book.output.action.completed") {

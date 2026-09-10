@@ -594,11 +594,11 @@ test("an initial refresh failure shows a retryable load failure panel", () => {
 test("phase 4 page markup includes the interior-only processing workflow", () => {
   const script = readFileSync(appScriptPath, "utf8");
 
-  for (const state of ["Selected queue", "Process Interior", "Settings saved", "Brand settings", "Interior processing", "Current stage", "Elapsed", "Interior settings"]) {
+  for (const state of ["Selected queue", "Process Interior", "Settings saved", "Interior processing", "Current stage", "Elapsed", "Interior settings"]) {
     assert.match(script, new RegExp(state));
   }
   assert.match(script, /send\("settings\.save"/);
-  assert.match(script, /send\("brand\.settings\.save"/);
+  assert.doesNotMatch(script, /brand\.settings/);
   assert.match(script, /send\("book\.validate"/);
   assert.match(script, /send\("process\.start"/);
   assert.match(script, /mode: "interior-only"/);
@@ -607,39 +607,10 @@ test("phase 4 page markup includes the interior-only processing workflow", () =>
   assert.match(script, /"Interrupted"/);
 });
 
-test("saved brand settings survive the application refresh", () => {
-  const { messageHandler, contentListeners, messages, brandSettingsEditor, content } = loadBridge("brands");
-  const oldJson = "{\"frame\":false}";
-  const newJson = "{\"frame\":true}";
-
-  messageHandler({ data: { version: 1, id: "initial-refresh", ok: true, command: "app.snapshot", payload: {
-    discovery: { brands: [{ name: "Brand One", assets: [] }], books: [] }, globalSettings: {}, bookSummaries: []
-  } } });
-  messageHandler({ data: { version: 1, id: "brand-get", ok: true, command: "brand.settings", payload: oldJson } });
-  brandSettingsEditor.value = newJson;
-  contentListeners.input({ target: brandSettingsEditor });
-
-  const save = { dataset: { action: "save-brand-settings" }, closest: () => save };
-  contentListeners.click({ target: save });
-
-  const saveRequest = messages.at(-1);
-  assert.equal(saveRequest.command, "brand.settings.save");
-  assert.equal(saveRequest.payload.json, newJson);
-
-  messageHandler({ data: { version: 1, id: saveRequest.id, ok: true, command: "brand.settings.saved", payload: newJson } });
-  assert.equal(messages.at(-1).command, "app.refresh");
-
-  messageHandler({ data: { version: 1, id: "refresh-result", ok: true, command: "app.snapshot", payload: {
-    discovery: { brands: [{ name: "Brand One", assets: [] }], books: [] }, globalSettings: {}, bookSummaries: []
-  } } });
-
-  assert.match(content.innerHTML, /frame.*true/);
-});
-
 test("Brands displays certification state and validates the selected Brand", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("brands");
   messageHandler({ data: { version: 1, id: "initial-refresh", ok: true, command: "app.snapshot", payload: {
-    discovery: { brands: [{ name: "Brand One", assets: [] }, { name: "Brand Two", assets: [] }], books: [] }, globalSettings: {}, bookSummaries: [],
+    discovery: { brands: [{ name: "Brand One", assets: [{ name: "IntroTemplate", type: "Folder", status: "Present", entries: [{ name: "intro.png", extension: ".png", size: { width: 1500, height: 1500 }, status: "Present" }] }, { name: "frame.png", type: "Image", status: "Present", extension: ".png", size: { width: 2270, height: 2270 } }, { name: "background.png", type: "Image", status: "Present", extension: ".png", size: { width: 2588, height: 2625 } }] }, { name: "Brand Two", assets: [] }], books: [] }, globalSettings: { artworkMaximumSide: 2270, finalPageWidth: 2588, finalPageHeight: 2625 }, bookSummaries: [],
     brandSummaries: [{ brandName: "Brand One", validationStatus: 2 }, { brandName: "Brand Two", validationStatus: 0 }]
   } } });
 
@@ -651,12 +622,18 @@ test("Brands displays certification state and validates the selected Brand", () 
   assert.equal(messages.at(-1).payload.brandName, "Brand One");
 
   const request = messages.at(-1);
-  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "brand.validation.result", payload: { isSuccess: false, failures: [{ message: "frame.png is missing" }] } } });
-  assert.match(content.innerHTML, /frame\.png is missing/);
+  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "brand.validation.result", payload: { isSuccess: false, failures: [{ target: "IntroTemplate/intro.png", message: "Image is 1500 × 1500 px. Required size: 1024 × 1024 px, 2048 × 2048 px, 2588 × 2625 px." }] } } });
+  assert.match(content.innerHTML, /Fix these Brand assets/);
+  assert.match(content.innerHTML, /IntroTemplate\/intro\.png/);
+  assert.match(content.innerHTML, /1500 × 1500 px/);
+  assert.match(content.innerHTML, /Name<\/th><th>Extension<\/th><th>Size<\/th><th>Status/);
+  assert.match(content.innerHTML, /Required size/);
+  assert.match(content.innerHTML, /Search Brands/);
+  assert.doesNotMatch(content.innerHTML, /Template settings/);
 
   const selectSecondBrand = { dataset: { action: "select-brand", brandName: "Brand Two" }, closest: () => selectSecondBrand };
   contentListeners.click({ target: selectSecondBrand });
-  assert.doesNotMatch(content.innerHTML, /frame\.png is missing/);
+  assert.doesNotMatch(content.innerHTML, /Fix these Brand assets/);
 
   messageHandler({ data: { version: 1, id: request.id, ok: true, command: "brand.validation.result", payload: { isSuccess: true, failures: [] } } });
   assert.equal(messages.at(-1).command, "app.refresh");
