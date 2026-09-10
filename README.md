@@ -49,10 +49,10 @@ Mỗi trang Interior được chuẩn hoá thành `normalized-source.png`, sau �
 
 ## Intro AUTO và CUSTOM
 
-- **AUTO** (`HasIntro=false`): dùng toàn bộ ảnh hợp lệ trong `Brand/IntroTemplate/`, theo tên file tăng dần.
+- **AUTO** (`HasIntro=false`): dùng toàn bộ ảnh hợp lệ trong `Brand/IntroTemplate/`, theo tên file tăng dần. Ảnh Brand đúng kích thước Final Interior Page (mặc định `2588x2625`) được đưa thẳng vào PDF; `1024x1024` và `2048x2048` vẫn dùng luồng CropArt.
 - **CUSTOM** (`HasIntro=true`): dùng danh sách Book Interior do bạn chọn và giữ đúng thứ tự đó. Những trang đã chọn không lặp lại trong Interior normal hoặc shuffle.
 
-Intro luôn được xử lý theo CropArt, không chạy detector và không dùng frame. Nếu bật Brand Background, background được chèn sau từng trang Intro và Interior.
+Intro legacy và Custom luôn được xử lý theo CropArt, không chạy detector và không dùng frame. AUTO Brand artwork ở kích thước Final Interior Page cũng không dùng detector hoặc frame, nhưng bỏ qua toàn bộ xử lý raster vì đã là trang in hoàn chỉnh. Nếu bật Brand Background, background được chèn sau từng trang Intro và Interior.
 
 ![CUSTOM Intro](docs/assets/screenshots/0.1/04-book-interior-settings-custom-intro.png)
 
