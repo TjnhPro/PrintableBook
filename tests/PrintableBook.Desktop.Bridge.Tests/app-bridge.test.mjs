@@ -1216,8 +1216,13 @@ test("Automatic Intro template preview dimensions gate the current Brand readine
 
   contentListeners.load({ target: { matches: (selector) => selector === "img[data-local-image]", dataset: { introTemplateId: "Demo%00intro.png" }, naturalWidth: 1000, naturalHeight: 1000 } });
 
-  assert.match(content.innerHTML, /must be 1024 × 1024 or 2048 × 2048 pixels/);
+  assert.match(content.innerHTML, /must be 1024 × 1024, 2048 × 2048, or 2588 × 2625 pixels/);
   assert.match(content.innerHTML, /Needs review/);
+  assert.equal(messages.length, messageCount);
+
+  contentListeners.load({ target: { matches: (selector) => selector === "img[data-local-image]", dataset: { introTemplateId: "Demo%00intro.png" }, naturalWidth: 2588, naturalHeight: 2625 } });
+
+  assert.match(content.innerHTML, /Ready for backend size validation during processing\./);
   assert.equal(messages.length, messageCount);
 });
 

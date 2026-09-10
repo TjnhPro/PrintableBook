@@ -310,7 +310,23 @@
     };
   };
   const introTemplateAssetId = (asset) => encodeURIComponent(`${valueFor(activeBrand(), "name", "")}\u0000${valueFor(asset, "key", "")}`);
-  const isSupportedIntroTemplateSize = (width, height) => (width === 1024 && height === 1024) || (width === 2048 && height === 2048);
+  const finalInteriorPageSize = () => {
+    const settings = valueFor(window.appSnapshot, "globalSettings", {});
+    return {
+      width: Number(valueFor(settings, "finalPageWidth", 2588)),
+      height: Number(valueFor(settings, "finalPageHeight", 2625))
+    };
+  };
+  const introTemplateSizeDescription = () => {
+    const finalPage = finalInteriorPageSize();
+    return `1024 × 1024, 2048 × 2048, or ${finalPage.width} × ${finalPage.height} pixels`;
+  };
+  const isSupportedIntroTemplateSize = (width, height) => {
+    const finalPage = finalInteriorPageSize();
+    return (width === 1024 && height === 1024) ||
+      (width === 2048 && height === 2048) ||
+      (width === finalPage.width && height === finalPage.height);
+  };
   const introReadiness = (book, summary) => {
     const selection = effectiveIntro(book, summary);
     const customCandidates = assetsFor(summary).filter((asset) => valueFor(asset, "kind", "") === "Interior");
@@ -325,7 +341,7 @@
     const templates = (valueFor(brand, "introTemplateAssets", []) ?? []).filter((asset) => /\.(png|jpe?g)$/i.test(valueFor(asset, "fileName", "")));
     if (!templates.length) return { ready: false, reason: "The current Brand has no eligible Intro templates." };
     const effectiveTemplates = templates;
-    if (effectiveTemplates.some((asset) => state.introTemplateDimensions.get(introTemplateAssetId(asset))?.valid === false)) return { ready: false, reason: "An effective Intro template is unreadable or must be 1024 × 1024 or 2048 × 2048 pixels." };
+    if (effectiveTemplates.some((asset) => state.introTemplateDimensions.get(introTemplateAssetId(asset))?.valid === false)) return { ready: false, reason: `An effective Intro template is unreadable or must be ${introTemplateSizeDescription()}.` };
     return { ready: true, reason: "" };
   };
   const processingReadiness = (book, summary) => {
@@ -475,7 +491,7 @@
     const paging = `<footer class="intro-template-pagination" data-intro-total-pages="${totalPages}"><span>${allItems.length ? `${start + 1}–${Math.min(start + introPageSize, allItems.length)} of ${allItems.length}` : "0 pages"}</span><div><button class="button-secondary" data-action="intro-template-page" data-intro-template-page="previous" ${state.introTemplatePage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.introTemplatePage} of ${totalPages}</span><button class="button-secondary" data-action="intro-template-page" data-intro-template-page="next" ${state.introTemplatePage === totalPages ? "disabled" : ""}>Next</button></div></footer>`;
     const sourceCopy = selection.hasIntro
       ? `${selected.length ? `${selected.length} selected Intro page${selected.length === 1 ? "" : "s"}. Use each card to preserve order or remove it.` : "Select at least one Book interior page to make this Book ready."}`
-      : "All eligible templates are processed in filename order. Book interior pages remain eligible for normal Interior processing.";
+      : `All eligible templates are added in filename order. ${finalInteriorPageSize().width} × ${finalInteriorPageSize().height} Brand artwork is assembled directly into the PDF; 1024 × 1024 and 2048 × 2048 templates retain the legacy processing path. Book interior pages remain eligible for normal Interior processing.`;
     return `<section class="intro-template-workspace"><div class="intro-template-heading"><div><h3>Intro pages</h3><p>${selection.hasIntro ? "Choose ordered pages from this Book's Book interior." : brandCopy}</p></div><span class="status-badge ${selection.hasIntro ? "status-warn" : "status-muted"}">${selection.hasIntro ? "Custom Book interior" : "Automatic Brand template"}</span></div><p class="${readiness.ready ? "panel-note" : "intro-template-warning"}" role="${readiness.ready ? "status" : "alert"}">${readiness.ready ? "Ready for backend size validation during processing." : escapeHtml(readiness.reason)}</p><fieldset class="intro-mode-choice" ${disabled ? "disabled" : ""}><legend>Intro source</legend><label><input type="radio" name="intro-mode" data-action="set-intro-mode" data-book-id="${escapeHtml(bookId(book))}" value="auto" ${selection.hasIntro ? "" : "checked"}> Automatic <small>Use every eligible current Brand IntroTemplate in filename order.</small></label><label><input type="radio" name="intro-mode" data-action="set-intro-mode" data-book-id="${escapeHtml(bookId(book))}" value="custom" ${selection.hasIntro ? "checked" : ""}> Custom <small>Choose Book interior pages and their print order.</small></label></fieldset><div class="intro-template-selection"><div><h4>${selection.hasIntro ? "Book interior pages" : "Automatic Brand IntroTemplate"}</h4><p>${sourceCopy}</p></div><div class="intro-template-page-grid">${visibleItems || "<p class=\"empty-copy\">No eligible Intro pages are available.</p>"}</div>${paging}</div></section>`;
   };
 

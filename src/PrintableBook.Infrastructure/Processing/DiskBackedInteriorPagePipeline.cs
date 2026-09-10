@@ -41,7 +41,8 @@ public sealed class DiskBackedInteriorPagePipeline(
 
         request.ValidateGeometry();
         var pageCache = Path.Combine(request.Workspace.WorkingDirectory.Value, "cache", request.PageId);
-        var processedInteriorDirectory = Path.Combine(request.Workspace.ProcessedDirectory.Value, request.ProcessingKind == InteriorPageProcessingKind.IntroTemplate ? "intro" : "interior");
+        var isIntroTemplate = request.ProcessingKind is InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate;
+        var processedInteriorDirectory = Path.Combine(request.Workspace.ProcessedDirectory.Value, isIntroTemplate ? "intro" : "interior");
         var classificationFile = Path.Combine(pageCache, "classification.json");
         var normalized = new FileReference(Path.Combine(pageCache, "normalized-source.png"));
         var prepared = new FileReference(Path.Combine(pageCache, "prepared.png"));
@@ -54,6 +55,13 @@ public sealed class DiskBackedInteriorPagePipeline(
 
         try
         {
+            if (request.ProcessingKind == InteriorPageProcessingKind.BrandIntroTemplate &&
+                (await imageInspector.GetInfoAsync(request.Source, cancellationToken)).Size == request.FinalPageSize)
+            {
+                currentStep = "final-artwork";
+                return new InteriorPageProcessingResult(request.PageId, request.Source, request.Source);
+            }
+
             Directory.CreateDirectory(processedInteriorDirectory);
             Directory.CreateDirectory(pageCache);
             MigrateLegacyCacheStamp(legacyCacheStampFile, cacheStampFile);
@@ -81,7 +89,7 @@ public sealed class DiskBackedInteriorPagePipeline(
             var classification = invalidation is CacheInvalidationStage.Classification
                 ? null
                 : await TryReadClassificationAsync(classificationFile, cancellationToken);
-            if (request.ProcessingKind == InteriorPageProcessingKind.IntroTemplate && classification?.Type != ArtworkType.CropArt)
+            if (isIntroTemplate && classification?.Type != ArtworkType.CropArt)
             {
                 classification = null;
             }
@@ -94,7 +102,7 @@ public sealed class DiskBackedInteriorPagePipeline(
             {
                 DeleteDownstream(prepared, framed, working, finalPage);
                 currentStep = "classification";
-                classification = request.ProcessingKind == InteriorPageProcessingKind.IntroTemplate
+                classification = isIntroTemplate
                     ? CreateForcedCropArtClassification()
                     : await artworkClassifier.ClassifyAsync(
                         new ArtworkClassificationRequest(normalized, request.ArtworkDetectionThreshold, request.BorderLineDetection), cancellationToken);
@@ -120,8 +128,8 @@ public sealed class DiskBackedInteriorPagePipeline(
                 preparedArtwork = PreparedArtwork.FromCached(prepared, classification.Type);
             }
 
-            var frame = request.ProcessingKind == InteriorPageProcessingKind.IntroTemplate ? null : request.Frame;
-            var shouldApplyFrame = request.ProcessingKind != InteriorPageProcessingKind.IntroTemplate && ShouldApplyFrame(
+            var frame = isIntroTemplate ? null : request.Frame;
+            var shouldApplyFrame = !isIntroTemplate && ShouldApplyFrame(
                 frame is not null && File.Exists(frame.Value),
                 request.FrameMode,
                 preparedArtwork.AutoFrameRecommended);
@@ -177,7 +185,7 @@ public sealed class DiskBackedInteriorPagePipeline(
 
     private async ValueTask ValidateRawIntroTemplateSizeAsync(InteriorPagePipelineRequest request, CancellationToken cancellationToken)
     {
-        if (request.ProcessingKind != InteriorPageProcessingKind.IntroTemplate) return;
+        if (request.ProcessingKind is not (InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate)) return;
         var size = (await imageInspector.GetInfoAsync(request.Source, cancellationToken)).Size;
         if (size.Width != size.Height || size.Width is not 1024 and not 2048)
         {
@@ -508,6 +516,7 @@ public sealed class DiskBackedInteriorPagePipeline(
                 {
                     InteriorPageProcessingKind.Interior => "interior",
                     InteriorPageProcessingKind.IntroTemplate => "intro-template",
+                    InteriorPageProcessingKind.BrandIntroTemplate => "intro-template",
                     _ => throw new ArgumentOutOfRangeException(nameof(request), request.ProcessingKind, "Unsupported page processing kind.")
                 },
                 CacheStampSchemaVersion);

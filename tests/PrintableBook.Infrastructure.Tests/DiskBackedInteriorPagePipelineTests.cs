@@ -117,6 +117,27 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessAsync_uses_final_sized_brand_intro_artwork_directly_without_creating_intermediate_artifacts()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = Path.Combine(rootPath, "final-intro.png");
+        using (var image = new MagickImage(MagickColors.White, 2588, 2625))
+        {
+            image.GetPixels().SetPixel(100, 100, [0, 0, 0]);
+            image.Write(source);
+        }
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(new BookId("final-intro-book"), new DirectoryReference(Path.Combine(rootPath, "FinalIntroBook")));
+
+        var result = await CreatePipeline().ProcessAsync(new InteriorPagePipelineRequest(
+            workspace, new FileReference(source), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(2270, 2270), new ImageSize(2550, 2550), new ImageSize(2588, 2625), new ImageDensity(300, 300), null, FrameMode.Disabled,
+            processingKind: InteriorPageProcessingKind.BrandIntroTemplate));
+
+        Assert.Equal(new FileReference(source), result.FinalPage);
+        Assert.Equal(new ImageSize(2588, 2625), (await new MagickImageInspector().GetInfoAsync(result.FinalPage)).Size);
+        Assert.False(Directory.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "intro-0001")));
+    }
+
+    [Fact]
     public async Task ProcessAsync_defensively_ignores_a_frame_in_a_mutated_intro_request()
     {
         Directory.CreateDirectory(rootPath);

@@ -22,6 +22,7 @@ public sealed class InteriorPagePipelineRequestTests
 
         Assert.Throws<ArgumentException>(() => new InteriorPagePipelineRequest(workspace, new FileReference("intro.png"), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), new FileReference("frame.png"), FrameMode.Disabled, processingKind: InteriorPageProcessingKind.IntroTemplate));
         Assert.Throws<ArgumentException>(() => new InteriorPagePipelineRequest(workspace, new FileReference("intro.png"), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), null, FrameMode.Auto, processingKind: InteriorPageProcessingKind.IntroTemplate));
+        Assert.Throws<ArgumentException>(() => new InteriorPagePipelineRequest(workspace, new FileReference("intro.png"), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), new FileReference("frame.png"), FrameMode.Disabled, processingKind: InteriorPageProcessingKind.BrandIntroTemplate));
     }
 
     [Fact]

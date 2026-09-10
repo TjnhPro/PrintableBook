@@ -163,7 +163,7 @@ background
 
 ## Brand validation contract
 
-Brand assets have an explicit two-stage contract, independent from Book workspace state. **Brand Validate** is the deep certification action: it verifies the V1 tracked scope (`IntroTemplate/**` supported images, `frame.png`, and `background.png`) and their required image dimensions, then persists `brand.validation.json` beside the Brand.
+Brand assets have an explicit two-stage contract, independent from Book workspace state. **Brand Validate** is the deep certification action: it verifies the V1 tracked scope (`IntroTemplate/**` supported images, `frame.png`, and `background.png`) and their required image dimensions, then persists `brand.validation.json` beside the Brand. A Brand IntroTemplate can be a legacy square (`1024x1024` or `2048x2048`) or an exact Final Interior Page raster. The latter is classified only at the page-pipeline boundary and passes directly into ordered PDF assembly; it is not a Working Area and never receives frame, border, normalization, or crop-art work.
 
 **Brand CheckState** is deliberately cheap and state-first. With no state it returns `NotValidated` without scanning image content. For a current certification it compares only the validation definition and a metadata fingerprint (normalized tracked path, file length, and last-write UTC); it never decodes images or reads their bytes. A changed metadata fingerprint, explicit invalidation, or a changed `DefinitionChangedAtUtc` returns `NeedsValidation`.
 
