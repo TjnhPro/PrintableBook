@@ -444,11 +444,10 @@
     };
     const expectedSize = (asset) => {
       const name = valueFor(asset, "name", "");
-      const settings = valueFor(window.appSnapshot, "globalSettings", {});
-      if (name === "IntroTemplate") return `1024 × 1024 px, 2048 × 2048 px, or ${valueFor(settings, "finalPageWidth", 2588)} × ${valueFor(settings, "finalPageHeight", 2625)} px`;
-      if (name === "frame.png") return `${valueFor(settings, "artworkMaximumSide", 2550)} × ${valueFor(settings, "artworkMaximumSide", 2550)} px`;
-      if (name === "background.png") return `${valueFor(settings, "finalPageWidth", 2588)} × ${valueFor(settings, "finalPageHeight", 2625)} px`;
-      return "No fixed size requirement";
+      const requirement = valueFor(window.appSnapshot, "brandImageSizeRequirements", [])
+        .find((item) => valueFor(item, "target", "") === name);
+      const allowedSizes = valueFor(requirement, "allowedSizes", []);
+      return allowedSizes.length ? allowedSizes.map(size).join(", ") : "Validate Brand to confirm the required size";
     };
     const validationMessage = validationResult && !valueFor(validationResult, "isSuccess", false)
       ? `<section class="brand-validation-summary" role="alert" tabindex="-1" data-brand-validation-summary aria-labelledby="brand-validation-title"><h3 id="brand-validation-title">Fix these Brand assets</h3><p>Each item names the file, its current size, and the size required before processing.</p><ul>${validationFailures.map((failure) => `<li><strong>${escapeHtml(valueFor(failure, "target", "Brand asset"))}</strong><span>${escapeHtml(valueFor(failure, "message", "Validation failed."))}</span></li>`).join("")}</ul></section>`

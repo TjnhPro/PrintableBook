@@ -610,7 +610,7 @@ test("phase 4 page markup includes the interior-only processing workflow", () =>
 test("Brands displays certification state and validates the selected Brand", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("brands");
   messageHandler({ data: { version: 1, id: "initial-refresh", ok: true, command: "app.snapshot", payload: {
-    discovery: { brands: [{ name: "Brand One", assets: [{ name: "IntroTemplate", type: "Folder", status: "Present", entries: [{ name: "intro.png", extension: ".png", size: { width: 1500, height: 1500 }, status: "Present" }] }, { name: "frame.png", type: "Image", status: "Present", extension: ".png", size: { width: 2270, height: 2270 } }, { name: "background.png", type: "Image", status: "Present", extension: ".png", size: { width: 2588, height: 2625 } }] }, { name: "Brand Two", assets: [] }], books: [] }, globalSettings: { artworkMaximumSide: 2270, finalPageWidth: 2588, finalPageHeight: 2625 }, bookSummaries: [],
+    discovery: { brands: [{ name: "Brand One", assets: [{ name: "IntroTemplate", type: "Folder", status: "Present", entries: [{ name: "intro.png", extension: ".png", size: { width: 1500, height: 1500 }, status: "Present" }] }, { name: "frame.png", type: "Image", status: "Present", extension: ".png", size: { width: 2270, height: 2270 } }, { name: "background.png", type: "Image", status: "Present", extension: ".png", size: { width: 2588, height: 2625 } }] }, { name: "Brand Two", assets: [] }], books: [] }, globalSettings: {}, brandImageSizeRequirements: [{ target: "IntroTemplate", allowedSizes: [{ width: 1024, height: 1024 }, { width: 2048, height: 2048 }, { width: 2588, height: 2625 }] }, { target: "frame.png", allowedSizes: [{ width: 2270, height: 2270 }] }, { target: "background.png", allowedSizes: [{ width: 2588, height: 2625 }] }], bookSummaries: [],
     brandSummaries: [{ brandName: "Brand One", validationStatus: 2 }, { brandName: "Brand Two", validationStatus: 0 }]
   } } });
 
@@ -630,6 +630,11 @@ test("Brands displays certification state and validates the selected Brand", () 
   assert.match(content.innerHTML, /Required size/);
   assert.match(content.innerHTML, /Search Brands/);
   assert.doesNotMatch(content.innerHTML, /Template settings/);
+
+  const brandSearch = { dataset: { action: "filter-brands" }, value: "Two" };
+  contentListeners.input({ target: brandSearch });
+  assert.match(content.innerHTML, /Brand Two/);
+  assert.doesNotMatch(content.innerHTML, /Brand One<\/span>/);
 
   const selectSecondBrand = { dataset: { action: "select-brand", brandName: "Brand Two" }, closest: () => selectSecondBrand };
   contentListeners.click({ target: selectSecondBrand });

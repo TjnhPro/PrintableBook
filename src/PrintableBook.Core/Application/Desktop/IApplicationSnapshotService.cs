@@ -23,7 +23,7 @@ public interface ILocalOutputActionService
 }
 public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = true, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null);
 public sealed record BrandDesktopSummary(string BrandName, BrandValidationStatus ValidationStatus, DateTimeOffset? ValidatedAtUtc, string? Fingerprint);
-public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt, IReadOnlyList<BrandDesktopSummary>? BrandSummaries = null);
+public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt, IReadOnlyList<BrandDesktopSummary>? BrandSummaries = null, IReadOnlyList<BrandImageSizeRequirement>? BrandImageSizeRequirements = null);
 
 public interface IApplicationSnapshotService
 {
@@ -78,7 +78,7 @@ public sealed class ApplicationSnapshotService(
                 : await brandValidationService.CheckStateAsync(brand.Directory, settings, cancellationToken);
             brandSummaries.Add(new BrandDesktopSummary(brand.Name, state.Status, state.ValidatedAtUtc, state.Fingerprint));
         }
-        return new ApplicationSnapshot(discoverySnapshot, settings, completedSummaries, DateTimeOffset.UtcNow, brandSummaries);
+        return new ApplicationSnapshot(discoverySnapshot, settings, completedSummaries, DateTimeOffset.UtcNow, brandSummaries, BrandValidationDefinition.GetImageSizeRequirements(settings));
     }
 
     private async ValueTask<BookDesktopSummary> BuildBookSummaryAsync(DiscoveredBook book, CancellationToken cancellationToken)
