@@ -137,7 +137,7 @@ const pdfLibrarySnapshot = () => ({
       bookId: { value: "Book Alpha" }, workspaceStatus: "Completed", lastRunAt: "2026-08-25T10:00:00Z", interiorSourcePageCount: 40, activeInteriorSourcePageCount: 40,
       validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
       outputSummaries: [
-        { artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Interior.pdf", fileName: "Book Alpha - Interior.pdf", verificationStatus: "Verified", generatedAt: "2026-08-25T10:00:00Z", pageCount: 80, widthInches: 8.5, heightInches: 8.5, fileSizeBytes: 80 * 1024 * 1024 },
+        { artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Interior.pdf", fileName: "Book Alpha - Interior.pdf", verificationStatus: "Verified", generatedAt: "2026-08-25T10:00:00Z", pageCount: 80, widthInches: 8.626666666666667, heightInches: 8.75, fileSizeBytes: 80 * 1024 * 1024 },
         { artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Cover.pdf", fileName: "Book Alpha - Cover.pdf", verificationStatus: "Verified", generatedAt: "2026-08-25T10:00:00Z", pageCount: 1, widthInches: 17, heightInches: 11, fileSizeBytes: 12 * 1024 * 1024 }
       ]
     },
@@ -1287,6 +1287,8 @@ test("PDF Library groups current Cover and Interior PDFs under one Book", () => 
   assert.match(alphaMarkup, />Open</);
   assert.match(alphaMarkup, />Reveal</);
   assert.match(alphaMarkup, />Copy</);
+  assert.match(alphaMarkup, /8\.63 × 8\.75 in/);
+  assert.doesNotMatch(alphaMarkup, /8\.626666666666667/);
 });
 
 test("PDF Library uses Book-centric copy and removes run history language", () => {

@@ -161,6 +161,10 @@
     if (value >= 1024) return `${Math.round(value / 1024)} KB`;
     return `${value} B`;
   };
+  const inches = (value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric.toFixed(2) : "—";
+  };
   const panel = (title, body, extra = "") => `<section class="panel ${extra}"><h2 class="panel-title">${title}</h2>${body}</section>`;
   const currentRoute = () => document.querySelector(".nav-item-active")?.dataset.route ?? "books";
   const applicationIsLoading = () => state.applicationLoadState === "loading" || state.applicationLoadState === "refreshing";
@@ -808,7 +812,7 @@
     const actions = (summary, output, compact = false) => `<div class="output-actions"><button class="button-primary" data-action="open-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">${compact ? "Open" : "Open PDF"}</button><button class="button-secondary" data-action="reveal-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">${compact ? "Reveal" : "Reveal in Explorer"}</button><button class="button-secondary" data-action="copy-output-path" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">${compact ? "Copy" : "Copy path"}</button></div>`;
     const outputRow = (summary, output) => {
       const pageCount = valueFor(output, "pageCount", "—");
-      const dimensions = valueFor(output, "widthInches", null) ? `${valueFor(output, "widthInches", 0)} × ${valueFor(output, "heightInches", 0)} in` : "—";
+      const dimensions = valueFor(output, "widthInches", null) ? `${inches(valueFor(output, "widthInches", 0))} × ${inches(valueFor(output, "heightInches", 0))} in` : "—";
       return `<li class="pdf-library-file"><div class="pdf-library-file-mark">PDF</div><div class="pdf-library-file-copy"><div class="pdf-library-file-title"><strong title="${escapeHtml(valueFor(output, "fileName", "PDF output"))}">${escapeHtml(valueFor(output, "fileName", "PDF output"))}</strong><span class="pdf-library-file-status">${badge(valueFor(output, "verificationStatus", "Available"))}</span></div><small>${escapeHtml(String(pageCount))} pages · ${escapeHtml(dimensions)} · ${fileSize(valueFor(output, "fileSizeBytes", 0))}</small>${actions(summary, output, state.pdfLibraryView === "grid")}</div></li>`;
     };
     const bookCard = ({ book, summary }) => {
