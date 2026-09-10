@@ -18,6 +18,11 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   const contentListeners = {};
   const documentListeners = {};
   const searchInput = { focused: false, selection: null, focus() { this.focused = true; }, setSelectionRange(start, end) { this.selection = [start, end]; } };
+  const brandList = {
+    set innerHTML(markup) {
+      contentMarkup = contentMarkup.replace(/(<ul class="item-list" data-brand-list>).*?(<\/ul>)/, `$1${markup}$2`);
+    }
+  };
   let contentMarkup = "";
   let fullRenderCount = 0;
   let bookDrawerBodyRenderCount = 0;
@@ -30,7 +35,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     set innerHTML(markup) { fullRenderCount += 1; contentMarkup = markup; },
     addEventListener: (eventName, handler) => { contentListeners[eventName] = handler; },
     insertAdjacentHTML: (_position, markup) => { contentMarkup += markup; },
-    querySelector: (selector) => selector === '[data-action="pdf-library-search"]' ? searchInput : null
+    querySelector: (selector) => selector === '[data-action="pdf-library-search"]' ? searchInput : selector === "[data-brand-list]" ? brandList : null
   };
   const introWorkspace = {
     set outerHTML(markup) {
@@ -608,7 +613,7 @@ test("phase 4 page markup includes the interior-only processing workflow", () =>
 });
 
 test("Brands displays certification state and validates the selected Brand", () => {
-  const { messageHandler, content, contentListeners, messages } = loadBridge("brands");
+  const { messageHandler, content, contentListeners, getFullRenderCount, messages } = loadBridge("brands");
   messageHandler({ data: { version: 1, id: "initial-refresh", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Brand One", assets: [{ name: "IntroTemplate", type: "Folder", status: "Present", entries: [{ name: "intro.png", extension: ".png", size: { width: 1500, height: 1500 }, status: "Present" }] }, { name: "frame.png", type: "Image", status: "Present", extension: ".png", size: { width: 2270, height: 2270 } }, { name: "background.png", type: "Image", status: "Present", extension: ".png", size: { width: 2588, height: 2625 } }] }, { name: "Brand Two", assets: [] }], books: [] }, globalSettings: { artworkMaximumSide: 2270, finalPageWidth: 2588, finalPageHeight: 2625 }, bookSummaries: [],
     brandSummaries: [{ brandName: "Brand One", validationStatus: 2 }, { brandName: "Brand Two", validationStatus: 0 }]
@@ -633,8 +638,10 @@ test("Brands displays certification state and validates the selected Brand", () 
   assert.match(content.innerHTML, /Search Brands/);
   assert.doesNotMatch(content.innerHTML, /Template settings/);
 
+  const rendersBeforeSearch = getFullRenderCount();
   const brandSearch = { dataset: { action: "filter-brands" }, value: "Two" };
   contentListeners.input({ target: brandSearch });
+  assert.equal(getFullRenderCount(), rendersBeforeSearch, "Brand search must update only its result list");
   assert.match(content.innerHTML, /Brand Two/);
   assert.doesNotMatch(content.innerHTML, /Brand One<\/span>/);
 
