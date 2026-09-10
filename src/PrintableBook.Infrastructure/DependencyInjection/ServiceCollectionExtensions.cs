@@ -31,7 +31,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IApplicationRootDiscovery, PhysicalApplicationRootDiscovery>();
         services.AddSingleton<IBrandFrameResolver, PhysicalBrandFrameResolver>();
         services.AddSingleton<IGlobalSettingsStore, JsonGlobalSettingsStore>();
-        services.AddSingleton<IBrandSettingsStore, JsonBrandSettingsStore>();
         services.AddSingleton<IBrandValidationStateStore, JsonBrandValidationStateStore>();
         services.AddSingleton<IImageInspector, MagickImageInspector>();
         services.AddSingleton<IArtworkSourceNormalizer, MagickArtworkSourceNormalizer>();

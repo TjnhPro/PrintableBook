@@ -30,14 +30,14 @@ public partial class MainWindow : Window
     private bool closeFlowRunning;
     private bool systemShutdown;
 
-    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IBrandSettingsStore brandSettingsStore, IBrandValidationService brandValidationService, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookInteriorSettingsService bookInteriorSettingsService, ILocalOutputActionService outputActionService, IOperationDiagnostics diagnostics, UiDiagnosticsService uiDiagnosticsService, IBackgroundTaskManager backgroundTaskManager, DispatcherStallMonitor dispatcherStallMonitor, ProcessWindowShutdownCoordinator shutdownCoordinator, UpdateShutdownState updateShutdownState, IDesktopUpdateCoordinator updateCoordinator)
+    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IBrandValidationService brandValidationService, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookInteriorSettingsService bookInteriorSettingsService, ILocalOutputActionService outputActionService, IOperationDiagnostics diagnostics, UiDiagnosticsService uiDiagnosticsService, IBackgroundTaskManager backgroundTaskManager, DispatcherStallMonitor dispatcherStallMonitor, ProcessWindowShutdownCoordinator shutdownCoordinator, UpdateShutdownState updateShutdownState, IDesktopUpdateCoordinator updateCoordinator)
     {
         Application = application;
         this.diagnostics = diagnostics;
         this.shutdownCoordinator = shutdownCoordinator;
         this.dispatcherStallMonitor = dispatcherStallMonitor;
         this.updateShutdownState = updateShutdownState;
-        bridgeRouter = new WebViewBridgeRouter(applicationLoadCoordinator, settingsStore, processSessionService, brandSettingsStore, coverSelectionService, interiorFrameModeService, bookInteriorSettingsService, outputActionService, diagnostics, uiDiagnosticsService, backgroundTaskManager, brandValidationService: brandValidationService, updateCoordinator: updateCoordinator);
+        bridgeRouter = new WebViewBridgeRouter(applicationLoadCoordinator, settingsStore, processSessionService, coverSelectionService: coverSelectionService, interiorFrameModeService: interiorFrameModeService, bookInteriorSettingsService: bookInteriorSettingsService, outputActionService: outputActionService, diagnostics: diagnostics, uiDiagnosticsService: uiDiagnosticsService, backgroundTaskManager: backgroundTaskManager, brandValidationService: brandValidationService, updateCoordinator: updateCoordinator);
         InitializeComponent();
         dispatcherStallMonitor.Start();
         Closing += OnClosing;
