@@ -24,6 +24,6 @@ Therefore the default final page produces an Interior PDF MediaBox of `621.12 ×
 
 Cover geometry remains a separate PDF contract and is not derived from the Interior raster dimensions.
 
-The exporter builds Intro pages sequentially and repeated Interior units concurrently, then imports them into one final document in logical order. PDFsharp types do not appear in Core contracts; Core exposes neutral file references and physical page settings only.
+The exporter builds Intro pages sequentially and repeated Interior units concurrently, then imports them into one final document in logical order. A Brand IntroTemplate whose raster is exactly the Final Interior Page is supplied as that finished page directly; it is not resized through the `2550 × 2550 px` Working Area and its PDF page still uses the Final Interior Page MediaBox. PDFsharp types do not appear in Core contracts; Core exposes neutral file references and physical page settings only.
 
 References: <https://github.com/dlemstra/Magick.NET>, <https://github.com/empira/PDFsharp/blob/master/LICENSE>, and <https://github.com/empira/PDFsharp>.

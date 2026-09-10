@@ -246,20 +246,21 @@ public sealed class ProcessingSessionWorkerTests
     }
 
     [Fact]
-    public async Task Marks_only_final_sized_automatic_brand_intro_pages_for_direct_pdf_assembly()
+    public async Task Automatic_brand_intro_pages_are_not_reinspected_after_brand_validation()
     {
         var application = new Application();
-        var finalPage = new FileReference(Path.Combine("brand", "IntroTemplate", "intro.png"));
+        var inspector = new ImageInspector(new InvalidDataException("must not inspect certified Brand files"));
         IBackgroundTaskWorker worker = CreateWorker(
             new Provider(Snapshot()),
             application,
             new FrameResolver(),
             new FileSystem(),
-            new ImageInspector(introTemplateSize: new ImageSize(2588, 2625)));
+            inspector);
 
         await worker.ExecuteAsync(Request(), new Context(), CancellationToken.None);
 
-        Assert.Contains(finalPage, Assert.Single(application.Request!.Books).EffectiveFinalIntroTemplatePages);
+        Assert.Equal(0, inspector.Calls);
+        Assert.False(Assert.Single(application.Request!.Books).CustomIntroFromBookInterior);
     }
 
     [Fact]

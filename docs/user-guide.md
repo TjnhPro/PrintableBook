@@ -8,7 +8,7 @@ Printable Book làm việc hoàn toàn trên thư mục local: Brand trong `bran
 
 ## 2. Chuẩn bị Brand
 
-Tạo một thư mục Brand dưới `brands/`. Brand có thể chứa `IntroTemplate/`, `frame.png`, `background.png`, `AppPlus/` và `brand.json`. `frame.png` phải tương thích artwork prepared; `background.png` phải đúng Final Page size khi bật Brand Background.
+Tạo một thư mục Brand dưới `brands/`. Brand có thể chứa `IntroTemplate/`, `frame.png`, `background.png`, `AppPlus/` và `brand.json`. `frame.png` phải tương thích artwork prepared; `background.png` phải đúng Final Page size khi bật Brand Background. Trong `IntroTemplate/`, ảnh `1024x1024` hoặc `2048x2048` dùng luồng Intro cũ; ảnh đúng kích thước Final Interior Page hiện hành (mặc định `2588x2625`) được đưa thẳng vào PDF như artwork toàn trang, không thêm viền hay xử lý ảnh.
 
 ![Brands and templates](assets/screenshots/0.1/12-brands-templates.png)
 
@@ -36,7 +36,7 @@ Tab **Interior settings** chứa cấu hình chung của Book. Nhấn **Save cha
 
 ### 6.2 Intro AUTO
 
-Tắt **Custom Intro** để dùng AUTO: tất cả ảnh hợp lệ của Brand `IntroTemplate/` được dùng theo filename tăng dần.
+Tắt **Custom Intro** để dùng AUTO: tất cả ảnh hợp lệ của Brand `IntroTemplate/` được dùng theo filename tăng dần. Với artwork Intro toàn trang, hãy xuất đúng kích thước Final Interior Page (mặc định `2588x2625`); ảnh này bỏ qua Working Area `2550x2550` và đi thẳng vào PDF. Custom Intro từ `Book interior` vẫn dùng luồng Intro cũ.
 
 ![AUTO Intro](assets/screenshots/0.1/03-book-interior-settings-auto-intro.png)
 

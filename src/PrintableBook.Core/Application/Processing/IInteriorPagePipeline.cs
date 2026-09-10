@@ -5,7 +5,8 @@ namespace PrintableBook.Core.Application.Processing;
 public enum InteriorPageProcessingKind
 {
     Interior = 0,
-    IntroTemplate = 1
+    IntroTemplate = 1,
+    BrandIntroTemplate = 2
 }
 
 public sealed record InteriorPagePipelineRequest
@@ -39,7 +40,8 @@ public sealed record InteriorPagePipelineRequest
         BorderLineDetection = borderLineDetection;
         ProcessingKind = processingKind;
         if (!Enum.IsDefined(processingKind)) throw new ArgumentOutOfRangeException(nameof(processingKind), processingKind, "Unsupported page processing kind.");
-        if (processingKind == InteriorPageProcessingKind.IntroTemplate && (frame is not null || frameMode != FrameMode.Disabled))
+        if (processingKind is (InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate) &&
+            (frame is not null || frameMode != FrameMode.Disabled))
         {
             throw new ArgumentException("IntroTemplate pages must not apply a frame.", nameof(frameMode));
         }

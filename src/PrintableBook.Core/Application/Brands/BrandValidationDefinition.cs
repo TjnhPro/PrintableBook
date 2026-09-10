@@ -36,7 +36,7 @@ public sealed record BrandValidationDefinition(
 
     // Any future tracked-scope or rule semantic change must update this to its real UTC change time.
     private static readonly DateTimeOffset CurrentDefinitionChangedAtUtc =
-        new(2026, 8, 31, 4, 32, 0, TimeSpan.Zero);
+        new(2026, 9, 10, 0, 0, 0, TimeSpan.Zero);
 
     public static BrandValidationDefinition CreateCurrent(GlobalSettings settings)
     {
@@ -50,7 +50,7 @@ public sealed record BrandValidationDefinition(
                     new BrandValidationDirectoryFilesTarget("IntroTemplate", true, SupportedIntroExtensions, 1),
                     [
                         new BrandFileExistsRule(),
-                        new BrandImageDimensionsRule([new ImageSize(1024, 1024), new ImageSize(2048, 2048)])
+                        new BrandImageDimensionsRule([new ImageSize(1024, 1024), new ImageSize(2048, 2048), new ImageSize(settings.FinalPageWidth, settings.FinalPageHeight)])
                     ]),
                 new BrandValidationEntry(
                     "frame",

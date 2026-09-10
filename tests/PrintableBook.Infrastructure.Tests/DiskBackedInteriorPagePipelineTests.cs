@@ -117,7 +117,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ProcessAsync_uses_final_intro_artwork_directly_without_creating_intermediate_artifacts()
+    public async Task ProcessAsync_uses_final_sized_brand_intro_artwork_directly_without_creating_intermediate_artifacts()
     {
         Directory.CreateDirectory(rootPath);
         var source = Path.Combine(rootPath, "final-intro.png");
@@ -130,7 +130,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
 
         var result = await CreatePipeline().ProcessAsync(new InteriorPagePipelineRequest(
             workspace, new FileReference(source), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(2270, 2270), new ImageSize(2550, 2550), new ImageSize(2588, 2625), new ImageDensity(300, 300), null, FrameMode.Disabled,
-            processingKind: InteriorPageProcessingKind.FinalIntroTemplate));
+            processingKind: InteriorPageProcessingKind.BrandIntroTemplate));
 
         Assert.Equal(new FileReference(source), result.FinalPage);
         Assert.Equal(new ImageSize(2588, 2625), (await new MagickImageInspector().GetInfoAsync(result.FinalPage)).Size);

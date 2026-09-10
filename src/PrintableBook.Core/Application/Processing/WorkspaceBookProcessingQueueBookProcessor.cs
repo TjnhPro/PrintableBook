@@ -116,7 +116,9 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     FrameMode.Disabled,
                     command.ArtworkSourceNormalization,
                     command.BorderLineDetection,
-                    InteriorPageProcessingKind.IntroTemplate))
+                    command.CustomIntroFromBookInterior
+                        ? InteriorPageProcessingKind.IntroTemplate
+                        : InteriorPageProcessingKind.BrandIntroTemplate))
                 .ToArray();
             var interiorRequests = activeInteriorSources
                 .Select(item => new InteriorPagePipelineRequest(
@@ -257,7 +259,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         }
         catch (InteriorPageProcessingException failure)
         {
-            var isIntro = failure.ProcessingKind == InteriorPageProcessingKind.IntroTemplate;
+            var isIntro = failure.ProcessingKind is InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate;
             var processingFailure = new ProcessingFailure(isIntro ? "intro.page_failed" : "interior.page_failed", failure.Message);
             state = state.Fail(isIntro ? "intro-pages" : "interior-pages", processingFailure, DateTimeOffset.UtcNow);
             await stateStore.SaveErrorAsync(workspace, processingFailure, CancellationToken.None);
