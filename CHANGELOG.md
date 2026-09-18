@@ -11,6 +11,8 @@
 ### Changed
 
 - Gói Windows x64 portable dùng framework-dependent single-file executable; WebView2 profile được lưu trong `%LOCALAPPDATA%\PrintableBook\WebView2`.
+- **No frame** nay ép Interior qua CropArt (trim trắng, pad vuông trắng, resize chuẩn), bỏ qua detector và không áp Brand frame; các lựa chọn `disabled` đã lưu nhận semantics mới khi process lại.
+- Cache Interior nâng lên stamp v4/classification metadata v2 với provenance detected/forced, migration chọn lọc từ v3 và atomic commit để retry an toàn.
 
 ## 0.1.0
 

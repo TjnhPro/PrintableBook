@@ -26,14 +26,14 @@ The working page centers the 2270-square artwork at `(140, 140)`. The final page
 
 ## Brand-frame policy
 
-Frame availability, automatic recommendation, and user mode remain separate. `FrameMode.Auto` uses `AutoFrameRecommended`; `FrameMode.Enabled` forces a compatible available frame; `FrameMode.Disabled` suppresses it. The exact decision is:
+Frame availability, automatic recommendation, and user mode remain separate at the overlay stage. `FrameMode.Auto` uses `AutoFrameRecommended`; `FrameMode.Enabled` forces a compatible available frame; `FrameMode.Disabled` suppresses it. Before preparation, however, Disabled is also an explicit user override: it skips the classifier and selects CropArt.
 
 ```text
 ShouldApplyFrame = FrameAvailable &&
   (Auto => AutoFrameRecommended, Enabled => true, Disabled => false)
 ```
 
-Thus BorderArt and FullArt frame in Auto, CropArt stays unframed in Auto, CropArt can be framed with Enabled, and BorderArt/FullArt can be unframed with Disabled.
+Thus BorderArt and FullArt frame in Auto, CropArt stays unframed in Auto, and any detected type can be framed with Enabled. Disabled always prepares as CropArt and remains unframed; it no longer preserves a detected BorderArt/FullArt preparation path.
 
 An applied frame must already match the prepared artwork size. It is not silently resized. If no frame applies, `framed.png` is an exact pass-through artifact so downstream stages have a stable input.
 
@@ -48,10 +48,12 @@ Each page has these durable artifacts:
 .workspace/cache/<PageId>/framed.png
 .workspace/cache/<PageId>/working-page.png
 .workspace/processed/interior/<PageId>.png
-.workspace/processed/interior/<PageId>.input-stamp.json
+.workspace/cache/<PageId>/input-stamp.json
 ```
 
-The input stamp includes source identity, threshold, classification and preparation algorithm versions, all three image sizes, density, frame identity, and `FrameMode`. Cache invalidation starts at the earliest changed dependency: a FrameMode-only change reuses `classification.json` and `prepared.png`, then rebuilds `framed.png`, `working-page.png`, and the final page. Corrupt or incompatible stamps, corrupt metadata, and unreadable/wrong-size stage files are treated as stale and regenerated. `classification.json` persists canonical type strings: `borderart`, `fullart`, or `cropart`. Failure or cancellation retains the workspace for a later retry.
+The v4 input stamp includes source identity, classification policy, threshold, detector/preparation versions, all three image sizes, density, frame identity, and `FrameMode`. Cache invalidation follows policy-specific dependencies: `Auto ↔ Enabled` reuses classification/prepared; `Disabled ↔ Auto|Enabled` rebuilds from classification; detector settings do not invalidate forced No Frame; trim threshold changes invalidate its preparation.
+
+`classification.json` v2 persists effective type, origin (`detected`, `forced-no-frame`, `forced-intro`), detection status and optional detector evidence. Forced entries must have null evidence. Recognized v3 Auto/Enabled metadata is upgraded without rewriting compatible preparation, while legacy Interior Disabled is rebuilt. Corrupt, contradictory or unknown schemas fail closed. Classification metadata is atomically replaced and the v4 stamp is committed last, so cancellation retains a retryable workspace.
 
 ## Local product workflow certification
 
