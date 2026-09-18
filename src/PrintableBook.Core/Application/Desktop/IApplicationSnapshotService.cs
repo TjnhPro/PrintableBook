@@ -92,6 +92,7 @@ public sealed class ApplicationSnapshotService(
         var source = validation?.Source;
         var sourceFailure = scan.Failure ?? validation?.Failure;
         var isSourceValid = scan.IsSuccess && validation!.IsSuccess;
+        var processingRoot = scan.Metadata?.ProcessingRoot ?? book.Directory;
         var state = await stateStore.LoadAsync(book.Workspace, cancellationToken) ?? BookProcessingState.NotStarted(book.Id);
         var coverCandidates = source?.GetAssets(BookAssetKind.Cover).Select(asset => asset.Reference).ToArray() ?? [];
         var hasSelectedCover = coverCandidates.Length == 1 || coverCandidates.Any(candidate => string.Equals(candidate, state.SelectedCoverReference, StringComparison.OrdinalIgnoreCase));
@@ -185,7 +186,9 @@ public sealed class ApplicationSnapshotService(
         {
             checks.Add(introCheck);
         }
-        var assetSummaries = DescribeAssets(book, source, state);
+        var representativeCoverReference = scan.Metadata?.RepresentativeImageReference?.Value ??
+            FindRepresentativeCoverReference(processingRoot, source, state.SelectedCoverReference);
+        var assetSummaries = DescribeAssets(book, source, state, scan.Metadata?.RepresentativeImageReference);
         return new BookDesktopSummary(
             book.Id,
             !isReady ? "Invalid" : needsIntroSelection ? "Needs review" : "Ready",
@@ -197,7 +200,7 @@ public sealed class ApplicationSnapshotService(
             interiorPages,
             await stateStore.LoadLogsAsync(book.Workspace, cancellationToken),
             source?.GetAssets(BookAssetKind.Interior).Count ?? 0,
-            await DiscoverSourceFoldersAsync(book.Directory, cancellationToken),
+            await DiscoverSourceFoldersAsync(processingRoot, cancellationToken),
             coverCandidates,
             state.SelectedCoverReference,
             state.UpdatedAt == DateTimeOffset.MinValue ? null : state.UpdatedAt,
@@ -205,34 +208,38 @@ public sealed class ApplicationSnapshotService(
             assetSummaries,
             fullBookChecks,
             await DescribeOutputsAsync(book.Id, state.PublishedArtifactReferences ?? [], cancellationToken),
-            FindRepresentativeCoverReference(book, source, state.SelectedCoverReference),
+            representativeCoverReference,
             HasBackground: state.HasBackground,
             ActiveInteriorSourcePageCount: activeInteriorSourcePageCount,
             HasIntro: state.HasIntro,
             SelectedIntroInteriorSourceKeys: state.SelectedIntroInteriorSourceKeys);
     }
 
-    private static string? FindRepresentativeCoverReference(DiscoveredBook book, BookSource? source, string? selectedCoverReference)
+    private static string? FindRepresentativeCoverReference(DirectoryReference processingRoot, BookSource? source, string? selectedCoverReference)
     {
         var covers = source?.GetAssets(BookAssetKind.Cover) ?? [];
         return covers
             .OrderByDescending(asset => string.Equals(asset.Reference, selectedCoverReference, StringComparison.OrdinalIgnoreCase))
-            .ThenBy(asset => IsBookCoverAsset(book, asset) ? 0 : 1)
+            .ThenBy(asset => IsBookCoverAsset(processingRoot, asset) ? 0 : 1)
             .ThenBy(asset => asset.Reference, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault()
             ?.Reference;
     }
 
-    private static bool IsBookCoverAsset(DiscoveredBook book, BookAsset asset) =>
-        Path.GetRelativePath(book.Directory.Value, asset.Reference)
+    private static bool IsBookCoverAsset(DirectoryReference processingRoot, BookAsset asset) =>
+        Path.GetRelativePath(processingRoot.Value, asset.Reference)
             .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
             .StartsWith($"Book cover{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase);
 
-    private static IReadOnlyList<BookAssetSummary> DescribeAssets(DiscoveredBook book, BookSource? source, BookProcessingState state)
+    private static IReadOnlyList<BookAssetSummary> DescribeAssets(
+        DiscoveredBook book,
+        BookSource? source,
+        BookProcessingState state,
+        FileReference? representativeImage)
     {
-        if (source is null) return [];
-        var summaries = new List<BookAssetSummary>(source.Assets.Count);
-        foreach (var asset in source.Assets)
+        var sourceAssets = source?.Assets ?? [];
+        var summaries = new List<BookAssetSummary>(sourceAssets.Count + (representativeImage is null ? 0 : 1));
+        foreach (var asset in sourceAssets)
         {
             var file = new FileReference(asset.Reference);
             var relativePath = Path.GetRelativePath(book.Directory.Value, asset.Reference);
@@ -250,6 +257,23 @@ public sealed class ApplicationSnapshotService(
                 ToLocalImageUrl(asset.Reference),
                 sourceKey is null || state.IsInteriorActive(sourceKey)));
         }
+
+        if (representativeImage is not null &&
+            !summaries.Any(asset => string.Equals(asset.SourceReference, representativeImage.Value, StringComparison.OrdinalIgnoreCase)))
+        {
+            var relativePath = Path.GetRelativePath(book.Directory.Value, representativeImage.Value);
+            summaries.Add(new BookAssetSummary(
+                representativeImage.Value,
+                relativePath,
+                Path.GetFileName(representativeImage.Value),
+                Path.GetDirectoryName(relativePath) ?? string.Empty,
+                "Representative",
+                null,
+                null,
+                FrameMode.Auto,
+                ToLocalImageUrl(representativeImage.Value)));
+        }
+
         return summaries;
     }
 
