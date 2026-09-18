@@ -126,7 +126,7 @@ No production processing algorithm changes are planned.
 - Book grid preview: `aspect-ratio: 1`.
 - Compact list: retain existing square geometry.
 - Drawer preview: `64×64` desktop and `48×48` compact.
-- Representative Book image: `object-fit: contain` on the existing muted surface.
+- Representative Book image: CSS-only center crop with `object-fit: cover` and `object-position: center center` on the existing muted surface.
 - PDF Library preview ratio: unchanged.
 - Missing/unreadable thumbnail: reuse the existing placeholder/error fallback.
 - Existing alt text, keyboard actions, focus behavior, and touch targets remain unchanged.
@@ -227,7 +227,7 @@ Files:
 Tasks:
 
 1. Add a Book-specific square ratio instead of changing the shared PDF ratio.
-2. Use `contain` for Book representative images.
+2. Use CSS-only `cover` plus centered object positioning for Book representative images; do not resize source files.
 3. Make drawer preview dimensions square.
 4. Assert PDF Library geometry remains unchanged.
 
@@ -303,7 +303,7 @@ Expected:
 ### Desktop
 
 - Book card and drawer are square.
-- Portrait Main cover uses `contain`.
+- Portrait Main cover fills the square preview and crops from the center.
 - Missing image uses current placeholder.
 - PDF Library ratio remains unchanged.
 
@@ -317,7 +317,7 @@ Expected:
 - [x] Main thumbnail is not a processing Cover candidate.
 - [x] Main thumbnail stays stable after Clone cover selection.
 - [x] Legacy flat Books behave unchanged.
-- [x] Book previews are square and preserve the portrait cover.
+- [x] Book previews are square and center-crop portrait covers through CSS only.
 - [x] PDF Library geometry is unchanged.
 - [x] Focused tests, full suites, Node tests, and Release build pass.
 - [x] Real-folder smoke matches the bounded contract.
@@ -330,7 +330,7 @@ Included:
 - one Main Book-cover thumbnail lookup;
 - display/processing cover separation;
 - Clone-based source diagnostics;
-- Book-only square/contain preview;
+- Book-only square, center-cropped preview;
 - legacy compatibility and regression coverage.
 
 Deferred:
@@ -352,7 +352,7 @@ Deferred:
 | First supported Main cover becomes thumbnail only | Approved by user | Prevents display assets entering export selection |
 | Do not inspect or reason about Main Interior | Approved by user | Removes the incorrect page-008/page-042 assumption |
 | Main thumbnail stays stable after Clone cover selection | Autoplan decision | Separates identity from processing configuration |
-| Book preview square with `contain` | Design review decision | Avoids cropping title artwork |
+| Book preview square with centered `cover` | User follow-up decision | Fill the 1×1 thumbnail from the image center without preprocessing |
 | Clone wins if flat folders also exist | Scope-reduction decision | Warnings/selector are deferred |
 | Outer-root-relative Interior keys remain | Engineering decision | Keeps current state readers/writers consistent |
 
@@ -363,7 +363,7 @@ Deferred:
 | CEO Review | `/plan-ceo-review` via `/autoplan` | Scope and strategy | 1 | CLEAR | Reduced to Main thumbnail plus Clone processing |
 | Codex Review | `/codex review` | Independent second opinion | 0 | UNAVAILABLE | Local Codex CLI authentication failed with HTTP 401 |
 | Eng Review | `/plan-eng-review` via `/autoplan` | Architecture and tests | 1 | CLEAR | Minimal metadata boundary and processing isolation |
-| Design Review | `/plan-design-review` via `/autoplan` | UI/UX gaps | 1 | CLEAR | Square Book preview uses contain; PDF unchanged |
+| Design Review | `/plan-design-review` via `/autoplan` | UI/UX gaps | 1 | SUPERSEDED | User follow-up changed the square preview from contain to CSS-only centered cover; PDF geometry remains unchanged |
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | SKIPPED | No developer-facing product surface |
 
 **VERDICT:** CEO + DESIGN + ENG CLEARED — scope matches the explicit user contract and is implementation-ready pending approval.

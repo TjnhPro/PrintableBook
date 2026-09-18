@@ -1498,7 +1498,7 @@ test("PDF Library List uses bounded thumbnails and verbose output actions", () =
   assert.match(content.innerHTML, /Copy path/);
   assert.match(css, /\.pdf-library-book-list \{ display:grid; grid-template-columns:112px/);
   assert.match(css, /\.pdf-library-book-list \.pdf-library-book-preview \{ width:112px; height:112px; min-height:112px;/);
-  assert.match(css, /\.pdf-library-book-list \.pdf-library-book-preview img \{ object-fit:contain;/);
+  assert.match(css, /\.pdf-library-book-list \.pdf-library-book-preview img \{ object-fit:cover; object-position:center center;/);
   assert.match(css, /\.pdf-library-pagination \{ position:static; justify-content:space-between; width:100%; max-width:100%; margin:0; padding:12px 0 0; box-sizing:border-box; border-top:1px solid var\(--pb-border\);/);
 });
 
