@@ -76,7 +76,11 @@ Các test kiến trúc bảo vệ hướng phụ thuộc: Core không tham chi�
 
 ## Discovery, Book và workspace
 
-Library discovery quét `sources/` thành Book, assets và validation snapshot. Mỗi Book có workspace riêng dưới `.workspace/`, gồm state, log, cache, processed preview và output tạm. Trạng thái Book lưu các lựa chọn ổn định theo key tương đối của ảnh Interior, không theo index hiển thị, nên refresh hay đổi thứ tự file không làm mất lựa chọn.
+Library discovery quét mỗi thư mục trực tiếp dưới `sources/` thành một Book, assets và validation snapshot. Nếu có direct child `Clone book/`, scanner dùng nó làm processing root và áp dụng nguyên `BookSourceLayout.ProcessingFolders`; nếu không có Clone, scanner giữ processing root là thư mục Book để tương thích cấu trúc phẳng cũ. Clone thắng dứt khoát khi cả hai dạng cùng tồn tại.
+
+Với layout Main/Clone, scanner chỉ đọc direct child `Main book/Book cover/`, lọc extension ảnh được hỗ trợ, sắp xếp filename `OrdinalIgnoreCase` và đưa ảnh đầu tiên vào scan metadata làm representative thumbnail. Ảnh Main không được thêm vào `BookSource.Assets`, vì Cover candidates và processor đều lấy từ tập assets này. Không folder Main nào khác được enumerate, validate, đếm hoặc process trong phiên bản này. Snapshot thêm representative vào projection hiển thị riêng và vẫn dùng processing root Clone cho source-folder diagnostics.
+
+Mỗi Book có workspace riêng dưới `.workspace/`, gồm state, log, cache, processed preview và output tạm. Trạng thái Book lưu các lựa chọn ổn định theo key tương đối với outer Book root (ví dụ `Clone book/Book interior/page-001.png`), không theo index hiển thị, nên refresh hay đổi thứ tự file không làm mất lựa chọn. Việc chuyển state từ một Book phẳng cũ sang layout Clone không được thực hiện tự động.
 
 Các output đã publish thuộc `Output/` của Book. PDF Library đọc output đã publish; không đọc trực tiếp cache tạm.
 

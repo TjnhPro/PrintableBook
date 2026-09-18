@@ -1281,6 +1281,27 @@ test("Books render direct Cover and Interior local image URLs and replace a fail
   assert.equal(fallback.textContent, "Image unavailable");
 });
 
+test("Books use the display-only Main representative instead of the Clone processing cover", () => {
+  const { messageHandler, content } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "nested-book", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" },
+      representativeCoverReference: "D:\\sources\\Book 001\\Main book\\Book cover\\main.png",
+      coverCandidates: ["D:\\sources\\Book 001\\Clone book\\Book cover\\clone.png"],
+      validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      assets: [
+        { sourceReference: "D:\\sources\\Book 001\\Main book\\Book cover\\main.png", localImageUrl: "file:///D:/sources/Book%20001/Main%20book/Book%20cover/main.png", relativePath: "Main book/Book cover/main.png", fileName: "main.png", folder: "Main book/Book cover", kind: "Representative", frameMode: "auto" },
+        { sourceReference: "D:\\sources\\Book 001\\Clone book\\Book cover\\clone.png", localImageUrl: "file:///D:/sources/Book%20001/Clone%20book/Book%20cover/clone.png", relativePath: "Clone book/Book cover/clone.png", fileName: "clone.png", folder: "Clone book/Book cover", kind: "Cover", frameMode: "auto" }
+      ]
+    }]
+  } } });
+
+  assert.match(content.innerHTML, /Main%20book\/Book%20cover\/main\.png/);
+  assert.doesNotMatch(content.innerHTML, /Clone%20book\/Book%20cover\/clone\.png/);
+});
+
 test("frontend source contains no removed asset-preview bridge protocol", () => {
   const script = readFileSync(appScriptPath, "utf8");
 

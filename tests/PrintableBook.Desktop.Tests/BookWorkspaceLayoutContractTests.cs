@@ -63,6 +63,20 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
+    public void BookRepresentativePreviewsAreSquareAndPreserveTheWholeImageWithoutChangingPdfGeometry()
+    {
+        var layout = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css"));
+
+        Assert.Contains("--pb-representative-preview: 1 / 1", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-card-preview { position:relative; display:grid; width:100%; aspect-ratio:var(--pb-representative-preview)", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-card-preview img { width:100%; height:100%; object-fit:contain; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-drawer-preview { display:grid; width:64px; height:64px", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-drawer-preview { width:48px; height:48px; }", layout, StringComparison.Ordinal);
+        Assert.Contains("--pb-book-card-preview: 4 / 3", layout, StringComparison.Ordinal);
+        Assert.Contains(".pdf-library-book-grid .pdf-library-book-preview { aspect-ratio:16 / 9; }", layout, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void InteriorArtworkWorkspaceUsesAnIndependentlyScrollableStatusGrid()
     {
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
