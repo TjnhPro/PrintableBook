@@ -168,6 +168,27 @@ public sealed class ApplicationSnapshotServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_keeps_the_main_thumbnail_separate_from_clone_processing_assets()
+    {
+        var scanner = new NestedBookScanner();
+        var fileSystem = new RecordingFolderFileSystem();
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(),
+            new StubSettingsStore(),
+            scanner,
+            new StubStateStore(scanner.CloneCoverReference),
+            fileSystem).RefreshAsync();
+
+        var summary = Assert.Single(snapshot.BookSummaries);
+        Assert.Equal(scanner.MainCoverReference, summary.RepresentativeCoverReference);
+        Assert.Equal([scanner.CloneCoverReference], summary.CoverCandidates);
+        Assert.Equal("Representative", Assert.Single(summary.Assets!, asset => asset.SourceReference == scanner.MainCoverReference).Kind);
+        Assert.DoesNotContain(summary.CoverCandidates!, candidate => candidate == scanner.MainCoverReference);
+        Assert.Equal("Clone book/Book interior/page-001.png", Assert.Single(summary.InteriorSourcePages!).SourceKey);
+        Assert.All(fileSystem.DirectoryQueries, path => Assert.StartsWith(scanner.CloneRoot, path, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task RefreshAsync_opens_sanitized_snapshot_operation_scopes()
     {
         var diagnostics = new RecordingDiagnostics();
@@ -471,6 +492,23 @@ public sealed class ApplicationSnapshotServiceTests
                 new BookAsset(Path.Combine(bookDirectory.Value, "Interior", "page-1.png"), BookAssetKind.Interior)])));
     }
 
+    private sealed class NestedBookScanner : IBookSourceScanner
+    {
+        public string CloneRoot { get; } = Path.Combine("sources", "Book A", "Clone book");
+        public string CloneCoverReference { get; } = Path.Combine("sources", "Book A", "Clone book", "Book cover", "clone.png");
+        public string MainCoverReference { get; } = Path.Combine("sources", "Book A", "Main book", "Book cover", "main.png");
+
+        public ValueTask<BookSourceScanResult> ScanAsync(BookId bookId, DirectoryReference bookDirectory, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(BookSourceScanResult.Succeeded(
+                new BookSource([
+                    new BookAsset(CloneCoverReference, BookAssetKind.Cover),
+                    new BookAsset(Path.Combine(CloneRoot, "Book interior", "page-001.png"), BookAssetKind.Interior)]),
+                new BookSourceScanMetadata(
+                    BookSourceLayoutKind.MainCloneNestedV1,
+                    new DirectoryReference(CloneRoot),
+                    new FileReference(MainCoverReference))));
+    }
+
     private sealed class StubStateStore(string? selectedCoverReference = null, BookProcessingState? explicitState = null) : IBookWorkspaceStateStore
     {
         public ValueTask<BookProcessingState?> LoadAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) =>
@@ -494,6 +532,28 @@ public sealed class ApplicationSnapshotServiceTests
         {
             foreach (var file in files) yield return file;
         }
+        public ValueTask<string> ReadTextAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult(string.Empty);
+        public ValueTask WriteTextAtomicallyAsync(FileReference file, string content, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask CopyFileAsync(FileReference source, FileReference destination, bool overwrite, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask MoveFileAsync(FileReference source, FileReference destination, bool overwrite, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask DeleteFileAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask DeleteDirectoryAsync(DirectoryReference directory, bool recursive, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    }
+
+    private sealed class RecordingFolderFileSystem : IFileSystem
+    {
+        public List<string> DirectoryQueries { get; } = [];
+
+        public ValueTask<bool> FileExistsAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
+        public ValueTask<FileMetadata?> GetFileMetadataAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult<FileMetadata?>(null);
+        public ValueTask<bool> DirectoryExistsAsync(DirectoryReference directory, CancellationToken cancellationToken = default)
+        {
+            DirectoryQueries.Add(directory.Value);
+            return ValueTask.FromResult(false);
+        }
+        public ValueTask CreateDirectoryAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public async IAsyncEnumerable<DirectoryReference> EnumerateDirectoriesAsync(DirectoryReference directory, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) { yield break; }
+        public async IAsyncEnumerable<FileReference> EnumerateFilesAsync(DirectoryReference directory, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) { yield break; }
         public ValueTask<string> ReadTextAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult(string.Empty);
         public ValueTask WriteTextAtomicallyAsync(FileReference file, string content, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask CopyFileAsync(FileReference source, FileReference destination, bool overwrite, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;

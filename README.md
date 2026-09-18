@@ -24,7 +24,7 @@ PrintableBook/
 └─ settings.json
 ```
 
-Mỗi Book nằm trong `sources/`. Khi xử lý, Book có `.workspace/` riêng cho state/cache và `Output/` cho PDF đã publish.
+Mỗi thư mục trực tiếp trong `sources/` là một Book. Gói Book mới có thể chứa `Main book/Book cover/` và `Clone book/`: ảnh được hỗ trợ đầu tiên trong `Main book/Book cover/` chỉ dùng làm thumbnail, còn toàn bộ ảnh xử lý vẫn đọc từ cấu trúc folder hiện có bên trong `Clone book/`. Các folder Main khác chưa được đọc. Book theo cấu trúc phẳng cũ vẫn được hỗ trợ khi không có `Clone book/`. Khi xử lý, Book có `.workspace/` riêng cho state/cache và `Output/` cho PDF đã publish.
 
 ## Bắt đầu nhanh
 

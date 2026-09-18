@@ -234,6 +234,97 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessBookAsync_processes_only_clone_book_interior_in_a_nested_package()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "NestedInteriorBook"));
+        var cloneInterior = Path.Combine(bookDirectory.Value, "Clone book", "Book interior");
+        var mainInterior = Path.Combine(bookDirectory.Value, "Main book", "Book interior");
+        var mainCover = Path.Combine(bookDirectory.Value, "Main book", "Book cover");
+        Directory.CreateDirectory(cloneInterior);
+        Directory.CreateDirectory(mainInterior);
+        Directory.CreateDirectory(mainCover);
+        await WriteImageAsync(Path.Combine(cloneInterior, "page-01.png"), 40, 20, 259, 279);
+        await WriteImageAsync(Path.Combine(cloneInterior, "page-02.png"), 20, 40, 279, 259);
+        await WriteImageAsync(Path.Combine(mainInterior, "ignored-page.png"), 10, 10, 289, 289);
+        await WriteImageAsync(Path.Combine(mainCover, "main.png"), 10, 10, 289, 289);
+
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(), shuffleStore,
+            CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new PdfSharpPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+        var command = CreateCommand("nested-interior-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
+
+        var result = await processor.ProcessBookAsync(command);
+
+        Assert.Equal(BookProcessingStatus.Completed, result.Status);
+        using var interiorPdf = PdfReader.Open(result.PublishedInteriorOutput!.InteriorPdf.Value);
+        Assert.Equal(2, interiorPdf.Pages.Count);
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        var shuffle = await shuffleStore.LoadAsync(workspace);
+        Assert.All(shuffle!.Entries, entry => Assert.Contains(Path.Combine("Clone book", "Book interior"), entry.Page.Value, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(shuffle.Entries, entry => entry.Page.Value.Contains(Path.Combine("Main book", "Book interior"), StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ProcessBookAsync_rejects_the_main_thumbnail_as_a_selected_processing_cover()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "NestedCoverBook"));
+        var cloneCover = Path.Combine(bookDirectory.Value, "Clone book", "Book cover");
+        var cloneInterior = Path.Combine(bookDirectory.Value, "Clone book", "Book interior");
+        var mainCover = Path.Combine(bookDirectory.Value, "Main book", "Book cover");
+        Directory.CreateDirectory(cloneCover);
+        Directory.CreateDirectory(cloneInterior);
+        Directory.CreateDirectory(mainCover);
+        await WriteImageAsync(Path.Combine(cloneCover, "clone.png"), 10, 10, 589, 289, 600, 300);
+        await WriteImageAsync(Path.Combine(cloneInterior, "page-01.png"), 40, 20, 259, 279);
+        var mainThumbnail = new FileReference(Path.Combine(mainCover, "main.png"));
+        await WriteImageAsync(mainThumbnail.Value, 10, 10, 589, 289, 600, 300);
+
+        var fileSystem = new PhysicalFileSystem();
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem), new PhysicalBookWorkspaceFactory(fileSystem),
+            new JsonBookWorkspaceStateStore(fileSystem), new MagickCoverValidator(), new JsonInteriorShuffleStore(fileSystem),
+            CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new PdfSharpPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+        var command = CreateCommand("nested-cover-book", bookDirectory) with { SelectedCover = mainThumbnail };
+
+        var result = await processor.ProcessBookAsync(command);
+
+        Assert.Equal(BookProcessingStatus.Failed, result.Status);
+        Assert.Equal("book.cover_selection_invalid", result.Failure!.Code);
+    }
+
+    [Fact]
+    public async Task ProcessBookAsync_rescans_clone_book_and_fails_when_its_interior_becomes_empty()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "NestedRescanBook"));
+        var cloneInterior = Path.Combine(bookDirectory.Value, "Clone book", "Book interior");
+        Directory.CreateDirectory(cloneInterior);
+        var interiorPath = Path.Combine(cloneInterior, "page-01.png");
+        await WriteImageAsync(interiorPath, 40, 20, 259, 279);
+
+        var fileSystem = new PhysicalFileSystem();
+        var initialScan = await new BookSourceScanner(fileSystem).ScanAsync(new BookId("nested-rescan-book"), bookDirectory);
+        Assert.Single(initialScan.Source!.GetAssets(BookAssetKind.Interior));
+        File.Delete(interiorPath);
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem), new PhysicalBookWorkspaceFactory(fileSystem),
+            new JsonBookWorkspaceStateStore(fileSystem), new MagickCoverValidator(), new JsonInteriorShuffleStore(fileSystem),
+            CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new PdfSharpPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+
+        var result = await processor.ProcessBookAsync(
+            CreateCommand("nested-rescan-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly });
+
+        Assert.Equal(BookProcessingStatus.Failed, result.Status);
+        Assert.Equal("book.interior_empty", result.Failure!.Code);
+    }
+
+    [Fact]
     public async Task ProcessBookAsync_skips_inactive_interior_without_renumbering_or_deleting_its_cache()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "InactiveInteriorBook"));

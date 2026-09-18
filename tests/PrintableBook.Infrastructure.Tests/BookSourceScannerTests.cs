@@ -92,6 +92,76 @@ public sealed class BookSourceScannerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ScanAsync_uses_clone_book_for_processing_and_main_book_cover_for_the_representative_image()
+    {
+        await CreateFileAsync(Path.Combine("Clone book", "Book cover"), "clone-cover.jpg");
+        await CreateFileAsync(Path.Combine("Clone book", "Book interior"), "page-001.jpg");
+        await CreateFileAsync(Path.Combine("Clone book", "Book interior"), "page-002.jpg");
+        await CreateFileAsync(Path.Combine("Main book", "Book cover"), "z-cover.png");
+        await CreateFileAsync(Path.Combine("Main book", "Book cover"), "a-cover.png");
+        await CreateFileAsync(Path.Combine("Main book", "Book cover"), "notes.txt");
+        await CreateFileAsync(Path.Combine("Main book", "Book interior"), "page-999.png");
+
+        var result = await CreateScanner().ScanAsync(new BookId("book-one"), new DirectoryReference(rootPath));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(BookSourceLayoutKind.MainCloneNestedV1, result.Metadata!.LayoutKind);
+        Assert.Equal(Path.Combine(rootPath, "Clone book"), result.Metadata.ProcessingRoot.Value);
+        Assert.Equal(
+            Path.Combine(rootPath, "Main book", "Book cover", "a-cover.png"),
+            result.Metadata.RepresentativeImageReference!.Value);
+        Assert.Equal(
+            ["page-001.jpg", "page-002.jpg"],
+            result.Source!.GetAssets(BookAssetKind.Interior).Select(asset => Path.GetFileName(asset.Reference)));
+        Assert.Equal("clone-cover.jpg", Path.GetFileName(Assert.Single(result.Source.GetAssets(BookAssetKind.Cover)).Reference));
+        Assert.DoesNotContain(result.Source.Assets, asset => asset.Reference.Contains($"{Path.DirectorySeparatorChar}Main book{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ScanAsync_falls_back_to_clone_cover_when_main_book_cover_has_no_supported_image()
+    {
+        await CreateFileAsync(Path.Combine("Clone book", "Book cover"), "clone-cover.jpg");
+        await CreateFileAsync(Path.Combine("Clone book", "Book interior"), "page-001.jpg");
+        await CreateFileAsync(Path.Combine("Main book", "Book cover"), "notes.txt");
+
+        var result = await CreateScanner().ScanAsync(new BookId("book-one"), new DirectoryReference(rootPath));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(BookSourceLayoutKind.MainCloneNestedV1, result.Metadata!.LayoutKind);
+        Assert.Null(result.Metadata.RepresentativeImageReference);
+        Assert.Equal("clone-cover.jpg", Path.GetFileName(Assert.Single(result.Source!.GetAssets(BookAssetKind.Cover)).Reference));
+    }
+
+    [Fact]
+    public async Task ScanAsync_resolves_nested_package_folder_names_case_insensitively()
+    {
+        await CreateFileAsync(Path.Combine("clone BOOK", "book INTERIOR"), "page-001.jpg");
+        await CreateFileAsync(Path.Combine("MAIN book", "BOOK COVER"), "main.png");
+
+        var result = await CreateScanner().ScanAsync(new BookId("book-one"), new DirectoryReference(rootPath));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(BookSourceLayoutKind.MainCloneNestedV1, result.Metadata!.LayoutKind);
+        Assert.EndsWith(Path.Combine("clone BOOK", "book INTERIOR", "page-001.jpg"), Assert.Single(result.Source!.GetAssets(BookAssetKind.Interior)).Reference, StringComparison.Ordinal);
+        Assert.EndsWith(Path.Combine("MAIN book", "BOOK COVER", "main.png"), result.Metadata.RepresentativeImageReference!.Value, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ScanAsync_keeps_the_legacy_flat_processing_root_when_clone_book_is_absent()
+    {
+        await CreateFileAsync("Book interior", "page-001.jpg");
+        await CreateFileAsync(Path.Combine("Main book", "Book cover"), "main-cover.png");
+
+        var result = await CreateScanner().ScanAsync(new BookId("book-one"), new DirectoryReference(rootPath));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(BookSourceLayoutKind.LegacyFlat, result.Metadata!.LayoutKind);
+        Assert.Equal(rootPath, result.Metadata.ProcessingRoot.Value);
+        Assert.Null(result.Metadata.RepresentativeImageReference);
+        Assert.Single(result.Source!.GetAssets(BookAssetKind.Interior));
+    }
+
+    [Fact]
     public async Task ScanAsync_succeeds_when_interior_folder_is_empty()
     {
         await CreateFileAsync("Cover", "cover.png");

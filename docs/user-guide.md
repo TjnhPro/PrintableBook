@@ -16,7 +16,21 @@ Kích thước hợp lệ: `frame.png` phải là `Artwork maximum side × Artwo
 
 ## 3. Chuẩn bị Book
 
-Mỗi Book là một thư mục trực tiếp dưới `sources/`. Đặt ảnh cần xử lý vào `Book interior/`. Cover chưa phải điều kiện để chạy **Process Interior**; khi output full book được sử dụng sau này, Cover sẽ có luồng validation riêng.
+Mỗi Book là một thư mục trực tiếp dưới `sources/`. Hai cấu trúc được hỗ trợ:
+
+```text
+sources/<Book>/
+├─ Main book/
+│  └─ Book cover/       # ảnh hỗ trợ đầu tiên theo tên file: chỉ dùng làm thumbnail
+└─ Clone book/
+   ├─ Book cover/
+   ├─ Book interior/    # nguồn Process Interior
+   └─ ...               # giữ nguyên các folder nguồn hiện có
+```
+
+Khi có `Clone book/`, ứng dụng chỉ dùng cấu trúc bên trong Clone để validation và process. `Main book/Book cover/` chỉ cung cấp thumbnail; ảnh này không phải Cover candidate và không đi vào PDF. Các folder khác trong Main chưa được đọc. Nếu thiếu thumbnail Main, giao diện dùng Cover đại diện từ Clone như trước.
+
+Với Book theo cấu trúc phẳng cũ, tiếp tục đặt `Book interior/`, `Book cover/` và các folder nguồn trực tiếp dưới thư mục Book. Ứng dụng dùng cấu trúc cũ này khi không có `Clone book/`; state của Book phẳng đã tồn tại không tự động chuyển sang đường dẫn Clone. Cover chưa phải điều kiện để chạy **Process Interior**; output full book vẫn dùng luồng Cover validation riêng.
 
 ## 4. Refresh Library
 
