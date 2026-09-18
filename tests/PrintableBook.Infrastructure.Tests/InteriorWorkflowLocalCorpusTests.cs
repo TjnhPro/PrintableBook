@@ -83,7 +83,7 @@ public sealed class InteriorWorkflowLocalCorpusTests
 
                     var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
                     using var classification = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(cache, "classification.json")));
-                    var actualType = ReadCanonicalArtworkType(classification.RootElement.GetProperty("Type").GetString());
+                    var actualType = ReadCanonicalArtworkType(classification.RootElement.GetProperty("EffectiveType").GetString());
                     var outputPaths = CopyArtifacts(categoryDirectory, resultsDirectory, category.Name, input, cache, result.FinalPage.Value);
                     var prepared = await inspector.GetInfoAsync(new FileReference(outputPaths.Prepared));
                     var framed = await inspector.GetInfoAsync(new FileReference(outputPaths.Framed));

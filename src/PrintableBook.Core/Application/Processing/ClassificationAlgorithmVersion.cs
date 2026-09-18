@@ -1,7 +1,8 @@
 namespace PrintableBook.Core.Application.Processing;
 
 /// <summary>
-/// Version of the output-affecting detector ordering and artwork type policy.
+/// Version of the detector ordering and detected artwork-type decision.
+/// Forced preparation policies are versioned independently by the page pipeline.
 /// </summary>
 public static class ClassificationAlgorithmVersion
 {

@@ -16,7 +16,12 @@ public sealed class DiskBackedInteriorPagePipeline(
     IFinalInteriorPageProcessor finalPageProcessor,
     IImageInspector imageInspector) : IInteriorPagePipeline
 {
-    private const string CacheStampSchemaVersion = "interior-page-cache-v3";
+    private const string CacheStampSchemaVersion = "interior-page-cache-v4";
+    private const string LegacyCacheStampSchemaVersion = "interior-page-cache-v3";
+    private const string ClassificationCacheSchemaVersion = "artwork-classification-cache-v2";
+    private const string DetectedPolicy = "detected-v1";
+    private const string ForcedNoFramePolicy = "forced-no-frame-v1";
+    private const string ForcedIntroPolicy = "forced-intro-v1";
 
     public DiskBackedInteriorPagePipeline(
         IArtworkClassifier artworkClassifier,
@@ -65,7 +70,8 @@ public sealed class DiskBackedInteriorPagePipeline(
             Directory.CreateDirectory(processedInteriorDirectory);
             Directory.CreateDirectory(pageCache);
             MigrateLegacyCacheStamp(legacyCacheStampFile, cacheStampFile);
-            var currentStamp = CacheInputStamp.Create(request);
+            var classificationPolicy = ResolveClassificationPolicy(request);
+            var currentStamp = CacheInputStamp.Create(request, classificationPolicy);
             var previousStamp = await TryReadCacheStampAsync(cacheStampFile, cancellationToken);
             var invalidation = previousStamp is null
                 ? CacheInvalidationStage.Classification
@@ -73,7 +79,6 @@ public sealed class DiskBackedInteriorPagePipeline(
             if (invalidation is not CacheInvalidationStage.None)
             {
                 ApplyInvalidation(invalidation, normalized, classificationFile, prepared, framed, working, finalPage);
-                await File.WriteAllTextAsync(cacheStampFile, JsonSerializer.Serialize(currentStamp), cancellationToken);
             }
 
             if (!await IsReadableAsync(normalized, new ImageSize(request.ArtworkSourceNormalization.NormalizedSourceSize, request.ArtworkSourceNormalization.NormalizedSourceSize), cancellationToken))
@@ -88,13 +93,28 @@ public sealed class DiskBackedInteriorPagePipeline(
 
             var classification = invalidation is CacheInvalidationStage.Classification
                 ? null
-                : await TryReadClassificationAsync(classificationFile, cancellationToken);
-            if (isIntroTemplate && classification?.Type != ArtworkType.CropArt)
+                : await TryReadClassificationAsync(
+                    classificationFile,
+                    previousStamp?.SchemaVersion,
+                    previousStamp is null ? classificationPolicy : ResolveClassificationPolicy(previousStamp),
+                    cancellationToken);
+            if (isIntroTemplate && classification is not { Type: ArtworkType.CropArt, Origin: ArtworkClassificationOrigin.ForcedIntro })
             {
                 classification = null;
             }
+
+            if (classification is not null && previousStamp?.SchemaVersion == LegacyCacheStampSchemaVersion)
+            {
+                await WriteClassificationAsync(classificationFile, classification, cancellationToken);
+            }
+
             if (classification is not null && await IsReadableAsync(finalPage, request.FinalPageSize, cancellationToken))
             {
+                if (previousStamp?.SchemaVersion == LegacyCacheStampSchemaVersion)
+                {
+                    await WriteJsonAtomicallyAsync(cacheStampFile, currentStamp, cancellationToken);
+                }
+
                 return new InteriorPageProcessingResult(request.PageId, request.Source, finalPage);
             }
 
@@ -102,10 +122,15 @@ public sealed class DiskBackedInteriorPagePipeline(
             {
                 DeleteDownstream(prepared, framed, working, finalPage);
                 currentStep = "classification";
-                classification = isIntroTemplate
-                    ? CreateForcedCropArtClassification()
-                    : await artworkClassifier.ClassifyAsync(
-                        new ArtworkClassificationRequest(normalized, request.ArtworkDetectionThreshold, request.BorderLineDetection), cancellationToken);
+                classification = classificationPolicy switch
+                {
+                    ForcedIntroPolicy => EffectiveArtworkClassification.ForcedIntro(),
+                    ForcedNoFramePolicy => EffectiveArtworkClassification.ForcedNoFrame(),
+                    DetectedPolicy => EffectiveArtworkClassification.FromDetection(
+                        await artworkClassifier.ClassifyAsync(
+                            new ArtworkClassificationRequest(normalized, request.ArtworkDetectionThreshold, request.BorderLineDetection), cancellationToken)),
+                    _ => throw new InvalidOperationException("The classification policy is not supported.")
+                };
                 await WriteClassificationAsync(classificationFile, classification, cancellationToken);
             }
 
@@ -134,7 +159,7 @@ public sealed class DiskBackedInteriorPagePipeline(
                 request.FrameMode,
                 preparedArtwork.AutoFrameRecommended);
             if (!await IsReadableAsync(framed, request.PreparedArtworkSize, cancellationToken) ||
-                (!shouldApplyFrame && !HashesMatch(prepared, framed)))
+                (!shouldApplyFrame && !FilesMatch(prepared, framed)))
             {
                 DeleteDownstream(working, finalPage);
                 currentStep = "frame";
@@ -157,6 +182,13 @@ public sealed class DiskBackedInteriorPagePipeline(
                 await finalPageProcessor.ProduceAsync(
                     new FinalInteriorPageRequest(working, finalPage, request.FinalPageSize, request.TargetDensity), cancellationToken);
                 await EnsureSizeAsync(finalPage, request.FinalPageSize, "Final page", cancellationToken);
+            }
+
+            if (previousStamp is null ||
+                previousStamp.SchemaVersion == LegacyCacheStampSchemaVersion ||
+                invalidation is not CacheInvalidationStage.None)
+            {
+                await WriteJsonAtomicallyAsync(cacheStampFile, currentStamp, cancellationToken);
             }
 
             return new InteriorPageProcessingResult(request.PageId, request.Source, finalPage);
@@ -193,8 +225,13 @@ public sealed class DiskBackedInteriorPagePipeline(
         }
     }
 
-    private static ArtworkClassificationResult CreateForcedCropArtClassification() =>
-        new(ArtworkType.CropArt, BorderLineDetectionResult.NoBorder(), BorderPixelDetectionResult.None());
+    private static string ResolveClassificationPolicy(InteriorPagePipelineRequest request) => request.ProcessingKind switch
+    {
+        InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate => ForcedIntroPolicy,
+        InteriorPageProcessingKind.Interior when request.FrameMode == FrameMode.Disabled => ForcedNoFramePolicy,
+        InteriorPageProcessingKind.Interior => DetectedPolicy,
+        _ => throw new ArgumentOutOfRangeException(nameof(request), request.ProcessingKind, "Unsupported page processing kind.")
+    };
 
     private async ValueTask<bool> IsReadableAsync(FileReference image, ImageSize expectedSize, CancellationToken cancellationToken)
     {
@@ -235,7 +272,12 @@ public sealed class DiskBackedInteriorPagePipeline(
             }
 
             var stamp = JsonSerializer.Deserialize<CacheInputStamp>(json);
-            return stamp is { SchemaVersion: CacheStampSchemaVersion } ? stamp : null;
+            return stamp?.SchemaVersion switch
+            {
+                CacheStampSchemaVersion when !string.IsNullOrWhiteSpace(stamp.ClassificationPolicy) => stamp,
+                LegacyCacheStampSchemaVersion => stamp,
+                _ => null
+            };
         }
         catch (OperationCanceledException)
         {
@@ -286,23 +328,34 @@ public sealed class DiskBackedInteriorPagePipeline(
 
     private static bool ClassificationCompatible(CacheInputStamp previous, CacheInputStamp current) =>
         string.Equals(previous.ProcessingKind, current.ProcessingKind, StringComparison.Ordinal) &&
-        previous.ArtworkDetectionThreshold == current.ArtworkDetectionThreshold &&
-        string.Equals(previous.BorderLineAlgorithmVersion, current.BorderLineAlgorithmVersion, StringComparison.Ordinal) &&
-        string.Equals(previous.BorderLineSettingsFingerprint, current.BorderLineSettingsFingerprint, StringComparison.Ordinal) &&
-        string.Equals(previous.ClassificationAlgorithmVersion, current.ClassificationAlgorithmVersion, StringComparison.Ordinal);
+        string.Equals(ResolveClassificationPolicy(previous), ResolveClassificationPolicy(current), StringComparison.Ordinal) &&
+        (!string.Equals(ResolveClassificationPolicy(current), DetectedPolicy, StringComparison.Ordinal) ||
+         (previous.ArtworkDetectionThreshold == current.ArtworkDetectionThreshold &&
+          string.Equals(previous.BorderLineAlgorithmVersion, current.BorderLineAlgorithmVersion, StringComparison.Ordinal) &&
+          string.Equals(previous.BorderLineSettingsFingerprint, current.BorderLineSettingsFingerprint, StringComparison.Ordinal) &&
+          string.Equals(previous.ClassificationAlgorithmVersion, current.ClassificationAlgorithmVersion, StringComparison.Ordinal)));
 
     private static bool PreparationCompatible(CacheInputStamp previous, CacheInputStamp current) =>
         string.Equals(previous.ArtworkPreparationAlgorithmVersion, current.ArtworkPreparationAlgorithmVersion, StringComparison.Ordinal) &&
+        previous.ArtworkDetectionThreshold == current.ArtworkDetectionThreshold &&
         previous.PreparedArtworkWidth == current.PreparedArtworkWidth &&
         previous.PreparedArtworkHeight == current.PreparedArtworkHeight &&
         previous.TargetDensityHorizontal == current.TargetDensityHorizontal &&
         previous.TargetDensityVertical == current.TargetDensityVertical;
 
-    private static bool FrameCompatible(CacheInputStamp previous, CacheInputStamp current) =>
-        string.Equals(previous.FramePath, current.FramePath, StringComparison.OrdinalIgnoreCase) &&
-        previous.FrameLength == current.FrameLength &&
-        previous.FrameLastWriteUtcTicks == current.FrameLastWriteUtcTicks &&
-        previous.FrameMode == current.FrameMode;
+    private static bool FrameCompatible(CacheInputStamp previous, CacheInputStamp current)
+    {
+        var currentPolicy = ResolveClassificationPolicy(current);
+        if (currentPolicy is ForcedNoFramePolicy or ForcedIntroPolicy)
+        {
+            return true;
+        }
+
+        return string.Equals(previous.FramePath, current.FramePath, StringComparison.OrdinalIgnoreCase) &&
+               previous.FrameLength == current.FrameLength &&
+               previous.FrameLastWriteUtcTicks == current.FrameLastWriteUtcTicks &&
+               previous.FrameMode == current.FrameMode;
+    }
 
     private static bool WorkingCompatible(CacheInputStamp previous, CacheInputStamp current) =>
         previous.WorkingPageWidth == current.WorkingPageWidth &&
@@ -351,10 +404,14 @@ public sealed class DiskBackedInteriorPagePipeline(
         }
     }
 
-    private static async ValueTask WriteClassificationAsync(string file, ArtworkClassificationResult result, CancellationToken cancellationToken) =>
-        await File.WriteAllTextAsync(file, JsonSerializer.Serialize(ClassificationCacheEntry.From(result)), cancellationToken);
+    private static async ValueTask WriteClassificationAsync(string file, EffectiveArtworkClassification result, CancellationToken cancellationToken) =>
+        await WriteJsonAtomicallyAsync(file, ClassificationCacheEntry.From(result), cancellationToken);
 
-    private static async ValueTask<ArtworkClassificationResult?> TryReadClassificationAsync(string file, CancellationToken cancellationToken)
+    private static async ValueTask<EffectiveArtworkClassification?> TryReadClassificationAsync(
+        string file,
+        string? stampSchemaVersion,
+        string classificationPolicy,
+        CancellationToken cancellationToken)
     {
         if (!File.Exists(file))
         {
@@ -363,8 +420,23 @@ public sealed class DiskBackedInteriorPagePipeline(
 
         try
         {
-            var entry = JsonSerializer.Deserialize<ClassificationCacheEntry>(await File.ReadAllTextAsync(file, cancellationToken));
-            return entry?.ToResult();
+            var json = await File.ReadAllTextAsync(file, cancellationToken);
+            if (stampSchemaVersion == LegacyCacheStampSchemaVersion)
+            {
+                using var document = JsonDocument.Parse(json);
+                if (document.RootElement.TryGetProperty(nameof(ClassificationCacheEntry.SchemaVersion), out var schema) &&
+                    string.Equals(schema.GetString(), ClassificationCacheSchemaVersion, StringComparison.Ordinal))
+                {
+                    var partiallyMigrated = JsonSerializer.Deserialize<ClassificationCacheEntry>(json)?.ToDecision();
+                    return DecisionMatchesPolicy(partiallyMigrated, classificationPolicy) ? partiallyMigrated : null;
+                }
+
+                var legacy = JsonSerializer.Deserialize<LegacyClassificationCacheEntry>(json);
+                return legacy?.ToDecision(classificationPolicy);
+            }
+
+            var entry = JsonSerializer.Deserialize<ClassificationCacheEntry>(json);
+            return entry?.ToDecision();
         }
         catch (OperationCanceledException)
         {
@@ -375,6 +447,15 @@ public sealed class DiskBackedInteriorPagePipeline(
             return null;
         }
     }
+
+    private static bool DecisionMatchesPolicy(EffectiveArtworkClassification? decision, string policy) =>
+        (decision?.Origin, policy) switch
+        {
+            (ArtworkClassificationOrigin.Detected, DetectedPolicy) => true,
+            (ArtworkClassificationOrigin.ForcedNoFrame, ForcedNoFramePolicy) => true,
+            (ArtworkClassificationOrigin.ForcedIntro, ForcedIntroPolicy) => true,
+            _ => false
+        };
 
     private static void DeleteDownstream(params FileReference[] files)
     {
@@ -409,8 +490,53 @@ public sealed class DiskBackedInteriorPagePipeline(
             _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported frame mode.")
         });
 
-    private static bool HashesMatch(FileReference first, FileReference second) =>
-        File.ReadAllBytes(first.Value).AsSpan().SequenceEqual(File.ReadAllBytes(second.Value));
+    private static bool FilesMatch(FileReference first, FileReference second)
+    {
+        const int bufferSize = 64 * 1024;
+        using var left = new FileStream(first.Value, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.SequentialScan);
+        using var right = new FileStream(second.Value, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.SequentialScan);
+        if (left.Length != right.Length)
+        {
+            return false;
+        }
+
+        var leftBuffer = new byte[bufferSize];
+        var rightBuffer = new byte[bufferSize];
+        while (true)
+        {
+            var leftRead = left.Read(leftBuffer);
+            var rightRead = right.Read(rightBuffer);
+            if (leftRead != rightRead || !leftBuffer.AsSpan(0, leftRead).SequenceEqual(rightBuffer.AsSpan(0, rightRead)))
+            {
+                return false;
+            }
+
+            if (leftRead == 0)
+            {
+                return true;
+            }
+        }
+    }
+
+    private static async ValueTask WriteJsonAtomicallyAsync<T>(string file, T value, CancellationToken cancellationToken)
+    {
+        var directory = Path.GetDirectoryName(file)
+            ?? throw new ArgumentException("The cache metadata path must include a directory.", nameof(file));
+        Directory.CreateDirectory(directory);
+        var temporary = Path.Combine(directory, $".{Path.GetFileName(file)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(value), cancellationToken);
+            File.Move(temporary, file, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporary))
+            {
+                File.Delete(temporary);
+            }
+        }
+    }
 
     private enum CacheInvalidationStage
     {
@@ -447,6 +573,7 @@ public sealed class DiskBackedInteriorPagePipeline(
         string BorderLineAlgorithmVersion,
         string BorderLineSettingsFingerprint,
         string ProcessingKind,
+        string? ClassificationPolicy,
         string SchemaVersion)
     {
         private static readonly string[] requiredProperties =
@@ -480,7 +607,7 @@ public sealed class DiskBackedInteriorPagePipeline(
         public static bool HasRequiredProperties(JsonElement stamp) =>
             requiredProperties.All(property => stamp.TryGetProperty(property, out _));
 
-        public static CacheInputStamp Create(InteriorPagePipelineRequest request)
+        public static CacheInputStamp Create(InteriorPagePipelineRequest request, string classificationPolicy)
         {
             var source = new FileInfo(request.Source.Value);
             if (!source.Exists)
@@ -519,6 +646,7 @@ public sealed class DiskBackedInteriorPagePipeline(
                     InteriorPageProcessingKind.BrandIntroTemplate => "intro-template",
                     _ => throw new ArgumentOutOfRangeException(nameof(request), request.ProcessingKind, "Unsupported page processing kind.")
                 },
+                classificationPolicy,
                 CacheStampSchemaVersion);
         }
 
@@ -531,27 +659,89 @@ public sealed class DiskBackedInteriorPagePipeline(
         };
     }
 
+    private static string ResolveClassificationPolicy(CacheInputStamp stamp)
+    {
+        if (stamp.SchemaVersion == LegacyCacheStampSchemaVersion)
+        {
+            return string.Equals(stamp.ProcessingKind, "intro-template", StringComparison.Ordinal)
+                ? ForcedIntroPolicy
+                : DetectedPolicy;
+        }
+
+        return stamp.ClassificationPolicy switch
+        {
+            DetectedPolicy => DetectedPolicy,
+            ForcedNoFramePolicy => ForcedNoFramePolicy,
+            ForcedIntroPolicy => ForcedIntroPolicy,
+            _ => "invalid-policy"
+        };
+    }
+
     private sealed record ClassificationCacheEntry(
-        string Version,
-        string Type,
-        BorderLineCacheEntry BorderLine,
+        string SchemaVersion,
+        string EffectiveType,
+        string Origin,
+        string DetectionStatus,
+        string PolicyVersion,
+        string? DetectorAlgorithmVersion,
+        BorderLineCacheEntry? BorderLine,
         BorderPixelCacheEntry? BorderPixel)
     {
-        public static ClassificationCacheEntry From(ArtworkClassificationResult result) => new(
-            ClassificationAlgorithmVersion.Current,
+        public static ClassificationCacheEntry From(EffectiveArtworkClassification result) => new(
+            ClassificationCacheSchemaVersion,
             ToCanonicalType(result.Type),
-            BorderLineCacheEntry.From(result.BorderLine),
-            result.BorderPixel is null ? null : BorderPixelCacheEntry.From(result.BorderPixel));
-
-        public ArtworkClassificationResult ToResult()
-        {
-            if (!string.Equals(Version, ClassificationAlgorithmVersion.Current, StringComparison.Ordinal))
+            ToCanonicalOrigin(result.Origin),
+            result.DetectionStatus == ArtworkDetectionStatus.Completed ? "completed" : "not-run",
+            result.Origin switch
             {
-                throw new InvalidOperationException("Cached classification uses an incompatible algorithm version.");
+                ArtworkClassificationOrigin.Detected => DetectedPolicy,
+                ArtworkClassificationOrigin.ForcedNoFrame => ForcedNoFramePolicy,
+                ArtworkClassificationOrigin.ForcedIntro => ForcedIntroPolicy,
+                _ => throw new ArgumentOutOfRangeException(nameof(result), result.Origin, "Unsupported classification origin.")
+            },
+            result.Detection is null ? null : ClassificationAlgorithmVersion.Current,
+            result.Detection is null ? null : BorderLineCacheEntry.From(result.Detection.BorderLine),
+            result.Detection?.BorderPixel is null ? null : BorderPixelCacheEntry.From(result.Detection.BorderPixel));
+
+        public EffectiveArtworkClassification ToDecision()
+        {
+            if (!string.Equals(SchemaVersion, ClassificationCacheSchemaVersion, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Cached classification uses an incompatible schema version.");
             }
 
-            return new ArtworkClassificationResult(FromCanonicalType(Type), BorderLine.ToResult(), BorderPixel?.ToResult());
+            var type = FromCanonicalType(EffectiveType);
+            return Origin switch
+            {
+                "detected" when DetectionStatus == "completed" &&
+                                PolicyVersion == DetectedPolicy &&
+                                DetectorAlgorithmVersion == ClassificationAlgorithmVersion.Current &&
+                                BorderLine is not null =>
+                    EffectiveArtworkClassification.FromDetection(
+                        new ArtworkClassificationResult(type, BorderLine.ToResult(), BorderPixel?.ToResult())),
+                "forced-no-frame" when type == ArtworkType.CropArt &&
+                                            DetectionStatus == "not-run" &&
+                                            PolicyVersion == ForcedNoFramePolicy &&
+                                            DetectorAlgorithmVersion is null &&
+                                            BorderLine is null &&
+                                            BorderPixel is null => EffectiveArtworkClassification.ForcedNoFrame(),
+                "forced-intro" when type == ArtworkType.CropArt &&
+                                         DetectionStatus == "not-run" &&
+                                         PolicyVersion == ForcedIntroPolicy &&
+                                         DetectorAlgorithmVersion is null &&
+                                         BorderLine is null &&
+                                         BorderPixel is null => EffectiveArtworkClassification.ForcedIntro(),
+                _ => throw new InvalidOperationException("Cached classification metadata is contradictory.")
+            };
         }
+
+        private static string ToCanonicalOrigin(ArtworkClassificationOrigin origin) => origin switch
+        {
+            ArtworkClassificationOrigin.Detected => "detected",
+            ArtworkClassificationOrigin.ForcedNoFrame => "forced-no-frame",
+            ArtworkClassificationOrigin.ForcedIntro => "forced-intro",
+            _ => throw new ArgumentOutOfRangeException(nameof(origin), origin, "Unsupported classification origin.")
+        };
 
         private static string ToCanonicalType(ArtworkType type) => type switch
         {
@@ -561,13 +751,52 @@ public sealed class DiskBackedInteriorPagePipeline(
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unsupported artwork type.")
         };
 
-        private static ArtworkType FromCanonicalType(string type) => type switch
+        public static ArtworkType FromCanonicalType(string type) => type switch
         {
             "borderart" => ArtworkType.BorderArt,
             "fullart" => ArtworkType.FullArt,
             "cropart" => ArtworkType.CropArt,
             _ => throw new InvalidOperationException("Cached classification has an unknown artwork type.")
         };
+    }
+
+    private sealed record LegacyClassificationCacheEntry(
+        string Version,
+        string Type,
+        BorderLineCacheEntry? BorderLine,
+        BorderPixelCacheEntry? BorderPixel)
+    {
+        public EffectiveArtworkClassification ToDecision(string classificationPolicy)
+        {
+            if (!string.Equals(Version, ClassificationAlgorithmVersion.Current, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Cached classification uses an incompatible algorithm version.");
+            }
+
+            var type = ClassificationCacheEntry.FromCanonicalType(Type);
+            if (classificationPolicy == ForcedIntroPolicy)
+            {
+                if (type != ArtworkType.CropArt)
+                {
+                    throw new InvalidOperationException("Legacy Intro classification must be CropArt.");
+                }
+
+                return EffectiveArtworkClassification.ForcedIntro();
+            }
+
+            if (classificationPolicy != DetectedPolicy)
+            {
+                throw new InvalidOperationException("Legacy classification policy is not supported.");
+            }
+
+            if (BorderLine is null)
+            {
+                throw new InvalidOperationException("Legacy detector metadata is missing BorderLine evidence.");
+            }
+
+            return EffectiveArtworkClassification.FromDetection(
+                new ArtworkClassificationResult(type, BorderLine.ToResult(), BorderPixel?.ToResult()));
+        }
     }
 
     private sealed record BorderLineCacheEntry(bool HasBorder, int? Left, int? Right, int? Top, int? Bottom)

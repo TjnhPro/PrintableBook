@@ -16,12 +16,13 @@ public sealed class BorderArtPreparationProcessor(
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (request.Classification.Type != ArtworkType.BorderArt || !request.Classification.BorderLine.HasBorder)
+        if (request.Classification.Type != ArtworkType.BorderArt ||
+            request.Classification.Detection is not { BorderLine.HasBorder: true } detection)
         {
             throw new ArgumentException("BorderArt preparation requires positive BorderLine evidence.", nameof(request));
         }
 
-        if (request.Classification.BorderLine.BorderBounds is not { } borderBounds)
+        if (detection.BorderLine.BorderBounds is not { } borderBounds)
         {
             throw new ArgumentException("BorderArt preparation requires BorderLine bounds.", nameof(request));
         }

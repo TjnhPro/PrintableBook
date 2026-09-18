@@ -60,9 +60,11 @@ Trang **Active** được đưa vào normal Interior. Trang **Inactive** đượ
 
 ### 7.2 Frame Auto / Frame / No Frame
 
-- **Auto**: dùng recommendation của classification.
-- **Frame**: bắt buộc dùng frame tương thích của Brand.
-- **No frame**: không dùng frame.
+- **Auto**: tự detect `BorderArt` / `FullArt` / `CropArt`, rồi dùng recommendation của classification để quyết định Brand frame.
+- **Frame**: vẫn tự detect cách chuẩn bị artwork, sau đó bắt buộc dùng frame tương thích của Brand nếu có.
+- **No frame**: ép artwork qua `CropArt` — trim vùng trắng bên ngoài, pad trắng thành hình vuông và resize chuẩn — đồng thời không dùng Brand frame. Detector BorderLine/BorderPixel không chạy ở mode này. Viền tối vốn được vẽ trong source vẫn được xem là artwork và có thể được giữ lại.
+
+Từ phiên bản này, Book đã lưu **No frame** cũng nhận semantics CropArt mới ở lần process tiếp theo; PDF đã publish không tự thay đổi cho tới khi Book được process/publish lại.
 
 ### 7.3 Bulk actions
 
