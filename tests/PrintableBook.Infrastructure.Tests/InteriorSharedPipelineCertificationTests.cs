@@ -50,7 +50,9 @@ public sealed class InteriorSharedPipelineCertificationTests : IAsyncLifetime
 
         var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
         using var classification = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(cache, "classification.json")));
-        Assert.Equal(expectedType.ToString().ToLowerInvariant(), classification.RootElement.GetProperty("Type").GetString());
+        var effectiveType = frameMode == FrameMode.Disabled ? ArtworkType.CropArt : expectedType;
+        Assert.Equal(effectiveType.ToString().ToLowerInvariant(), classification.RootElement.GetProperty("EffectiveType").GetString());
+        Assert.Equal(frameMode == FrameMode.Disabled ? "forced-no-frame" : "detected", classification.RootElement.GetProperty("Origin").GetString());
         await AssertSizeAsync(Path.Combine(cache, "prepared.png"), PreparedSize);
         await AssertSizeAsync(Path.Combine(cache, "framed.png"), PreparedSize);
         await AssertSizeAsync(Path.Combine(cache, "working-page.png"), WorkingSize);
@@ -106,7 +108,9 @@ public sealed class InteriorSharedPipelineCertificationTests : IAsyncLifetime
 
         Assert.Equal(new ImageSize(2048, 2048), (await new MagickImageInspector().GetInfoAsync(new FileReference(Path.Combine(cache, "normalized-source.png")))).Size);
         using var classification = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(cache, "classification.json")));
-        Assert.Equal("borderart", classification.RootElement.GetProperty("Type").GetString());
+        Assert.Equal("cropart", classification.RootElement.GetProperty("EffectiveType").GetString());
+        Assert.Equal("forced-no-frame", classification.RootElement.GetProperty("Origin").GetString());
+        Assert.Equal("not-run", classification.RootElement.GetProperty("DetectionStatus").GetString());
         await AssertSizeAsync(Path.Combine(cache, "prepared.png"), PreparedSize);
         await AssertSizeAsync(result.FinalPage.Value, FinalSize);
     }

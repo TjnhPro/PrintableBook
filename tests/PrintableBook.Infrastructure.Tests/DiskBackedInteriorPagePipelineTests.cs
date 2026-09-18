@@ -70,13 +70,14 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         }
         var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(new BookId("intro-book"), new DirectoryReference(Path.Combine(rootPath, "IntroBook")));
 
-        var result = await CreatePipeline().ProcessAsync(new InteriorPagePipelineRequest(
+        var result = await CreatePipeline(new ThrowingArtworkClassifier()).ProcessAsync(new InteriorPagePipelineRequest(
             workspace, new FileReference(source), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(200, 200), new ImageSize(200, 200), new ImageSize(200, 200), new ImageDensity(300, 300), null, FrameMode.Disabled,
             processingKind: InteriorPageProcessingKind.IntroTemplate));
 
         Assert.StartsWith(Path.Combine(workspace.ProcessedDirectory.Value, "intro"), result.FinalPage.Value, StringComparison.OrdinalIgnoreCase);
         var classification = await File.ReadAllTextAsync(Path.Combine(workspace.WorkingDirectory.Value, "cache", "intro-0001", "classification.json"));
         Assert.Contains("cropart", classification, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("forced-intro", classification, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -303,7 +304,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         await pipeline.ProcessAsync(request);
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(classification));
-        Assert.Equal(ClassificationAlgorithmVersion.Current, document.RootElement.GetProperty("Version").GetString());
+        Assert.Equal("artwork-classification-cache-v2", document.RootElement.GetProperty("SchemaVersion").GetString());
     }
 
     [Theory]
@@ -320,20 +321,15 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
 
         var completed = await pipeline.ProcessAsync(request);
         var classification = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "classification.json");
-        using var original = JsonDocument.Parse(await File.ReadAllTextAsync(classification));
-        await File.WriteAllTextAsync(classification, JsonSerializer.Serialize(new
-        {
-            Version = original.RootElement.GetProperty("Version").GetString(),
-            Type = staleType,
-            BorderLine = original.RootElement.GetProperty("BorderLine"),
-            BorderPixel = original.RootElement.GetProperty("BorderPixel")
-        }));
+        var original = await File.ReadAllTextAsync(classification);
+        var replacement = staleType is string text ? $"\"{text}\"" : staleType.ToString();
+        await File.WriteAllTextAsync(classification, original.Replace("\"EffectiveType\":\"cropart\"", $"\"EffectiveType\":{replacement}", StringComparison.Ordinal));
         File.Delete(completed.FinalPage.Value);
 
         await pipeline.ProcessAsync(request);
 
         using var regenerated = JsonDocument.Parse(await File.ReadAllTextAsync(classification));
-        Assert.Equal("cropart", regenerated.RootElement.GetProperty("Type").GetString());
+        Assert.Equal("cropart", regenerated.RootElement.GetProperty("EffectiveType").GetString());
     }
 
     [Fact]
@@ -382,9 +378,84 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
 
         var classification = JsonDocument.Parse(await File.ReadAllTextAsync(
             Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "classification.json")));
-        Assert.Equal("cropart", classification.RootElement.GetProperty("Type").GetString());
+        Assert.Equal("cropart", classification.RootElement.GetProperty("EffectiveType").GetString());
         using var framed = new MagickImage(framedPath);
         Assert.Equal((byte)255, framed.GetPixels().GetPixel(0, 0)[0]);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_no_frame_forces_cropart_without_calling_the_classifier()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("forced-no-frame.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("forced-no-frame"), new DirectoryReference(Path.Combine(rootPath, "ForcedNoFrameBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200)) with
+        {
+            FrameMode = FrameMode.Disabled
+        };
+
+        var result = await CreatePipeline(new ThrowingArtworkClassifier()).ProcessAsync(request);
+
+        var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
+        using var classification = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(cache, "classification.json")));
+        Assert.Equal("cropart", classification.RootElement.GetProperty("EffectiveType").GetString());
+        Assert.Equal("forced-no-frame", classification.RootElement.GetProperty("Origin").GetString());
+        Assert.Equal("not-run", classification.RootElement.GetProperty("DetectionStatus").GetString());
+        Assert.Equal(JsonValueKind.Null, classification.RootElement.GetProperty("BorderLine").ValueKind);
+        Assert.Equal(JsonValueKind.Null, classification.RootElement.GetProperty("BorderPixel").ValueKind);
+        Assert.True(File.Exists(result.FinalPage.Value));
+        Assert.Equal(
+            await File.ReadAllBytesAsync(Path.Combine(cache, "prepared.png")),
+            await File.ReadAllBytesAsync(Path.Combine(cache, "framed.png")));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_migrates_v3_auto_metadata_without_rebuilding_prepared_artwork()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("legacy-auto.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("legacy-auto"), new DirectoryReference(Path.Combine(rootPath, "LegacyAutoBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200));
+        var pipeline = CreatePipeline();
+        await pipeline.ProcessAsync(request);
+        var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
+        await SeedLegacyV3CropArtMetadataAsync(cache, "auto");
+        var prepared = Path.Combine(cache, "prepared.png");
+        var retainedTime = DateTime.UtcNow.AddHours(-1);
+        File.SetLastWriteTimeUtc(prepared, retainedTime);
+
+        await pipeline.ProcessAsync(request);
+
+        Assert.Equal(retainedTime, File.GetLastWriteTimeUtc(prepared));
+        using var classification = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(cache, "classification.json")));
+        Assert.Equal("detected", classification.RootElement.GetProperty("Origin").GetString());
+        Assert.Equal("interior-page-cache-v4", JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(cache, "input-stamp.json"))).RootElement.GetProperty("SchemaVersion").GetString());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_rebuilds_legacy_v3_disabled_metadata_as_forced_no_frame()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("legacy-disabled.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("legacy-disabled"), new DirectoryReference(Path.Combine(rootPath, "LegacyDisabledBook")));
+        var auto = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200));
+        var pipeline = CreatePipeline();
+        await pipeline.ProcessAsync(auto);
+        var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
+        await SeedLegacyV3CropArtMetadataAsync(cache, "disabled");
+        var prepared = Path.Combine(cache, "prepared.png");
+        var staleTime = DateTime.UtcNow.AddHours(-1);
+        File.SetLastWriteTimeUtc(prepared, staleTime);
+
+        await pipeline.ProcessAsync(auto with { FrameMode = FrameMode.Disabled });
+
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(prepared));
+        using var classification = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(cache, "classification.json")));
+        Assert.Equal("forced-no-frame", classification.RootElement.GetProperty("Origin").GetString());
+        Assert.Equal("not-run", classification.RootElement.GetProperty("DetectionStatus").GetString());
     }
 
     [Fact]
@@ -445,7 +516,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         var retainedPreparedTime = DateTime.UtcNow.AddHours(-1);
         File.SetLastWriteTimeUtc(prepared, retainedPreparedTime);
         await pipeline.ProcessAsync(framedRequest with { FrameMode = FrameMode.Disabled });
-        Assert.Equal(retainedPreparedTime, File.GetLastWriteTimeUtc(prepared));
+        Assert.NotEqual(retainedPreparedTime, File.GetLastWriteTimeUtc(prepared));
 
         var completed = await pipeline.ProcessAsync(request);
         using (var wrongSize = new MagickImage(MagickColors.White, 10, 10)) wrongSize.Write(working);
@@ -455,10 +526,16 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData(FrameMode.Enabled, FrameMode.Disabled)]
-    [InlineData(FrameMode.Auto, FrameMode.Enabled)]
-    [InlineData(FrameMode.Disabled, FrameMode.Auto)]
-    public async Task ProcessAsync_rebuilds_from_frame_for_each_frame_mode_transition(FrameMode initialMode, FrameMode changedMode)
+    [InlineData(FrameMode.Auto, FrameMode.Enabled, true)]
+    [InlineData(FrameMode.Enabled, FrameMode.Auto, true)]
+    [InlineData(FrameMode.Auto, FrameMode.Disabled, false)]
+    [InlineData(FrameMode.Enabled, FrameMode.Disabled, false)]
+    [InlineData(FrameMode.Disabled, FrameMode.Auto, false)]
+    [InlineData(FrameMode.Disabled, FrameMode.Enabled, false)]
+    public async Task ProcessAsync_invalidates_the_expected_stage_for_each_frame_mode_transition(
+        FrameMode initialMode,
+        FrameMode changedMode,
+        bool retainsDetectedPreparation)
     {
         Directory.CreateDirectory(rootPath);
         var source = await CreateArtworkSourceAsync($"frame-mode-{initialMode}-{changedMode}.png");
@@ -488,8 +565,16 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
 
         await pipeline.ProcessAsync(request with { FrameMode = changedMode });
 
-        Assert.Equal(classificationBefore, await File.ReadAllTextAsync(classification));
-        Assert.Equal(retainedPreparedTime, File.GetLastWriteTimeUtc(prepared));
+        if (retainsDetectedPreparation)
+        {
+            Assert.Equal(classificationBefore, await File.ReadAllTextAsync(classification));
+            Assert.Equal(retainedPreparedTime, File.GetLastWriteTimeUtc(prepared));
+        }
+        else
+        {
+            Assert.NotEqual(classificationBefore, await File.ReadAllTextAsync(classification));
+            Assert.NotEqual(retainedPreparedTime, File.GetLastWriteTimeUtc(prepared));
+        }
         Assert.NotEqual(staleDownstreamTime, File.GetLastWriteTimeUtc(framed));
         Assert.NotEqual(staleDownstreamTime, File.GetLastWriteTimeUtc(working));
         Assert.NotEqual(staleDownstreamTime, File.GetLastWriteTimeUtc(completed.FinalPage.Value));
@@ -524,6 +609,40 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(framed));
         Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(working));
         Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(completed.FinalPage.Value));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_no_frame_uses_policy_specific_cache_dependencies()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("forced-dependencies.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("forced-dependencies"), new DirectoryReference(Path.Combine(rootPath, "ForcedDependenciesBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200)) with
+        {
+            FrameMode = FrameMode.Disabled
+        };
+        var pipeline = CreatePipeline(new ThrowingArtworkClassifier());
+        await pipeline.ProcessAsync(request);
+        var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
+        var classification = Path.Combine(cache, "classification.json");
+        var prepared = Path.Combine(cache, "prepared.png");
+        var classificationBefore = await File.ReadAllTextAsync(classification);
+        var retainedTime = DateTime.UtcNow.AddHours(-2);
+        File.SetLastWriteTimeUtc(prepared, retainedTime);
+
+        await pipeline.ProcessAsync(request with
+        {
+            BorderLineDetection = BorderLineDetectionSettings.Default with { Pass2SearchDepth = 500 }
+        });
+
+        Assert.Equal(classificationBefore, await File.ReadAllTextAsync(classification));
+        Assert.Equal(retainedTime, File.GetLastWriteTimeUtc(prepared));
+
+        await pipeline.ProcessAsync(request with { ArtworkDetectionThreshold = new ArtworkDetectionThreshold(21) });
+
+        Assert.Equal(classificationBefore, await File.ReadAllTextAsync(classification));
+        Assert.NotEqual(retainedTime, File.GetLastWriteTimeUtc(prepared));
     }
 
     [Fact]
@@ -658,7 +777,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         else if (string.Equals(invalidStamp, "incompatible-schema", StringComparison.Ordinal))
         {
             var contents = await File.ReadAllTextAsync(stamp);
-            await File.WriteAllTextAsync(stamp, contents.Replace("interior-page-cache-v3", "incompatible-schema", StringComparison.Ordinal));
+            await File.WriteAllTextAsync(stamp, contents.Replace("interior-page-cache-v4", "incompatible-schema", StringComparison.Ordinal));
         }
         else if (string.Equals(invalidStamp, "numeric-frame-mode", StringComparison.Ordinal))
         {
@@ -701,13 +820,46 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         await File.WriteAllTextAsync(stamp, contents.Replace(expected, replacement, StringComparison.Ordinal));
     }
 
-    private DiskBackedInteriorPagePipeline CreatePipeline() => new(
-        new ArtworkClassifier(new MagickBorderLineDetector(), new MagickBorderPixelDetector()),
+    private DiskBackedInteriorPagePipeline CreatePipeline(IArtworkClassifier? artworkClassifier = null) => new(
+        artworkClassifier ?? new ArtworkClassifier(new MagickBorderLineDetector(), new MagickBorderPixelDetector()),
         CreatePreparationService(),
         new MagickFrameProcessor(),
         new MagickWorkingPageProcessor(),
         new MagickFinalInteriorPageProcessor(),
         new MagickImageInspector());
+
+    private static async Task SeedLegacyV3CropArtMetadataAsync(string cache, string frameMode)
+    {
+        var stamp = Path.Combine(cache, "input-stamp.json");
+        var stampJson = await File.ReadAllTextAsync(stamp);
+        using var stampDocument = JsonDocument.Parse(stampJson);
+        var legacyStamp = stampDocument.RootElement.EnumerateObject()
+            .Where(property => property.Name != "ClassificationPolicy")
+            .ToDictionary(
+                property => property.Name,
+                property => property.Name switch
+                {
+                    "SchemaVersion" => (object)"interior-page-cache-v3",
+                    "FrameMode" => frameMode,
+                    _ => property.Value.Clone()
+                });
+        await File.WriteAllTextAsync(stamp, JsonSerializer.Serialize(legacyStamp));
+        await File.WriteAllTextAsync(Path.Combine(cache, "classification.json"), JsonSerializer.Serialize(new
+        {
+            Version = ClassificationAlgorithmVersion.Current,
+            Type = "cropart",
+            BorderLine = new { HasBorder = false, Left = (int?)null, Right = (int?)null, Top = (int?)null, Bottom = (int?)null },
+            BorderPixel = new { HasBorderPixel = false, LeftHit = false, RightHit = false, TopHit = false, BottomHit = false }
+        }));
+    }
+
+    private sealed class ThrowingArtworkClassifier : IArtworkClassifier
+    {
+        public ValueTask<ArtworkClassificationResult> ClassifyAsync(
+            ArtworkClassificationRequest request,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("The classifier must not run for No Frame.");
+    }
 
     private static ArtworkPreparationService CreatePreparationService() => new(
         new BorderArtPreparationProcessor(
