@@ -512,6 +512,38 @@ test("Book Library keeps page selection beside its compact search control", () =
 
 });
 
+test("Book Library uses one compact status select with live counts and resets filtering to page one", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("books");
+  const reviewBooks = Array.from({ length: 13 }, (_, index) => ({ id: { value: `Review Book ${index + 1}` }, name: `Review Book ${index + 1}` }));
+  const failedBook = { id: { value: "Failed Book" }, name: "Failed Book" };
+  const books = [...reviewBooks, failedBook];
+  messageHandler({ data: { version: 1, id: "book-status-select", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books }, globalSettings: {},
+    bookSummaries: [
+      ...reviewBooks.map((book) => ({ bookId: book.id, interiorSourcePageCount: 12, activeInteriorSourcePageCount: 12, validationStatus: "NeedsReview", workspaceStatus: "Not started", assets: [] })),
+      { bookId: failedBook.id, interiorSourcePageCount: 12, activeInteriorSourcePageCount: 12, validationStatus: "Ready", workspaceStatus: "Failed", assets: [] }
+    ]
+  } } });
+
+  assert.match(content.innerHTML, /<label class="field book-status-filter"><span>Status<\/span><select class="control" data-action="book-status">/);
+  assert.match(content.innerHTML, /<option value="All" selected>All \(14\)<\/option>/);
+  assert.match(content.innerHTML, /<option value="Needs review"[^>]*>Needs review \(13\)<\/option>/);
+  assert.match(content.innerHTML, /<option value="Ready"[^>]*>Ready \(0\)<\/option>/);
+  assert.match(content.innerHTML, /<option value="Failed"[^>]*>Failed \(1\)<\/option>/);
+  assert.doesNotMatch(content.innerHTML, /data-book-status=/);
+
+  const nextPage = { dataset: { action: "book-page", bookPage: "next", bookTotalPages: "2" }, closest: () => nextPage };
+  contentListeners.click({ target: nextPage });
+  assert.match(content.innerHTML, /Page 2 of 2/);
+
+  contentListeners.change({ target: { dataset: { action: "book-status" }, value: "Failed" } });
+
+  assert.match(content.innerHTML, /<option value="Failed" selected>Failed \(1\)<\/option>/);
+  assert.match(content.innerHTML, /Failed Book/);
+  assert.doesNotMatch(content.innerHTML, /Review Book 1/);
+  assert.match(content.innerHTML, /Page 1 of 1/);
+});
+
 test("books toolbar starts one confirmed cache cleanup and polls it", () => {
   const { messageHandler, contentListeners, messages, intervals } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: { discovery: { brands: [], books: [] }, globalSettings: {}, bookSummaries: [] } } });
