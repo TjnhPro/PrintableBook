@@ -21,7 +21,7 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
-    public void BookLibraryContractIncludesPaginatedGridFiltersAndTextualStatusFeedback()
+    public void BookLibraryContractIncludesPaginatedGridAndCompactStatusSelect()
     {
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
 
@@ -36,13 +36,16 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.DoesNotContain("bookFrameFilter", script, StringComparison.Ordinal);
         Assert.DoesNotContain("clear-book-filters", script, StringComparison.Ordinal);
         Assert.DoesNotContain(">Clear filters<", script, StringComparison.Ordinal);
-        Assert.Contains("book-status-filters", script, StringComparison.Ordinal);
+        Assert.Contains("book-status-filter", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"book-status\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("book-status-filters", script, StringComparison.Ordinal);
         Assert.Contains("book-library-grid-scroll", script, StringComparison.Ordinal);
 
         var layout = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css"));
         Assert.Contains(".book-library-page { display:grid", layout, StringComparison.Ordinal);
         Assert.Contains(".book-library-grid-scroll { min-height:0; overflow-y:auto", layout, StringComparison.Ordinal);
-        Assert.Contains(".book-status-filters { flex:1 1 440px; margin-top:0;", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-status-filter { min-width:180px; }", layout, StringComparison.Ordinal);
+        Assert.DoesNotContain(".book-status-filters", layout, StringComparison.Ordinal);
         Assert.Contains(".book-pagination { position:static", layout, StringComparison.Ordinal);
     }
 
@@ -85,7 +88,7 @@ public sealed class BookWorkspaceLayoutContractTests
 
         Assert.Contains("const localImageMarkup", script, StringComparison.Ordinal);
         Assert.Contains("width=\"256\" height=\"256\" loading=\"lazy\" decoding=\"async\" data-local-image", script, StringComparison.Ordinal);
-        Assert.Contains("content.addEventListener(\"error" , script, StringComparison.Ordinal);
+        Assert.Contains("content.addEventListener(\"error", script, StringComparison.Ordinal);
         Assert.DoesNotContain("queueVisible" + "AssetPreviews", script, StringComparison.Ordinal);
         Assert.DoesNotContain("book.asset" + ".preview", script, StringComparison.Ordinal);
         Assert.Contains("interior-artwork-grid-scroll", script, StringComparison.Ordinal);
