@@ -44,7 +44,10 @@ public sealed class BrandValidationLifecycleIntegrationTests : IAsyncLifetime
         Assert.True(result.IsSuccess, string.Join("; ", result.Failures.Select(failure => failure.Message)));
         Assert.True(File.Exists(Path.Combine(brandPath, "brand.validation.json")));
         Assert.Equal(3, imageReadsAfterValidation);
-        Assert.Equal(BrandValidationStatus.Validated, certified.Status);
+        Assert.True(certified.Status == BrandValidationStatus.Validated, $"Expected Validated but received {certified.Status}: {certified.ReasonCode}");
+        Assert.Equal(
+            ["background.png", "frame.png", "introtemplate/nested/intro.png"],
+            certified.ValidatedAssets!.Select(fact => fact.RelativePath));
         Assert.Equal(imageReadsAfterValidation, images.SizeReads);
 
         File.SetLastWriteTimeUtc(framePath, DateTime.UtcNow.AddMinutes(2));
@@ -52,6 +55,7 @@ public sealed class BrandValidationLifecycleIntegrationTests : IAsyncLifetime
 
         Assert.Equal(BrandValidationStatus.NeedsValidation, stale.Status);
         Assert.Equal("brand_fingerprint_changed", stale.ReasonCode);
+        Assert.Null(stale.ValidatedAssets);
         Assert.Equal(imageReadsAfterValidation, images.SizeReads);
     }
 

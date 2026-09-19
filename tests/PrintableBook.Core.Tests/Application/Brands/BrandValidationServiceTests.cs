@@ -37,6 +37,11 @@ public sealed class BrandValidationServiceTests
         Assert.True(validated.IsSuccess, string.Join("; ", validated.Failures.Select(failure => $"{failure.Target}:{failure.Code}")));
         Assert.Equal(BrandValidationStatus.Validated, checkedState.Status);
         Assert.NotNull(store.Record);
+        Assert.Equal(BrandValidationRecord.CurrentSchemaVersion, store.Record.SchemaVersion);
+        Assert.Equal(3, store.Record.Assets!.Count);
+        Assert.Equal(
+            ["background.png", "frame.png", "introtemplate/intro.png"],
+            checkedState.ValidatedAssets!.Select(fact => fact.RelativePath));
         Assert.Equal(imageReadsAfterValidate, images.SizeReads);
         Assert.True(files.MetadataReads > 0);
         Assert.Equal(0, files.ContentReads);
@@ -59,6 +64,9 @@ public sealed class BrandValidationServiceTests
         Assert.Equal(BrandValidationStatus.NeedsValidation, changedFile.Status);
         Assert.Equal("brand_fingerprint_changed", changedFile.ReasonCode);
         Assert.Equal(BrandValidationStatus.NeedsValidation, changedSettings.Status);
+        Assert.Equal("brand_definition_changed", changedSettings.ReasonCode);
+        Assert.Null(changedFile.ValidatedAssets);
+        Assert.Null(changedSettings.ValidatedAssets);
         Assert.Equal(imageReadsAfterValidate, images.SizeReads);
     }
 
@@ -85,21 +93,71 @@ public sealed class BrandValidationServiceTests
     }
 
     [Fact]
-    public async Task Explicitly_invalid_or_old_records_exit_before_metadata_scanning()
+    public async Task Old_records_exit_before_metadata_scanning()
     {
         var files = FileSystem.ValidBrand();
         var definition = BrandValidationDefinition.CreateCurrent(GlobalSettings.Default);
         var stale = new StateStore
         {
-            Record = new BrandValidationRecord(definition.DefinitionChangedAtUtc.AddSeconds(-1), "sha256:old", DateTimeOffset.UtcNow, false)
+            Record = new BrandValidationRecord(
+                SchemaVersion: 0,
+                AssetFingerprintFormatVersion: 0,
+                definition.DefinitionChangedAtUtc,
+                DefinitionSignature: null,
+                "sha256:old",
+                DateTimeOffset.UtcNow,
+                RequiresValidation: false,
+                Assets: null)
         };
         var service = CreateService(stale, files, new Images());
 
         var state = await service.CheckStateAsync(BrandDirectory, GlobalSettings.Default);
 
         Assert.Equal(BrandValidationStatus.NeedsValidation, state.Status);
-        Assert.Equal("brand_definition_changed", state.ReasonCode);
+        Assert.Equal("brand_validation_record_outdated", state.ReasonCode);
         Assert.Equal(0, files.MetadataReads);
+    }
+
+    [Fact]
+    public async Task CheckState_rejects_semantically_invalid_certificate_facts()
+    {
+        var store = new StateStore();
+        var files = FileSystem.ValidBrand();
+        var images = new Images();
+        var service = CreateService(store, files, images);
+        await service.ValidateAsync(BrandDirectory, GlobalSettings.Default);
+        var valid = store.Record!;
+        store.Record = valid with
+        {
+            Assets =
+            [
+                new("background.png", new ImageSize(1, 1)),
+                new("background.png", new ImageSize(1, 1)),
+                new("frame.png", new ImageSize(1, 1))
+            ]
+        };
+        var imageReads = images.SizeReads;
+
+        var state = await service.CheckStateAsync(BrandDirectory, GlobalSettings.Default);
+
+        Assert.Equal(BrandValidationStatus.NeedsValidation, state.Status);
+        Assert.Equal("brand_validation_record_invalid", state.ReasonCode);
+        Assert.Null(state.ValidatedAssets);
+        Assert.Equal(imageReads, images.SizeReads);
+    }
+
+    [Fact]
+    public async Task Validation_does_not_certify_files_that_change_between_metadata_scans()
+    {
+        var store = new StateStore();
+        var files = FileSystem.ValidBrand();
+        var images = new Images(onFirstRead: () => files.Touch("frame.png", 999));
+
+        var result = await CreateService(store, files, images).ValidateAsync(BrandDirectory, GlobalSettings.Default);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("brand_changed_during_validation", Assert.Single(result.Failures).Code);
+        Assert.Null(store.Record);
     }
 
     [Fact]
@@ -130,12 +188,13 @@ public sealed class BrandValidationServiceTests
         }
     }
 
-    private sealed class Images(ImageSize? introSize = null) : IImageInspector
+    private sealed class Images(ImageSize? introSize = null, Action? onFirstRead = null) : IImageInspector
     {
         public int SizeReads { get; private set; }
         public ValueTask<ImageSize> GetSizeAsync(FileReference image, CancellationToken cancellationToken = default)
         {
             SizeReads++;
+            if (SizeReads == 1) onFirstRead?.Invoke();
             return ValueTask.FromResult(image.Value.EndsWith("frame.png", StringComparison.OrdinalIgnoreCase)
                 ? new ImageSize(GlobalSettings.Default.ArtworkMaximumSide, GlobalSettings.Default.ArtworkMaximumSide)
                 : image.Value.EndsWith("background.png", StringComparison.OrdinalIgnoreCase)

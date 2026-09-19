@@ -3,6 +3,7 @@ using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Scanning;
 using PrintableBook.Core.Application.Diagnostics;
+using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 
@@ -152,6 +153,55 @@ public sealed class ApplicationSnapshotServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_overlays_only_validated_brand_facts_using_canonical_nested_paths()
+    {
+        var validation = new BrandValidation(
+            new BrandValidationState(
+                BrandValidationStatus.Validated,
+                ValidatedAssets:
+                [
+                    new("introtemplate/nested/intro.png", new ImageSize(1024, 1024)),
+                    new("frame.png", new ImageSize(2270, 2270)),
+                    new("background.png", new ImageSize(2588, 2625))
+                ]));
+        var snapshot = await new ApplicationSnapshotService(
+            new BrandInventoryDiscovery(),
+            new StubSettingsStore(),
+            new StubScanner(),
+            new StubStateStore(),
+            new StubFileSystem(),
+            brandValidationService: validation).RefreshAsync();
+
+        var assets = Assert.Single(snapshot.Discovery.Brands).Assets!;
+        Assert.Equal(new ImageSize(1024, 1024), Assert.Single(Assert.Single(assets, asset => asset.Name == "IntroTemplate").Entries!).Size);
+        Assert.Equal(new ImageSize(2270, 2270), Assert.Single(assets, asset => asset.Name == "frame.png").Size);
+        Assert.Equal(new ImageSize(2588, 2625), Assert.Single(assets, asset => asset.Name == "background.png").Size);
+        Assert.Null(Assert.Single(Assert.Single(assets, asset => asset.Name == "AppPlus").Entries!).Size);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_does_not_overlay_cached_facts_for_a_stale_brand()
+    {
+        var validation = new BrandValidation(
+            new BrandValidationState(
+                BrandValidationStatus.NeedsValidation,
+                ValidatedAssets: [new("frame.png", new ImageSize(2270, 2270))]));
+        var snapshot = await new ApplicationSnapshotService(
+            new BrandInventoryDiscovery(),
+            new StubSettingsStore(),
+            new StubScanner(),
+            new StubStateStore(),
+            new StubFileSystem(),
+            brandValidationService: validation).RefreshAsync();
+
+        Assert.All(Assert.Single(snapshot.Discovery.Brands).Assets!, asset =>
+        {
+            Assert.Null(asset.Size);
+            Assert.All(asset.Entries ?? [], entry => Assert.Null(entry.Size));
+        });
+    }
+
+    [Fact]
     public async Task RefreshAsync_uses_an_available_cover_folder_asset_when_book_cover_is_not_present()
     {
         var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new CoverFolderScanner(), new StubStateStore(), new StubFileSystem()).RefreshAsync();
@@ -197,6 +247,7 @@ public sealed class ApplicationSnapshotServiceTests
         Assert.Contains(("snapshot.refresh", null), diagnostics.Operations);
         Assert.Contains(("discovery", null), diagnostics.Operations);
         Assert.Contains(("book.scan", "Book A"), diagnostics.Operations);
+        Assert.Contains(("brand.state", "Brand A"), diagnostics.Operations);
     }
 
     [Fact]
@@ -348,6 +399,24 @@ public sealed class ApplicationSnapshotServiceTests
                 })
                 .ToArray();
             return ValueTask.FromResult(new ApplicationDiscovery(paths, [], books));
+        }
+    }
+
+    private sealed class BrandInventoryDiscovery : IApplicationRootDiscovery
+    {
+        public ValueTask<ApplicationDiscovery> DiscoverAsync(CancellationToken cancellationToken = default)
+        {
+            var paths = new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json"));
+            var brand = new DiscoveredBrand(
+                "Brand A",
+                new DirectoryReference("brands/Brand A"),
+                [
+                    new("IntroTemplate", "Folder", "Present", "brands/Brand A/IntroTemplate", Entries: [new("Nested/Intro.PNG", ".PNG", null, "Present")]),
+                    new("AppPlus", "Folder", "Present", "brands/Brand A/AppPlus", Entries: [new("badge.png", ".png", null, "Present")]),
+                    new("frame.png", "Image", "Present", "brands/Brand A/frame.png", ".png"),
+                    new("background.png", "Image", "Present", "brands/Brand A/background.png", ".png")
+                ]);
+            return ValueTask.FromResult(new ApplicationDiscovery(paths, [brand], []));
         }
     }
 
@@ -519,6 +588,15 @@ public sealed class ApplicationSnapshotServiceTests
         public ValueTask AppendLogAsync(BookWorkspace workspace, BookProcessingLogEntry entry, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask<IReadOnlyList<BookProcessingLogEntry>> LoadLogsAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<BookProcessingLogEntry>>([]);
         public ValueTask SaveErrorAsync(BookWorkspace workspace, ProcessingFailure failure, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    }
+
+    private sealed class BrandValidation(BrandValidationState state) : IBrandValidationService
+    {
+        public ValueTask<BrandValidationState> CheckStateAsync(DirectoryReference brandDirectory, GlobalSettings settings, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(state);
+
+        public ValueTask<BrandValidationResult> ValidateAsync(DirectoryReference brandDirectory, GlobalSettings settings, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(new BrandValidationResult(state, []));
     }
 
     private sealed class StubFileSystem(params FileReference[] files) : IFileSystem

@@ -71,14 +71,50 @@ public sealed class ApplicationSnapshotService(
             .Select(summary => summary ?? throw new InvalidOperationException("Book summary was not produced."))
             .ToArray();
         var brandSummaries = new List<BrandDesktopSummary>(discoverySnapshot.Brands.Count);
+        var composedBrands = new List<DiscoveredBrand>(discoverySnapshot.Brands.Count);
         foreach (var brand in discoverySnapshot.Brands)
         {
-            var state = brandValidationService is null
-                ? new BrandValidationState(BrandValidationStatus.NotValidated)
-                : await brandValidationService.CheckStateAsync(brand.Directory, settings, cancellationToken);
+            BrandValidationState state;
+            using (diagnostics.Begin("brand.state", brand.Name))
+            {
+                state = brandValidationService is null
+                    ? new BrandValidationState(BrandValidationStatus.NotValidated)
+                    : await brandValidationService.CheckStateAsync(brand.Directory, settings, cancellationToken);
+            }
             brandSummaries.Add(new BrandDesktopSummary(brand.Name, state.Status, state.ValidatedAtUtc, state.Fingerprint));
+            composedBrands.Add(ApplyValidatedBrandFacts(brand, state));
         }
-        return new ApplicationSnapshot(discoverySnapshot, settings, completedSummaries, DateTimeOffset.UtcNow, brandSummaries, BrandValidationDefinition.GetImageSizeRequirements(settings));
+        var composedDiscovery = discoverySnapshot with { Brands = composedBrands };
+        return new ApplicationSnapshot(composedDiscovery, settings, completedSummaries, DateTimeOffset.UtcNow, brandSummaries, BrandValidationDefinition.GetImageSizeRequirements(settings));
+    }
+
+    private static DiscoveredBrand ApplyValidatedBrandFacts(DiscoveredBrand brand, BrandValidationState state)
+    {
+        if (state.Status != BrandValidationStatus.Validated ||
+            state.ValidatedAssets is not { Count: > 0 } facts ||
+            brand.Assets is null)
+        {
+            return brand;
+        }
+
+        var sizes = facts.ToDictionary(fact => fact.RelativePath, fact => fact.Size, StringComparer.Ordinal);
+        var assets = brand.Assets.Select(asset =>
+        {
+            if (asset.Entries is not null)
+            {
+                var entries = asset.Entries.Select(entry =>
+                {
+                    var key = BrandValidationTargetResolver.NormalizeRelativePath(Path.Combine(asset.Name, entry.Name));
+                    return sizes.TryGetValue(key, out var size) ? entry with { Size = size } : entry;
+                }).ToArray();
+                return asset with { Entries = entries };
+            }
+
+            var assetKey = BrandValidationTargetResolver.NormalizeRelativePath(asset.Name);
+            return sizes.TryGetValue(assetKey, out var assetSize) ? asset with { Size = assetSize } : asset;
+        }).ToArray();
+
+        return brand with { Assets = assets };
     }
 
     private async ValueTask<BookDesktopSummary> BuildBookSummaryAsync(DiscoveredBook book, CancellationToken cancellationToken)

@@ -63,7 +63,7 @@ public sealed class ApplicationRootDiscoveryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DiscoverAsync_exposes_folder_entries_and_image_dimensions_for_the_brand_asset_inventory()
+    public async Task DiscoverAsync_exposes_structural_brand_inventory_without_inspecting_images()
     {
         var intro = Path.Combine(rootPath, "brands", "Amazon", "IntroTemplate");
         var appPlus = Path.Combine(rootPath, "brands", "Amazon", "AppPlus", "nested");
@@ -74,7 +74,7 @@ public sealed class ApplicationRootDiscoveryTests : IAsyncLifetime
         await File.WriteAllTextAsync(Path.Combine(rootPath, "brands", "Amazon", "frame.png"), "test");
         await File.WriteAllTextAsync(Path.Combine(rootPath, "brands", "Amazon", "background.png"), "test");
         var fileSystem = new PhysicalFileSystem();
-        var discovery = new PhysicalApplicationRootDiscovery(fileSystem, new PhysicalBookWorkspaceFactory(fileSystem), () => rootPath, new FixedSizeImageInspector());
+        var discovery = new PhysicalApplicationRootDiscovery(fileSystem, new PhysicalBookWorkspaceFactory(fileSystem), () => rootPath);
 
         var assets = Assert.Single((await discovery.DiscoverAsync()).Brands).Assets!;
 
@@ -82,12 +82,14 @@ public sealed class ApplicationRootDiscoveryTests : IAsyncLifetime
         var introEntry = Assert.Single(introAsset.Entries!);
         Assert.Equal("intro.png", introEntry.Name);
         Assert.Equal(".png", introEntry.Extension);
-        Assert.Equal(new ImageSize(1024, 1024), introEntry.Size);
+        Assert.Null(introEntry.Size);
         Assert.Equal("Present", introEntry.Status);
         var appPlusAsset = Assert.Single(assets, asset => asset.Name == "AppPlus");
         Assert.Equal("nested/badge.jpg", Assert.Single(appPlusAsset.Entries!).Name);
-        Assert.Equal(new ImageSize(1024, 1024), Assert.Single(appPlusAsset.Entries!).Size);
-        Assert.Equal(new ImageSize(1024, 1024), Assert.Single(assets, asset => asset.Name == "frame.png").Size);
+        Assert.Null(Assert.Single(appPlusAsset.Entries!).Size);
+        Assert.Null(Assert.Single(assets, asset => asset.Name == "frame.png").Size);
+        Assert.All(assets.SelectMany(asset => asset.Entries ?? []), entry => Assert.NotEqual("Unreadable", entry.Status));
+        Assert.All(assets, asset => Assert.NotEqual("Unreadable", asset.Status));
     }
 
     public Task InitializeAsync() => Task.CompletedTask;
@@ -95,11 +97,5 @@ public sealed class ApplicationRootDiscoveryTests : IAsyncLifetime
     {
         if (Directory.Exists(rootPath)) Directory.Delete(rootPath, recursive: true);
         return Task.CompletedTask;
-    }
-
-    private sealed class FixedSizeImageInspector : IImageInspector
-    {
-        public ValueTask<ImageSize> GetSizeAsync(FileReference image, CancellationToken cancellationToken = default) => ValueTask.FromResult(new ImageSize(1024, 1024));
-        public ValueTask<ImageInfo> GetInfoAsync(FileReference image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }
