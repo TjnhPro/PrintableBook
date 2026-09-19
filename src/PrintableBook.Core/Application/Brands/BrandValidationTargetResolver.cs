@@ -53,8 +53,24 @@ public sealed class BrandValidationTargetResolver(IFileSystem fileSystem)
     }
 
     public static string NormalizeRelativePath(DirectoryReference brandDirectory, FileReference file) =>
-        Path.GetRelativePath(brandDirectory.Value, file.Value)
+        NormalizeRelativePath(Path.GetRelativePath(brandDirectory.Value, file.Value));
+
+    public static string NormalizeRelativePath(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
+        {
+            throw new ArgumentException("A Brand asset path must be a non-rooted relative path.", nameof(relativePath));
+        }
+
+        var segments = relativePath
             .Replace(Path.DirectorySeparatorChar, '/')
             .Replace(Path.AltDirectorySeparatorChar, '/')
-            .ToLowerInvariant();
+            .Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0 || segments.Any(segment => segment is "." or ".."))
+        {
+            throw new ArgumentException("A Brand asset path cannot contain traversal segments.", nameof(relativePath));
+        }
+
+        return string.Join('/', segments).ToLowerInvariant();
+    }
 }

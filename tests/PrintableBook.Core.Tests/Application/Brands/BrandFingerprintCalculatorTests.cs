@@ -39,7 +39,7 @@ public sealed class BrandFingerprintCalculatorTests
     }
 
     [Fact]
-    public async Task Fingerprint_changes_for_tracked_metadata_and_relevant_dimension_context_but_not_untracked_files()
+    public async Task Asset_fingerprint_changes_for_tracked_metadata_but_not_settings_or_untracked_files()
     {
         var baseline = new MetadataFileSystem(
             ("C:\\brands\\demo\\frame.png", 10),
@@ -62,7 +62,29 @@ public sealed class BrandFingerprintCalculatorTests
 
         Assert.NotEqual(await CalculateAsync(baseline), await CalculateAsync(changed));
         Assert.Equal(await CalculateAsync(baseline), await CalculateAsync(excludedOnly));
-        Assert.NotEqual(await CalculateAsync(baseline), await CalculateAsync(baseline, GlobalSettings.Default with { ArtworkMaximumSide = 2000 }));
+        Assert.Equal(await CalculateAsync(baseline), await CalculateAsync(baseline, GlobalSettings.Default with { ArtworkMaximumSide = 2000 }));
+    }
+
+    [Fact]
+    public void Definition_signature_changes_for_relevant_settings_and_is_stable_across_collection_order()
+    {
+        var files = new MetadataFileSystem();
+        var resolver = new BrandValidationTargetResolver(files);
+        var calculator = new BrandFingerprintCalculator(files, resolver);
+        var current = BrandValidationDefinition.CreateCurrent(GlobalSettings.Default);
+        var reordered = current with
+        {
+            Entries = current.Entries.Reverse().Select(entry => entry with
+            {
+                Rules = entry.Rules.Reverse().Select(rule => rule is BrandImageDimensionsRule dimensions
+                    ? dimensions with { AllowedSizes = dimensions.AllowedSizes.Reverse().ToArray() }
+                    : rule).ToArray()
+            }).ToArray()
+        };
+        var changed = BrandValidationDefinition.CreateCurrent(GlobalSettings.Default with { ArtworkMaximumSide = 2000 });
+
+        Assert.Equal(calculator.CalculateDefinitionSignature(current), calculator.CalculateDefinitionSignature(reordered));
+        Assert.NotEqual(calculator.CalculateDefinitionSignature(current), calculator.CalculateDefinitionSignature(changed));
     }
 
     [Fact]
