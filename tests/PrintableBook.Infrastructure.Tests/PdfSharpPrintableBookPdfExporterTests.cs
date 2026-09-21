@@ -113,6 +113,29 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ExportInteriorAsync_interleaves_background_after_production_prefix_intro_and_interior_pages()
+    {
+        Directory.CreateDirectory(rootPath);
+        var productionCover = await CreatePngAsync("prefix-cover.png", 100, 100);
+        var productionOwner = await CreatePngAsync("prefix-owner.png", 100, 100);
+        var intro = await CreatePngAsync("prefix-intro.png", 100, 100);
+        var interior = await CreatePngAsync("prefix-interior.png", 100, 100);
+        var background = await CreatePngAsync("prefix-background.png", 100, 100);
+
+        var result = await new PdfSharpPrintableBookPdfExporter().ExportInteriorAsync(new InteriorPdfExportRequest(
+            IntroPages: [intro],
+            OrderedInteriorPages: [interior],
+            BackgroundPage: background,
+            TemporaryOutputDirectory: new DirectoryReference(Path.Combine(rootPath, "production-prefix-output")),
+            InteriorPageSize: new PhysicalPageSize(8.5, 8.5),
+            MaximumPageConcurrency: 2,
+            ProductionPrefixPages: [productionCover, productionOwner]));
+
+        using var pdf = PdfReader.Open(result.InteriorPdf.Value);
+        Assert.Equal(8, pdf.Pages.Count);
+    }
+
+    [Fact]
     public async Task ExportInteriorAsync_assembles_many_background_units_in_deterministic_page_count()
     {
         Directory.CreateDirectory(rootPath);

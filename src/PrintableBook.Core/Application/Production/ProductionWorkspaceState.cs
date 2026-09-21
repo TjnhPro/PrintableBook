@@ -89,6 +89,17 @@ public sealed record ProductionWorkspaceState(
             CoverOutput = new ProductionOutputState(fileName, inputSignature, completedAtUtc)
         };
     }
+
+    public ProductionWorkspaceState RecordInteriorOutput(string fileName, string inputSignature, DateTimeOffset completedAtUtc)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentException("An Interior output filename is required.", nameof(fileName));
+        if (string.IsNullOrWhiteSpace(inputSignature)) throw new ArgumentException("An Interior input signature is required.", nameof(inputSignature));
+        return this with
+        {
+            SchemaVersion = CurrentSchemaVersion,
+            InteriorOutput = new ProductionOutputState(fileName, inputSignature, completedAtUtc)
+        };
+    }
 }
 
 public interface IProductionWorkspaceStateStore

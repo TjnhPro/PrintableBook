@@ -6,6 +6,7 @@ using PrintableBook.Core.Application.Services;
 using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
+using PrintableBook.Core.Application.Production;
 
 namespace PrintableBook.Core.Application.BackgroundTasks.Workers;
 
@@ -149,6 +150,24 @@ public sealed class ProcessingSessionWorker(
             background = new FileReference(Path.Combine(brand.Directory.Value, "background.png"));
         }
 
+        if (request.Mode == BookProcessingMode.ProductionInterior)
+        {
+            var productionBook = books[0];
+            foreach (var kind in new[] { ProductionAssetKind.InteriorCover, ProductionAssetKind.BookOwner })
+            {
+                var source = ProductionWorkspacePaths.SourceFile(productionBook.Workspace, kind);
+                if (!await fileSystem.FileExistsAsync(source, cancellationToken))
+                {
+                    Fail(
+                        request,
+                        context,
+                        "production_interior_assets_missing",
+                        "Upload both Interior Cover and Book Owner Production assets before building Final Interior.",
+                        productionBook.Id);
+                }
+            }
+        }
+
         var processingRequest = new BookProcessingQueueRequest(books.Select(book => new PrintableBookProcessingCommand(
             book.Id,
             book.Directory,
@@ -170,7 +189,14 @@ public sealed class ProcessingSessionWorker(
             ArtworkSourceNormalization: settings.EffectiveArtworkSourceNormalization,
             BorderLineDetection: settings.EffectiveBorderLineDetection,
             IntroTemplatePages: introTemplatePagesByBook[book.Id.Value],
-            CustomIntroFromBookInterior: customIntroFromBookInteriorByBook[book.Id.Value])).ToArray());
+            CustomIntroFromBookInterior: customIntroFromBookInteriorByBook[book.Id.Value],
+            ProductionPrefixSources: request.Mode == BookProcessingMode.ProductionInterior
+                ?
+                [
+                    CreateProductionPrefix(book.Workspace, ProductionAssetKind.InteriorCover),
+                    CreateProductionPrefix(book.Workspace, ProductionAssetKind.BookOwner)
+                ]
+                : null)).ToArray());
 
         void Report(BookProcessingProgress progress)
         {
@@ -210,6 +236,14 @@ public sealed class ProcessingSessionWorker(
 
     private static IReadOnlyList<DiscoveredBook> Validate(ApplicationSnapshot snapshot, ProcessingSessionWorkerRequest request, IBackgroundTaskContext context)
     {
+        if (!Enum.IsDefined(request.Mode))
+        {
+            Fail(request, context, "process_mode_invalid", "The requested processing mode is not available.");
+        }
+        if (request.Mode == BookProcessingMode.ProductionInterior && request.BookIds.Count != 1)
+        {
+            Fail(request, context, "production_single_book_required", "Build Final Interior requires exactly one Book.");
+        }
         if (!snapshot.Discovery.Brands.Any(brand => string.Equals(brand.Name, request.BrandName, StringComparison.Ordinal)))
         {
             Fail(request, context, "process_brand_not_found", "The selected Brand no longer exists.");
@@ -228,6 +262,12 @@ public sealed class ProcessingSessionWorker(
         }
         return selected;
 
+    }
+
+    private static ProductionPrefixSource CreateProductionPrefix(BookWorkspace workspace, ProductionAssetKind kind)
+    {
+        var definition = ProductionAssets.Get(kind);
+        return new ProductionPrefixSource(kind, ProductionWorkspacePaths.SourceFile(workspace, kind), definition.StablePageId);
     }
 
     private static void Fail(ProcessingSessionWorkerRequest request, IBackgroundTaskContext context, string code, string message, BookId? bookId = null)

@@ -76,10 +76,7 @@ public sealed class ProductionPageProcessingService(
     public static string CreateSettingsSignature(GlobalSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        var normalization = settings.EffectiveArtworkSourceNormalization;
-        var border = settings.EffectiveBorderLineDetection;
-        var canonical = string.Join('|',
-            "production-page-v1",
+        return CreateSettingsSignature(
             settings.ArtworkDetectionThreshold,
             settings.ArtworkMaximumSide,
             settings.WorkingPageWidth,
@@ -87,6 +84,45 @@ public sealed class ProductionPageProcessingService(
             settings.FinalPageWidth,
             settings.FinalPageHeight,
             settings.Dpi,
+            settings.EffectiveArtworkSourceNormalization,
+            settings.EffectiveBorderLineDetection);
+    }
+
+    public static string CreateSettingsSignature(PrintableBookProcessingCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return CreateSettingsSignature(
+            command.ArtworkDetectionThreshold.Value,
+            command.PreparedArtworkSize.Width,
+            command.WorkingPageSize.Width,
+            command.WorkingPageSize.Height,
+            command.FinalPageSize.Width,
+            command.FinalPageSize.Height,
+            (int)command.TargetInteriorDensity.Horizontal,
+            command.EffectiveArtworkSourceNormalization,
+            command.EffectiveBorderLineDetection);
+    }
+
+    private static string CreateSettingsSignature(
+        byte artworkDetectionThreshold,
+        int artworkMaximumSide,
+        int workingPageWidth,
+        int workingPageHeight,
+        int finalPageWidth,
+        int finalPageHeight,
+        int dpi,
+        ArtworkSourceNormalizationSettings normalization,
+        BorderLineDetectionSettings border)
+    {
+        var canonical = string.Join('|',
+            "production-page-v1",
+            artworkDetectionThreshold,
+            artworkMaximumSide,
+            workingPageWidth,
+            workingPageHeight,
+            finalPageWidth,
+            finalPageHeight,
+            dpi,
             normalization.NormalizedSourceSize,
             border.Pass1SearchDepth,
             border.Pass2SearchDepth,

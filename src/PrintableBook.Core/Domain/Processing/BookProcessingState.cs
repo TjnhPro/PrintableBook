@@ -14,6 +14,12 @@ public enum PublishedArtifactKind
     Interior = 1
 }
 
+public enum InteriorOutputKind
+{
+    Base = 0,
+    Production = 1
+}
+
 /// <summary>
 /// Persistable state of a book project. Step names remain opaque to keep processing rules configurable.
 /// </summary>
@@ -34,7 +40,9 @@ public sealed record BookProcessingState(
     IReadOnlyList<string>? InactiveInteriorSourceKeys = null,
     bool HasIntro = false,
     IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null,
-    IReadOnlyList<PublishedInteriorPreview>? PublishedInteriorPreviews = null)
+    IReadOnlyList<PublishedInteriorPreview>? PublishedInteriorPreviews = null,
+    InteriorOutputKind? PublishedInteriorKind = null,
+    DateTimeOffset? PublishedInteriorAtUtc = null)
 {
     public static BookProcessingState NotStarted(BookId bookId) => new(
         bookId,
@@ -149,6 +157,16 @@ public sealed record BookProcessingState(
         artifacts.Add(artifactReference);
         return this with { PublishedArtifactReferences = artifacts };
     }
+
+    public BookProcessingState RecordPublishedInterior(
+        string artifactReference,
+        InteriorOutputKind kind,
+        DateTimeOffset publishedAtUtc) =>
+        RecordPublishedArtifact(PublishedArtifactKind.Interior, artifactReference) with
+        {
+            PublishedInteriorKind = kind,
+            PublishedInteriorAtUtc = publishedAtUtc
+        };
 
     public BookProcessingState RecordPublishedInteriorPreviews(IEnumerable<PublishedInteriorPreview> previews)
     {

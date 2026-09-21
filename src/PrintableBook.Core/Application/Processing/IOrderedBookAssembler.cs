@@ -8,15 +8,20 @@ public sealed record OrderedBookAssemblyRequest(
     IReadOnlyList<InteriorPageProcessingResult> InteriorPages,
     InteriorShuffleMap ShuffleMap,
     ImageSize ExpectedInteriorSize,
-    FileReference? BackgroundPage = null);
+    FileReference? BackgroundPage = null,
+    IReadOnlyList<FileReference>? ProductionPrefixPages = null)
+{
+    public IReadOnlyList<FileReference> EffectiveProductionPrefixPages => ProductionPrefixPages ?? [];
+}
 
 public sealed record OrderedBookAssembly(
+    IReadOnlyList<FileReference> ProductionPrefixPages,
     IReadOnlyList<FileReference> IntroPages,
     IReadOnlyList<FileReference> OrderedInteriorPages,
     FileReference? BackgroundPage)
 {
     public int OutputPageCount =>
-        (IntroPages.Count + OrderedInteriorPages.Count) *
+        (ProductionPrefixPages.Count + IntroPages.Count + OrderedInteriorPages.Count) *
         (BackgroundPage is null ? 1 : 2);
 }
 

@@ -22,6 +22,7 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         WriteSingleRasterPdf(coverPdf, request.Cover, request.CoverPageSize, cancellationToken);
         await WriteInteriorPdfAsync(
             interiorPdf,
+            request.EffectiveProductionPrefixPages,
             request.IntroPages,
             request.OrderedInteriorPages,
             request.BackgroundPage,
@@ -42,6 +43,7 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         var interiorPdf = new FileReference(Path.Combine(request.TemporaryOutputDirectory.Value, "interior.pdf"));
         await WriteInteriorPdfAsync(
             interiorPdf,
+            request.EffectiveProductionPrefixPages,
             request.IntroPages,
             request.OrderedInteriorPages,
             request.BackgroundPage,
@@ -130,6 +132,7 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
 
     private static async ValueTask WriteInteriorPdfAsync(
         FileReference target,
+        IReadOnlyList<FileReference> productionPrefixPages,
         IReadOnlyList<FileReference> introPages,
         IReadOnlyList<FileReference> orderedInteriorPages,
         FileReference? backgroundPage,
@@ -145,10 +148,11 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
 
         try
         {
-            if (introPages.Count > 0)
+            if (productionPrefixPages.Count > 0 || introPages.Count > 0)
             {
+                var leadingPages = productionPrefixPages.Concat(introPages).ToArray();
                 introImport = CreateImportDocument(
-                    BuildIntroRasterPages(introPages, backgroundPage),
+                    BuildLeadingRasterPages(leadingPages, backgroundPage),
                     pageSize,
                     cancellationToken);
             }
@@ -233,14 +237,14 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         }
     }
 
-    private static IReadOnlyList<FileReference> BuildIntroRasterPages(
-        IReadOnlyList<FileReference> introPages,
+    private static IReadOnlyList<FileReference> BuildLeadingRasterPages(
+        IReadOnlyList<FileReference> leadingPages,
         FileReference? backgroundPage)
     {
-        var result = new List<FileReference>(introPages.Count * (backgroundPage is null ? 1 : 2));
-        foreach (var intro in introPages)
+        var result = new List<FileReference>(leadingPages.Count * (backgroundPage is null ? 1 : 2));
+        foreach (var page in leadingPages)
         {
-            result.Add(intro);
+            result.Add(page);
             if (backgroundPage is not null)
             {
                 result.Add(backgroundPage);

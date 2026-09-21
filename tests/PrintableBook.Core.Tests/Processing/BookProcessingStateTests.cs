@@ -20,6 +20,18 @@ public sealed class BookProcessingStateTests
     }
 
     [Fact]
+    public void RecordPublishedInterior_updates_provenance_only_with_the_successful_artifact()
+    {
+        var publishedAt = DateTimeOffset.Parse("2026-09-21T12:30:00Z");
+        var state = BookProcessingState.NotStarted(new BookId("book"))
+            .RecordPublishedInterior("C:\\output\\book - Interior.pdf", InteriorOutputKind.Production, publishedAt);
+
+        Assert.Equal(InteriorOutputKind.Production, state.PublishedInteriorKind);
+        Assert.Equal(publishedAt, state.PublishedInteriorAtUtc);
+        Assert.Equal(["C:\\output\\book - Interior.pdf"], state.PublishedArtifactReferences);
+    }
+
+    [Fact]
     public void New_book_defaults_to_brand_background_and_all_interior_active()
     {
         var state = BookProcessingState.NotStarted(new BookId("book"));

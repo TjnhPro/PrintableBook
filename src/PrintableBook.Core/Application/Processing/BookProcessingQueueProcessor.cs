@@ -2,6 +2,7 @@ using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Execution;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
+using PrintableBook.Core.Application.Production;
 
 namespace PrintableBook.Core.Application.Processing;
 
@@ -26,12 +27,19 @@ public sealed record PrintableBookProcessingCommand(
     ArtworkSourceNormalizationSettings? ArtworkSourceNormalization = null,
     BorderLineDetectionSettings? BorderLineDetection = null,
     IReadOnlyList<FileReference>? IntroTemplatePages = null,
-    bool CustomIntroFromBookInterior = false)
+    bool CustomIntroFromBookInterior = false,
+    IReadOnlyList<ProductionPrefixSource>? ProductionPrefixSources = null)
 {
     public ArtworkSourceNormalizationSettings EffectiveArtworkSourceNormalization => ArtworkSourceNormalization ?? ArtworkSourceNormalizationSettings.Default;
     public BorderLineDetectionSettings EffectiveBorderLineDetection => BorderLineDetection ?? BorderLineDetectionSettings.Default;
     public IReadOnlyList<FileReference> EffectiveIntroTemplatePages => IntroTemplatePages ?? [];
+    public IReadOnlyList<ProductionPrefixSource> EffectiveProductionPrefixSources => ProductionPrefixSources ?? [];
 }
+
+public sealed record ProductionPrefixSource(
+    ProductionAssetKind AssetKind,
+    FileReference Source,
+    string PageId);
 
 public sealed record BookProcessingQueueRequest(IReadOnlyList<PrintableBookProcessingCommand> Books);
 

@@ -9,6 +9,7 @@ using PrintableBook.Core.Application.Results;
 using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
+using PrintableBook.Core.Application.Production;
 
 namespace PrintableBook.Core.Tests.Application.BackgroundTasks;
 
@@ -117,6 +118,78 @@ public sealed class ProcessingSessionWorkerTests
     }
 
     private static ProcessingSessionWorkerRequest Request() => new(["book-one"], "Brand", BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow);
+
+    [Fact]
+    public async Task Production_mode_resolves_the_two_canonical_prefix_sources_in_fixed_order()
+    {
+        var application = new Application();
+        IBackgroundTaskWorker worker = CreateWorker(
+            new Provider(Snapshot()),
+            application,
+            new FrameResolver(),
+            new FileSystem(true),
+            new ImageInspector());
+
+        await worker.ExecuteAsync(
+            new ProcessingSessionWorkerRequest(["book-one"], "Brand", BookProcessingMode.ProductionInterior, DateTimeOffset.UtcNow),
+            new Context(),
+            CancellationToken.None);
+
+        var command = Assert.Single(application.Request!.Books);
+        Assert.Equal(BookProcessingMode.ProductionInterior, command.Mode);
+        Assert.Collection(
+            command.EffectiveProductionPrefixSources,
+            source =>
+            {
+                Assert.Equal(ProductionAssetKind.InteriorCover, source.AssetKind);
+                Assert.Equal(Path.Combine("workspace", "production", "interior_cover.png"), source.Source.Value);
+                Assert.Equal("production-interior-cover", source.PageId);
+            },
+            source =>
+            {
+                Assert.Equal(ProductionAssetKind.BookOwner, source.AssetKind);
+                Assert.Equal(Path.Combine("workspace", "production", "interior_book_owner.png"), source.Source.Value);
+                Assert.Equal("production-book-owner", source.PageId);
+            });
+    }
+
+    [Fact]
+    public async Task Production_mode_rejects_a_multi_book_session()
+    {
+        IBackgroundTaskWorker worker = CreateWorker(
+            new Provider(MixedSnapshot()),
+            new Application(),
+            new FrameResolver(),
+            new FileSystem(),
+            new ImageInspector());
+
+        var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(
+            new ProcessingSessionWorkerRequest(["book-one", "book-two"], "Brand", BookProcessingMode.ProductionInterior, DateTimeOffset.UtcNow),
+            new Context(),
+            CancellationToken.None).AsTask());
+
+        Assert.Equal("production_single_book_required", failure.Code);
+    }
+
+    [Fact]
+    public async Task Production_mode_rejects_missing_prefix_assets_before_processing()
+    {
+        var application = new Application();
+        IBackgroundTaskWorker worker = CreateWorker(
+            new Provider(Snapshot()),
+            application,
+            new FrameResolver(),
+            new FileSystem(false),
+            new ImageInspector());
+
+        var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(
+            new ProcessingSessionWorkerRequest(["book-one"], "Brand", BookProcessingMode.ProductionInterior, DateTimeOffset.UtcNow),
+            new Context(),
+            CancellationToken.None).AsTask());
+
+        Assert.Equal("production_interior_assets_missing", failure.Code);
+        Assert.Null(application.Request);
+    }
 
     private static ProcessingSessionWorker CreateWorker(
         IApplicationSnapshotProvider provider,

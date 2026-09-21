@@ -20,7 +20,11 @@ public sealed record PrintableBookPdfExportRequest(
     DirectoryReference TemporaryOutputDirectory,
     PhysicalPageSize CoverPageSize,
     PhysicalPageSize InteriorPageSize,
-    int MaximumPageConcurrency);
+    int MaximumPageConcurrency,
+    IReadOnlyList<FileReference>? ProductionPrefixPages = null)
+{
+    public IReadOnlyList<FileReference> EffectiveProductionPrefixPages => ProductionPrefixPages ?? [];
+}
 
 public sealed record PrintableBookPdfExportResult(FileReference CoverPdf, FileReference InteriorPdf);
 
@@ -37,7 +41,11 @@ public sealed record InteriorPdfExportRequest(
     FileReference? BackgroundPage,
     DirectoryReference TemporaryOutputDirectory,
     PhysicalPageSize InteriorPageSize,
-    int MaximumPageConcurrency);
+    int MaximumPageConcurrency,
+    IReadOnlyList<FileReference>? ProductionPrefixPages = null)
+{
+    public IReadOnlyList<FileReference> EffectiveProductionPrefixPages => ProductionPrefixPages ?? [];
+}
 
 public sealed record InteriorPdfExportResult(FileReference InteriorPdf);
 

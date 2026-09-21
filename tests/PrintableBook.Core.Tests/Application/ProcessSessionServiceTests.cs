@@ -85,6 +85,29 @@ public sealed class ProcessSessionServiceTests
         }
     }
 
+    [Fact]
+    public async Task StartAsync_accepts_full_book_without_changing_the_existing_contract()
+    {
+        var manager = new Manager();
+        var service = new ProcessSessionService(manager);
+
+        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.FullBook);
+
+        var request = Assert.IsType<ProcessingSessionWorkerRequest>(manager.Request);
+        Assert.Equal(BookProcessingMode.FullBook, request.Mode);
+    }
+
+    [Fact]
+    public async Task StartAsync_requires_one_book_for_production_interior()
+    {
+        var service = new ProcessSessionService(new Manager());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.StartAsync(
+            ["book-one", "book-two"],
+            "Brand",
+            BookProcessingMode.ProductionInterior).AsTask());
+    }
+
     private sealed class Manager : IBackgroundTaskManager
     {
         private readonly BackgroundTaskId id = new("processing-test");

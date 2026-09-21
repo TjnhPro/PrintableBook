@@ -12,6 +12,11 @@ public sealed class OrderedBookAssembler(IFileSystem fileSystem, IImageInspector
         ArgumentNullException.ThrowIfNull(request);
         ValidateShuffleMap(request.InteriorPages, request.ShuffleMap);
 
+        foreach (var prefixPage in request.EffectiveProductionPrefixPages)
+        {
+            await ValidateInteriorPageAsync(prefixPage, request.ExpectedInteriorSize, cancellationToken);
+        }
+
         foreach (var introPage in request.IntroPages)
         {
             await ValidateInteriorPageAsync(introPage, request.ExpectedInteriorSize, cancellationToken);
@@ -33,6 +38,7 @@ public sealed class OrderedBookAssembler(IFileSystem fileSystem, IImageInspector
             .ToArray();
 
         return new OrderedBookAssembly(
+            request.EffectiveProductionPrefixPages.ToArray(),
             request.IntroPages.ToArray(),
             orderedInteriors,
             request.BackgroundPage);
