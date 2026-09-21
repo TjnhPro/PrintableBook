@@ -52,6 +52,19 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         return new InteriorPdfExportResult(interiorPdf);
     }
 
+    public ValueTask<CoverPdfExportResult> ExportCoverAsync(
+        CoverPdfExportRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        ValidatePageSize(request.CoverPageSize, nameof(request));
+        Directory.CreateDirectory(request.TemporaryOutputDirectory.Value);
+        var coverPdf = new FileReference(Path.Combine(request.TemporaryOutputDirectory.Value, "cover.pdf"));
+        WriteSingleRasterPdf(coverPdf, request.Cover, request.CoverPageSize, cancellationToken);
+        return ValueTask.FromResult(new CoverPdfExportResult(coverPdf));
+    }
+
     private static void Validate(PrintableBookPdfExportRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -61,9 +74,14 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
             request.InteriorPageSize,
             request.MaximumPageConcurrency);
 
-        if (request.CoverPageSize.WidthInches <= 0 || request.CoverPageSize.HeightInches <= 0)
+        ValidatePageSize(request.CoverPageSize, nameof(request));
+    }
+
+    private static void ValidatePageSize(PhysicalPageSize pageSize, string parameterName)
+    {
+        if (pageSize.WidthInches <= 0 || pageSize.HeightInches <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(request), "PDF page dimensions must be positive.");
+            throw new ArgumentOutOfRangeException(parameterName, "PDF page dimensions must be positive.");
         }
     }
 

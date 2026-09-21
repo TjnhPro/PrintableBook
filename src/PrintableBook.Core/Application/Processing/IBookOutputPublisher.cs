@@ -38,6 +38,17 @@ public sealed record PublishedInteriorOutput(
     DirectoryReference PublishedDirectory,
     FileReference InteriorPdf);
 
+public sealed record CoverOutputPublicationRequest(
+    BookId BookId,
+    CoverPdfExportResult TemporaryOutput,
+    DirectoryReference FinalOutputRoot,
+    int ExpectedCoverPageCount,
+    PhysicalPageSize ExpectedCoverPageSize);
+
+public sealed record PublishedCoverOutput(
+    DirectoryReference PublishedDirectory,
+    FileReference CoverPdf);
+
 public interface IBookOutputPublisher
 {
     ValueTask<PublishedBookOutputs> PublishAsync(
@@ -47,4 +58,9 @@ public interface IBookOutputPublisher
     ValueTask<PublishedInteriorOutput> PublishInteriorAsync(
         InteriorOutputPublicationRequest request,
         CancellationToken cancellationToken = default);
+
+    ValueTask<PublishedCoverOutput> PublishCoverAsync(
+        CoverOutputPublicationRequest request,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Cover-only publication is not supported by this adapter.");
 }

@@ -78,6 +78,17 @@ public sealed record ProductionWorkspaceState(
             completedAtUtc);
         return this with { SchemaVersion = CurrentSchemaVersion, ProcessedPages = pages };
     }
+
+    public ProductionWorkspaceState RecordCoverOutput(string fileName, string inputSignature, DateTimeOffset completedAtUtc)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentException("A Cover output filename is required.", nameof(fileName));
+        if (string.IsNullOrWhiteSpace(inputSignature)) throw new ArgumentException("A Cover input signature is required.", nameof(inputSignature));
+        return this with
+        {
+            SchemaVersion = CurrentSchemaVersion,
+            CoverOutput = new ProductionOutputState(fileName, inputSignature, completedAtUtc)
+        };
+    }
 }
 
 public interface IProductionWorkspaceStateStore

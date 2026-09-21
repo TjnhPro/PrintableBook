@@ -99,6 +99,30 @@ public sealed class ValidatedBookOutputPublisherTests : IAsyncLifetime
         Assert.StartsWith("%PDF", await File.ReadAllTextAsync(published.InteriorPdf.Value), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task PublishCoverAsync_replaces_only_the_cover_pdf_after_validation()
+    {
+        Directory.CreateDirectory(rootPath);
+        var image = await CreatePngAsync();
+        var output = new DirectoryReference(Path.Combine(rootPath, "Book One", "Output"));
+        Directory.CreateDirectory(output.Value);
+        var cover = Path.Combine(output.Value, "Book One - Cover.pdf");
+        var interior = Path.Combine(output.Value, "Book One - Interior.pdf");
+        await File.WriteAllTextAsync(cover, "old-cover");
+        await File.WriteAllTextAsync(interior, "old-interior");
+        var temporaryOutput = new DirectoryReference(Path.Combine(rootPath, "Book One", ".workspace", "output-temp", "production-cover"));
+        var exported = await new PdfSharpPrintableBookPdfExporter().ExportCoverAsync(
+            new CoverPdfExportRequest(image, temporaryOutput, new PhysicalPageSize(17.47, 8.75)));
+
+        var published = await new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()).PublishCoverAsync(
+            new CoverOutputPublicationRequest(new BookId("Book One"), exported, output, 1, new PhysicalPageSize(17.47, 8.75)));
+
+        Assert.Equal("old-interior", await File.ReadAllTextAsync(interior));
+        Assert.Equal(Path.Combine(output.Value, "Book One - Cover.pdf"), published.CoverPdf.Value);
+        Assert.StartsWith("%PDF", await File.ReadAllTextAsync(published.CoverPdf.Value), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(temporaryOutput.Value));
+    }
+
     private static ValueTask<PrintableBookPdfExportResult> ExportFullAsync(FileReference image, DirectoryReference temporaryOutput) =>
         new PdfSharpPrintableBookPdfExporter().ExportAsync(new PrintableBookPdfExportRequest(
             image, [], [image], null, temporaryOutput, new PhysicalPageSize(2, 1), new PhysicalPageSize(8.5, 8.5), 1));

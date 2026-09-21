@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBrandValidationService, BrandValidationService>();
         services.AddSingleton<IBrandTemplateCopyService, BrandTemplateCopyService>();
         services.AddSingleton<IProductionPageProcessingService, ProductionPageProcessingService>();
+        services.AddSingleton<IProductionCoverPdfService, ProductionCoverPdfService>();
         services.AddSingleton<IBookCoverSelectionService, BookCoverSelectionService>();
         services.AddSingleton<IInteriorFrameModeService, InteriorFrameModeService>();
         services.AddSingleton<IBookInteriorSettingsService, BookInteriorSettingsService>();
