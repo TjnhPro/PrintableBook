@@ -30,8 +30,14 @@ public sealed class BackgroundTaskManager(
         {
             ThrowIfDisposed();
             var policy = BackgroundTaskPolicies.For(kind);
-            var duplicate = FindActiveDuplicateLocked(kind, policy.DuplicatePolicy);
+            var duplicate = FindActiveDuplicateLocked(kind, key, policy.DuplicatePolicy);
             if (duplicate is not null) return ValueTask.FromResult(SnapshotLocked(duplicate));
+
+            if (policy.DuplicatePolicy == BackgroundTaskDuplicatePolicy.ReturnExistingByKey &&
+                registry.Values.Any(candidate => candidate.Kind == kind && !IsTerminal(candidate.State)))
+            {
+                throw new BackgroundTaskConflictException(kind, kind);
+            }
 
             var conflict = FindActiveConflictLocked(policy);
             if (conflict is not null)
@@ -357,10 +363,12 @@ public sealed class BackgroundTaskManager(
         }
     }
 
-    private BackgroundTaskEntry? FindActiveDuplicateLocked(BackgroundTaskKind kind, BackgroundTaskDuplicatePolicy policy) => policy switch
+    private BackgroundTaskEntry? FindActiveDuplicateLocked(BackgroundTaskKind kind, string key, BackgroundTaskDuplicatePolicy policy) => policy switch
     {
         BackgroundTaskDuplicatePolicy.JoinByKind or BackgroundTaskDuplicatePolicy.ReturnExisting => registry.Values.FirstOrDefault(entry =>
             entry.Kind == kind && !IsTerminal(entry.State)),
+        BackgroundTaskDuplicatePolicy.ReturnExistingByKey => registry.Values.FirstOrDefault(entry =>
+            entry.Kind == kind && string.Equals(entry.Key, key, StringComparison.Ordinal) && !IsTerminal(entry.State)),
         _ => throw new ArgumentOutOfRangeException(nameof(policy), policy, "Unsupported background task duplicate policy.")
     };
 
@@ -390,7 +398,7 @@ public sealed class BackgroundTaskManager(
         }
     }
 
-    private bool IsLatestRetainedKindLocked(BackgroundTaskEntry candidate) => candidate.Kind is (BackgroundTaskKind.LibraryRefresh or BackgroundTaskKind.ProcessingSession or BackgroundTaskKind.CacheCleanup) &&
+    private bool IsLatestRetainedKindLocked(BackgroundTaskEntry candidate) => candidate.Kind is (BackgroundTaskKind.LibraryRefresh or BackgroundTaskKind.ProcessingSession or BackgroundTaskKind.CacheCleanup or BackgroundTaskKind.ProductionAction) &&
         !registry.Values.Any(entry => entry.Kind == candidate.Kind && IsTerminal(entry.State) && entry.Sequence > candidate.Sequence);
 
     private static bool IsTerminal(BackgroundTaskState state) => state is BackgroundTaskState.Completed or BackgroundTaskState.Failed or BackgroundTaskState.Cancelled;

@@ -35,6 +35,7 @@ public static class ServiceCollectionExtensions
         services.AddKeyedSingleton<IBackgroundTaskWorker, LibraryRefreshWorker>(BackgroundTaskKind.LibraryRefresh);
         services.AddKeyedSingleton<IBackgroundTaskWorker, ProcessingSessionWorker>(BackgroundTaskKind.ProcessingSession);
         services.AddKeyedSingleton<IBackgroundTaskWorker, CacheCleanupWorker>(BackgroundTaskKind.CacheCleanup);
+        services.AddKeyedSingleton<IBackgroundTaskWorker, ProductionActionWorker>(BackgroundTaskKind.ProductionAction);
         services.AddSingleton<IProcessSessionService, ProcessSessionService>();
         services.AddSingleton<IBookProcessingPipeline, BookProcessingPipeline>();
         services.AddSingleton<IBookProcessingQueueBookProcessor, WorkspaceBookProcessingQueueBookProcessor>();

@@ -11,6 +11,7 @@ using PrintableBook.Core.Application.Storage;
 using PrintableBook.Core.Application.Brands;
 using PrintableBook.Desktop.BackgroundTasks;
 using PrintableBook.Desktop.Updates;
+using PrintableBook.Core.Application.Production;
 
 namespace PrintableBook.Desktop.Bridge;
 
@@ -31,7 +32,9 @@ internal sealed class WebViewBridgeRouter(
     ProcessingMutationGate? processingMutationGate = null,
     IBrandValidationService? brandValidationService = null,
     IBrandTemplateCopyService? brandTemplateCopyService = null,
-    IDesktopUpdateCoordinator? updateCoordinator = null)
+    IDesktopUpdateCoordinator? updateCoordinator = null,
+    IProductionFilePicker? productionFilePicker = null,
+    IProductionAssetImportService? productionAssetImportService = null)
 {
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
     private readonly ProcessingMutationGate processingMutationGate = processingMutationGate ?? new ProcessingMutationGate();
@@ -168,6 +171,10 @@ internal sealed class WebViewBridgeRouter(
                 catch (BackgroundTaskConflictException exception) when (exception.ActiveKind == BackgroundTaskKind.LibraryRefresh)
                 {
                     return new BridgeResponse(Version, request.Id, false, null, "cache_cleanup_refresh_active");
+                }
+                catch (BackgroundTaskConflictException exception) when (exception.ActiveKind == BackgroundTaskKind.ProductionAction)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "cache_cleanup_production_active");
                 }
             }
             if (request.Command == "cache.clear.result")
@@ -488,6 +495,10 @@ internal sealed class WebViewBridgeRouter(
                 {
                     return new BridgeResponse(Version, request.Id, false, null, "cache_cleanup_active");
                 }
+                catch (BackgroundTaskConflictException exception) when (exception.ActiveKind == BackgroundTaskKind.ProductionAction)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "production_action_active");
+                }
                 catch (InvalidOperationException exception)
                 {
                     return new BridgeResponse(Version, request.Id, false, null, exception.Message);
@@ -552,6 +563,75 @@ internal sealed class WebViewBridgeRouter(
                     await brandTemplateCopyService.CopyAsync(brand.Directory, book.Workspace, cancellationToken));
             }
 
+            if (request.Command == "book.production.asset.import")
+            {
+                if (applicationLoadCoordinator is null || productionFilePicker is null || productionAssetImportService is null ||
+                    request.Payload is not { } importPayload ||
+                    !importPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
+                    !importPayload.TryGetProperty("assetKind", out var assetKindElement) || !TryParseProductionAssetKind(assetKindElement, out var assetKind))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_production_asset_import");
+                }
+
+                var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                if (snapshot is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+                var book = snapshot.Discovery.Books.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Id.Value, bookIdElement.GetString(), StringComparison.Ordinal));
+                if (book is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+
+                var definition = ProductionAssets.Get(assetKind);
+                var selected = await productionFilePicker.PickPngAsync(definition.FileName, cancellationToken);
+                if (selected is null)
+                {
+                    return BridgeResponse.Succeeded(request.Id, "book.production.asset.import.cancelled", new { cancelled = true });
+                }
+
+                try
+                {
+                    var result = await productionAssetImportService.ImportAsync(book.Workspace, assetKind, selected, cancellationToken);
+                    return BridgeResponse.Succeeded(request.Id, "book.production.asset.imported", result);
+                }
+                catch (ProductionAssetImportException exception)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, exception.Code);
+                }
+            }
+
+            if (request.Command == "book.production.action.start")
+            {
+                if (backgroundTaskManager is null || request.Payload is not { } actionPayload ||
+                    !actionPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
+                    !actionPayload.TryGetProperty("action", out var actionElement) || !TryParseProductionAction(actionElement, out var action))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_production_action");
+                }
+
+                var bookId = bookIdElement.GetString()!;
+                var key = $"{bookId}:{action}";
+                try
+                {
+                    var task = await backgroundTaskManager.StartAsync(
+                        BackgroundTaskKind.ProductionAction,
+                        key,
+                        bookId,
+                        new ProductionActionRequest(bookId, action),
+                        cancellationToken: cancellationToken);
+                    return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(task));
+                }
+                catch (BackgroundTaskConflictException exception) when (exception.ActiveKind == BackgroundTaskKind.ProductionAction)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "production_action_active");
+                }
+                catch (BackgroundTaskConflictException exception) when (exception.ActiveKind == BackgroundTaskKind.ProcessingSession)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "processing_active");
+                }
+                catch (BackgroundTaskConflictException exception) when (exception.ActiveKind == BackgroundTaskKind.CacheCleanup)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "cache_cleanup_active");
+                }
+            }
+
             if (request.Command != "settings.save" || settingsStore is null || request.Payload is not { } payload)
             {
                 return BridgeResponse.UnsupportedCommand(request.Id);
@@ -593,7 +673,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 
@@ -630,6 +710,34 @@ internal sealed class WebViewBridgeRouter(
         return value.ValueKind is JsonValueKind.String && value.GetString() is "auto" or "enabled" or "disabled";
     }
 
+    private static bool TryParseProductionAssetKind(JsonElement value, out ProductionAssetKind kind)
+    {
+        kind = value.ValueKind == JsonValueKind.String
+            ? value.GetString() switch
+            {
+                "final-cover" => ProductionAssetKind.FinalCover,
+                "interior-cover" => ProductionAssetKind.InteriorCover,
+                "book-owner" => ProductionAssetKind.BookOwner,
+                _ => default
+            }
+            : default;
+        return value.ValueKind == JsonValueKind.String && value.GetString() is "final-cover" or "interior-cover" or "book-owner";
+    }
+
+    private static bool TryParseProductionAction(JsonElement value, out ProductionActionKind action)
+    {
+        action = value.ValueKind == JsonValueKind.String
+            ? value.GetString() switch
+            {
+                "build-cover-pdf" => ProductionActionKind.BuildCoverPdf,
+                "process-interior-cover" => ProductionActionKind.ProcessInteriorCover,
+                "process-book-owner" => ProductionActionKind.ProcessBookOwner,
+                _ => default
+            }
+            : default;
+        return value.ValueKind == JsonValueKind.String && value.GetString() is "build-cover-pdf" or "process-interior-cover" or "process-book-owner";
+    }
+
     private static bool TryParseTaskId(JsonElement value, out BackgroundTaskId taskId)
     {
         taskId = default;
@@ -662,6 +770,7 @@ internal sealed class WebViewBridgeRouter(
             {
                 "interior-only" => BookProcessingMode.InteriorOnly,
                 "full-book" => BookProcessingMode.FullBook,
+                "production-interior" => BookProcessingMode.ProductionInterior,
                 _ => throw new ArgumentException("The requested processing mode is not supported.")
             }
             : throw new ArgumentException("A process start request requires a processing mode.");

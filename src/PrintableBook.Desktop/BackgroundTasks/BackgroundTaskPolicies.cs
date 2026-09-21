@@ -6,13 +6,15 @@ internal enum BackgroundTaskLaneKind
 {
     Library,
     Processing,
-    Cleanup
+    Cleanup,
+    Production
 }
 
 internal enum BackgroundTaskDuplicatePolicy
 {
     JoinByKind,
-    ReturnExisting
+    ReturnExisting,
+    ReturnExistingByKey
 }
 
 internal sealed record BackgroundTaskPolicy(
@@ -35,12 +37,17 @@ internal static class BackgroundTaskPolicies
                 BackgroundTaskLaneKind.Processing,
                 1,
                 BackgroundTaskDuplicatePolicy.ReturnExisting,
-                [BackgroundTaskKind.CacheCleanup]),
+                [BackgroundTaskKind.CacheCleanup, BackgroundTaskKind.ProductionAction]),
             [BackgroundTaskKind.CacheCleanup] = new(
                 BackgroundTaskLaneKind.Cleanup,
                 1,
                 BackgroundTaskDuplicatePolicy.ReturnExisting,
-                [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession])
+                [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.ProductionAction]),
+            [BackgroundTaskKind.ProductionAction] = new(
+                BackgroundTaskLaneKind.Production,
+                1,
+                BackgroundTaskDuplicatePolicy.ReturnExistingByKey,
+                [BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup])
         };
 
     internal static IReadOnlyDictionary<BackgroundTaskKind, BackgroundTaskPolicy> All => policies;

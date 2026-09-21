@@ -11,6 +11,7 @@ using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Brands;
+using PrintableBook.Core.Application.Production;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 
@@ -659,6 +660,65 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task ProcessStartRoutesTheProductionInteriorModeToTheSessionOwner()
+    {
+        var session = new StubProcessSessionService(new ProcessSessionSnapshot(false, false, "Brand One", null, null, []));
+
+        var response = await new WebViewBridgeRouter(processSessionService: session)
+            .HandleAsync("""{"version":1,"id":"production-interior","command":"process.start","payload":{"bookIds":["Book One"],"brandName":"Brand One","mode":"production-interior"}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal(BookProcessingMode.ProductionInterior, session.LastMode);
+    }
+
+    [Fact]
+    public async Task Production_import_uses_the_native_picker_and_authorized_book_workspace()
+    {
+        var picker = new StubProductionFilePicker(new FileReference("selected.png"));
+        var importer = new StubProductionAssetImportService();
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            productionFilePicker: picker,
+            productionAssetImportService: importer);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"import","command":"book.production.asset.import","payload":{"bookId":"Book One","assetKind":"interior-cover"}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("book.production.asset.imported", response.Command);
+        Assert.Equal(ProductionAssetKind.InteriorCover, importer.AssetKind);
+        Assert.Equal(new DirectoryReference("workspace"), importer.Workspace?.WorkingDirectory);
+        Assert.Equal(new FileReference("selected.png"), importer.Source);
+    }
+
+    [Fact]
+    public async Task Production_import_picker_cancel_is_a_successful_neutral_result()
+    {
+        var importer = new StubProductionAssetImportService();
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            productionFilePicker: new StubProductionFilePicker(null),
+            productionAssetImportService: importer);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"import","command":"book.production.asset.import","payload":{"bookId":"Book One","assetKind":"final-cover"}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("book.production.asset.import.cancelled", response.Command);
+        Assert.Null(importer.Workspace);
+    }
+
+    [Fact]
+    public async Task Production_action_starts_a_typed_background_task()
+    {
+        var manager = new CleanupTaskManager { CleanupState = BackgroundTaskState.Running };
+        var response = await new WebViewBridgeRouter(backgroundTaskManager: manager)
+            .HandleAsync("""{"version":1,"id":"action","command":"book.production.action.start","payload":{"bookId":"Book One","action":"process-book-owner"}}""");
+
+        Assert.True(response.Ok);
+        var task = Assert.IsType<BackgroundTaskBridgeSnapshot>(response.Payload);
+        Assert.Equal("ProductionAction", task.Kind);
+    }
+
+    [Fact]
     public async Task ProcessCommandsReturnTheImmediateSessionSnapshotsWithoutAWaitCommand()
     {
         var idle = new ProcessSessionSnapshot(false, false, null, null, null, []);
@@ -827,6 +887,31 @@ public sealed class BridgeMessageContractTests
             BookWorkspace = bookWorkspace;
             var destination = new DirectoryReference(Path.Combine(bookWorkspace.WorkingDirectory.Value, "templates"));
             return ValueTask.FromResult(new BrandTemplateCopyResult(destination, BrandTemplateFiles.Required));
+        }
+    }
+
+    private sealed class StubProductionFilePicker(FileReference? selection) : IProductionFilePicker
+    {
+        public ValueTask<FileReference?> PickPngAsync(string assetLabel, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(selection);
+    }
+
+    private sealed class StubProductionAssetImportService : IProductionAssetImportService
+    {
+        public BookWorkspace? Workspace { get; private set; }
+        public ProductionAssetKind? AssetKind { get; private set; }
+        public FileReference? Source { get; private set; }
+
+        public ValueTask<ProductionAssetImportResult> ImportAsync(BookWorkspace workspace, ProductionAssetKind assetKind, FileReference selectedSource, CancellationToken cancellationToken = default)
+        {
+            Workspace = workspace;
+            AssetKind = assetKind;
+            Source = selectedSource;
+            return ValueTask.FromResult(new ProductionAssetImportResult(
+                assetKind,
+                ProductionWorkspacePaths.SourceFile(workspace, assetKind),
+                new ImageSize(100, 100),
+                new ProductionFileSignature(1, DateTimeOffset.UnixEpoch)));
         }
     }
 

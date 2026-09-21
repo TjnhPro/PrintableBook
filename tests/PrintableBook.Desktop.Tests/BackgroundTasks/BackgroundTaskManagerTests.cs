@@ -11,11 +11,12 @@ public sealed class BackgroundTaskManagerTests
     public void Policies_define_library_processing_and_cleanup_with_locked_conflicts()
     {
         Assert.Equal(
-            [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup],
+            [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup, BackgroundTaskKind.ProductionAction],
             BackgroundTaskPolicies.All.Keys.Order());
         AssertPolicy(BackgroundTaskKind.LibraryRefresh, BackgroundTaskLaneKind.Library, BackgroundTaskDuplicatePolicy.JoinByKind, [BackgroundTaskKind.CacheCleanup]);
-        AssertPolicy(BackgroundTaskKind.ProcessingSession, BackgroundTaskLaneKind.Processing, BackgroundTaskDuplicatePolicy.ReturnExisting, [BackgroundTaskKind.CacheCleanup]);
-        AssertPolicy(BackgroundTaskKind.CacheCleanup, BackgroundTaskLaneKind.Cleanup, BackgroundTaskDuplicatePolicy.ReturnExisting, [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession]);
+        AssertPolicy(BackgroundTaskKind.ProcessingSession, BackgroundTaskLaneKind.Processing, BackgroundTaskDuplicatePolicy.ReturnExisting, [BackgroundTaskKind.CacheCleanup, BackgroundTaskKind.ProductionAction]);
+        AssertPolicy(BackgroundTaskKind.CacheCleanup, BackgroundTaskLaneKind.Cleanup, BackgroundTaskDuplicatePolicy.ReturnExisting, [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.ProductionAction]);
+        AssertPolicy(BackgroundTaskKind.ProductionAction, BackgroundTaskLaneKind.Production, BackgroundTaskDuplicatePolicy.ReturnExistingByKey, [BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup]);
     }
 
     [Fact]
@@ -88,6 +89,40 @@ public sealed class BackgroundTaskManagerTests
         Assert.Equal(first.TaskId, second.TaskId);
         cleanup.Release.TrySetResult();
         Assert.True(await manager.WaitAsync(first.TaskId, TimeSpan.FromSeconds(2)));
+    }
+
+    [Fact]
+    public async Task Production_action_returns_only_an_exact_duplicate_and_rejects_a_distinct_action()
+    {
+        var production = new BlockingWorker(BackgroundTaskKind.ProductionAction);
+        using var manager = CreateManager(production);
+
+        var first = await manager.StartAsync(BackgroundTaskKind.ProductionAction, "book-one:cover", "book-one", new TaskRequest("cover"));
+        await production.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var duplicate = await manager.StartAsync(BackgroundTaskKind.ProductionAction, "book-one:cover", "book-one", new TaskRequest("cover"));
+        var conflict = await Assert.ThrowsAsync<BackgroundTaskConflictException>(() => manager.StartAsync(
+            BackgroundTaskKind.ProductionAction,
+            "book-one:owner",
+            "book-one",
+            new TaskRequest("owner")).AsTask());
+
+        Assert.Equal(first.TaskId, duplicate.TaskId);
+        Assert.Equal(BackgroundTaskKind.ProductionAction, conflict.ActiveKind);
+        production.Release.TrySetResult();
+        Assert.True(await manager.WaitAsync(first.TaskId, TimeSpan.FromSeconds(2)));
+    }
+
+    [Theory]
+    [InlineData(BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.ProductionAction)]
+    [InlineData(BackgroundTaskKind.ProductionAction, BackgroundTaskKind.ProcessingSession)]
+    [InlineData(BackgroundTaskKind.CacheCleanup, BackgroundTaskKind.ProductionAction)]
+    [InlineData(BackgroundTaskKind.ProductionAction, BackgroundTaskKind.CacheCleanup)]
+    public async Task Production_conflicts_are_symmetric(BackgroundTaskKind activeKind, BackgroundTaskKind requestedKind)
+    {
+        var activeWorker = new BlockingWorker(activeKind);
+        using var manager = CreateManager(activeWorker);
+
+        await StartAndAssertConflictAsync(manager, activeWorker, activeKind, requestedKind);
     }
 
     [Fact]
