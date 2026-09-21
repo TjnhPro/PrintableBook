@@ -29,6 +29,12 @@ public sealed class PhysicalBookWorkspaceTests : IAsyncLifetime
 
         Assert.True(Directory.Exists(Path.Combine(bookDirectory.Value, ".workspace", "cache")));
         Assert.True(Directory.Exists(Path.Combine(bookDirectory.Value, ".workspace", "processed", "interior")));
+        Assert.True(Directory.Exists(Path.Combine(bookDirectory.Value, ".workspace", "generator")));
+        Assert.True(Directory.Exists(Path.Combine(bookDirectory.Value, ".workspace", "templates")));
+        Assert.True(Directory.Exists(Path.Combine(bookDirectory.Value, ".workspace", "production")));
+        Assert.True(Directory.Exists(Path.Combine(bookDirectory.Value, ".workspace", "processed", "production")));
+        Assert.True(Directory.Exists(Path.Combine(bookDirectory.Value, ".workspace", "cache", "production-interior-cover")));
+        Assert.True(Directory.Exists(Path.Combine(bookDirectory.Value, ".workspace", "cache", "production-book-owner")));
         Assert.True(Directory.Exists(Path.Combine(bookDirectory.Value, ".workspace", "output-temp")));
         Assert.Equal(Path.Combine(bookDirectory.Value, ".workspace", "processed"), workspace.ProcessedDirectory.Value);
         Assert.Equal(Path.Combine(bookDirectory.Value, ".workspace", "output-temp"), workspace.TemporaryOutputDirectory.Value);

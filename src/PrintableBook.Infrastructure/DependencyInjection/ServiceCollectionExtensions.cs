@@ -16,6 +16,8 @@ using PrintableBook.Infrastructure.Scanning;
 using PrintableBook.Infrastructure.Workspaces;
 using PrintableBook.Core.Application.Updates;
 using PrintableBook.Infrastructure.Updates;
+using PrintableBook.Core.Application.Production;
+using PrintableBook.Infrastructure.Production;
 
 namespace PrintableBook.Infrastructure.DependencyInjection;
 
@@ -58,6 +60,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBookSourceScanner, BookSourceScanner>();
         services.AddSingleton<IBookWorkspaceFactory, PhysicalBookWorkspaceFactory>();
         services.AddSingleton<IBookWorkspaceStateStore, JsonBookWorkspaceStateStore>();
+        services.AddSingleton<IProductionWorkspaceStateStore, JsonProductionWorkspaceStateStore>();
+        services.AddSingleton<IProductionAssetImportService, ProductionAssetImportService>();
         services.AddSingleton<IBookStorageMaintenance, PhysicalBookStorageMaintenance>();
         services.AddSingleton<IInteriorShuffleStore, JsonInteriorShuffleStore>();
         services.AddHttpClient(GitHubReleaseUpdateFeed.HttpClientName, client =>

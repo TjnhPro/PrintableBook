@@ -16,7 +16,11 @@ public sealed class PhysicalBookWorkspaceFactory(IFileSystem fileSystem) : IBook
         var workspaceDirectory = new DirectoryReference(Path.Combine(bookDirectory.Value, ".workspace"));
         var processedDirectory = new DirectoryReference(Path.Combine(workspaceDirectory.Value, "processed"));
         var temporaryOutputDirectory = new DirectoryReference(Path.Combine(workspaceDirectory.Value, "output-temp"));
-        foreach (var name in new[] { "state", "logs", "errors", "cache", "processed", "processed/interior", "processed/intro", "output-temp" })
+        foreach (var name in new[]
+                 {
+                     "state", "logs", "errors", "cache", "cache/production-interior-cover", "cache/production-book-owner",
+                     "generator", "templates", "production", "processed", "processed/interior", "processed/intro", "processed/production", "output-temp"
+                 })
         {
             await fileSystem.CreateDirectoryAsync(new DirectoryReference(Path.Combine(workspaceDirectory.Value, name)), cancellationToken);
         }
