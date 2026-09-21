@@ -281,6 +281,66 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Brand_template_copy_uses_the_ready_book_and_validated_brand_from_the_retained_snapshot()
+    {
+        var copy = new StubBrandTemplateCopyService();
+        var snapshot = CreateSnapshot() with
+        {
+            BrandSummaries = [new BrandDesktopSummary("Brand One", BrandValidationStatus.Validated, DateTimeOffset.UnixEpoch, "sha256:test")]
+        };
+        var manager = new RetainedSnapshotTaskManager(snapshot);
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(manager),
+            brandTemplateCopyService: copy);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"copy-templates","command":"book.brand.templates.copy","payload":{"bookId":"Book One","brandName":"Brand One"}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("book.brand.templates.copied", response.Command);
+        Assert.Equal(new DirectoryReference("brands/Brand One"), copy.BrandDirectory);
+        Assert.Equal(new DirectoryReference("workspace"), copy.BookWorkspace?.WorkingDirectory);
+        Assert.Equal(0, manager.Starts);
+    }
+
+    [Fact]
+    public async Task Brand_template_copy_rejects_a_brand_that_is_not_validated()
+    {
+        var copy = new StubBrandTemplateCopyService();
+        var snapshot = CreateSnapshot() with
+        {
+            BrandSummaries = [new BrandDesktopSummary("Brand One", BrandValidationStatus.NeedsValidation, null, null)]
+        };
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
+            brandTemplateCopyService: copy);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"copy-templates","command":"book.brand.templates.copy","payload":{"bookId":"Book One","brandName":"Brand One"}}""");
+
+        Assert.Equal("brand_not_validated", response.Error);
+        Assert.Null(copy.BrandDirectory);
+    }
+
+    [Fact]
+    public async Task Brand_template_copy_rejects_a_book_that_is_not_ready()
+    {
+        var copy = new StubBrandTemplateCopyService();
+        var current = CreateSnapshot();
+        var snapshot = current with
+        {
+            BookSummaries = [current.BookSummaries[0] with { ValidationStatus = "Invalid" }],
+            BrandSummaries = [new BrandDesktopSummary("Brand One", BrandValidationStatus.Validated, null, null)]
+        };
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
+            brandTemplateCopyService: copy);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"copy-templates","command":"book.brand.templates.copy","payload":{"bookId":"Book One","brandName":"Brand One"}}""");
+
+        Assert.Equal("book_not_ready", response.Error);
+        Assert.Null(copy.BrandDirectory);
+    }
+
+    [Fact]
     public async Task Mutation_commands_use_only_the_retained_snapshot_before_queueing_refreshes()
     {
         var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
@@ -753,6 +813,20 @@ public sealed class BridgeMessageContractTests
         {
             Directory = brandDirectory;
             return ValueTask.FromResult(new BrandValidationResult(new BrandValidationState(BrandValidationStatus.Validated), []));
+        }
+    }
+
+    private sealed class StubBrandTemplateCopyService : IBrandTemplateCopyService
+    {
+        public DirectoryReference? BrandDirectory { get; private set; }
+        public BookWorkspace? BookWorkspace { get; private set; }
+
+        public ValueTask<BrandTemplateCopyResult> CopyAsync(DirectoryReference brandDirectory, BookWorkspace bookWorkspace, CancellationToken cancellationToken = default)
+        {
+            BrandDirectory = brandDirectory;
+            BookWorkspace = bookWorkspace;
+            var destination = new DirectoryReference(Path.Combine(bookWorkspace.WorkingDirectory.Value, "templates"));
+            return ValueTask.FromResult(new BrandTemplateCopyResult(destination, BrandTemplateFiles.Required));
         }
     }
 

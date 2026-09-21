@@ -8,13 +8,15 @@ Printable Book làm việc hoàn toàn trên thư mục local: Brand trong `bran
 
 ## 2. Chuẩn bị Brand
 
-Tạo một thư mục Brand dưới `brands/`. Một Brand gồm hai folder tùy chọn `IntroTemplate/`, `AppPlus/`, cùng hai ảnh `frame.png` và `background.png`. `BackCover.psd` và `brand.json` không còn được dùng hay đọc bởi ứng dụng. Màn hình **Brands & templates** hiển thị từng folder dưới dạng danh sách `Name | Extension | Size | Status`, còn `frame.png` và `background.png` là các card riêng với kích thước hiện tại và kích thước bắt buộc.
+Tạo một thư mục Brand dưới `brands/`. Một Brand gồm hai folder tùy chọn `IntroTemplate/`, `AppPlus/`, hai ảnh `frame.png`, `background.png`, và hai template bắt buộc `cover.psd`, `app_plus.psd` ở root Brand. `BackCover.psd` và `brand.json` không còn được dùng hay đọc bởi ứng dụng. Màn hình **Brands & templates** hiển thị từng folder dưới dạng danh sách `Name | Extension | Size | Status`, còn các file root là các card riêng.
 
-Kích thước hợp lệ: `frame.png` phải là `Artwork maximum side × Artwork maximum side`; `background.png` phải đúng `Final Interior Page`; ảnh trong `IntroTemplate/` phải là `1024 × 1024 px`, `2048 × 2048 px`, hoặc đúng `Final Interior Page` (mặc định `2588 × 2625 px`). Với ảnh Intro đúng Final Interior Page, ứng dụng đưa thẳng artwork đó vào PDF, không thêm viền hay xử lý ảnh. Sau khi chọn **Validate Brand**, lỗi chỉ rõ file nào sai, kích thước hiện tại và kích thước cần sửa.
+Kích thước hợp lệ: `frame.png` phải là `Artwork maximum side × Artwork maximum side`; `background.png` phải đúng `Final Interior Page`; ảnh trong `IntroTemplate/` phải là `1024 × 1024 px`, `2048 × 2048 px`, hoặc đúng `Final Interior Page` (mặc định `2588 × 2625 px`). `cover.psd` và `app_plus.psd` chỉ được kiểm tra tồn tại, không được đọc như ảnh. Với ảnh Intro đúng Final Interior Page, ứng dụng đưa thẳng artwork đó vào PDF, không thêm viền hay xử lý ảnh. Sau khi chọn **Validate Brand**, lỗi chỉ rõ file nào sai, kích thước hiện tại và kích thước cần sửa.
 
 ![Brands and templates](assets/screenshots/0.1/12-brands-templates.png)
 
 ## 3. Chuẩn bị Book
+
+Trong Book detail, nút **Copy Brand Templates** khả dụng khi Book ở trạng thái `Ready` và Brand đang chọn đã `Validated`. Nút này copy đè `cover.psd` và `app_plus.psd` vào `.workspace/templates/`; thao tác không chạy processing và không tạo state/cache riêng.
 
 Mỗi Book là một thư mục trực tiếp dưới `sources/`. Hai cấu trúc được hỗ trợ:
 
