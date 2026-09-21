@@ -171,6 +171,24 @@ public sealed class BrandValidationServiceTests
         Assert.Equal("Image is 1500 × 1500 px. Required size: 1024 × 1024 px, 2048 × 2048 px, 2588 × 2625 px.", failure.Message);
     }
 
+    [Theory]
+    [InlineData("cover.psd")]
+    [InlineData("app_plus.psd")]
+    public async Task Missing_required_psd_template_keeps_the_brand_invalid_without_inspecting_it_as_an_image(string missingFile)
+    {
+        var files = FileSystem.ValidBrand();
+        files.Remove(missingFile);
+        var images = new Images();
+
+        var result = await CreateService(new StateStore(), files, images).ValidateAsync(BrandDirectory, GlobalSettings.Default);
+
+        var failure = Assert.Single(result.Failures);
+        Assert.False(result.IsSuccess);
+        Assert.Equal(missingFile, failure.Target);
+        Assert.Equal("brand_asset_missing", failure.Code);
+        Assert.Equal(3, images.SizeReads);
+    }
+
     private static BrandValidationService CreateService(StateStore store, FileSystem files, Images images)
     {
         var resolver = new BrandValidationTargetResolver(files);
@@ -216,6 +234,8 @@ public sealed class BrandValidationServiceTests
             result.Add("IntroTemplate/intro.png", 10);
             result.Add("frame.png", 20);
             result.Add("background.png", 30);
+            result.Add("cover.psd", 40);
+            result.Add("app_plus.psd", 50);
             return result;
         }
 

@@ -120,6 +120,19 @@ public sealed class BrandFingerprintCalculatorTests
         Assert.NotEqual(baselineFingerprint, await CalculateAsync(touched));
     }
 
+    [Fact]
+    public async Task Fingerprint_changes_when_a_required_psd_template_changes()
+    {
+        var baseline = new MetadataFileSystem(
+            ("C:\\brands\\demo\\cover.psd", 10),
+            ("C:\\brands\\demo\\app_plus.psd", 11));
+        var changed = new MetadataFileSystem(
+            ("C:\\brands\\demo\\cover.psd", 99),
+            ("C:\\brands\\demo\\app_plus.psd", 11));
+
+        Assert.NotEqual(await CalculateAsync(baseline), await CalculateAsync(changed));
+    }
+
     private static ValueTask<string> CalculateAsync(MetadataFileSystem files, GlobalSettings? settings = null)
     {
         var resolver = new BrandValidationTargetResolver(files);

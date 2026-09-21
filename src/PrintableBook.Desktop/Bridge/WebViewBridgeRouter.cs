@@ -30,6 +30,7 @@ internal sealed class WebViewBridgeRouter(
     IBackgroundTaskManager? backgroundTaskManager = null,
     ProcessingMutationGate? processingMutationGate = null,
     IBrandValidationService? brandValidationService = null,
+    IBrandTemplateCopyService? brandTemplateCopyService = null,
     IDesktopUpdateCoordinator? updateCoordinator = null)
 {
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
@@ -517,6 +518,40 @@ internal sealed class WebViewBridgeRouter(
                 }
             }
 
+            if (request.Command == "book.brand.templates.copy")
+            {
+                if (applicationLoadCoordinator is null || brandTemplateCopyService is null || request.Payload is not { } copyPayload ||
+                    !copyPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
+                    !copyPayload.TryGetProperty("brandName", out var brandNameElement) || string.IsNullOrWhiteSpace(brandNameElement.GetString()))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_template_copy");
+                }
+
+                var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                if (snapshot is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+
+                var book = snapshot.Discovery.Books.FirstOrDefault(item => string.Equals(item.Id.Value, bookIdElement.GetString(), StringComparison.Ordinal));
+                var bookSummary = book is null ? null : snapshot.BookSummaries.FirstOrDefault(item => item.BookId == book.Id);
+                if (book is null || bookSummary is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+                if (!string.Equals(bookSummary.ValidationStatus, "Ready", StringComparison.Ordinal))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "book_not_ready");
+                }
+
+                var brand = snapshot.Discovery.Brands.FirstOrDefault(item => string.Equals(item.Name, brandNameElement.GetString(), StringComparison.Ordinal));
+                if (brand is null) return new BridgeResponse(Version, request.Id, false, null, "brand_not_found");
+                var brandSummary = snapshot.BrandSummaries?.FirstOrDefault(item => string.Equals(item.BrandName, brand.Name, StringComparison.Ordinal));
+                if (brandSummary?.ValidationStatus != BrandValidationStatus.Validated)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "brand_not_validated");
+                }
+
+                return BridgeResponse.Succeeded(
+                    request.Id,
+                    "book.brand.templates.copied",
+                    await brandTemplateCopyService.CopyAsync(brand.Directory, book.Workspace, cancellationToken));
+            }
+
             if (request.Command != "settings.save" || settingsStore is null || request.Payload is not { } payload)
             {
                 return BridgeResponse.UnsupportedCommand(request.Id);
@@ -558,7 +593,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

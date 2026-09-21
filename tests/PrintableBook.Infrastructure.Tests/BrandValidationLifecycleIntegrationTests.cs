@@ -24,6 +24,8 @@ public sealed class BrandValidationLifecycleIntegrationTests : IAsyncLifetime
         WriteImage(introPath, 1024, 1024);
         WriteImage(framePath, 64, 64);
         WriteImage(backgroundPath, 80, 90);
+        await File.WriteAllTextAsync(Path.Combine(brandPath, BrandTemplateFiles.Cover), "cover-template");
+        await File.WriteAllTextAsync(Path.Combine(brandPath, BrandTemplateFiles.AppPlus), "app-plus-template");
 
         var fileSystem = new PhysicalFileSystem();
         var images = new CountingImageInspector(new MagickImageInspector());

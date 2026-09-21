@@ -490,6 +490,53 @@ test("Book card selection and detail entry do not redraw the Book Library", () =
   assert.equal(getFullRenderCount(), rendersBeforeDetail, "opening Book detail must preserve the grid and its scroll position");
 });
 
+test("Book detail copies templates from the selected validated Brand for a ready Book", () => {
+  const { messageHandler, content, contentListeners, messages, status } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "brand-template-snapshot", ok: true, command: "app.snapshot", payload: {
+    discovery: {
+      brands: [{ name: "Brand One" }],
+      books: [{ id: { value: "Book 001" }, name: "Book 001" }]
+    },
+    globalSettings: {},
+    brandSummaries: [{ brandName: "Brand One", validationStatus: "Validated" }],
+    bookSummaries: [{ bookId: { value: "Book 001" }, interiorSourcePageCount: 1, activeInteriorSourcePageCount: 1, validationStatus: "Ready", workspaceStatus: "Not started", assets: [] }]
+  } } });
+
+  const openBook = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  assert.match(content.innerHTML, /Copy Brand Templates/);
+  assert.doesNotMatch(content.innerHTML, /data-action="copy-brand-templates"[^>]*disabled/);
+
+  const copy = { dataset: { action: "copy-brand-templates", bookId: "Book 001" }, closest: () => copy };
+  contentListeners.click({ target: copy });
+  const request = messages.at(-1);
+  assert.equal(request.command, "book.brand.templates.copy");
+  assert.deepEqual(request.payload, { bookId: "Book 001", brandName: "Brand One" });
+  assert.match(content.innerHTML, /Copying…/);
+
+  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "book.brand.templates.copied", payload: { copiedFileNames: ["cover.psd", "app_plus.psd"] } } });
+  assert.equal(status.textContent, "Brand templates copied");
+  assert.match(content.innerHTML, /Copy Brand Templates/);
+});
+
+test("Book detail disables Brand template copy until both Book and Brand are valid", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "brand-template-blocked", ok: true, command: "app.snapshot", payload: {
+    discovery: {
+      brands: [{ name: "Brand One" }],
+      books: [{ id: { value: "Book 001" }, name: "Book 001" }]
+    },
+    globalSettings: {},
+    brandSummaries: [{ brandName: "Brand One", validationStatus: "NeedsValidation" }],
+    bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Invalid", workspaceStatus: "Not started", assets: [] }]
+  } } });
+
+  const openBook = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+
+  assert.match(content.innerHTML, /data-action="copy-brand-templates"[^>]*disabled/);
+});
+
 test("Book Library keeps page selection beside its compact search control", () => {
   const { messageHandler, content, contentListeners, status, getFullRenderCount } = loadBridge("books");
   const books = Array.from({ length: 13 }, (_, index) => ({ id: { value: `Book ${index + 1}` }, name: `Book ${index + 1}` }));

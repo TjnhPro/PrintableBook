@@ -37,7 +37,7 @@ public sealed class BrandValidationService(
             {
                 return NeedsValidation(record, "brand_fingerprint_changed");
             }
-            if (!TryValidateFacts(record.Assets, current.ExistingRelativePaths, out var facts))
+            if (!TryValidateFacts(record.Assets, GetImageFactPaths(brandDirectory, resolved, current.ExistingRelativePaths), out var facts))
             {
                 return NeedsValidation(record, "brand_validation_record_invalid");
             }
@@ -148,7 +148,7 @@ public sealed class BrandValidationService(
         }
 
         var orderedFacts = facts.OrderBy(fact => fact.RelativePath, StringComparer.Ordinal).ToArray();
-        if (!TryValidateFacts(orderedFacts, after.ExistingRelativePaths, out _))
+        if (!TryValidateFacts(orderedFacts, GetImageFactPaths(brandDirectory, afterResolved, after.ExistingRelativePaths), out _))
         {
             await MarkPreviousRequiresValidationAsync(brandDirectory, previous, cancellationToken);
             return new(
@@ -204,6 +204,21 @@ public sealed class BrandValidationService(
 
     private static BrandValidationState NeedsValidation(BrandValidationRecord record, string reasonCode) =>
         new(BrandValidationStatus.NeedsValidation, record.ValidatedAtUtc, record.Fingerprint, reasonCode);
+
+    private static IReadOnlyList<string> GetImageFactPaths(
+        DirectoryReference brandDirectory,
+        IReadOnlyList<ResolvedBrandValidationEntry> resolved,
+        IReadOnlyList<string> existingPaths)
+    {
+        var existing = new HashSet<string>(existingPaths, StringComparer.Ordinal);
+        return resolved
+            .Where(entry => entry.Entry.Rules.Any(rule => rule is BrandImageDimensionsRule))
+            .SelectMany(entry => entry.Files)
+            .Select(file => BrandValidationTargetResolver.NormalizeRelativePath(brandDirectory, file))
+            .Where(existing.Contains)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+    }
 
     private static bool TryValidateFacts(
         IReadOnlyList<BrandValidationAssetFact>? facts,

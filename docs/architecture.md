@@ -169,11 +169,13 @@ background
 
 ## Brand validation contract
 
-Brand assets have an explicit two-stage contract, independent from Book workspace state. **Brand Validate** is the deep certification action: it verifies the V1 tracked scope (`IntroTemplate/**` supported images, `frame.png`, and `background.png`) and their required image dimensions, then persists `brand.validation.json` beside the Brand. A Brand IntroTemplate can be a legacy square (`1024x1024` or `2048x2048`) or an exact Final Interior Page raster. The latter is classified only at the page-pipeline boundary and passes directly into ordered PDF assembly; it is not a Working Area and never receives frame, border, normalization, or crop-art work.
+Brand assets have an explicit two-stage contract, independent from Book workspace state. **Brand Validate** is the deep certification action: it verifies the tracked image scope (`IntroTemplate/**` supported images, `frame.png`, and `background.png`) and their required dimensions, and requires the root files `cover.psd` and `app_plus.psd` to exist. It then persists `brand.validation.json` beside the Brand. PSD files are existence-checked and fingerprinted as files; they are never decoded as images. A Brand IntroTemplate can be a legacy square (`1024x1024` or `2048x2048`) or an exact Final Interior Page raster. The latter is classified only at the page-pipeline boundary and passes directly into ordered PDF assembly; it is not a Working Area and never receives frame, border, normalization, or crop-art work.
 
 **Brand CheckState** is deliberately cheap and state-first. With no state it returns `NotValidated` without scanning image content. For a current certification it compares only the validation definition and a metadata fingerprint (normalized tracked path, file length, and last-write UTC); it never decodes images or reads their bytes. A changed metadata fingerprint, explicit invalidation, or a changed `DefinitionChangedAtUtc` returns `NeedsValidation`.
 
 Interior processing performs this cheap state check again immediately after obtaining its fresh snapshot. It accepts only `Validated` Brands. Certified Brand-owned frame/background/automatic Intro assets are not deeply inspected again at process start; custom Intro pages selected from a Book remain Book-owned and continue to receive their own validation. Any semantic change to tracked scope or validation rules must update `DefinitionChangedAtUtc` so prior certifications cannot be reused.
+
+The manual **Copy Brand Templates** use case is separate from processing. For a `Ready` Book and the currently selected `Validated` Brand, it creates `Book/.workspace/templates/` and copies exactly `cover.psd` and `app_plus.psd` with overwrite enabled. The operation has no state record, version detection, cache, or processing-pipeline stage.
 
 ## Thực thi nền và concurrency
 

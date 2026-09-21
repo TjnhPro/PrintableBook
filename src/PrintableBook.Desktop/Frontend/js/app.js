@@ -4,7 +4,7 @@
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
   const bookStatuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
-  const state = { selectedBrand: "", inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "auto", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { selectedBrand: "", inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "auto", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -255,6 +255,12 @@
     if (currentRoute() === "books") render("books", false);
   };
   const selectedBook = () => books().find((book) => bookId(book) === state.selectedBookId);
+  const brandTemplateCopyReadiness = (book, summary) => {
+    if (!book || !summary || valueFor(summary, "validationStatus", "") !== "Ready") return { ready: false, reason: "Run Interior preflight and resolve Book errors first." };
+    const brand = activeBrand();
+    if (!brand) return { ready: false, reason: "Select a validated Brand first." };
+    return { ready: true, reason: `Copy cover.psd and app_plus.psd from ${valueFor(brand, "name", "the selected Brand")}.`, brand };
+  };
   const assetsFor = (summary) => valueFor(summary, "assets", []);
   const assetForReference = (summary, sourceReference) => assetsFor(summary).find((asset) => valueFor(asset, "sourceReference", "") === sourceReference);
   const interiorDraftFor = (id, create = false) => {
@@ -489,12 +495,14 @@
     };
     const renderFile = (asset) => {
       const failure = failureFor(asset);
-      return `<article class="brand-file-card"><div class="brand-asset-heading"><div><h3>${escapeHtml(valueFor(asset, "name", ""))}</h3><p>${escapeHtml(valueFor(asset, "extension", "") || "Image")}</p></div>${badge(statusFor(asset))}</div><dl><div><dt>Current size</dt><dd>${escapeHtml(size(asset))}</dd></div><div><dt>Required size</dt><dd>${escapeHtml(expectedSize(asset))}</dd></div></dl>${failure ? `<p class="brand-asset-error">${escapeHtml(valueFor(failure, "message", "Validation failed."))}</p>` : ""}</article>`;
+      const isImage = valueFor(asset, "type", "") === "Image";
+      const details = isImage ? `<dl><div><dt>Current size</dt><dd>${escapeHtml(size(asset))}</dd></div><div><dt>Required size</dt><dd>${escapeHtml(expectedSize(asset))}</dd></div></dl>` : "";
+      return `<article class="brand-file-card"><div class="brand-asset-heading"><div><h3>${escapeHtml(valueFor(asset, "name", ""))}</h3><p>${isImage ? escapeHtml(valueFor(asset, "extension", "") || "Image") : "Required PSD template"}</p></div>${badge(statusFor(asset))}</div>${details}${failure ? `<p class="brand-asset-error">${escapeHtml(valueFor(failure, "message", "Validation failed."))}</p>` : ""}</article>`;
     };
     const folders = assets.filter((asset) => valueFor(asset, "type", "") === "Folder");
     const files = assets.filter((asset) => valueFor(asset, "type", "") !== "Folder");
     const assetInventory = assets.length ? `<div class="brand-asset-inventory"><div class="brand-folder-list">${folders.map(renderFolder).join("")}</div><div class="brand-file-grid">${files.map(renderFile).join("")}</div></div>` : "<p class=\"empty-copy\">No brand assets found.</p>";
-    content.innerHTML = `<div class="page-header"><div><h1>Brands & templates</h1><p>Inspect reusable Brand assets and resolve exact file requirements before processing.</p></div></div><div class="master-detail"><section class="panel list-panel"><label class="brand-search"><span>Search Brands</span><input class="control" data-action="filter-brands" value="${escapeHtml(state.brandFilter)}" placeholder="Search by name" /></label><div class="list-title">Brands</div><ul class="item-list" data-brand-list>${brandListMarkup(allBrands)}</ul></section><section class="detail-pane">${selected ? panel(escapeHtml(valueFor(selected, "name", "")), `<div class="page-actions"><div>${badge(validationStatus)}<p class="panel-note">Validate IntroTemplate, frame.png, and background.png before processing.</p></div><button class="button-primary" data-action="validate-brand" ${processIsActive() ? "disabled" : ""}>Validate Brand</button></div>${validationMessage}${assetInventory}`) : panel("Brand detail", "<p class=\"empty-copy\">Select a Brand to inspect its assets.</p>")}</section></div>`;
+    content.innerHTML = `<div class="page-header"><div><h1>Brands & templates</h1><p>Inspect reusable Brand assets and resolve exact file requirements before processing.</p></div></div><div class="master-detail"><section class="panel list-panel"><label class="brand-search"><span>Search Brands</span><input class="control" data-action="filter-brands" value="${escapeHtml(state.brandFilter)}" placeholder="Search by name" /></label><div class="list-title">Brands</div><ul class="item-list" data-brand-list>${brandListMarkup(allBrands)}</ul></section><section class="detail-pane">${selected ? panel(escapeHtml(valueFor(selected, "name", "")), `<div class="page-actions"><div>${badge(validationStatus)}<p class="panel-note">Validate IntroTemplate, frame.png, background.png, cover.psd, and app_plus.psd before processing.</p></div><button class="button-primary" data-action="validate-brand" ${processIsActive() ? "disabled" : ""}>Validate Brand</button></div>${validationMessage}${assetInventory}`) : panel("Brand detail", "<p class=\"empty-copy\">Select a Brand to inspect its assets.</p>")}</section></div>`;
   };
 
   const renderProcessedInteriorPages = (summary) => {
@@ -512,13 +520,14 @@
   const renderBookTabs = (book, summary) => {
     const tabButton = (id, label) => `<button class="detail-tab ${state.selectedBookTab === id ? "active" : ""}" data-action="book-tab" data-book-tab="${id}">${label}</button>`;
     const readiness = processingReadiness(book, summary);
+    const templateReadiness = brandTemplateCopyReadiness(book, summary);
     const body = state.selectedBookTab === "settings"
       ? `<section class="interior-settings"><section class="asset-background-setting"><div><h3>Brand background</h3><p>Insert the selected Brand background after every active Interior page.</p></div><label class="asset-background-toggle"><input type="checkbox" data-action="set-book-background" data-book-id="${escapeHtml(bookId(book))}" ${effectiveBackground(book, summary) ? "checked" : ""} ${processIsActive() || state.bookInteriorSavePending ? "disabled" : ""}> Use Brand background</label></section>${renderIntroTemplateWorkspace(book, summary)}</section>`
       : state.selectedBookTab === "artwork"
         ? renderFolderAssetWorkspace(book, summary)
         : state.selectedBookTab === "pages"
           ? renderProcessedInteriorPages(summary)
-        : `<section class="book-overview"><div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Interior preflight</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div><p class="panel-note">Review the summary, then configure Brand background and Intro pages in Interior settings.</p></section>`;
+        : `<section class="book-overview"><div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Interior preflight</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div><section class="asset-background-setting"><div><h3>Brand PSD templates</h3><p>Copy cover.psd and app_plus.psd from the selected Brand into this Book workspace.</p></div><button class="button-secondary" data-action="copy-brand-templates" data-book-id="${escapeHtml(bookId(book))}" ${templateReadiness.ready && !state.brandTemplateCopyPending ? "" : "disabled"} title="${escapeHtml(templateReadiness.reason)}">${state.brandTemplateCopyPending ? "Copying…" : "Copy Brand Templates"}</button></section><p class="panel-note">Review the summary, then configure Brand background and Intro pages in Interior settings.</p></section>`;
     return `<div class="book-heading"><div><h2>${escapeHtml(valueFor(book, "name", ""))}</h2><p>Interior-only production workspace</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs">${tabButton("overview", "Overview")}${tabButton("settings", "Interior settings")}${tabButton("artwork", "Interior artwork")}${tabButton("pages", "Interior pages")}</nav><div class="tab-body ${state.selectedBookTab === "artwork" ? "tab-body-artwork" : state.selectedBookTab === "pages" ? "tab-body-processed-pages" : ""}">${body}</div>`;
   };
 
@@ -1020,6 +1029,14 @@
     if (action === "save-settings") { const payload = {}; document.querySelectorAll("[data-setting]").forEach((input) => { const group = input.dataset.settingGroup; if (group) { payload[group] ??= {}; payload[group][input.dataset.setting] = Number(input.value); } else payload[input.dataset.setting] = Number(input.value); }); send("settings.save", payload); }
     if (action === "select-brand") { state.inspectedBrand = target.dataset.brandName; state.brandValidationResult = null; render("brands"); }
     if (action === "validate-brand") { const requestId = send("brand.validate", { brandName: state.inspectedBrand }); state.brandValidationRequestBrands.set(requestId, state.inspectedBrand); }
+    if (action === "copy-brand-templates" && !state.brandTemplateCopyPending) {
+      const book = books().find((item) => bookId(item) === target.dataset.bookId);
+      const readiness = book ? brandTemplateCopyReadiness(book, summaryFor(book)) : { ready: false, reason: "Choose a Book first." };
+      if (!readiness.ready) { status.textContent = readiness.reason; return; }
+      state.brandTemplateCopyPending = true;
+      refreshBookDrawerBody();
+      send("book.brand.templates.copy", { bookId: target.dataset.bookId, brandName: valueFor(readiness.brand, "name", "") });
+    }
     if (action === "select-book" || action === "open-book-detail") openBookDrawer(target.dataset.bookId);
     if (action === "close-book-drawer") closeBookDrawer();
     if (action === "save-book-interior-settings" && !state.bookInteriorSavePending) {
@@ -1295,6 +1312,10 @@
       content.querySelector?.("[data-brand-validation-summary]")?.focus?.();
       status.textContent = valueFor(state.brandValidationResult, "isSuccess", false) ? "Brand validation completed" : "Brand validation needs attention";
       beginApplicationRefresh();
+    } else if (ok && command === "book.brand.templates.copied") {
+      state.brandTemplateCopyPending = false;
+      if (state.bookDrawerOpen && currentRoute() === "books") refreshBookDrawerBody();
+      status.textContent = "Brand templates copied";
     } else if (ok && command === "book.output.action.completed") {
       status.textContent = "Output action completed";
     } else if (ok && command === "diagnostics.snapshot") {
@@ -1311,6 +1332,10 @@
         stopUpdatePolling();
       }
       const error = valueFor(response, "error", "unexpected response");
+      if (requestCommand === "book.brand.templates.copy") {
+        state.brandTemplateCopyPending = false;
+        if (state.bookDrawerOpen && currentRoute() === "books") refreshBookDrawerBody();
+      }
       if (requestCommand === "book.interior.settings.save") {
         state.bookInteriorSavePending = false;
         updateInteriorSaveUi();
