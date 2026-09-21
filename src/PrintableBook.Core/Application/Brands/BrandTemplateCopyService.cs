@@ -6,8 +6,9 @@ public static class BrandTemplateFiles
 {
     public const string Cover = "cover.psd";
     public const string AppPlus = "app_plus.psd";
+    public const string BookOwner = "book_owner.psd";
 
-    public static readonly IReadOnlyList<string> Required = [Cover, AppPlus];
+    public static readonly IReadOnlyList<string> Required = [Cover, AppPlus, BookOwner];
 }
 
 public sealed record BrandTemplateCopyResult(

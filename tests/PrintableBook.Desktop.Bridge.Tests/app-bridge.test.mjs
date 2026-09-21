@@ -514,7 +514,7 @@ test("Book detail copies templates from the selected validated Brand for a ready
   assert.deepEqual(request.payload, { bookId: "Book 001", brandName: "Brand One" });
   assert.match(content.innerHTML, /Copying…/);
 
-  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "book.brand.templates.copied", payload: { copiedFileNames: ["cover.psd", "app_plus.psd"] } } });
+  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "book.brand.templates.copied", payload: { copiedFileNames: ["cover.psd", "app_plus.psd", "book_owner.psd"] } } });
   assert.equal(status.textContent, "Brand templates copied");
   assert.match(content.innerHTML, /Copy Brand Templates/);
 });

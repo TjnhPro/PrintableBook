@@ -26,7 +26,7 @@ public sealed class ApplicationRootDiscoveryTests : IAsyncLifetime
         Assert.Equal(["Amazon", "Studio"], snapshot.Brands.Select(brand => brand.Name));
         Assert.Equal(["Book One", "Book Two"], snapshot.Books.Select(book => book.Name));
         Assert.All(snapshot.Books, book => Assert.True(Directory.Exists(Path.Combine(book.Directory.Value, ".workspace"))));
-        Assert.All(snapshot.Brands, brand => Assert.Equal(6, brand.Assets!.Count));
+        Assert.All(snapshot.Brands, brand => Assert.Equal(7, brand.Assets!.Count));
     }
 
     [Fact]
@@ -75,6 +75,7 @@ public sealed class ApplicationRootDiscoveryTests : IAsyncLifetime
         await File.WriteAllTextAsync(Path.Combine(rootPath, "brands", "Amazon", "background.png"), "test");
         await File.WriteAllTextAsync(Path.Combine(rootPath, "brands", "Amazon", "cover.psd"), "test");
         await File.WriteAllTextAsync(Path.Combine(rootPath, "brands", "Amazon", "app_plus.psd"), "test");
+        await File.WriteAllTextAsync(Path.Combine(rootPath, "brands", "Amazon", "book_owner.psd"), "test");
         var fileSystem = new PhysicalFileSystem();
         var discovery = new PhysicalApplicationRootDiscovery(fileSystem, new PhysicalBookWorkspaceFactory(fileSystem), () => rootPath);
 
@@ -92,6 +93,7 @@ public sealed class ApplicationRootDiscoveryTests : IAsyncLifetime
         Assert.Null(Assert.Single(assets, asset => asset.Name == "frame.png").Size);
         Assert.Equal("Present", Assert.Single(assets, asset => asset.Name == "cover.psd").Status);
         Assert.Equal("Present", Assert.Single(assets, asset => asset.Name == "app_plus.psd").Status);
+        Assert.Equal("Present", Assert.Single(assets, asset => asset.Name == "book_owner.psd").Status);
         Assert.All(assets.SelectMany(asset => asset.Entries ?? []), entry => Assert.NotEqual("Unreadable", entry.Status));
         Assert.All(assets, asset => Assert.NotEqual("Unreadable", asset.Status));
     }

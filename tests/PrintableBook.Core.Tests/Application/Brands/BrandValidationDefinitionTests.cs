@@ -11,14 +11,15 @@ public sealed class BrandValidationDefinitionTests
     {
         var definition = BrandValidationDefinition.CreateCurrent(GlobalSettings.Default);
 
-        Assert.Equal(["intro", "frame", "background", "cover-template", "app-plus-template"], definition.Entries.Select(entry => entry.Key));
+        Assert.Equal(["intro", "frame", "background", "cover-template", "app-plus-template", "book-owner-template"], definition.Entries.Select(entry => entry.Key));
         Assert.DoesNotContain(definition.Entries, entry => entry.Target.RelativePath.Contains("AppPlus", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(definition.Entries, entry => entry.Target.RelativePath.Contains("BackCover", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(definition.Entries, entry => entry.Target.RelativePath.Contains("brand.json", StringComparison.OrdinalIgnoreCase));
         Assert.Collection(
             definition.Entries.Where(entry => entry.Key.EndsWith("template", StringComparison.Ordinal)),
             entry => Assert.Equal(BrandTemplateFiles.Cover, entry.Target.RelativePath),
-            entry => Assert.Equal(BrandTemplateFiles.AppPlus, entry.Target.RelativePath));
+            entry => Assert.Equal(BrandTemplateFiles.AppPlus, entry.Target.RelativePath),
+            entry => Assert.Equal(BrandTemplateFiles.BookOwner, entry.Target.RelativePath));
     }
 
     [Fact]
@@ -69,7 +70,7 @@ public sealed class BrandValidationDefinitionTests
         var definition = BrandValidationDefinition.CreateCurrent(GlobalSettings.Default);
 
         Assert.Equal(
-            new DateTimeOffset(2026, 9, 21, 0, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 9, 21, 11, 28, 57, TimeSpan.Zero),
             definition.DefinitionChangedAtUtc);
     }
 
