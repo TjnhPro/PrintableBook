@@ -26,6 +26,17 @@ public sealed class InteriorPagePipelineRequestTests
     }
 
     [Fact]
+    public void Production_request_requires_no_frame_and_preserves_the_appended_role()
+    {
+        var workspace = new BookWorkspace(new BookId("book"), new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("temp"));
+        var request = new InteriorPagePipelineRequest(workspace, new FileReference("production.png"), "production-interior-cover", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), null, FrameMode.Disabled, processingKind: InteriorPageProcessingKind.ProductionInterior);
+
+        Assert.Equal(3, (int)request.ProcessingKind);
+        Assert.Throws<ArgumentException>(() => (request with { FrameMode = FrameMode.Auto }).ValidateProcessingPolicy());
+        Assert.Throws<ArgumentException>(() => new InteriorPagePipelineRequest(workspace, new FileReference("production.png"), "production-interior-cover", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), new FileReference("frame.png"), FrameMode.Disabled, processingKind: InteriorPageProcessingKind.ProductionInterior));
+    }
+
+    [Fact]
     public void Constructor_accepts_the_canonical_prepared_working_and_final_geometry()
     {
         var request = CreateRequest(new ImageSize(2270, 2270), new ImageSize(2550, 2550), new ImageSize(2588, 2625));

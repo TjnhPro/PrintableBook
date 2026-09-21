@@ -16,6 +16,7 @@ public sealed record ProductionAssetState(
 public sealed record ProductionProcessedPageState(
     string FileName,
     ProductionFileSignature SourceSignature,
+    ProductionFileSignature OutputSignature,
     string ProcessingSettingsSignature,
     DateTimeOffset CompletedAtUtc);
 
@@ -49,6 +50,33 @@ public sealed record ProductionWorkspaceState(
             : new Dictionary<string, ProductionAssetState>(Assets, StringComparer.OrdinalIgnoreCase);
         assets[definition.FileName] = new ProductionAssetState(definition.FileName, signature, importedAtUtc);
         return this with { SchemaVersion = CurrentSchemaVersion, Assets = assets };
+    }
+
+    public ProductionWorkspaceState RecordProcessedPage(
+        ProductionAssetKind kind,
+        ProductionFileSignature sourceSignature,
+        ProductionFileSignature outputSignature,
+        string processingSettingsSignature,
+        DateTimeOffset completedAtUtc)
+    {
+        if (string.IsNullOrWhiteSpace(processingSettingsSignature))
+        {
+            throw new ArgumentException("A processing settings signature is required.", nameof(processingSettingsSignature));
+        }
+
+        var definition = ProductionAssets.Get(kind);
+        var fileName = definition.ProcessedFileName
+            ?? throw new ArgumentException("This Production asset does not have a processed page.", nameof(kind));
+        var pages = ProcessedPages is null
+            ? new Dictionary<string, ProductionProcessedPageState>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, ProductionProcessedPageState>(ProcessedPages, StringComparer.OrdinalIgnoreCase);
+        pages[definition.FileName] = new ProductionProcessedPageState(
+            fileName,
+            sourceSignature,
+            outputSignature,
+            processingSettingsSignature,
+            completedAtUtc);
+        return this with { SchemaVersion = CurrentSchemaVersion, ProcessedPages = pages };
     }
 }
 

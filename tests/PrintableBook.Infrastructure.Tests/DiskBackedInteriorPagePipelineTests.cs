@@ -81,6 +81,37 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessAsync_forces_production_pages_to_crop_art_and_isolates_cache_and_output()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("production-cover.png");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("production-book"), new DirectoryReference(Path.Combine(rootPath, "ProductionBook")));
+        var request = new InteriorPagePipelineRequest(
+            workspace,
+            new FileReference(source),
+            "production-interior-cover",
+            new ArtworkDetectionThreshold(20),
+            new ImageSize(200, 200),
+            new ImageSize(200, 200),
+            new ImageSize(200, 200),
+            new ImageDensity(300, 300),
+            null,
+            FrameMode.Disabled,
+            processingKind: InteriorPageProcessingKind.ProductionInterior);
+
+        var result = await CreatePipeline(new ThrowingArtworkClassifier()).ProcessAsync(request);
+
+        Assert.StartsWith(Path.Combine(workspace.ProcessedDirectory.Value, "production"), result.FinalPage.Value, StringComparison.OrdinalIgnoreCase);
+        var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "production-interior-cover");
+        Assert.True(File.Exists(Path.Combine(cache, "input-stamp.json")));
+        var classification = await File.ReadAllTextAsync(Path.Combine(cache, "classification.json"));
+        Assert.Contains("cropart", classification, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("forced-no-frame", classification, StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01")));
+    }
+
+    [Fact]
     public async Task ProcessAsync_rejects_intro_templates_that_are_not_1024_or_2048_square()
     {
         Directory.CreateDirectory(rootPath);

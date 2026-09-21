@@ -6,7 +6,8 @@ public enum InteriorPageProcessingKind
 {
     Interior = 0,
     IntroTemplate = 1,
-    BrandIntroTemplate = 2
+    BrandIntroTemplate = 2,
+    ProductionInterior = 3
 }
 
 public sealed record InteriorPagePipelineRequest
@@ -40,11 +41,7 @@ public sealed record InteriorPagePipelineRequest
         BorderLineDetection = borderLineDetection;
         ProcessingKind = processingKind;
         if (!Enum.IsDefined(processingKind)) throw new ArgumentOutOfRangeException(nameof(processingKind), processingKind, "Unsupported page processing kind.");
-        if (processingKind is (InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate) &&
-            (frame is not null || frameMode != FrameMode.Disabled))
-        {
-            throw new ArgumentException("IntroTemplate pages must not apply a frame.", nameof(frameMode));
-        }
+        ValidateProcessingPolicy();
         ValidateGeometry();
     }
 
@@ -61,6 +58,20 @@ public sealed record InteriorPagePipelineRequest
     public ArtworkSourceNormalizationSettings ArtworkSourceNormalization { get; init; }
     public BorderLineDetectionSettings? BorderLineDetection { get; init; }
     public InteriorPageProcessingKind ProcessingKind { get; init; }
+
+    public void ValidateProcessingPolicy()
+    {
+        if (ProcessingKind is (InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate) &&
+            (Frame is not null || FrameMode != FrameMode.Disabled))
+        {
+            throw new ArgumentException("IntroTemplate pages must not apply a frame.", nameof(FrameMode));
+        }
+        if (ProcessingKind == InteriorPageProcessingKind.ProductionInterior &&
+            (Frame is not null || FrameMode != FrameMode.Disabled))
+        {
+            throw new ArgumentException("Production Interior pages must use No Frame.", nameof(FrameMode));
+        }
+    }
 
     public void ValidateGeometry()
     {

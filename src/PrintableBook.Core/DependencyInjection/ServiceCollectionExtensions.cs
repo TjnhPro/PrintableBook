@@ -9,6 +9,7 @@ using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Services;
 using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Application.Updates;
+using PrintableBook.Core.Application.Production;
 
 namespace PrintableBook.Core.DependencyInjection;
 
@@ -25,6 +26,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<BrandFingerprintCalculator>();
         services.AddSingleton<IBrandValidationService, BrandValidationService>();
         services.AddSingleton<IBrandTemplateCopyService, BrandTemplateCopyService>();
+        services.AddSingleton<IProductionPageProcessingService, ProductionPageProcessingService>();
         services.AddSingleton<IBookCoverSelectionService, BookCoverSelectionService>();
         services.AddSingleton<IInteriorFrameModeService, InteriorFrameModeService>();
         services.AddSingleton<IBookInteriorSettingsService, BookInteriorSettingsService>();

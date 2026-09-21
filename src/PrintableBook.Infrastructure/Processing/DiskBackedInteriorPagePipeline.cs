@@ -44,10 +44,17 @@ public sealed class DiskBackedInteriorPagePipeline(
             throw new ArgumentException("Page identity is required.", nameof(request));
         }
 
+        request.ValidateProcessingPolicy();
         request.ValidateGeometry();
         var pageCache = Path.Combine(request.Workspace.WorkingDirectory.Value, "cache", request.PageId);
         var isIntroTemplate = request.ProcessingKind is InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate;
-        var processedInteriorDirectory = Path.Combine(request.Workspace.ProcessedDirectory.Value, isIntroTemplate ? "intro" : "interior");
+        var processedDirectoryName = request.ProcessingKind switch
+        {
+            InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate => "intro",
+            InteriorPageProcessingKind.ProductionInterior => "production",
+            _ => "interior"
+        };
+        var processedInteriorDirectory = Path.Combine(request.Workspace.ProcessedDirectory.Value, processedDirectoryName);
         var classificationFile = Path.Combine(pageCache, "classification.json");
         var normalized = new FileReference(Path.Combine(pageCache, "normalized-source.png"));
         var prepared = new FileReference(Path.Combine(pageCache, "prepared.png"));
@@ -228,6 +235,7 @@ public sealed class DiskBackedInteriorPagePipeline(
     private static string ResolveClassificationPolicy(InteriorPagePipelineRequest request) => request.ProcessingKind switch
     {
         InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate => ForcedIntroPolicy,
+        InteriorPageProcessingKind.ProductionInterior => ForcedNoFramePolicy,
         InteriorPageProcessingKind.Interior when request.FrameMode == FrameMode.Disabled => ForcedNoFramePolicy,
         InteriorPageProcessingKind.Interior => DetectedPolicy,
         _ => throw new ArgumentOutOfRangeException(nameof(request), request.ProcessingKind, "Unsupported page processing kind.")
@@ -644,6 +652,7 @@ public sealed class DiskBackedInteriorPagePipeline(
                     InteriorPageProcessingKind.Interior => "interior",
                     InteriorPageProcessingKind.IntroTemplate => "intro-template",
                     InteriorPageProcessingKind.BrandIntroTemplate => "intro-template",
+                    InteriorPageProcessingKind.ProductionInterior => "production-interior",
                     _ => throw new ArgumentOutOfRangeException(nameof(request), request.ProcessingKind, "Unsupported page processing kind.")
                 },
                 classificationPolicy,
