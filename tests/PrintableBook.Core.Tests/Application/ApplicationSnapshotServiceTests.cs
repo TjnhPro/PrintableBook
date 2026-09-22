@@ -13,6 +13,48 @@ namespace PrintableBook.Core.Tests.Application;
 public sealed class ApplicationSnapshotServiceTests
 {
     [Fact]
+    public async Task RefreshAsync_projects_metadata_and_valid_brand_assignment_from_one_brand_load()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("Book A")) with
+        {
+            Metadata = BookProductionMetadata.Create("Production Title", null, "ABCD", null, " Jane Doe "),
+            AssignedBrand = "Brand A"
+        };
+        var brandMetadata = new StubBrandMetadataStore(BrandMetadata.Create("jane doe"));
+
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(), new StubSettingsStore(), new StubScanner(), new StubStateStore(explicitState: state), new StubFileSystem(),
+            brandMetadataStore: brandMetadata).RefreshAsync();
+
+        var book = Assert.Single(snapshot.BookSummaries);
+        var brand = Assert.Single(snapshot.BrandSummaries!);
+        Assert.Equal("Production Title", book.Metadata!.Title);
+        Assert.Equal("Brand A", book.AssignedBrand);
+        Assert.Equal(BookBrandAssignmentStatus.Valid, book.AssignmentStatus);
+        Assert.Equal("jane doe", brand.Author);
+        Assert.Equal("Available", brand.MetadataStatus);
+        Assert.Equal(1, brandMetadata.LoadCount);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_isolates_invalid_brand_metadata_and_fails_assignment_closed()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("Book A")) with
+        {
+            Metadata = BookProductionMetadata.Create(null, null, null, null, "Jane Doe"),
+            AssignedBrand = "Brand A"
+        };
+
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(), new StubSettingsStore(), new StubScanner(), new StubStateStore(explicitState: state), new StubFileSystem(),
+            brandMetadataStore: new StubBrandMetadataStore(exception: new System.Text.Json.JsonException("invalid metadata"))).RefreshAsync();
+
+        Assert.Equal(BookBrandAssignmentStatus.BrandMetadataUnavailable, Assert.Single(snapshot.BookSummaries).AssignmentStatus);
+        Assert.Equal("Unavailable", Assert.Single(snapshot.BrandSummaries!).MetadataStatus);
+        Assert.Contains("invalid metadata", Assert.Single(snapshot.BrandSummaries!).MetadataError);
+    }
+
+    [Fact]
     public async Task RefreshAsync_returns_one_coherent_discovery_snapshot()
     {
         var discovery = new StubDiscovery();
@@ -676,6 +718,22 @@ public sealed class ApplicationSnapshotServiceTests
 
         public ValueTask<BrandValidationResult> ValidateAsync(DirectoryReference brandDirectory, GlobalSettings settings, CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(new BrandValidationResult(state, []));
+    }
+
+    private sealed class StubBrandMetadataStore(BrandMetadata? metadata = null, Exception? exception = null) : IBrandMetadataStore
+    {
+        public int LoadCount { get; private set; }
+
+        public ValueTask<BrandMetadata?> LoadAsync(DirectoryReference brandDirectory, CancellationToken cancellationToken = default)
+        {
+            LoadCount++;
+            return exception is null
+                ? ValueTask.FromResult(metadata)
+                : ValueTask.FromException<BrandMetadata?>(exception);
+        }
+
+        public ValueTask SaveAsync(DirectoryReference brandDirectory, BrandMetadata metadata, CancellationToken cancellationToken = default) =>
+            ValueTask.CompletedTask;
     }
 
     private sealed class StubFileSystem(params FileReference[] files) : IFileSystem

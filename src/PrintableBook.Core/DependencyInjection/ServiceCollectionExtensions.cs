@@ -31,6 +31,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBookCoverSelectionService, BookCoverSelectionService>();
         services.AddSingleton<IInteriorFrameModeService, InteriorFrameModeService>();
         services.AddSingleton<IBookInteriorSettingsService, BookInteriorSettingsService>();
+        services.AddSingleton<IBookCatalogMetadataService, BookCatalogMetadataService>();
         services.AddSingleton<IInterruptedProcessingRecoveryService, InterruptedProcessingRecoveryService>();
         services.AddKeyedSingleton<IBackgroundTaskWorker, LibraryRefreshWorker>(BackgroundTaskKind.LibraryRefresh);
         services.AddKeyedSingleton<IBackgroundTaskWorker, ProcessingSessionWorker>(BackgroundTaskKind.ProcessingSession);

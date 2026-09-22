@@ -42,8 +42,8 @@ public interface ILocalOutputActionService
     ValueTask RevealAsync(FileReference file, CancellationToken cancellationToken = default);
     ValueTask CopyPathAsync(FileReference file, CancellationToken cancellationToken = default);
 }
-public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = true, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null, ProductionDesktopSummary? Production = null);
-public sealed record BrandDesktopSummary(string BrandName, BrandValidationStatus ValidationStatus, DateTimeOffset? ValidatedAtUtc, string? Fingerprint);
+public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = true, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null, ProductionDesktopSummary? Production = null, BookProductionMetadata? Metadata = null, string? AssignedBrand = null, BookBrandAssignmentStatus AssignmentStatus = BookBrandAssignmentStatus.Unassigned, string? AssignmentReason = null);
+public sealed record BrandDesktopSummary(string BrandName, BrandValidationStatus ValidationStatus, DateTimeOffset? ValidatedAtUtc, string? Fingerprint, string? Author = null, string MetadataStatus = "Missing", string? MetadataError = null);
 public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt, IReadOnlyList<BrandDesktopSummary>? BrandSummaries = null, IReadOnlyList<BrandImageSizeRequirement>? BrandImageSizeRequirements = null);
 
 public interface IApplicationSnapshotService
@@ -65,7 +65,8 @@ public sealed class ApplicationSnapshotService(
     IPdfDocumentInspector? pdfDocumentInspector = null,
     IOperationDiagnostics? diagnostics = null,
     IBrandValidationService? brandValidationService = null,
-    IProductionWorkspaceStateStore? productionStateStore = null) : IApplicationSnapshotService
+    IProductionWorkspaceStateStore? productionStateStore = null,
+    IBrandMetadataStore? brandMetadataStore = null) : IApplicationSnapshotService
 {
     private const int MaximumBookSummaryConcurrency = 4;
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
@@ -79,6 +80,39 @@ public sealed class ApplicationSnapshotService(
             discoverySnapshot = await discovery.DiscoverAsync(cancellationToken);
         }
         var settings = await settingsStore.LoadAsync(discoverySnapshot.Paths, cancellationToken);
+        var brandSummaries = new List<BrandDesktopSummary>(discoverySnapshot.Brands.Count);
+        var composedBrands = new List<DiscoveredBrand>(discoverySnapshot.Brands.Count);
+        var assignmentTargets = new Dictionary<string, BrandAssignmentTarget>(StringComparer.Ordinal);
+        foreach (var brand in discoverySnapshot.Brands)
+        {
+            BrandMetadata? metadata = null;
+            var metadataStatus = "Missing";
+            string? metadataError = null;
+            if (brandMetadataStore is not null)
+            {
+                try
+                {
+                    metadata = await brandMetadataStore.LoadAsync(brand.Directory, cancellationToken);
+                    metadataStatus = metadata is null ? "Missing" : "Available";
+                }
+                catch (Exception exception) when (exception is System.Text.Json.JsonException or InvalidDataException or ArgumentException)
+                {
+                    metadataStatus = "Unavailable";
+                    metadataError = exception.Message;
+                }
+            }
+            assignmentTargets.Add(brand.Name, new BrandAssignmentTarget(brand.Name, metadata, metadataStatus != "Unavailable"));
+
+            BrandValidationState state;
+            using (diagnostics.Begin("brand.state", brand.Name))
+            {
+                state = brandValidationService is null
+                    ? new BrandValidationState(BrandValidationStatus.NotValidated)
+                    : await brandValidationService.CheckStateAsync(brand.Directory, settings, cancellationToken);
+            }
+            brandSummaries.Add(new BrandDesktopSummary(brand.Name, state.Status, state.ValidatedAtUtc, state.Fingerprint, metadata?.Author, metadataStatus, metadataError));
+            composedBrands.Add(ApplyValidatedBrandFacts(brand, state));
+        }
         var summaries = new BookDesktopSummary?[discoverySnapshot.Books.Count];
         await Parallel.ForEachAsync(
             Enumerable.Range(0, discoverySnapshot.Books.Count),
@@ -87,25 +121,11 @@ public sealed class ApplicationSnapshotService(
                 MaxDegreeOfParallelism = MaximumBookSummaryConcurrency,
                 CancellationToken = cancellationToken
             },
-            async (index, token) => summaries[index] = await BuildBookSummaryAsync(discoverySnapshot.Books[index], settings, token));
+            async (index, token) => summaries[index] = await BuildBookSummaryAsync(discoverySnapshot.Books[index], settings, assignmentTargets, token));
 
         var completedSummaries = summaries
             .Select(summary => summary ?? throw new InvalidOperationException("Book summary was not produced."))
             .ToArray();
-        var brandSummaries = new List<BrandDesktopSummary>(discoverySnapshot.Brands.Count);
-        var composedBrands = new List<DiscoveredBrand>(discoverySnapshot.Brands.Count);
-        foreach (var brand in discoverySnapshot.Brands)
-        {
-            BrandValidationState state;
-            using (diagnostics.Begin("brand.state", brand.Name))
-            {
-                state = brandValidationService is null
-                    ? new BrandValidationState(BrandValidationStatus.NotValidated)
-                    : await brandValidationService.CheckStateAsync(brand.Directory, settings, cancellationToken);
-            }
-            brandSummaries.Add(new BrandDesktopSummary(brand.Name, state.Status, state.ValidatedAtUtc, state.Fingerprint));
-            composedBrands.Add(ApplyValidatedBrandFacts(brand, state));
-        }
         var composedDiscovery = discoverySnapshot with { Brands = composedBrands };
         return new ApplicationSnapshot(composedDiscovery, settings, completedSummaries, DateTimeOffset.UtcNow, brandSummaries, BrandValidationDefinition.GetImageSizeRequirements(settings));
     }
@@ -142,6 +162,7 @@ public sealed class ApplicationSnapshotService(
     private async ValueTask<BookDesktopSummary> BuildBookSummaryAsync(
         DiscoveredBook book,
         GlobalSettings settings,
+        IReadOnlyDictionary<string, BrandAssignmentTarget> assignmentTargets,
         CancellationToken cancellationToken)
     {
         BookSourceScanResult scan;
@@ -155,6 +176,8 @@ public sealed class ApplicationSnapshotService(
         var isSourceValid = scan.IsSuccess && validation!.IsSuccess;
         var processingRoot = scan.Metadata?.ProcessingRoot ?? book.Directory;
         var state = await stateStore.LoadAsync(book.Workspace, cancellationToken) ?? BookProcessingState.NotStarted(book.Id);
+        assignmentTargets.TryGetValue(state.AssignedBrand ?? string.Empty, out var assignmentTarget);
+        var assignment = BookBrandAssignmentEvaluator.Evaluate(state.AssignedBrand, state.Metadata?.Author, assignmentTarget);
         var coverCandidates = source?.GetAssets(BookAssetKind.Cover).Select(asset => asset.Reference).ToArray() ?? [];
         var hasSelectedCover = coverCandidates.Length == 1 || coverCandidates.Any(candidate => string.Equals(candidate, state.SelectedCoverReference, StringComparison.OrdinalIgnoreCase));
         var interiorPages = (state.PublishedInteriorPreviews ?? [])
@@ -274,7 +297,11 @@ public sealed class ApplicationSnapshotService(
             ActiveInteriorSourcePageCount: activeInteriorSourcePageCount,
             HasIntro: state.HasIntro,
             SelectedIntroInteriorSourceKeys: state.SelectedIntroInteriorSourceKeys,
-            Production: await DescribeProductionAsync(book.Workspace, state, settings, cancellationToken));
+            Production: await DescribeProductionAsync(book.Workspace, state, settings, cancellationToken),
+            Metadata: state.Metadata,
+            AssignedBrand: state.AssignedBrand,
+            AssignmentStatus: assignment.Status,
+            AssignmentReason: assignment.Reason);
     }
 
     private async ValueTask<ProductionDesktopSummary> DescribeProductionAsync(
