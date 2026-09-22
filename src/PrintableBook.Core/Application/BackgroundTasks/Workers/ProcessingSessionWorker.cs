@@ -26,7 +26,9 @@ public sealed class ProcessingSessionWorker(
     {
         context.Report("Preparing", subject: request.BookIds.FirstOrDefault());
         var snapshot = await snapshotProvider.GetFreshAsync(cancellationToken);
-        var books = Validate(snapshot, request, context);
+        var validated = Validate(snapshot, request, context);
+        var books = validated.Books;
+        var brand = validated.Brand;
         var settings = snapshot.GlobalSettings;
         var queue = books.Select((book, index) => new ProcessQueueEntry(book.Id, index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Preparing" : "Waiting")).ToArray();
         var currentBook = books[0].Id;
@@ -40,13 +42,12 @@ public sealed class ProcessingSessionWorker(
             ProcessSessionSnapshot view;
             lock (progressSync)
             {
-                view = new ProcessSessionSnapshot(active, cancelling, request.BrandName, currentBook, currentStep, queue, pagesCompleted, pagesTotal, settings.MaximumPageConcurrency, request.StartedAt);
+                view = new ProcessSessionSnapshot(active, cancelling, brand.Name, currentBook, currentStep, queue, pagesCompleted, pagesTotal, settings.MaximumPageConcurrency, request.StartedAt);
             }
             context.SetView(view);
         }
 
         Publish();
-        var brand = snapshot.Discovery.Brands.First(item => string.Equals(item.Name, request.BrandName, StringComparison.Ordinal));
         var brandState = await brandValidationService.CheckStateAsync(brand.Directory, settings, cancellationToken);
         if (brandState.Status != BrandValidationStatus.Validated)
         {
@@ -234,7 +235,7 @@ public sealed class ProcessingSessionWorker(
         return result;
     }
 
-    private static IReadOnlyList<DiscoveredBook> Validate(ApplicationSnapshot snapshot, ProcessingSessionWorkerRequest request, IBackgroundTaskContext context)
+    private static ValidatedProcessingContext Validate(ApplicationSnapshot snapshot, ProcessingSessionWorkerRequest request, IBackgroundTaskContext context)
     {
         if (!Enum.IsDefined(request.Mode))
         {
@@ -244,47 +245,29 @@ public sealed class ProcessingSessionWorker(
         {
             Fail(request, context, "production_single_book_required", "Build Final Interior requires exactly one Book.");
         }
-        if (!snapshot.Discovery.Brands.Any(brand => string.Equals(brand.Name, request.BrandName, StringComparison.Ordinal)))
-        {
-            Fail(request, context, "process_brand_not_found", "The selected Brand no longer exists.");
-        }
         var ids = request.BookIds.Distinct(StringComparer.Ordinal).ToArray();
-        var selected = snapshot.Discovery.Books.Where(book => ids.Contains(book.Id.Value, StringComparer.Ordinal)).ToArray();
-        if (selected.Length != ids.Length)
+        var resolution = BookBrandExecutionResolver.ResolveBatch(snapshot, ids);
+        if (!resolution.IsSuccess)
         {
-            Fail(request, context, "process_book_not_found", "One or more selected Books no longer exist.");
+            var failure = resolution.Failure!;
+            var code = failure.Code == "book_not_found" ? "process_book_not_found" : failure.Code;
+            Fail(request, context, code, failure.Message, failure.BookId);
         }
-        var summaries = snapshot.BookSummaries.ToDictionary(summary => summary.BookId.Value, StringComparer.Ordinal);
-        var selectedSummaries = selected
-            .Select(book => summaries.TryGetValue(book.Id.Value, out var summary) ? summary : null)
-            .Where(summary => summary is not null)
-            .Cast<BookDesktopSummary>()
-            .ToArray();
-        var assignedBrands = selectedSummaries
-            .Where(summary => !string.IsNullOrWhiteSpace(summary.AssignedBrand))
-            .Select(summary => summary.AssignedBrand!)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        if (assignedBrands.Length > 1)
-        {
-            Fail(request, context, "mixed_assigned_brands_not_supported", "Selected Books belong to different Brands. Filter and process one Brand at a time.");
-        }
-        foreach (var summary in selectedSummaries)
-        {
-            var execution = BookBrandExecutionPolicy.Evaluate(summary.AssignedBrand, summary.AssignmentStatus, request.BrandName);
-            if (!execution.IsAllowed)
-            {
-                Fail(request, context, execution.Code!, execution.Message!, summary.BookId);
-            }
-        }
+
+        var selected = resolution.Books.Select(item => item.Book).ToArray();
+        var summaries = resolution.Books.ToDictionary(item => item.Book.Id.Value, item => item.Summary, StringComparer.Ordinal);
         var notReady = selected.FirstOrDefault(book => !summaries.TryGetValue(book.Id.Value, out var summary) || !string.Equals(summary.ValidationStatus, "Ready", StringComparison.Ordinal));
         if (notReady is not null)
         {
             Fail(request, context, "process_book_not_ready", $"Book '{notReady.Id.Value}' is not ready for processing.", notReady.Id);
         }
-        return selected;
+        return new ValidatedProcessingContext(selected, resolution.Brand!);
 
     }
+
+    private sealed record ValidatedProcessingContext(
+        IReadOnlyList<DiscoveredBook> Books,
+        DiscoveredBrand Brand);
 
     private static ProductionPrefixSource CreateProductionPrefix(BookWorkspace workspace, ProductionAssetKind kind)
     {
@@ -295,7 +278,7 @@ public sealed class ProcessingSessionWorker(
     private static void Fail(ProcessingSessionWorkerRequest request, IBackgroundTaskContext context, string code, string message, BookId? bookId = null)
     {
         var queue = request.BookIds.Select(id => new ProcessQueueEntry(new BookId(id), string.Equals(id, bookId?.Value, StringComparison.Ordinal) ? BookProcessingStatus.Failed : BookProcessingStatus.NotStarted, string.Equals(id, bookId?.Value, StringComparison.Ordinal) ? message : "Waiting")).ToArray();
-        context.SetView(new ProcessSessionSnapshot(false, false, request.BrandName, bookId, "Failed", queue, StartedAt: request.StartedAt));
+        context.SetView(new ProcessSessionSnapshot(false, false, null, bookId, "Failed", queue, StartedAt: request.StartedAt));
         throw new BackgroundTaskFailureException(code, message);
     }
 }

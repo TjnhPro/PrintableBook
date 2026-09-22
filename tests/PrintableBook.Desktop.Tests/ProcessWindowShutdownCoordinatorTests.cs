@@ -122,7 +122,7 @@ public sealed class ProcessWindowShutdownCoordinatorTests
         public int StopCalls { get; private set; }
         public List<TimeSpan> Timeouts { get; } = [];
         public ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(new ProcessSessionSnapshot(active, false, null, active ? new BookId("book") : null, null, []));
-        public ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, BookProcessingMode mode, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
         {
@@ -139,7 +139,7 @@ public sealed class ProcessWindowShutdownCoordinatorTests
         public ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(new ProcessSessionSnapshot(true, false, null, new BookId("book"), null, []));
 
-        public ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default) =>
+        public ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, BookProcessingMode mode, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
         public ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default) =>

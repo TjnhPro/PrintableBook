@@ -41,7 +41,7 @@ public sealed class ProcessingSessionWorkerTests
 
         var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(Request(), context, CancellationToken.None).AsTask());
 
-        Assert.Equal("process_brand_not_found", failure.Code);
+        Assert.Equal("book_brand_assignment_invalid", failure.Code);
         Assert.False(context.View!.IsActive);
         Assert.Equal("Failed", context.View.CurrentStep);
     }
@@ -117,10 +117,10 @@ public sealed class ProcessingSessionWorkerTests
         Assert.Collection(context.View.Queue, entry => Assert.Equal(BookProcessingStatus.Cancelled, entry.Status));
     }
 
-    private static ProcessingSessionWorkerRequest Request() => new(["book-one"], "Brand", BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow);
+    private static ProcessingSessionWorkerRequest Request() => new(["book-one"], BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow);
 
     [Fact]
-    public async Task Assigned_book_rejects_a_different_processing_brand_before_output_work()
+    public async Task Processing_uses_the_persisted_assigned_brand()
     {
         var initial = Snapshot();
         var summary = initial.BookSummaries[0] with
@@ -128,13 +128,16 @@ public sealed class ProcessingSessionWorkerTests
             AssignedBrand = "Other Brand",
             AssignmentStatus = BookBrandAssignmentStatus.Valid
         };
+        var otherBrand = new DiscoveredBrand("Other Brand", new DirectoryReference("other-brand"), IntroTemplateAssets: Brand().IntroTemplateAssets);
+        initial = initial with { Discovery = initial.Discovery with { Brands = [Brand(), otherBrand] }, BookSummaries = [summary] };
         var application = new Application();
-        IBackgroundTaskWorker worker = CreateWorker(new Provider(initial with { BookSummaries = [summary] }), application, new FrameResolver(), new FileSystem(), new ImageInspector());
+        var validation = new Validation();
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(initial), application, new FrameResolver(), new FileSystem(), new ImageInspector(), validation);
 
-        var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(Request(), new Context(), CancellationToken.None).AsTask());
+        await worker.ExecuteAsync(Request(), new Context(), CancellationToken.None);
 
-        Assert.Equal("book_brand_mismatch", failure.Code);
-        Assert.Null(application.Request);
+        Assert.Equal(new DirectoryReference("other-brand"), validation.Directory);
+        Assert.Equal(new FileReference(Path.Combine("other-brand", "frame.png")), Assert.Single(application.Request!.Books).Frame);
     }
 
     [Fact]
@@ -171,6 +174,33 @@ public sealed class ProcessingSessionWorkerTests
     }
 
     [Fact]
+    public async Task Unassigned_book_is_rejected_before_brand_validation_or_output_work()
+    {
+        var initial = Snapshot();
+        var summary = initial.BookSummaries[0] with
+        {
+            AssignedBrand = null,
+            AssignmentStatus = BookBrandAssignmentStatus.Unassigned
+        };
+        var application = new Application();
+        var validation = new Validation();
+        IBackgroundTaskWorker worker = CreateWorker(
+            new Provider(initial with { BookSummaries = [summary] }),
+            application,
+            new FrameResolver(),
+            new FileSystem(),
+            new ImageInspector(),
+            validation);
+
+        var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() =>
+            worker.ExecuteAsync(Request(), new Context(), CancellationToken.None).AsTask());
+
+        Assert.Equal("book_brand_assignment_required", failure.Code);
+        Assert.Equal(0, validation.CheckCalls);
+        Assert.Null(application.Request);
+    }
+
+    [Fact]
     public async Task Batch_with_multiple_assigned_brands_is_rejected_without_partitioning()
     {
         var initial = MixedSnapshot();
@@ -180,10 +210,16 @@ public sealed class ProcessingSessionWorkerTests
                 AssignedBrand = index == 0 ? "Brand" : "Other Brand",
                 AssignmentStatus = BookBrandAssignmentStatus.Valid
             }).ToArray();
-        IBackgroundTaskWorker worker = CreateWorker(new Provider(initial with { BookSummaries = summaries }), new Application(), new FrameResolver(), new FileSystem(), new ImageInspector());
+        var otherBrand = new DiscoveredBrand("Other Brand", new DirectoryReference("other-brand"), IntroTemplateAssets: Brand().IntroTemplateAssets);
+        var mixed = initial with
+        {
+            Discovery = initial.Discovery with { Brands = [Brand(), otherBrand] },
+            BookSummaries = summaries
+        };
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(mixed), new Application(), new FrameResolver(), new FileSystem(), new ImageInspector());
 
         var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(
-            new ProcessingSessionWorkerRequest(["book-one", "book-two"], "Brand", BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow),
+            new ProcessingSessionWorkerRequest(["book-one", "book-two"], BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow),
             new Context(), CancellationToken.None).AsTask());
 
         Assert.Equal("mixed_assigned_brands_not_supported", failure.Code);
@@ -201,7 +237,7 @@ public sealed class ProcessingSessionWorkerTests
             new ImageInspector());
 
         await worker.ExecuteAsync(
-            new ProcessingSessionWorkerRequest(["book-one"], "Brand", BookProcessingMode.ProductionInterior, DateTimeOffset.UtcNow),
+            new ProcessingSessionWorkerRequest(["book-one"], BookProcessingMode.ProductionInterior, DateTimeOffset.UtcNow),
             new Context(),
             CancellationToken.None);
 
@@ -234,7 +270,7 @@ public sealed class ProcessingSessionWorkerTests
             new ImageInspector());
 
         var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(
-            new ProcessingSessionWorkerRequest(["book-one", "book-two"], "Brand", BookProcessingMode.ProductionInterior, DateTimeOffset.UtcNow),
+            new ProcessingSessionWorkerRequest(["book-one", "book-two"], BookProcessingMode.ProductionInterior, DateTimeOffset.UtcNow),
             new Context(),
             CancellationToken.None).AsTask());
 
@@ -253,7 +289,7 @@ public sealed class ProcessingSessionWorkerTests
             new ImageInspector());
 
         var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(
-            new ProcessingSessionWorkerRequest(["book-one"], "Brand", BookProcessingMode.ProductionInterior, DateTimeOffset.UtcNow),
+            new ProcessingSessionWorkerRequest(["book-one"], BookProcessingMode.ProductionInterior, DateTimeOffset.UtcNow),
             new Context(),
             CancellationToken.None).AsTask());
 
@@ -349,7 +385,7 @@ public sealed class ProcessingSessionWorkerTests
         var inspector = new ImageInspector();
         IBackgroundTaskWorker worker = CreateWorker(new Provider(MixedSnapshot()), application, new FrameResolver(), files, inspector);
 
-        await worker.ExecuteAsync(new ProcessingSessionWorkerRequest(["book-one", "book-two"], "Brand", BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow), new Context(), CancellationToken.None);
+        await worker.ExecuteAsync(new ProcessingSessionWorkerRequest(["book-one", "book-two"], BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow), new Context(), CancellationToken.None);
 
         Assert.Equal(0, files.Calls);
         Assert.Equal(0, inspector.Calls);
@@ -466,7 +502,7 @@ public sealed class ProcessingSessionWorkerTests
                 new InteriorSourcePageSummary(Path.Combine("book-one", "Book interior", "page-001.png"), FrameMode.Auto, SourceKey: "Book interior/page-001.png"),
                 new InteriorSourcePageSummary(Path.Combine("book-one", "Book interior", "page-002.png"), FrameMode.Auto, SourceKey: "Book interior/page-002.png"),
                 new InteriorSourcePageSummary(Path.Combine("book-one", "Book interior", "page-003.png"), FrameMode.Auto, SourceKey: "Book interior/page-003.png")
-            ])],
+            ], AssignedBrand: "Brand", AssignmentStatus: BookBrandAssignmentStatus.Valid)],
             DateTimeOffset.UtcNow);
     }
 
@@ -480,8 +516,8 @@ public sealed class ProcessingSessionWorkerTests
             new ApplicationDiscovery(new ApplicationPaths(new DirectoryReference("root"), new DirectoryReference("brands"), new DirectoryReference("sources"), new FileReference("settings.json")), [Brand()], [bookOne, bookTwo]),
             GlobalSettings.Default,
             [
-                new BookDesktopSummary(bookOneId, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1, HasBackground: true),
-                new BookDesktopSummary(bookTwoId, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1, HasBackground: false)
+                new BookDesktopSummary(bookOneId, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1, HasBackground: true, AssignedBrand: "Brand", AssignmentStatus: BookBrandAssignmentStatus.Valid),
+                new BookDesktopSummary(bookTwoId, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1, HasBackground: false, AssignedBrand: "Brand", AssignmentStatus: BookBrandAssignmentStatus.Valid)
             ],
             DateTimeOffset.UtcNow);
     }

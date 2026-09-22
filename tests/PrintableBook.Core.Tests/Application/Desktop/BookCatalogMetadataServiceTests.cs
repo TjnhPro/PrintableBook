@@ -64,10 +64,11 @@ public sealed class BookCatalogMetadataServiceTests
     }
 
     [Fact]
-    public void Execution_policy_allows_legacy_books_and_blocks_invalid_or_mismatched_assignments()
+    public void Execution_policy_requires_assignment_and_blocks_invalid_or_mismatched_assignments()
     {
-        Assert.True(BookBrandExecutionPolicy.Evaluate(null, BookBrandAssignmentStatus.Unassigned, "Brand A").IsAllowed);
+        Assert.Equal("book_brand_assignment_required", BookBrandExecutionPolicy.Evaluate(null, BookBrandAssignmentStatus.Unassigned, null).Code);
         Assert.True(BookBrandExecutionPolicy.Evaluate("Brand A", BookBrandAssignmentStatus.Valid, "Brand A").IsAllowed);
+        Assert.True(BookBrandExecutionPolicy.Evaluate("Brand A", BookBrandAssignmentStatus.Valid, null).IsAllowed);
         Assert.Equal("book_brand_mismatch", BookBrandExecutionPolicy.Evaluate("Brand A", BookBrandAssignmentStatus.Valid, "Brand B").Code);
         Assert.Equal("book_brand_assignment_invalid", BookBrandExecutionPolicy.Evaluate("Brand A", BookBrandAssignmentStatus.AuthorMismatch, "Brand A").Code);
     }

@@ -12,7 +12,7 @@ public sealed record ProcessSessionSnapshot(bool IsActive, bool IsCancelling, st
 public interface IProcessSessionService
 {
     ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default);
-    ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default);
+    ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, BookProcessingMode mode, CancellationToken cancellationToken = default);
     ValueTask<ProcessSessionSnapshot> CancelAsync(CancellationToken cancellationToken = default);
     ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default);
 }
@@ -30,24 +30,23 @@ public sealed class ProcessSessionService(IBackgroundTaskManager taskManager) : 
         return Overlay(view, task);
     }
 
-    public async ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default)
+    public async ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, BookProcessingMode mode, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(bookIds);
         if (bookIds.Count == 0) throw new ArgumentException("Select at least one Book before starting processing.", nameof(bookIds));
         if (bookIds.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("Book identifiers cannot be blank.", nameof(bookIds));
         if (bookIds.Distinct(StringComparer.Ordinal).Count() != bookIds.Count) throw new ArgumentException("Book identifiers must be distinct.", nameof(bookIds));
-        if (string.IsNullOrWhiteSpace(brandName)) throw new ArgumentException("Select one Brand before starting processing.", nameof(brandName));
         if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported processing mode.");
         if (mode == BookProcessingMode.ProductionInterior && bookIds.Count != 1) throw new ArgumentException("Build Final Interior requires exactly one Book.", nameof(bookIds));
 
         var startedAt = DateTimeOffset.UtcNow;
         var ids = bookIds.ToArray();
-        var initial = new ProcessSessionSnapshot(true, false, brandName, new BookId(ids[0]), "Queued", ids.Select((id, index) => new ProcessQueueEntry(new BookId(id), index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Queued" : "Waiting")).ToArray(), 0, 0, 0, startedAt);
+        var initial = new ProcessSessionSnapshot(true, false, null, new BookId(ids[0]), "Queued", ids.Select((id, index) => new ProcessQueueEntry(new BookId(id), index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Queued" : "Waiting")).ToArray(), 0, 0, 0, startedAt);
         var task = await taskManager.StartAsync(
             BackgroundTaskKind.ProcessingSession,
             "processing",
             ids[0],
-            new ProcessingSessionWorkerRequest(ids, brandName, mode, startedAt),
+            new ProcessingSessionWorkerRequest(ids, mode, startedAt),
             initial,
             cancellationToken);
         return taskManager.TryGetView(task.TaskId, out ProcessSessionSnapshot? view) && view is not null ? Overlay(view, task) : Overlay(initial, task);

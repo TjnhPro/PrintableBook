@@ -562,7 +562,7 @@ internal sealed class WebViewBridgeRouter(
                     {
                         await using (await processingMutationGate.EnterAsync(cancellationToken))
                         {
-                            process = await StartProcessAsync(request, processSessionService, cancellationToken);
+                            process = await StartProcessAsync(request, processSessionService, applicationLoadCoordinator, cancellationToken);
                         }
                     }
                     else
@@ -618,8 +618,7 @@ internal sealed class WebViewBridgeRouter(
             if (request.Command == "book.brand.templates.copy")
             {
                 if (applicationLoadCoordinator is null || brandTemplateCopyService is null || request.Payload is not { } copyPayload ||
-                    !copyPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
-                    !copyPayload.TryGetProperty("brandName", out var brandNameElement) || string.IsNullOrWhiteSpace(brandNameElement.GetString()))
+                    !copyPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()))
                 {
                     return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_template_copy");
                 }
@@ -627,19 +626,21 @@ internal sealed class WebViewBridgeRouter(
                 await using var mutation = await processingMutationGate.EnterAsync(cancellationToken);
                 if (await IsProcessingActiveAsync(cancellationToken)) return new BridgeResponse(Version, request.Id, false, null, "processing_active");
                 var snapshot = await applicationLoadCoordinator.GetFreshAsync(cancellationToken);
+                var legacyBrandName = copyPayload.TryGetProperty("brandName", out var brandNameElement) && brandNameElement.ValueKind == JsonValueKind.String
+                    ? brandNameElement.GetString()
+                    : null;
+                var resolution = BookBrandExecutionResolver.ResolveBatch(snapshot, [bookIdElement.GetString()!], legacyBrandName);
+                if (!resolution.IsSuccess) return new BridgeResponse(Version, request.Id, false, null, resolution.Failure!.Code);
 
-                var book = snapshot.Discovery.Books.FirstOrDefault(item => string.Equals(item.Id.Value, bookIdElement.GetString(), StringComparison.Ordinal));
-                var bookSummary = book is null ? null : snapshot.BookSummaries.FirstOrDefault(item => item.BookId == book.Id);
-                if (book is null || bookSummary is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
-                var execution = BookBrandExecutionPolicy.Evaluate(bookSummary.AssignedBrand, bookSummary.AssignmentStatus, brandNameElement.GetString());
-                if (!execution.IsAllowed) return new BridgeResponse(Version, request.Id, false, null, execution.Code);
+                var resolved = resolution.Books[0];
+                var book = resolved.Book;
+                var bookSummary = resolved.Summary;
+                var brand = resolved.Brand;
                 if (!string.Equals(bookSummary.ValidationStatus, "Ready", StringComparison.Ordinal))
                 {
                     return new BridgeResponse(Version, request.Id, false, null, "book_not_ready");
                 }
 
-                var brand = snapshot.Discovery.Brands.FirstOrDefault(item => string.Equals(item.Name, brandNameElement.GetString(), StringComparison.Ordinal));
-                if (brand is null) return new BridgeResponse(Version, request.Id, false, null, "brand_not_found");
                 var brandSummary = snapshot.BrandSummaries?.FirstOrDefault(item => string.Equals(item.BrandName, brand.Name, StringComparison.Ordinal));
                 if (brandSummary?.ValidationStatus != BrandValidationStatus.Validated)
                 {
@@ -855,7 +856,11 @@ internal sealed class WebViewBridgeRouter(
         return true;
     }
 
-    private static async ValueTask<ProcessSessionSnapshot> StartProcessAsync(BridgeRequest request, IProcessSessionService sessionService, CancellationToken cancellationToken)
+    private static async ValueTask<ProcessSessionSnapshot> StartProcessAsync(
+        BridgeRequest request,
+        IProcessSessionService sessionService,
+        ApplicationLoadCoordinator? applicationLoadCoordinator,
+        CancellationToken cancellationToken)
     {
         if (request.Payload is not { } payload ||
             !payload.TryGetProperty("bookIds", out var bookIdsElement) ||
@@ -883,6 +888,14 @@ internal sealed class WebViewBridgeRouter(
                 _ => throw new ArgumentException("The requested processing mode is not supported.")
             }
             : throw new ArgumentException("A process start request requires a processing mode.");
-        return await sessionService.StartAsync(bookIds, brandName, mode, cancellationToken);
+
+        if (applicationLoadCoordinator is not null)
+        {
+            var snapshot = await applicationLoadCoordinator.GetFreshAsync(cancellationToken);
+            var resolution = BookBrandExecutionResolver.ResolveBatch(snapshot, bookIds, brandName);
+            if (!resolution.IsSuccess) throw new ArgumentException(resolution.Failure!.Code);
+        }
+
+        return await sessionService.StartAsync(bookIds, mode, cancellationToken);
     }
 }
