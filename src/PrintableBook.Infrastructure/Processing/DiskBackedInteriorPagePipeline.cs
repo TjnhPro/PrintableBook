@@ -44,7 +44,15 @@ public sealed class DiskBackedInteriorPagePipeline(
             throw new ArgumentException("Page identity is required.", nameof(request));
         }
 
-        request.ValidateProcessingPolicy();
+        var suppressesFrame = request.ProcessingKind is
+            InteriorPageProcessingKind.IntroTemplate or
+            InteriorPageProcessingKind.BrandIntroTemplate or
+            InteriorPageProcessingKind.ProductionInterior;
+        if (suppressesFrame)
+        {
+            request = request with { Frame = null, FrameMode = FrameMode.Disabled };
+        }
+
         request.ValidateGeometry();
         var pageCache = Path.Combine(request.Workspace.WorkingDirectory.Value, "cache", request.PageId);
         var isIntroTemplate = request.ProcessingKind is InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate;

@@ -195,6 +195,44 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessAsync_defensively_ignores_a_frame_in_a_mutated_production_request()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("production-no-frame.png");
+        var frame = await CreateRedFrameAsync("production-frame.png", new ImageSize(200, 200));
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("production-no-frame"),
+            new DirectoryReference(Path.Combine(rootPath, "ProductionNoFrame")));
+        var legalRequest = new InteriorPagePipelineRequest(
+            workspace,
+            new FileReference(source),
+            "production-interior-cover",
+            new ArtworkDetectionThreshold(20),
+            new ImageSize(200, 200),
+            new ImageSize(200, 200),
+            new ImageSize(200, 200),
+            new ImageDensity(300, 300),
+            null,
+            FrameMode.Disabled,
+            processingKind: InteriorPageProcessingKind.ProductionInterior,
+            outputFileName: "interior-cover.png");
+
+        await CreatePipeline().ProcessAsync(legalRequest with
+        {
+            Frame = new FileReference(frame),
+            FrameMode = FrameMode.Enabled
+        });
+
+        using var framed = new MagickImage(Path.Combine(
+            workspace.WorkingDirectory.Value,
+            "cache",
+            "production-interior-cover",
+            "framed.png"));
+        var corner = framed.GetPixels().GetPixel(0, 0);
+        Assert.False(corner[0] == 255 && corner[1] == 0 && corner[2] == 0, "Production output must force No Frame.");
+    }
+
+    [Fact]
     public async Task ProcessAsync_migrates_a_legacy_processed_input_stamp_into_page_cache()
     {
         Directory.CreateDirectory(rootPath);
