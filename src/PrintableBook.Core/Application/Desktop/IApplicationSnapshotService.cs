@@ -6,6 +6,7 @@ using PrintableBook.Core.Domain.Processing;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Diagnostics;
 using PrintableBook.Core.Application.Brands;
+using PrintableBook.Core.Application.Production;
 
 namespace PrintableBook.Core.Application.Desktop;
 
@@ -15,13 +16,33 @@ public sealed record InteriorSourcePageSummary(string SourceReference, FrameMode
 public sealed record BookFolderSummary(string Name, string Status, int FileCount, int ImageCount);
 public sealed record BookAssetSummary(string SourceReference, string RelativePath, string FileName, string Folder, string Kind, int? Width, int? Height, FrameMode FrameMode, string LocalImageUrl, bool IsActive = true);
 public sealed record BookOutputSummary(string ArtifactReference, string FileName, long FileSizeBytes, int? PageCount, double? WidthInches, double? HeightInches, string VerificationStatus, DateTimeOffset? GeneratedAt);
+public sealed record ProductionAssetDesktopSummary(
+    string AssetKind,
+    string DisplayName,
+    string FileName,
+    string SourceReference,
+    string SourceStatus,
+    string? SourceLocalImageUrl,
+    long? SourceFileSizeBytes,
+    DateTimeOffset? SourceUpdatedAtUtc,
+    string? ProcessedReference,
+    string ProcessedStatus,
+    string? ProcessedLocalImageUrl,
+    DateTimeOffset? ProcessedAtUtc);
+public sealed record ProductionDesktopSummary(
+    IReadOnlyList<ProductionAssetDesktopSummary> Assets,
+    string CoverOutputStatus,
+    DateTimeOffset? CoverBuiltAtUtc,
+    string InteriorOutputStatus,
+    string InteriorOutputKind,
+    DateTimeOffset? InteriorBuiltAtUtc);
 public interface ILocalOutputActionService
 {
     ValueTask OpenAsync(FileReference file, CancellationToken cancellationToken = default);
     ValueTask RevealAsync(FileReference file, CancellationToken cancellationToken = default);
     ValueTask CopyPathAsync(FileReference file, CancellationToken cancellationToken = default);
 }
-public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = true, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null);
+public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = true, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null, ProductionDesktopSummary? Production = null);
 public sealed record BrandDesktopSummary(string BrandName, BrandValidationStatus ValidationStatus, DateTimeOffset? ValidatedAtUtc, string? Fingerprint);
 public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt, IReadOnlyList<BrandDesktopSummary>? BrandSummaries = null, IReadOnlyList<BrandImageSizeRequirement>? BrandImageSizeRequirements = null);
 
@@ -43,7 +64,8 @@ public sealed class ApplicationSnapshotService(
     IFileSystem fileSystem,
     IPdfDocumentInspector? pdfDocumentInspector = null,
     IOperationDiagnostics? diagnostics = null,
-    IBrandValidationService? brandValidationService = null) : IApplicationSnapshotService
+    IBrandValidationService? brandValidationService = null,
+    IProductionWorkspaceStateStore? productionStateStore = null) : IApplicationSnapshotService
 {
     private const int MaximumBookSummaryConcurrency = 4;
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
@@ -65,7 +87,7 @@ public sealed class ApplicationSnapshotService(
                 MaxDegreeOfParallelism = MaximumBookSummaryConcurrency,
                 CancellationToken = cancellationToken
             },
-            async (index, token) => summaries[index] = await BuildBookSummaryAsync(discoverySnapshot.Books[index], token));
+            async (index, token) => summaries[index] = await BuildBookSummaryAsync(discoverySnapshot.Books[index], settings, token));
 
         var completedSummaries = summaries
             .Select(summary => summary ?? throw new InvalidOperationException("Book summary was not produced."))
@@ -117,7 +139,10 @@ public sealed class ApplicationSnapshotService(
         return brand with { Assets = assets };
     }
 
-    private async ValueTask<BookDesktopSummary> BuildBookSummaryAsync(DiscoveredBook book, CancellationToken cancellationToken)
+    private async ValueTask<BookDesktopSummary> BuildBookSummaryAsync(
+        DiscoveredBook book,
+        GlobalSettings settings,
+        CancellationToken cancellationToken)
     {
         BookSourceScanResult scan;
         using (diagnostics.Begin("book.scan", book.Id.Value))
@@ -248,8 +273,120 @@ public sealed class ApplicationSnapshotService(
             HasBackground: state.HasBackground,
             ActiveInteriorSourcePageCount: activeInteriorSourcePageCount,
             HasIntro: state.HasIntro,
-            SelectedIntroInteriorSourceKeys: state.SelectedIntroInteriorSourceKeys);
+            SelectedIntroInteriorSourceKeys: state.SelectedIntroInteriorSourceKeys,
+            Production: await DescribeProductionAsync(book.Workspace, state, settings, cancellationToken));
     }
+
+    private async ValueTask<ProductionDesktopSummary> DescribeProductionAsync(
+        BookWorkspace workspace,
+        BookProcessingState bookState,
+        GlobalSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var productionState = productionStateStore is null
+            ? ProductionWorkspaceState.Empty
+            : await productionStateStore.LoadAsync(workspace, cancellationToken);
+        var settingsSignature = ProductionPageProcessingService.CreateSettingsSignature(settings);
+        var assets = new List<ProductionAssetDesktopSummary>(ProductionAssets.All.Count);
+
+        foreach (var definition in ProductionAssets.All)
+        {
+            var source = ProductionWorkspacePaths.SourceFile(workspace, definition.Kind);
+            var sourceMetadata = await fileSystem.GetFileMetadataAsync(source, cancellationToken);
+            ProductionFileSignature? sourceSignature = sourceMetadata is null
+                ? null
+                : ProductionFileSignature.From(sourceMetadata.Value);
+            var processedReference = definition.ProcessedFileName is null
+                ? null
+                : ProductionWorkspacePaths.ProcessedFile(workspace, definition.Kind);
+            var processedMetadata = processedReference is null
+                ? null
+                : await fileSystem.GetFileMetadataAsync(processedReference, cancellationToken);
+            var processedState = productionState.ProcessedPages is not null &&
+                productionState.ProcessedPages.TryGetValue(definition.FileName, out var savedProcessed)
+                    ? savedProcessed
+                    : null;
+
+            var processedStatus = "Not applicable";
+            if (definition.ProcessedFileName is not null)
+            {
+                processedStatus = sourceMetadata is null
+                    ? "Missing"
+                    : processedMetadata is null || processedState is null
+                        ? "Ready to process"
+                        : processedState.SourceSignature != sourceSignature ||
+                          processedState.OutputSignature != ProductionFileSignature.From(processedMetadata.Value) ||
+                          !string.Equals(processedState.ProcessingSettingsSignature, settingsSignature, StringComparison.Ordinal)
+                            ? "Stale"
+                            : "Processed";
+            }
+
+            assets.Add(new ProductionAssetDesktopSummary(
+                ToAssetKindValue(definition.Kind),
+                definition.Kind switch
+                {
+                    ProductionAssetKind.FinalCover => "Final Cover",
+                    ProductionAssetKind.InteriorCover => "Interior Cover",
+                    ProductionAssetKind.BookOwner => "Book Owner",
+                    _ => definition.FileName
+                },
+                definition.FileName,
+                source.Value,
+                sourceMetadata is null ? "Missing" : "Ready to process",
+                sourceMetadata is null ? null : ToVersionedLocalImageUrl(source.Value, sourceMetadata.Value),
+                sourceMetadata?.LengthBytes,
+                sourceMetadata?.LastWriteTimeUtc,
+                processedReference?.Value,
+                processedStatus,
+                processedMetadata is null || processedReference is null ? null : ToVersionedLocalImageUrl(processedReference.Value, processedMetadata.Value),
+                processedState?.CompletedAtUtc));
+        }
+
+        var cover = assets.Single(asset => asset.AssetKind == "final-cover");
+        var coverOutputStatus = cover.SourceStatus == "Missing"
+            ? "Missing"
+            : productionState.CoverOutput is null
+                ? "Ready to process"
+                : CreateCurrentCoverSignature(cover) == productionState.CoverOutput.InputSignature ? "Processed" : "Stale";
+        var interiorKind = bookState.PublishedInteriorKind switch
+        {
+            InteriorOutputKind.Base => "Base",
+            InteriorOutputKind.Production => "Production",
+            _ => "Legacy"
+        };
+        var productionInteriorAssets = assets.Where(asset => asset.AssetKind is "interior-cover" or "book-owner").ToArray();
+        var interiorOutputStatus = productionInteriorAssets.Any(asset => asset.SourceStatus == "Missing")
+            ? "Missing"
+            : productionState.InteriorOutput is null
+                ? "Ready to process"
+            : assets.Where(asset => asset.AssetKind is "interior-cover" or "book-owner")
+                .Any(asset => asset.ProcessedStatus != "Processed")
+                ? "Stale"
+                : "Processed";
+        return new ProductionDesktopSummary(
+            assets,
+            coverOutputStatus,
+            productionState.CoverOutput?.CompletedAtUtc,
+            interiorOutputStatus,
+            interiorKind,
+            bookState.PublishedInteriorAtUtc);
+    }
+
+    private static string CreateCurrentCoverSignature(ProductionAssetDesktopSummary cover)
+    {
+        var signature = new ProductionFileSignature(
+            cover.SourceFileSizeBytes!.Value,
+            cover.SourceUpdatedAtUtc!.Value);
+        return ProductionCoverPdfService.CreateInputSignature(signature);
+    }
+
+    private static string ToAssetKindValue(ProductionAssetKind kind) => kind switch
+    {
+        ProductionAssetKind.FinalCover => "final-cover",
+        ProductionAssetKind.InteriorCover => "interior-cover",
+        ProductionAssetKind.BookOwner => "book-owner",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported Production asset kind.")
+    };
 
     private static string? FindRepresentativeCoverReference(DirectoryReference processingRoot, BookSource? source, string? selectedCoverReference)
     {
@@ -315,6 +452,9 @@ public sealed class ApplicationSnapshotService(
 
     private static string ToLocalImageUrl(string sourceReference) =>
         new Uri(Path.GetFullPath(sourceReference)).AbsoluteUri;
+
+    private static string ToVersionedLocalImageUrl(string sourceReference, FileMetadata metadata) =>
+        $"{ToLocalImageUrl(sourceReference)}?v={metadata.LengthBytes}-{metadata.LastWriteTimeUtc.UtcTicks}";
 
     private async ValueTask<IReadOnlyList<BookOutputSummary>> DescribeOutputsAsync(BookId bookId, IReadOnlyList<string> artifacts, CancellationToken cancellationToken)
     {

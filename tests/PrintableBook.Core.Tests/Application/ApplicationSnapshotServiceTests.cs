@@ -4,6 +4,7 @@ using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Scanning;
 using PrintableBook.Core.Application.Diagnostics;
 using PrintableBook.Core.Application.Brands;
+using PrintableBook.Core.Application.Production;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 
@@ -27,6 +28,75 @@ public sealed class ApplicationSnapshotServiceTests
         Assert.Equal(
             [new ImageSize(1024, 1024), new ImageSize(2048, 2048), new ImageSize(GlobalSettings.Default.FinalPageWidth, GlobalSettings.Default.FinalPageHeight)],
             Assert.Single(snapshot.BrandImageSizeRequirements!, requirement => requirement.Target == "IntroTemplate").AllowedSizes);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_describes_missing_production_assets_without_opening_images_or_reloading_settings()
+    {
+        var settings = new StubSettingsStore();
+
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(),
+            settings,
+            new StubScanner(),
+            new StubStateStore(),
+            new StubFileSystem(),
+            productionStateStore: new StubProductionStateStore()).RefreshAsync();
+
+        var production = Assert.Single(snapshot.BookSummaries).Production!;
+        Assert.Equal(1, settings.LoadCallCount);
+        Assert.Collection(production.Assets,
+            asset => Assert.Equal(("final-cover", "Missing"), (asset.AssetKind, asset.SourceStatus)),
+            asset => Assert.Equal(("interior-cover", "Missing"), (asset.AssetKind, asset.SourceStatus)),
+            asset => Assert.Equal(("book-owner", "Missing"), (asset.AssetKind, asset.SourceStatus)));
+        Assert.Equal("Missing", production.CoverOutputStatus);
+        Assert.Equal("Missing", production.InteriorOutputStatus);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_projects_processed_production_metadata_and_output_provenance()
+    {
+        var timestamp = DateTimeOffset.Parse("2026-09-22T01:02:03Z");
+        var workspace = new BookWorkspace(new BookId("Book A"), new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("temp"));
+        var coverSource = ProductionWorkspacePaths.SourceFile(workspace, ProductionAssetKind.InteriorCover);
+        var ownerSource = ProductionWorkspacePaths.SourceFile(workspace, ProductionAssetKind.BookOwner);
+        var coverOutput = ProductionWorkspacePaths.ProcessedFile(workspace, ProductionAssetKind.InteriorCover);
+        var ownerOutput = ProductionWorkspacePaths.ProcessedFile(workspace, ProductionAssetKind.BookOwner);
+        var sourceSignature = new ProductionFileSignature(100, timestamp);
+        var outputSignature = new ProductionFileSignature(200, timestamp);
+        var settingsSignature = ProductionPageProcessingService.CreateSettingsSignature(GlobalSettings.Default);
+        var productionState = ProductionWorkspaceState.Empty
+            .RecordProcessedPage(ProductionAssetKind.InteriorCover, sourceSignature, outputSignature, settingsSignature, timestamp)
+            .RecordProcessedPage(ProductionAssetKind.BookOwner, sourceSignature, outputSignature, settingsSignature, timestamp)
+            .RecordInteriorOutput("Book A - Interior.pdf", "sha256:inputs", timestamp);
+        var bookState = BookProcessingState.NotStarted(workspace.BookId)
+            .RecordPublishedInterior("Book A - Interior.pdf", InteriorOutputKind.Production, timestamp);
+        var files = new MetadataFileSystem(new Dictionary<string, FileMetadata>(StringComparer.OrdinalIgnoreCase)
+        {
+            [coverSource.Value] = new(sourceSignature.LengthBytes, sourceSignature.LastWriteTimeUtc),
+            [ownerSource.Value] = new(sourceSignature.LengthBytes, sourceSignature.LastWriteTimeUtc),
+            [coverOutput.Value] = new(outputSignature.LengthBytes, outputSignature.LastWriteTimeUtc),
+            [ownerOutput.Value] = new(outputSignature.LengthBytes, outputSignature.LastWriteTimeUtc)
+        });
+
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(),
+            new StubSettingsStore(),
+            new StubScanner(),
+            new StubStateStore(explicitState: bookState),
+            files,
+            productionStateStore: new StubProductionStateStore(productionState)).RefreshAsync();
+
+        var production = Assert.Single(snapshot.BookSummaries).Production!;
+        Assert.Equal("Production", production.InteriorOutputKind);
+        Assert.Equal("Processed", production.InteriorOutputStatus);
+        Assert.Equal(timestamp, production.InteriorBuiltAtUtc);
+        Assert.All(production.Assets.Where(asset => asset.AssetKind != "final-cover"), asset =>
+        {
+            Assert.Equal("Processed", asset.ProcessedStatus);
+            Assert.Contains("?v=", asset.SourceLocalImageUrl);
+            Assert.Contains("?v=", asset.ProcessedLocalImageUrl);
+        });
     }
 
     [Fact]
@@ -590,6 +660,15 @@ public sealed class ApplicationSnapshotServiceTests
         public ValueTask SaveErrorAsync(BookWorkspace workspace, ProcessingFailure failure, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 
+    private sealed class StubProductionStateStore(ProductionWorkspaceState? state = null) : IProductionWorkspaceStateStore
+    {
+        public ValueTask<ProductionWorkspaceState> LoadAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(state ?? ProductionWorkspaceState.Empty);
+
+        public ValueTask SaveAsync(BookWorkspace workspace, ProductionWorkspaceState state, CancellationToken cancellationToken = default) =>
+            ValueTask.CompletedTask;
+    }
+
     private sealed class BrandValidation(BrandValidationState state) : IBrandValidationService
     {
         public ValueTask<BrandValidationState> CheckStateAsync(DirectoryReference brandDirectory, GlobalSettings settings, CancellationToken cancellationToken = default) =>
@@ -610,6 +689,24 @@ public sealed class ApplicationSnapshotServiceTests
         {
             foreach (var file in files) yield return file;
         }
+        public ValueTask<string> ReadTextAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult(string.Empty);
+        public ValueTask WriteTextAtomicallyAsync(FileReference file, string content, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask CopyFileAsync(FileReference source, FileReference destination, bool overwrite, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask MoveFileAsync(FileReference source, FileReference destination, bool overwrite, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask DeleteFileAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask DeleteDirectoryAsync(DirectoryReference directory, bool recursive, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    }
+
+    private sealed class MetadataFileSystem(IReadOnlyDictionary<string, FileMetadata> metadata) : IFileSystem
+    {
+        public ValueTask<bool> FileExistsAsync(FileReference file, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(metadata.ContainsKey(file.Value));
+        public ValueTask<FileMetadata?> GetFileMetadataAsync(FileReference file, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(metadata.TryGetValue(file.Value, out var value) ? (FileMetadata?)value : null);
+        public ValueTask<bool> DirectoryExistsAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.FromResult(false);
+        public ValueTask CreateDirectoryAsync(DirectoryReference directory, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public async IAsyncEnumerable<DirectoryReference> EnumerateDirectoriesAsync(DirectoryReference directory, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) { yield break; }
+        public async IAsyncEnumerable<FileReference> EnumerateFilesAsync(DirectoryReference directory, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) { yield break; }
         public ValueTask<string> ReadTextAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.FromResult(string.Empty);
         public ValueTask WriteTextAtomicallyAsync(FileReference file, string content, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask CopyFileAsync(FileReference source, FileReference destination, bool overwrite, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
