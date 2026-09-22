@@ -4,11 +4,12 @@
 
 ## 0. Trạng thái
 
-- Phase: planning và review; **không code trong phase này**.
+- Phase: **implemented** trên branch `plan/book-brand-author-mvp`; đang chờ review/merge.
 - Branch: `plan/book-brand-author-mvp`, tạo từ `main` tại `4041c006`.
 - Chiến lược: additive, local-first, không refactor pipeline hiện tại.
 - Verdict: **giữ scope MVP, nhưng assignment phải là guardrail thật cho Book đã assign**.
 - Restore point trước `/autoplan`: `C:\Users\admin\.gstack\projects\coloringbook\plan-book-brand-author-mvp-autoplan-restore-20260922-142850.md`.
+- Implementation commits: persistence `40a7196`, snapshot/service `b63696f`, workflow guards `978396f`, UI `85e1483`, regression hardening `d40a384`.
 
 ## 1. Executive summary
 
@@ -461,12 +462,12 @@ Manual fixture: hai Brand cùng Author, một Brand khác Author, legacy Book, v
 
 Mỗi phase phải green trước phase tiếp theo.
 
-1. **Contracts/persistence** — value records, normalization/evaluator tests, optional Book state, Brand store + DI.
-2. **Services/snapshot** — mutation service, Brand metadata index, projected status, shared execution policy.
-3. **Bridge** — bốn commands, payload validation, gate, refresh, contract tests.
-4. **UI metadata/assignment** — independent draft, Book/Brand cards, rescue, title/search/badges.
-5. **Filter/guard** — counts/pagination/selection reset; label clarity; template + worker guard; mixed-batch reject.
-6. **Regression/docs** — full tests, restart/corruption/rename/race matrix; user guide/screenshots; known limitations.
+1. ✅ **Contracts/persistence** — value records, normalization/evaluator tests, optional Book state, Brand store + DI.
+2. ✅ **Services/snapshot** — mutation service, Brand metadata index, projected status, shared execution policy.
+3. ✅ **Bridge** — bốn commands, payload validation, gate, refresh, contract tests.
+4. ✅ **UI metadata/assignment** — independent draft, Book/Brand cards, rescue, title/search/badges.
+5. ✅ **Filter/guard** — counts/pagination/selection reset; label clarity; template + worker guard; mixed-batch reject.
+6. ✅ **Regression/docs** — full automated suite, corruption/race/compatibility contracts, user guide và known limitations. Bộ screenshot release hiện có không được thay bằng ảnh chưa qua packaged-app capture gate.
 
 ## 13. File impact map dự kiến
 
@@ -555,4 +556,18 @@ Không nhận vào MVP vì trái scope: bắt legacy migration, bulk assignment,
 | DX | PASS | Stable commands/errors, optional fields, pure policies, no over-abstraction. |
 | Outside voice (Codex CLI) | Initial draft rejected | Nhận safety findings; từ chối scope expansions nêu trên. |
 
-**Final verdict:** sẵn sàng cho implementation ở phase sau. Không còn quyết định sản phẩm/kiến trúc bắt buộc nào chưa chốt trong MVP.
+**Final verdict:** implementation hoàn tất trên branch hiện tại. Không còn quyết định sản phẩm/kiến trúc bắt buộc nào chưa chốt trong MVP.
+
+## 18. Implementation verification
+
+Ngày 2026-09-22:
+
+```text
+dotnet build PrintableBook.sln
+→ succeeded, 0 warnings, 0 errors
+
+dotnet test PrintableBook.sln --no-build
+→ 938 passed, 5 skipped local-corpus tests, 0 failed
+```
+
+JavaScript frontend cũng pass `node --check`; `git diff --check` không phát hiện whitespace error. Năm test skip là các local corpus test đã có sẵn và cần dữ liệu ảnh ngoài repository, không thuộc feature này.
