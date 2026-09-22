@@ -9,7 +9,7 @@
 - Chiến lược: additive, local-first, không refactor pipeline hiện tại.
 - Verdict: **giữ scope MVP, nhưng assignment phải là guardrail thật cho Book đã assign**.
 - Restore point trước `/autoplan`: `C:\Users\admin\.gstack\projects\coloringbook\plan-book-brand-author-mvp-autoplan-restore-20260922-142850.md`.
-- Implementation commits: persistence `40a7196`, snapshot/service `b63696f`, workflow guards `978396f`, UI `85e1483`, regression hardening `d40a384`.
+- Implementation commits: persistence `40a7196`, snapshot/service `b63696f`, workflow guards `978396f`, UI `85e1483`, regression hardening `d40a384`, docs `90bd8d3`, metadata repair `86715ed`.
 
 ## 1. Executive summary
 
