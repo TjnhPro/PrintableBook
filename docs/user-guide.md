@@ -18,6 +18,8 @@ Kích thước hợp lệ: `frame.png` phải là `Artwork maximum side × Artwo
 
 Trong Book detail, nút **Copy Brand Templates** khả dụng khi Book ở trạng thái `Ready` và Brand đang chọn đã `Validated`. Nút này copy đè `cover.psd`, `app_plus.psd` và `book_owner.psd` vào `.workspace/templates/`; thao tác không chạy processing và không tạo state/cache riêng.
 
+Các nút Upload/Replace trong tab **Production** mở native PNG picker tại `.workspace/templates/` của chính Book đang thao tác. File được chọn vẫn được validate rồi copy/đổi tên atomically vào `.workspace/production/`; pipeline không xử lý trực tiếp file đang được chỉnh sửa trong thư mục template.
+
 Mỗi Book là một thư mục trực tiếp dưới `sources/`. Hai cấu trúc được hỗ trợ:
 
 ```text

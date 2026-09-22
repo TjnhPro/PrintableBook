@@ -580,7 +580,10 @@ internal sealed class WebViewBridgeRouter(
                 if (book is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
 
                 var definition = ProductionAssets.Get(assetKind);
-                var selected = await productionFilePicker.PickPngAsync(definition.FileName, cancellationToken);
+                var selected = await productionFilePicker.PickPngAsync(
+                    definition.FileName,
+                    ProductionWorkspacePaths.TemplatesDirectory(book.Workspace),
+                    cancellationToken);
                 if (selected is null)
                 {
                     return BridgeResponse.Succeeded(request.Id, "book.production.asset.import.cancelled", new { cancelled = true });

@@ -685,6 +685,7 @@ public sealed class BridgeMessageContractTests
 
         Assert.True(response.Ok);
         Assert.Equal("book.production.asset.imported", response.Command);
+        Assert.Equal(new DirectoryReference(Path.Combine("workspace", "templates")), picker.InitialDirectory);
         Assert.Equal(ProductionAssetKind.InteriorCover, importer.AssetKind);
         Assert.Equal(new DirectoryReference("workspace"), importer.Workspace?.WorkingDirectory);
         Assert.Equal(new FileReference("selected.png"), importer.Source);
@@ -892,8 +893,16 @@ public sealed class BridgeMessageContractTests
 
     private sealed class StubProductionFilePicker(FileReference? selection) : IProductionFilePicker
     {
-        public ValueTask<FileReference?> PickPngAsync(string assetLabel, CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(selection);
+        public DirectoryReference? InitialDirectory { get; private set; }
+
+        public ValueTask<FileReference?> PickPngAsync(
+            string assetLabel,
+            DirectoryReference initialDirectory,
+            CancellationToken cancellationToken = default)
+        {
+            InitialDirectory = initialDirectory;
+            return ValueTask.FromResult(selection);
+        }
     }
 
     private sealed class StubProductionAssetImportService : IProductionAssetImportService
