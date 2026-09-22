@@ -158,7 +158,11 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("data-action=\"book-brand-filter\"", script, StringComparison.Ordinal);
         Assert.Contains("assignedBrandName(summary) === state.bookBrandFilter", script, StringComparison.Ordinal);
         Assert.Contains("state.selectedBookIds.clear()", script, StringComparison.Ordinal);
-        Assert.Contains("Processing Brand", markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Processing Brand", markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("brand-select", markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("selectedBrand", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("activeBrand(", script, StringComparison.Ordinal);
+        Assert.Contains("assignedBrandFor", script, StringComparison.Ordinal);
     }
 
     [Fact]
