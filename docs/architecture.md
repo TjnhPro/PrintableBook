@@ -80,7 +80,7 @@ Library discovery quét mỗi thư mục trực tiếp dưới `sources/` thành
 
 Với layout Main/Clone, scanner chỉ đọc direct child `Main book/Book cover/`, lọc extension ảnh được hỗ trợ, sắp xếp filename `OrdinalIgnoreCase` và đưa ảnh đầu tiên vào scan metadata làm representative thumbnail. Ảnh Main không được thêm vào `BookSource.Assets`, vì Cover candidates và processor đều lấy từ tập assets này. Không folder Main nào khác được enumerate, validate, đếm hoặc process trong phiên bản này. Snapshot thêm representative vào projection hiển thị riêng và vẫn dùng processing root Clone cho source-folder diagnostics.
 
-Mỗi Book có workspace riêng dưới `.workspace/`, gồm state, log, cache, processed preview và output tạm. Trạng thái Book lưu các lựa chọn ổn định theo key tương đối với outer Book root (ví dụ `Clone book/Book interior/page-001.png`), không theo index hiển thị, nên refresh hay đổi thứ tự file không làm mất lựa chọn. Việc chuyển state từ một Book phẳng cũ sang layout Clone không được thực hiện tự động.
+Mỗi Book có workspace riêng dưới `.workspace/`, gồm state, log, cache, processed preview và output tạm. Production bổ sung `generator/`, `templates/`, `production/`, cache có stable page ID và `processed/production/`. `production.json` chỉ lưu metadata signature/state advisory; snapshot không decode Production PNG. Trạng thái Book lưu các lựa chọn ổn định theo key tương đối với outer Book root (ví dụ `Clone book/Book interior/page-001.png`), không theo index hiển thị, nên refresh hay đổi thứ tự file không làm mất lựa chọn. Việc chuyển state từ một Book phẳng cũ sang layout Clone không được thực hiện tự động.
 
 Các output đã publish thuộc `Output/` của Book. PDF Library đọc output đã publish; không đọc trực tiếp cache tạm.
 
@@ -167,15 +167,17 @@ interior-shuffled-2
 background
 ```
 
+Production Interior dùng cùng assembler/exporter nhưng thêm hai leading page có type riêng. Hai source luôn được process fresh bằng policy `forced-no-frame-v1`/CropArt; stable page identity và canonical output filename là hai contract tách biệt. Thứ tự là `interior_cover`, `interior_book_owner`, Intro, rồi Interior shuffle. Background, nếu bật, được xen sau mọi artwork kể cả hai leading page. Mode cũ `InteriorOnly` không nhận leading page và không đổi behavior.
+
 ## Brand validation contract
 
-Brand assets have an explicit two-stage contract, independent from Book workspace state. **Brand Validate** is the deep certification action: it verifies the tracked image scope (`IntroTemplate/**` supported images, `frame.png`, and `background.png`) and their required dimensions, and requires the root files `cover.psd` and `app_plus.psd` to exist. It then persists `brand.validation.json` beside the Brand. PSD files are existence-checked and fingerprinted as files; they are never decoded as images. A Brand IntroTemplate can be a legacy square (`1024x1024` or `2048x2048`) or an exact Final Interior Page raster. The latter is classified only at the page-pipeline boundary and passes directly into ordered PDF assembly; it is not a Working Area and never receives frame, border, normalization, or crop-art work.
+Brand assets have an explicit two-stage contract, independent from Book workspace state. **Brand Validate** is the deep certification action: it verifies the tracked image scope (`IntroTemplate/**` supported images, `frame.png`, and `background.png`) and their required dimensions, and requires the root files `cover.psd`, `app_plus.psd`, and `book_owner.psd` to exist. It then persists `brand.validation.json` beside the Brand. PSD files are existence-checked and fingerprinted as files; they are never decoded as images. A Brand IntroTemplate can be a legacy square (`1024x1024` or `2048x2048`) or an exact Final Interior Page raster. The latter is classified only at the page-pipeline boundary and passes directly into ordered PDF assembly; it is not a Working Area and never receives frame, border, normalization, or crop-art work.
 
 **Brand CheckState** is deliberately cheap and state-first. With no state it returns `NotValidated` without scanning image content. For a current certification it compares only the validation definition and a metadata fingerprint (normalized tracked path, file length, and last-write UTC); it never decodes images or reads their bytes. A changed metadata fingerprint, explicit invalidation, or a changed `DefinitionChangedAtUtc` returns `NeedsValidation`.
 
 Interior processing performs this cheap state check again immediately after obtaining its fresh snapshot. It accepts only `Validated` Brands. Certified Brand-owned frame/background/automatic Intro assets are not deeply inspected again at process start; custom Intro pages selected from a Book remain Book-owned and continue to receive their own validation. Any semantic change to tracked scope or validation rules must update `DefinitionChangedAtUtc` so prior certifications cannot be reused.
 
-The manual **Copy Brand Templates** use case is separate from processing. For a `Ready` Book and the currently selected `Validated` Brand, it creates `Book/.workspace/templates/` and copies exactly `cover.psd` and `app_plus.psd` with overwrite enabled. The operation has no state record, version detection, cache, or processing-pipeline stage.
+The manual **Copy Brand Templates** use case is separate from processing. For a `Ready` Book and the currently selected `Validated` Brand, it creates `Book/.workspace/templates/` and copies exactly all three PSD templates with overwrite enabled. The operation has no state record, version detection, cache, or processing-pipeline stage.
 
 ## Thực thi nền và concurrency
 
@@ -186,6 +188,7 @@ The manual **Copy Brand Templates** use case is separate from processing. For a 
 - Chỉ các trang của Book hiện tại chạy bounded concurrency, cấu hình hợp lệ `1..12`.
 - Không có nested parallelism.
 - Library Refresh có thể overlap processing theo policy của manager.
+- ProductionAction chạy tuần tự và xung đột đối xứng với ProcessingSession/CacheCleanup; exact duplicate key có thể join, action hoặc Book khác bị reject.
 - Cancellation là cooperative: command cancel chuyển task sang `Cancelling`, worker quan sát `CancellationToken` và trạng thái terminal được publish khi unwind hoàn tất.
 
 Snapshot session/worker vẫn observable qua bridge để WebView hiển thị Process và taskbar status. Khi đóng ứng dụng, Desktop dùng graceful-stop có thời hạn; startup recovery chỉ chuyển workspace stale `Running` thành `Interrupted`, không thay đổi Completed/Failed/Cancelled.

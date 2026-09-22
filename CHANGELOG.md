@@ -7,6 +7,8 @@
 - Brand validation certificate với fast metadata fingerprint, deep Validate và processing gate trước khi xử lý.
 - Trạng thái Brand validation cùng thao tác **Validate Brand** trong ứng dụng desktop.
 - Script local cài Brand/Book mẫu vào artifact đã publish để smoke test, không đưa sample vào Debug hoặc ZIP release mặc định.
+- Production Assets workflow: native PNG import, independent Cover/prefix processing, `17.47 × 8.75 inch` Cover PDF và Production Final Interior với provenance trong PDF Library.
+- Brand template contract thêm `book_owner.psd`; release phải bổ sung file này cho mọi Brand và validate lại trước khi triển khai build mới.
 
 ### Changed
 

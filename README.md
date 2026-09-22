@@ -30,10 +30,12 @@ Mỗi thư mục trực tiếp trong `sources/` là một Book. Gói Book mới 
 
 1. Download ZIP release, giải nén vào thư mục writable.
 2. Chạy `PrintableBook.exe`.
-3. Thêm Brand vào `brands/` và Book vào `sources/`.
+3. Thêm Brand vào `brands/` và Book vào `sources/`. Brand hợp lệ cần `cover.psd`, `app_plus.psd` và `book_owner.psd` ở root.
 4. Trong **Books**, nhấn **Refresh** và chọn Brand.
 5. Mở Book detail để kiểm tra Interior, Intro, Active và Frame mode.
 6. Chọn Book, nhấn **Process Interior**, sau đó xem PDF trong **PDF Library**.
+
+Để dùng workflow Production, mở tab **Production** trong Book detail, upload ba PNG canonical, build Cover và Final Interior theo hướng dẫn trong [User Guide](docs/user-guide.md#8-production-assets).
 
 ## Workflow
 
@@ -61,6 +63,19 @@ Intro legacy và Custom luôn được xử lý theo CropArt, không chạy dete
 **Process** hiển thị queue, current stage, số worker và tiến độ. Mỗi session chỉ xử lý một Book tại một thời điểm; concurrency chỉ áp dụng các trang trong Book hiện tại, từ 1 đến 12 worker. Bạn có thể request **Cancel session**; cancellation là cooperative nên trạng thái sẽ chuyển terminal khi worker đã dừng an toàn.
 
 ![Process running](docs/assets/screenshots/0.1/09-process-running.png)
+
+## Production Assets
+
+Workflow Production chạy song song và không thay đổi **Process Interior** cũ:
+
+```text
+final_cover.png             → Build Cover PDF
+interior_cover.png          → No Frame / CropArt ┐
+interior_book_owner.png     → No Frame / CropArt ├→ Build Final Interior
+Intro + randomized Interior ─────────────────────┘
+```
+
+Cover PNG phải đúng `5242 × 2626 px`; PDF Cover dùng trang `17.47 × 8.75 inch`. Hai trang prefix Interior không bắt buộc kích thước input nhưng luôn dùng policy No Frame/CropArt. **Build Final Interior** tạo lại `<BookId> - Interior.pdf` theo thứ tự Interior Cover, Book Owner, Intro, rồi Interior đã shuffle; nếu `HasBackground` bật, một background được xen sau mỗi artwork. PDF Library ghi rõ Interior hiện tại là `Base`, `Production` hay `Legacy`.
 
 ## PDF Library
 

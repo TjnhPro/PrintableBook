@@ -8,15 +8,15 @@ Printable Book làm việc hoàn toàn trên thư mục local: Brand trong `bran
 
 ## 2. Chuẩn bị Brand
 
-Tạo một thư mục Brand dưới `brands/`. Một Brand gồm hai folder tùy chọn `IntroTemplate/`, `AppPlus/`, hai ảnh `frame.png`, `background.png`, và hai template bắt buộc `cover.psd`, `app_plus.psd` ở root Brand. `BackCover.psd` và `brand.json` không còn được dùng hay đọc bởi ứng dụng. Màn hình **Brands & templates** hiển thị từng folder dưới dạng danh sách `Name | Extension | Size | Status`, còn các file root là các card riêng.
+Tạo một thư mục Brand dưới `brands/`. Một Brand gồm hai folder tùy chọn `IntroTemplate/`, `AppPlus/`, hai ảnh `frame.png`, `background.png`, và ba template bắt buộc `cover.psd`, `app_plus.psd`, `book_owner.psd` ở root Brand. `BackCover.psd` và `brand.json` không còn được dùng hay đọc bởi ứng dụng. Màn hình **Brands & templates** hiển thị từng folder dưới dạng danh sách `Name | Extension | Size | Status`, còn các file root là các card riêng.
 
-Kích thước hợp lệ: `frame.png` phải là `Artwork maximum side × Artwork maximum side`; `background.png` phải đúng `Final Interior Page`; ảnh trong `IntroTemplate/` phải là `1024 × 1024 px`, `2048 × 2048 px`, hoặc đúng `Final Interior Page` (mặc định `2588 × 2625 px`). `cover.psd` và `app_plus.psd` chỉ được kiểm tra tồn tại, không được đọc như ảnh. Với ảnh Intro đúng Final Interior Page, ứng dụng đưa thẳng artwork đó vào PDF, không thêm viền hay xử lý ảnh. Sau khi chọn **Validate Brand**, lỗi chỉ rõ file nào sai, kích thước hiện tại và kích thước cần sửa.
+Kích thước hợp lệ: `frame.png` phải là `Artwork maximum side × Artwork maximum side`; `background.png` phải đúng `Final Interior Page`; ảnh trong `IntroTemplate/` phải là `1024 × 1024 px`, `2048 × 2048 px`, hoặc đúng `Final Interior Page` (mặc định `2588 × 2625 px`). Ba file PSD chỉ được kiểm tra tồn tại, không được đọc như ảnh. Với ảnh Intro đúng Final Interior Page, ứng dụng đưa thẳng artwork đó vào PDF, không thêm viền hay xử lý ảnh. Sau khi chọn **Validate Brand**, lỗi chỉ rõ file nào sai, kích thước hiện tại và kích thước cần sửa.
 
 ![Brands and templates](assets/screenshots/0.1/12-brands-templates.png)
 
 ## 3. Chuẩn bị Book
 
-Trong Book detail, nút **Copy Brand Templates** khả dụng khi Book ở trạng thái `Ready` và Brand đang chọn đã `Validated`. Nút này copy đè `cover.psd` và `app_plus.psd` vào `.workspace/templates/`; thao tác không chạy processing và không tạo state/cache riêng.
+Trong Book detail, nút **Copy Brand Templates** khả dụng khi Book ở trạng thái `Ready` và Brand đang chọn đã `Validated`. Nút này copy đè `cover.psd`, `app_plus.psd` và `book_owner.psd` vào `.workspace/templates/`; thao tác không chạy processing và không tạo state/cache riêng.
 
 Mỗi Book là một thư mục trực tiếp dưới `sources/`. Hai cấu trúc được hỗ trợ:
 
@@ -93,6 +93,27 @@ Filter artwork, chọn card/ảnh hoặc **Select all shown**, chọn Status và
 Sau một lần **Process Interior** hoàn thành, tab **Interior pages** là preview chỉ đọc của các page final đã publish. Nếu chưa process, tab hiển thị trạng thái không có page.
 
 ![Processed pages](assets/screenshots/0.1/07-book-processed-pages.png)
+
+## 8A. Production Assets
+
+Tab **Production** là workflow bổ sung; **Process Interior** cũ vẫn giữ nguyên.
+
+1. Upload **Final Cover**. File phải là PNG `5242 × 2626 px`.
+2. Upload **Interior Cover** và **Book Owner**. Hai file này không bắt buộc kích thước input cố định.
+3. Có thể chạy **Process Interior Cover** và **Process Book Owner** để kiểm tra preview. Đây là bước tùy chọn.
+4. Nhấn **Build Cover PDF** để tạo `Output/<BookId> - Cover.pdf` với page size `17.47 × 8.75 inch`.
+5. Lưu mọi thay đổi Interior/Intro/Background còn pending, sau đó nhấn **Build Final Interior**.
+
+Hai trang prefix luôn dùng No Frame/CropArt. Final Interior được build mới từ source hiện tại theo thứ tự:
+
+```text
+Interior Cover
+→ Book Owner
+→ Intro
+→ randomized Interior
+```
+
+Khi `HasBackground=true`, background được chèn sau từng trang artwork ở cả bốn nhóm. Build thành công thay atomically file `<BookId> - Interior.pdf`; build lỗi giữ PDF trước đó. Chạy **Process Interior** sau đó sẽ chủ động ghi đè cùng filename bằng bản `Base`. PDF Library hiển thị provenance `Production`, `Base`, hoặc `Legacy`.
 
 ## 9. Chọn Books để Process
 
