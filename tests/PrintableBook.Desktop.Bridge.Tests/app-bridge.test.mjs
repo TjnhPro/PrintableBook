@@ -149,7 +149,7 @@ const pdfLibrarySnapshot = () => ({
     {
       bookId: { value: "Book Beta" }, workspaceStatus: "Failed", lastRunAt: "2026-08-26T11:00:00Z", interiorSourcePageCount: 20, activeInteriorSourcePageCount: 20,
       validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
-      outputSummaries: [{ artifactReference: "D:\\PrintableBook\\sources\\Book Beta\\Output\\Book Beta - Interior.pdf", fileName: "Book Beta - Interior.pdf", verificationStatus: "Available", generatedAt: "2026-08-24T10:00:00Z", pageCount: 20, widthInches: 8.5, heightInches: 8.5, fileSizeBytes: 25 * 1024 * 1024 }]
+      outputSummaries: [{ artifactReference: "D:\\PrintableBook\\sources\\Book Beta\\Output\\Book Beta - Cover.pdf", fileName: "Book Beta - Cover.pdf", verificationStatus: "Available", generatedAt: "2026-08-24T10:00:00Z", pageCount: 1, widthInches: 17.47, heightInches: 8.75, fileSizeBytes: 25 * 1024 * 1024 }]
     },
     {
       bookId: { value: "Book Gamma" }, workspaceStatus: "Completed", lastRunAt: "2026-08-26T12:00:00Z", interiorSourcePageCount: 30, activeInteriorSourcePageCount: 30,
@@ -1408,13 +1408,14 @@ test("Book detail keeps the Interior preflight action while cover work is deferr
   assert.doesNotMatch(content.innerHTML, /Cover is unavailable/);
 });
 
-test("PDF Library shows only Completed Books that currently have output", () => {
+test("PDF Library shows every Book with current output, including a retained Cover after failure", () => {
   const { messageHandler, content } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
 
   assert.match(content.innerHTML, /data-pdf-book-id="Book Alpha"/);
   assert.match(content.innerHTML, /data-pdf-book-id="Book Delta"/);
-  assert.doesNotMatch(content.innerHTML, /data-pdf-book-id="Book Beta"/);
+  assert.match(content.innerHTML, /data-pdf-book-id="Book Beta"/);
+  assert.match(content.innerHTML, /Book Beta - Cover\.pdf/);
   assert.doesNotMatch(content.innerHTML, /data-pdf-book-id="Book Gamma"/);
 });
 
@@ -1440,7 +1441,7 @@ test("PDF Library uses Book-centric copy and removes run history language", () =
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
 
   assert.match(content.innerHTML, /PDF Library/);
-  assert.match(content.innerHTML, /Completed Books with local PDF output/);
+  assert.match(content.innerHTML, /Books with local PDF output/);
   assert.doesNotMatch(content.innerHTML, /Latest outputs/i);
   assert.doesNotMatch(content.innerHTML, /Previous runs/i);
   assert.doesNotMatch(content.innerHTML, /before publishing/i);
@@ -1450,8 +1451,9 @@ test("PDF Library renders one top-level card per eligible Book", () => {
   const { messageHandler, content } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
 
-  assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 2);
+  assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 3);
   assert.match(content.innerHTML, /data-pdf-book-id="Book Alpha"/);
+  assert.match(content.innerHTML, /data-pdf-book-id="Book Beta"/);
   assert.match(content.innerHTML, /data-pdf-book-id="Book Delta"/);
 });
 
