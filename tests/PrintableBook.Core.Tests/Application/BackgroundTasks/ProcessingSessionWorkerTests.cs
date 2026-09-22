@@ -289,6 +289,45 @@ public sealed class ProcessingSessionWorkerTests
     }
 
     [Fact]
+    public async Task Mixed_queue_resolves_brand_assets_from_each_books_saved_brand()
+    {
+        var snapshot = MixedSnapshot();
+        var brandA = Brand() with { Name = "Brand A", Directory = new DirectoryReference("brand-a") };
+        var brandB = Brand() with { Name = "Brand B", Directory = new DirectoryReference("brand-b") };
+        snapshot = snapshot with
+        {
+            Discovery = snapshot.Discovery with { Brands = [brandA, brandB] },
+            BookSummaries =
+            [
+                snapshot.BookSummaries[0] with { SelectedBrandName = "Brand A", HasBackground = true },
+                snapshot.BookSummaries[1] with { SelectedBrandName = "Brand B", HasBackground = true }
+            ]
+        };
+        var application = new Application();
+        var validation = new Validation();
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(snapshot), application, new FrameResolver(), new FileSystem(), new ImageInspector(), validation);
+
+        await worker.ExecuteAsync(
+            new ProcessingSessionWorkerRequest(["book-one", "book-two"], "Brand A", BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow),
+            new Context(),
+            CancellationToken.None);
+
+        Assert.Equal(2, validation.CheckCalls);
+        Assert.Collection(
+            application.Request!.Books,
+            first =>
+            {
+                Assert.Equal(new FileReference(Path.Combine("brand-a", "frame.png")), first.Frame);
+                Assert.Equal(new FileReference(Path.Combine("brand-a", "background.png")), first.BackgroundPage);
+            },
+            second =>
+            {
+                Assert.Equal(new FileReference(Path.Combine("brand-b", "frame.png")), second.Frame);
+                Assert.Equal(new FileReference(Path.Combine("brand-b", "background.png")), second.BackgroundPage);
+            });
+    }
+
+    [Fact]
     public async Task Resolves_automatic_intro_pages_in_filename_order()
     {
         var initial = Snapshot();

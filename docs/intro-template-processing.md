@@ -11,7 +11,7 @@ A Book does not retain a Brand name or any absolute path for a custom Intro. Its
 - `HasIntro = false`: automatic mode. All eligible `.png`, `.jpg`, and `.jpeg` files in the current Brand are used in filename order.
 - `HasIntro = true`: custom mode. The ordered, Book-relative `SelectedIntroInteriorSourceKeys` list is used. Each key identifies a source under that Book's `Book interior` folder, and at least one key is required.
 
-Changing Brand only changes automatic mode. A custom selection is resolved against the current Book's full Interior source set, so it is independent of the active Brand. Missing custom Book sources need review in the UI and reject processing; automatic mode recomputes its Brand list without changing Book state.
+Brand selection is part of each Book's saved Interior settings. Changing the header Brand while Book Detail is open creates an unsaved Book draft; **Save changes** persists it in that Book's workspace state. Reopening the Book restores its Brand. Legacy Books without a saved Brand continue to use the current header Brand as a fallback until a Brand is explicitly saved. A custom selection is resolved against the current Book's full Interior source set, so it remains independent of Brand assets. Missing custom Book sources need review in the UI and reject processing.
 
 ## Processing and assembly
 
@@ -50,4 +50,4 @@ Clear Cache deletes heavy legacy Intro artifacts (normalized, prepared, working,
 
 ## UI and safety boundary
 
-Book detail exposes Brand-template previews for automatic mode and Book Interior candidates for custom mode, with local previews, explicit ordering, and a single existing Interior settings save action. Selected custom cards are marked as Intro and their Active/Frame controls are disabled without mutating stored settings. Changing a Brand does not alter custom selection or readiness. The UI shows the three valid Brand dimensions, including the configured Final Interior Page size. It communicates selection problems, but backend Brand validation and pipeline checks remain the correctness boundary for existence, readability, and dimensions.
+Book detail exposes the saved Book Brand's template previews for automatic mode and Book Interior candidates for custom mode, with local previews, explicit ordering, and a single existing Interior settings save action. Selected custom cards are marked as Intro and their Active/Frame controls are disabled without mutating stored settings. Changing a Brand does not alter custom selection or readiness. The UI shows the three valid Brand dimensions, including the configured Final Interior Page size. It communicates selection problems, but backend Brand validation and pipeline checks remain the correctness boundary for existence, readability, and dimensions.

@@ -38,7 +38,7 @@ Với Book theo cấu trúc phẳng cũ, tiếp tục đặt `Book interior/`, `
 
 ## 4. Refresh Library
 
-Trong **Books**, chọn Brand ở header rồi nhấn **Refresh**. Refresh quét local folders và dựng snapshot mới. Chỉ dữ liệu snapshot mới được dùng cho các mutation Book/Brand.
+Trong **Books**, Brand ở header là mặc định cho Book cũ chưa có Brand đã lưu. Khi Book Detail đang mở, đổi Brand rồi nhấn **Save changes** để lưu lựa chọn riêng vào Book đó. Mở lại Book sẽ khôi phục đúng Brand của Book; một queue có nhiều Book sẽ dùng Brand đã lưu của từng Book. Nhấn **Refresh** để quét local folders và dựng snapshot mới. Chỉ dữ liệu snapshot mới được dùng cho các mutation Book/Brand.
 
 ## 5. Book Overview
 

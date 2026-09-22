@@ -281,6 +281,26 @@ internal sealed class WebViewBridgeRouter(
                     var summary = book is null ? null : snapshot.BookSummaries.FirstOrDefault(item => item.BookId == book.Id);
                     if (book is null || summary is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
 
+                    string? selectedBrandName = null;
+                    if (settingsPayload.TryGetProperty("brandName", out var brandElement))
+                    {
+                        if (brandElement.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(brandElement.GetString()))
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                        }
+
+                        var brand = snapshot.Discovery.Brands.FirstOrDefault(item => string.Equals(item.Name, brandElement.GetString(), StringComparison.Ordinal));
+                        var brandIsValidated = brand is not null && snapshot.BrandSummaries?.Any(item =>
+                            string.Equals(item.BrandName, brand.Name, StringComparison.Ordinal) &&
+                            item.ValidationStatus == BrandValidationStatus.Validated) == true;
+                        if (!brandIsValidated)
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
+                        }
+
+                        selectedBrandName = brand!.Name;
+                    }
+
                     bool? hasBackground = null;
                     if (settingsPayload.TryGetProperty("hasBackground", out var backgroundElement))
                     {
@@ -375,14 +395,14 @@ internal sealed class WebViewBridgeRouter(
                         }
                     }
 
-                    if (hasBackground is null && hasIntro is null && introInteriorSources is null && changes.Count == 0)
+                    if (selectedBrandName is null && hasBackground is null && hasIntro is null && introInteriorSources is null && changes.Count == 0)
                     {
                         return new BridgeResponse(Version, request.Id, false, null, "invalid_book_interior_settings");
                     }
 
                     try
                     {
-                        await bookInteriorSettingsService.SaveAsync(book, new BookInteriorSettingsChange(hasBackground, changes, hasIntro, introInteriorSources), cancellationToken);
+                        await bookInteriorSettingsService.SaveAsync(book, new BookInteriorSettingsChange(hasBackground, changes, hasIntro, introInteriorSources, selectedBrandName), cancellationToken);
                     }
                     catch (ArgumentException)
                     {

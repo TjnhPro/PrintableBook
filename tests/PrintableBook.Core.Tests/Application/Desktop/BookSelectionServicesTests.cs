@@ -81,6 +81,18 @@ public sealed class BookSelectionServicesTests
         Assert.Equal(["Book interior/page3.png", "Book interior/page1.png"], store.Saved.SelectedIntroInteriorSourceKeys);
     }
 
+    [Fact]
+    public async Task Book_interior_settings_save_persists_the_selected_brand_with_the_book()
+    {
+        var store = new RecordingWorkspaceStateStore();
+        var service = new BookInteriorSettingsService(store);
+
+        await service.SaveAsync(CreateBook(), new BookInteriorSettingsChange(null, [], SelectedBrandName: "Brand B"));
+
+        Assert.Equal("Brand B", store.Saved!.SelectedBrandName);
+        Assert.Equal(1, store.SaveCount);
+    }
+
     private static DiscoveredBook CreateBook()
     {
         var id = new BookId("book-one");

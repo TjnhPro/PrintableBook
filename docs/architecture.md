@@ -184,6 +184,7 @@ The manual **Copy Brand Templates** use case is separate from processing. For a 
 `BackgroundTaskManager` của Desktop là scheduling/task boundary. Nó áp policy lane, duplicate/conflict và lifecycle cho `ProcessingSessionWorker`; UI hay WebView polling không sở hữu worker thread. Worker tạo snapshot queue, kiểm tra Brand/Intro/background, sau đó gọi orchestration của Core.
 
 - Mỗi lần chỉ có một processing session active.
+- Brand được persist trong `BookProcessingState` của từng Book. Processing session resolve và validate Brand theo từng Book; `brandName` ở request chỉ là fallback tương thích cho Book cũ chưa có lựa chọn đã lưu. Một batch có thể xử lý các Book dùng Brand khác nhau mà không dùng chung frame/background/IntroTemplate.
 - Books chạy tuần tự trong session.
 - Chỉ các trang của Book hiện tại chạy bounded concurrency, cấu hình hợp lệ `1..12`.
 - Không có nested parallelism.

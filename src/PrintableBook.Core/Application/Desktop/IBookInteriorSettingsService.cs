@@ -18,7 +18,8 @@ public sealed record BookInteriorSettingsChange(
     bool? HasBackground,
     IReadOnlyList<InteriorAssetSettingsChange> Assets,
     bool? HasIntro = null,
-    IReadOnlyList<FileReference>? IntroInteriorSources = null);
+    IReadOnlyList<FileReference>? IntroInteriorSources = null,
+    string? SelectedBrandName = null);
 
 public sealed class BookInteriorSettingsService(IBookWorkspaceStateStore stateStore) : IBookInteriorSettingsService
 {
@@ -43,6 +44,7 @@ public sealed class BookInteriorSettingsService(IBookWorkspaceStateStore stateSt
         ArgumentNullException.ThrowIfNull(change);
 
         var state = await stateStore.LoadAsync(book.Workspace, cancellationToken) ?? BookProcessingState.NotStarted(book.Id);
+        if (change.SelectedBrandName is not null) state = state.SelectBrand(change.SelectedBrandName);
         if (change.HasBackground is { } hasBackground) state = state.SetHasBackground(hasBackground);
         if (change.HasIntro is { } hasIntro) state = state.SetHasIntro(hasIntro);
         if (change.IntroInteriorSources is not null)

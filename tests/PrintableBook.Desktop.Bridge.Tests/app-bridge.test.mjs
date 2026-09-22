@@ -1415,6 +1415,37 @@ test("Brand switching leaves custom Book interior Intro selection and readiness 
   assert.doesNotMatch(content.innerHTML, /missing from the current Brand/);
 });
 
+test("Book detail restores and saves a distinct Brand for each Book", () => {
+  const { messageHandler, contentListeners, brandSelect, brandSelectListeners, messages } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "per-book-brands", ok: true, command: "app.snapshot", payload: {
+    discovery: {
+      brands: [{ name: "Brand A" }, { name: "Brand B" }],
+      books: [{ id: { value: "Book A" }, name: "Book A" }, { id: { value: "Book B" }, name: "Book B" }]
+    },
+    globalSettings: {},
+    brandSummaries: [{ brandName: "Brand A", validationStatus: "Validated" }, { brandName: "Brand B", validationStatus: "Validated" }],
+    bookSummaries: [
+      { bookId: { value: "Book A" }, selectedBrandName: "Brand A", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [] },
+      { bookId: { value: "Book B" }, selectedBrandName: "Brand B", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [] }
+    ]
+  } } });
+
+  const openA = { dataset: { action: "select-book", bookId: "Book A" }, closest: () => openA };
+  contentListeners.click({ target: openA });
+  assert.equal(brandSelect.value, "Brand A");
+
+  const openB = { dataset: { action: "select-book", bookId: "Book B" }, closest: () => openB };
+  contentListeners.click({ target: openB });
+  assert.equal(brandSelect.value, "Brand B");
+
+  brandSelect.value = "Brand A";
+  brandSelectListeners.change();
+  const save = { dataset: { action: "save-book-interior-settings", bookId: "Book B" }, closest: () => save };
+  contentListeners.click({ target: save });
+
+  assert.deepEqual(messages.at(-1).payload, { bookId: "Book B", brandName: "Brand A", assets: [] });
+});
+
 test("Automatic Intro template preview dimensions gate the current Brand readiness without sending a bridge request", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "intro-dimensions", ok: true, command: "app.snapshot", payload: {

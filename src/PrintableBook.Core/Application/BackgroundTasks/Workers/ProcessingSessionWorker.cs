@@ -28,6 +28,22 @@ public sealed class ProcessingSessionWorker(
         var snapshot = await snapshotProvider.GetFreshAsync(cancellationToken);
         var books = Validate(snapshot, request, context);
         var settings = snapshot.GlobalSettings;
+        var summaries = snapshot.BookSummaries.ToDictionary(summary => summary.BookId.Value, StringComparer.Ordinal);
+        var discoveredBrands = snapshot.Discovery.Brands.ToDictionary(brand => brand.Name, StringComparer.Ordinal);
+        var brandsByBook = new Dictionary<string, DiscoveredBrand>(StringComparer.Ordinal);
+        foreach (var book in books)
+        {
+            var brandName = string.IsNullOrWhiteSpace(summaries[book.Id.Value].SelectedBrandName)
+                ? request.BrandName
+                : summaries[book.Id.Value].SelectedBrandName!;
+            if (!discoveredBrands.TryGetValue(brandName, out var brand))
+            {
+                Fail(request, context, "process_brand_not_found", $"The Brand saved for Book '{book.Id.Value}' no longer exists.", book.Id);
+            }
+            brandsByBook[book.Id.Value] = brand!;
+        }
+        var resolvedBrandNames = brandsByBook.Values.Select(brand => brand.Name).Distinct(StringComparer.Ordinal).ToArray();
+        var sessionBrandName = resolvedBrandNames.Length == 1 ? resolvedBrandNames[0] : "Multiple Brands";
         var queue = books.Select((book, index) => new ProcessQueueEntry(book.Id, index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Preparing" : "Waiting")).ToArray();
         var currentBook = books[0].Id;
         var currentStep = "Preparing";
@@ -40,25 +56,25 @@ public sealed class ProcessingSessionWorker(
             ProcessSessionSnapshot view;
             lock (progressSync)
             {
-                view = new ProcessSessionSnapshot(active, cancelling, request.BrandName, currentBook, currentStep, queue, pagesCompleted, pagesTotal, settings.MaximumPageConcurrency, request.StartedAt);
+                view = new ProcessSessionSnapshot(active, cancelling, sessionBrandName, currentBook, currentStep, queue, pagesCompleted, pagesTotal, settings.MaximumPageConcurrency, request.StartedAt);
             }
             context.SetView(view);
         }
 
         Publish();
-        var brand = snapshot.Discovery.Brands.First(item => string.Equals(item.Name, request.BrandName, StringComparison.Ordinal));
-        var brandState = await brandValidationService.CheckStateAsync(brand.Directory, settings, cancellationToken);
-        if (brandState.Status != BrandValidationStatus.Validated)
+        foreach (var brand in brandsByBook.Values.DistinctBy(item => item.Name, StringComparer.Ordinal))
         {
-            Fail(request, context, "process_brand_not_validated", $"Brand '{brand.Name}' must be validated before processing.");
+            var brandState = await brandValidationService.CheckStateAsync(brand.Directory, settings, cancellationToken);
+            if (brandState.Status != BrandValidationStatus.Validated)
+            {
+                var bookId = books.First(book => string.Equals(brandsByBook[book.Id.Value].Name, brand.Name, StringComparison.Ordinal)).Id;
+                Fail(request, context, "process_brand_not_validated", $"Brand '{brand.Name}' saved for Book '{bookId.Value}' must be validated before processing.", bookId);
+            }
         }
 
         // Brand validation already performed the expensive frame and background checks.
         // Processing receives only the certified Brand-owned files; Book-owned custom Intro
         // sources remain validated below because they are outside the Brand contract.
-        var frame = new FileReference(Path.Combine(brand.Directory.Value, "frame.png"));
-
-        var summaries = snapshot.BookSummaries.ToDictionary(summary => summary.BookId.Value, StringComparer.Ordinal);
         var introTemplatePagesByBook = new Dictionary<string, IReadOnlyList<FileReference>>(StringComparer.Ordinal);
         var customIntroFromBookInteriorByBook = new Dictionary<string, bool>(StringComparer.Ordinal);
         var validatedIntroSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -94,6 +110,7 @@ public sealed class ProcessingSessionWorker(
             }
             else
             {
+                var brand = brandsByBook[book.Id.Value];
                 var selection = IntroTemplateSelectionResolver.Resolve(brand.IntroTemplateAssets);
                 if (!selection.IsSuccess)
                 {
@@ -144,11 +161,6 @@ public sealed class ProcessingSessionWorker(
             }
             introTemplatePagesByBook[book.Id.Value] = pages;
         }
-        FileReference? background = null;
-        if (books.Any(book => summaries[book.Id.Value].HasBackground))
-        {
-            background = new FileReference(Path.Combine(brand.Directory.Value, "background.png"));
-        }
 
         if (request.Mode == BookProcessingMode.ProductionInterior)
         {
@@ -181,11 +193,13 @@ public sealed class ProcessingSessionWorker(
             settings.FinalInteriorPdfPageSize,
             settings.MaximumPageConcurrency,
             new ArtworkDetectionThreshold(settings.ArtworkDetectionThreshold),
-            frame,
+            new FileReference(Path.Combine(brandsByBook[book.Id.Value].Directory.Value, "frame.png")),
             null,
             SelectedCover: string.IsNullOrWhiteSpace(summaries[book.Id.Value].SelectedCoverReference) ? null : new FileReference(summaries[book.Id.Value].SelectedCoverReference!),
             Mode: request.Mode,
-            BackgroundPage: summaries[book.Id.Value].HasBackground ? background : null,
+            BackgroundPage: summaries[book.Id.Value].HasBackground
+                ? new FileReference(Path.Combine(brandsByBook[book.Id.Value].Directory.Value, "background.png"))
+                : null,
             ArtworkSourceNormalization: settings.EffectiveArtworkSourceNormalization,
             BorderLineDetection: settings.EffectiveBorderLineDetection,
             IntroTemplatePages: introTemplatePagesByBook[book.Id.Value],
@@ -243,10 +257,6 @@ public sealed class ProcessingSessionWorker(
         if (request.Mode == BookProcessingMode.ProductionInterior && request.BookIds.Count != 1)
         {
             Fail(request, context, "production_single_book_required", "Build Final Interior requires exactly one Book.");
-        }
-        if (!snapshot.Discovery.Brands.Any(brand => string.Equals(brand.Name, request.BrandName, StringComparison.Ordinal)))
-        {
-            Fail(request, context, "process_brand_not_found", "The selected Brand no longer exists.");
         }
         var ids = request.BookIds.Distinct(StringComparer.Ordinal).ToArray();
         var selected = snapshot.Discovery.Books.Where(book => ids.Contains(book.Id.Value, StringComparer.Ordinal)).ToArray();

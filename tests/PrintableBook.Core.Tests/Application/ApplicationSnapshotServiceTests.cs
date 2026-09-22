@@ -335,6 +335,16 @@ public sealed class ApplicationSnapshotServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_exposes_the_brand_saved_for_each_book()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("Book A")).SelectBrand("Brand B");
+
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new StubScanner(), new StubStateStore(explicitState: state), new StubFileSystem()).RefreshAsync();
+
+        Assert.Equal("Brand B", Assert.Single(snapshot.BookSummaries).SelectedBrandName);
+    }
+
+    [Fact]
     public async Task RefreshAsync_marks_an_empty_custom_intro_selection_as_needing_review()
     {
         var state = BookProcessingState.NotStarted(new BookId("Book A")).SetHasIntro(true).SetIntroInteriorSourceKeys([]);

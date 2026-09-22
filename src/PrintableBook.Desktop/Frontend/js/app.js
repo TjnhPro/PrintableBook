@@ -42,6 +42,23 @@
   const brandSummaryFor = (brand) => brandSummaries().find((summary) => valueFor(summary, "brandName", "") === valueFor(brand, "name", ""));
   const isValidatedBrand = (brand) => brandValidationStatus(valueFor(brandSummaryFor(brand), "validationStatus", "NotValidated")) === "Validated";
   const selectableBrands = () => brands().filter(isValidatedBrand);
+  const brandForBook = (book, summary = book ? summaryFor(book) : null) => {
+    if (!book) return activeBrand();
+    const draftBrandName = state.bookInteriorDrafts.get(bookId(book))?.selectedBrandName;
+    const persistedBrandName = valueFor(summary, "selectedBrandName", "");
+    const brandName = draftBrandName !== undefined ? draftBrandName : persistedBrandName;
+    return brandName
+      ? selectableBrands().find((brand) => valueFor(brand, "name", "") === brandName) ?? null
+      : activeBrand();
+  };
+  const syncSelectedBrandForBook = (book, summary = book ? summaryFor(book) : null) => {
+    if (!book) return;
+    const draftBrandName = state.bookInteriorDrafts.get(bookId(book))?.selectedBrandName;
+    const brandName = draftBrandName !== undefined ? draftBrandName : valueFor(summary, "selectedBrandName", "");
+    if (!brandName) return;
+    state.selectedBrand = brandName;
+    if (brandSelect) brandSelect.value = brandName;
+  };
   const frameModeValue = (value) => {
     if (typeof value === "number") return ["auto", "enabled", "disabled"][value] ?? "auto";
     const normalized = String(value ?? "auto").toLowerCase();
@@ -326,7 +343,7 @@
   const selectedBook = () => books().find((book) => bookId(book) === state.selectedBookId);
   const brandTemplateCopyReadiness = (book, summary) => {
     if (!book || !summary || valueFor(summary, "validationStatus", "") !== "Ready") return { ready: false, reason: "Run Interior preflight and resolve Book errors first." };
-    const brand = activeBrand();
+    const brand = brandForBook(book, summary);
     if (!brand) return { ready: false, reason: "Select a validated Brand first." };
     return { ready: true, reason: `Copy cover.psd, app_plus.psd, and book_owner.psd from ${valueFor(brand, "name", "the selected Brand")}.`, brand };
   };
@@ -345,7 +362,7 @@
   };
   const hasInteriorDraft = (id) => {
     const draft = interiorDraftFor(id);
-    return Boolean(draft && (draft.hasBackground !== undefined || draft.hasIntro !== undefined || draft.introSourceReferences !== undefined || draft.assets.size));
+    return Boolean(draft && (draft.selectedBrandName !== undefined || draft.hasBackground !== undefined || draft.hasIntro !== undefined || draft.introSourceReferences !== undefined || draft.assets.size));
   };
   const effectiveBackground = (book, summary) => {
     const draft = interiorDraftFor(bookId(book));
@@ -358,7 +375,14 @@
       frameMode: change?.frameMode ?? frameModeValue(valueFor(asset, "frameMode", "auto"))
     };
   };
-  const trimEmptyInteriorDraft = (id, draft) => { if (draft.hasBackground === undefined && draft.hasIntro === undefined && draft.introSourceReferences === undefined && draft.assets.size === 0) clearInteriorDraft(id); };
+  const trimEmptyInteriorDraft = (id, draft) => { if (draft.selectedBrandName === undefined && draft.hasBackground === undefined && draft.hasIntro === undefined && draft.introSourceReferences === undefined && draft.assets.size === 0) clearInteriorDraft(id); };
+  const stageBrandChange = (book, summary, brandName) => {
+    const id = bookId(book);
+    const draft = interiorDraftFor(id, true);
+    if (brandName === valueFor(summary, "selectedBrandName", "")) delete draft.selectedBrandName;
+    else draft.selectedBrandName = brandName;
+    trimEmptyInteriorDraft(id, draft);
+  };
   const stageBackgroundChange = (book, summary, enabled) => {
     const id = bookId(book);
     const draft = interiorDraftFor(id, true);
@@ -391,7 +415,7 @@
       sourceReferences: draft?.introSourceReferences ?? persistedIntroSourceReferences(summary)
     };
   };
-  const introTemplateAssetId = (asset) => encodeURIComponent(`${valueFor(activeBrand(), "name", "")}\u0000${valueFor(asset, "key", "")}`);
+  const introTemplateAssetId = (asset, brand) => encodeURIComponent(`${valueFor(brand, "name", "")}\u0000${valueFor(asset, "key", "")}`);
   const finalInteriorPageSize = () => {
     const settings = valueFor(window.appSnapshot, "globalSettings", {});
     return {
@@ -418,12 +442,12 @@
       if (selection.sourceReferences.some((reference) => !sources.has(String(reference).toLowerCase()))) return { ready: false, reason: "A selected custom Intro page is missing from Book interior." };
       return { ready: true, reason: "" };
     }
-    const brand = activeBrand();
+    const brand = brandForBook(book, summary);
     if (!brand) return { ready: false, reason: "Choose a Brand before processing Intro templates." };
     const templates = (valueFor(brand, "introTemplateAssets", []) ?? []).filter((asset) => /\.(png|jpe?g)$/i.test(valueFor(asset, "fileName", "")));
     if (!templates.length) return { ready: false, reason: "The current Brand has no eligible Intro templates." };
     const effectiveTemplates = templates;
-    if (effectiveTemplates.some((asset) => state.introTemplateDimensions.get(introTemplateAssetId(asset))?.valid === false)) return { ready: false, reason: `An effective Intro template is unreadable or must be ${introTemplateSizeDescription()}.` };
+    if (effectiveTemplates.some((asset) => state.introTemplateDimensions.get(introTemplateAssetId(asset, brand))?.valid === false)) return { ready: false, reason: `An effective Intro template is unreadable or must be ${introTemplateSizeDescription()}.` };
     return { ready: true, reason: "" };
   };
   const processingReadiness = (book, summary) => {
@@ -438,7 +462,7 @@
     if (hasInteriorDraft(bookId(book))) return { ready: false, reason: "Save changes before building Final Interior." };
     const standard = processingReadiness(book, summary);
     if (!standard.ready) return standard;
-    const brand = activeBrand();
+    const brand = brandForBook(book, summary);
     if (!brand) return { ready: false, reason: "Select and validate a Brand before building Final Interior." };
     const missing = [["interior-cover", "Interior Cover"], ["book-owner", "Book Owner"]]
       .filter(([kind]) => valueFor(productionAssetFor(summary, kind), "sourceStatus", "Missing") === "Missing")
@@ -465,7 +489,7 @@
     const draft = interiorDraftFor(id);
     if (!draft) return null;
     const assets = [...draft.assets].map(([sourceReference, change]) => ({ sourceReference, ...(change.active !== undefined ? { active: change.active } : {}), ...(change.frameMode !== undefined ? { frameMode: change.frameMode } : {}) }));
-    return { bookId: id, ...(draft.hasBackground !== undefined ? { hasBackground: draft.hasBackground } : {}), ...(draft.hasIntro !== undefined ? { hasIntro: draft.hasIntro } : {}), ...(draft.introSourceReferences !== undefined ? { introSourceReferences: draft.introSourceReferences } : {}), assets };
+    return { bookId: id, ...(draft.selectedBrandName !== undefined ? { brandName: draft.selectedBrandName } : {}), ...(draft.hasBackground !== undefined ? { hasBackground: draft.hasBackground } : {}), ...(draft.hasIntro !== undefined ? { hasIntro: draft.hasIntro } : {}), ...(draft.introSourceReferences !== undefined ? { introSourceReferences: draft.introSourceReferences } : {}), assets };
   };
   const updateInteriorSaveUi = () => {
     const id = state.selectedBookId;
@@ -483,10 +507,10 @@
       ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="256" height="256" loading="lazy" decoding="async" data-local-image data-image-fallback="${escapeHtml(fallback)}">`
       : `<span class="book-preview-fallback" aria-label="${escapeHtml(fallback)}">${escapeHtml(fallback)}</span>`;
   };
-  const introTemplateImageMarkup = (asset, alt, fallback = "Image unavailable") => {
+  const introTemplateImageMarkup = (asset, alt, brand, fallback = "Image unavailable") => {
     const url = valueFor(asset, "localImageUrl", "");
     return url
-      ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="256" height="256" loading="lazy" decoding="async" data-local-image data-intro-template-id="${escapeHtml(introTemplateAssetId(asset))}" data-image-fallback="${escapeHtml(fallback)}">`
+      ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="256" height="256" loading="lazy" decoding="async" data-local-image data-intro-template-id="${escapeHtml(introTemplateAssetId(asset, brand))}" data-image-fallback="${escapeHtml(fallback)}">`
       : `<span class="book-preview-fallback" aria-label="${escapeHtml(fallback)}">${escapeHtml(fallback)}</span>`;
   };
   const bookThumbnailMarkup = (book, summary, fallback = "Preview unavailable") => {
@@ -634,7 +658,7 @@
     const feedback = `<p class="production-feedback ${state.productionFeedbackError ? "is-error" : ""}" data-production-feedback role="${state.productionFeedbackError ? "alert" : "status"}" ${state.productionFeedback ? "" : "hidden"}>${escapeHtml(state.productionFeedback)}</p>`;
     const background = effectiveBackground(book, summary) ? "Enabled" : "Disabled";
     const finalBusy = state.processStartPending || processIsActive() || applicationIsLoading();
-    return `<section class="production-workspace" aria-busy="${taskBusy || state.processStartPending}"><header class="production-summary"><div><h3>Production Assets</h3><p>Brand: <strong>${escapeHtml(valueFor(activeBrand(), "name", "No validated Brand selected"))}</strong> · Background: <strong>${background}</strong></p></div><div>${badge(valueFor(production, "interiorOutputKind", "Legacy"))} ${badge(valueFor(production, "interiorOutputStatus", "Missing"))}</div></header>${feedback}<div class="production-asset-grid">${assets.length ? assets.map(card).join("") : "<p class=\"empty-copy\">Production workspace status is unavailable. Refresh the library.</p>"}</div><section class="production-final-action"><div><h3>Final Interior</h3><p>Order: Interior Cover → Book Owner → Intro → randomized Interior. Background pages follow the saved HasBackground setting.</p><p id="production-final-help">${escapeHtml(readiness.reason)} Replaces the current Interior PDF on success; Process Interior can replace it later.</p><small>Current output: ${escapeHtml(valueFor(production, "interiorOutputKind", "Legacy"))} · ${dateTime(valueFor(production, "interiorBuiltAtUtc", null))}</small></div><button class="button-primary" data-action="build-final-interior" data-production-ready="${readiness.ready}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-final-help" aria-busy="${finalBusy}" ${readiness.ready && !finalBusy ? "" : "disabled"}>${finalBusy ? "Building…" : "Build Final Interior"}</button></section></section>`;
+    return `<section class="production-workspace" aria-busy="${taskBusy || state.processStartPending}"><header class="production-summary"><div><h3>Production Assets</h3><p>Brand: <strong>${escapeHtml(valueFor(brandForBook(book, summary), "name", "No validated Brand selected"))}</strong> · Background: <strong>${background}</strong></p></div><div>${badge(valueFor(production, "interiorOutputKind", "Legacy"))} ${badge(valueFor(production, "interiorOutputStatus", "Missing"))}</div></header>${feedback}<div class="production-asset-grid">${assets.length ? assets.map(card).join("") : "<p class=\"empty-copy\">Production workspace status is unavailable. Refresh the library.</p>"}</div><section class="production-final-action"><div><h3>Final Interior</h3><p>Order: Interior Cover → Book Owner → Intro → randomized Interior. Background pages follow the saved HasBackground setting.</p><p id="production-final-help">${escapeHtml(readiness.reason)} Replaces the current Interior PDF on success; Process Interior can replace it later.</p><small>Current output: ${escapeHtml(valueFor(production, "interiorOutputKind", "Legacy"))} · ${dateTime(valueFor(production, "interiorBuiltAtUtc", null))}</small></div><button class="button-primary" data-action="build-final-interior" data-production-ready="${readiness.ready}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-final-help" aria-busy="${finalBusy}" ${readiness.ready && !finalBusy ? "" : "disabled"}>${finalBusy ? "Building…" : "Build Final Interior"}</button></section></section>`;
   };
 
   const refreshProductionWorkspace = (focusSelector = "") => {
@@ -667,7 +691,7 @@
   };
 
   const renderIntroTemplateWorkspace = (book, summary) => {
-    const brand = activeBrand();
+    const brand = brandForBook(book, summary);
     const allTemplates = valueFor(brand, "introTemplateAssets", []) ?? [];
     const templates = allTemplates.filter((asset) => /\.(png|jpe?g)$/i.test(valueFor(asset, "fileName", "")));
     const selection = effectiveIntro(book, summary);
@@ -693,7 +717,7 @@
         const index = selection.sourceReferences.findIndex((reference) => String(reference).toLowerCase() === String(valueFor(asset, "sourceReference", "")).toLowerCase());
         return index >= 0 ? selectedTile(asset, index) : availableOption(asset);
       }).join("")
-      : pageItems.map((asset) => `<article class="intro-template-tile"><span class="intro-template-preview">${introTemplateImageMarkup(asset, `Automatic Intro template ${valueFor(asset, "fileName", "")}`)}</span><strong>Automatic</strong><span title="${escapeHtml(valueFor(asset, "fileName", ""))}">${escapeHtml(valueFor(asset, "fileName", ""))}</span></article>`).join("");
+      : pageItems.map((asset) => `<article class="intro-template-tile"><span class="intro-template-preview">${introTemplateImageMarkup(asset, `Automatic Intro template ${valueFor(asset, "fileName", "")}`, brand)}</span><strong>Automatic</strong><span title="${escapeHtml(valueFor(asset, "fileName", ""))}">${escapeHtml(valueFor(asset, "fileName", ""))}</span></article>`).join("");
     const paging = `<footer class="intro-template-pagination" data-intro-total-pages="${totalPages}"><span>${allItems.length ? `${start + 1}–${Math.min(start + introPageSize, allItems.length)} of ${allItems.length}` : "0 pages"}</span><div><button class="button-secondary" data-action="intro-template-page" data-intro-template-page="previous" ${state.introTemplatePage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.introTemplatePage} of ${totalPages}</span><button class="button-secondary" data-action="intro-template-page" data-intro-template-page="next" ${state.introTemplatePage === totalPages ? "disabled" : ""}>Next</button></div></footer>`;
     const sourceCopy = selection.hasIntro
       ? `${selected.length ? `${selected.length} selected Intro page${selected.length === 1 ? "" : "s"}. Use each card to preserve order or remove it.` : "Select at least one Book interior page to make this Book ready."}`
@@ -1135,7 +1159,9 @@
     document.querySelector(".book-drawer-layer")?.remove();
     const book = selectedBook();
     if (!book) return;
-    content.insertAdjacentHTML("beforeend", renderBookDrawer(book, summaryFor(book)));
+    const summary = summaryFor(book);
+    syncSelectedBrandForBook(book, summary);
+    content.insertAdjacentHTML("beforeend", renderBookDrawer(book, summary));
     document.getElementById("book-drawer-title")?.focus();
   };
   const closeBookDrawer = () => {
@@ -1247,7 +1273,7 @@
       const book = selectedBook();
       const summary = book ? summaryFor(book) : null;
       const selection = book && summary ? effectiveIntro(book, summary) : null;
-      const itemCount = selection?.hasIntro ? assetsFor(summary).filter((asset) => valueFor(asset, "kind", "") === "Interior").length : (valueFor(activeBrand(), "introTemplateAssets", []) ?? []).filter((asset) => /\.(png|jpe?g)$/i.test(valueFor(asset, "fileName", ""))).length;
+      const itemCount = selection?.hasIntro ? assetsFor(summary).filter((asset) => valueFor(asset, "kind", "") === "Interior").length : (valueFor(brandForBook(book, summary), "introTemplateAssets", []) ?? []).filter((asset) => /\.(png|jpe?g)$/i.test(valueFor(asset, "fileName", ""))).length;
       const last = Math.max(1, Math.ceil(itemCount / 6));
       state.introTemplatePage = Math.min(last, Math.max(1, state.introTemplatePage + (target.dataset.introTemplatePage === "next" ? 1 : -1)));
       refreshIntroTemplateWorkspace(target.dataset.introTemplatePage);
@@ -1451,6 +1477,10 @@
       if (!allBrands.some((brand) => valueFor(brand, "name", "") === state.inspectedBrand)) state.inspectedBrand = valueFor(allBrands[0], "name", "");
       if (brandSelect) brandSelect.innerHTML = availableBrands.length ? availableBrands.map((brand) => `<option>${escapeHtml(valueFor(brand, "name", ""))}</option>`).join("") : "<option value=\"\">No validated brands</option>";
       if (brandSelect) brandSelect.value = state.selectedBrand;
+      if (state.bookDrawerOpen) {
+        const book = selectedBook();
+        syncSelectedBrandForBook(book, book ? summaryFor(book) : null);
+      }
       if (preserveBookDrawer) {
         if (state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();
         else updateInteriorSaveUi();
@@ -1650,6 +1680,14 @@
   updateGlobalProcessStatus();
   if (brandSelect) brandSelect.addEventListener("change", () => {
     state.selectedBrand = brandSelect.value;
+    if (state.bookDrawerOpen) {
+      const book = selectedBook();
+      const summary = book ? summaryFor(book) : null;
+      if (book && summary) {
+        stageBrandChange(book, summary, brandSelect.value);
+        status.textContent = "Unsaved Book Brand and Interior changes";
+      }
+    }
     render(document.querySelector(".nav-item-active")?.dataset.route ?? "books", false);
   });
   window.setInterval(() => { if (valueFor(window.processSnapshot, "isActive", false) || valueFor(window.processSnapshot, "isCancelling", false)) send("process.get"); }, 1000);

@@ -500,6 +500,26 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Book_interior_settings_save_persists_only_a_validated_snapshot_brand()
+    {
+        var settings = new StubBookInteriorSettingsService();
+        var snapshot = CreateSnapshot() with
+        {
+            BrandSummaries = [new BrandDesktopSummary("Brand One", BrandValidationStatus.Validated, DateTimeOffset.UnixEpoch, "fingerprint")]
+        };
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
+            bookInteriorSettingsService: settings);
+
+        var saved = await router.HandleAsync("""{"version":1,"id":"save-brand","command":"book.interior.settings.save","payload":{"bookId":"Book One","brandName":"Brand One"}}""");
+        var rejected = await router.HandleAsync("""{"version":1,"id":"reject-brand","command":"book.interior.settings.save","payload":{"bookId":"Book One","brandName":"Other Brand"}}""");
+
+        Assert.True(saved.Ok);
+        Assert.Equal("Brand One", settings.Batch!.SelectedBrandName);
+        Assert.Equal("invalid_book_interior_settings", rejected.Error);
+    }
+
+    [Fact]
     public async Task Book_interior_settings_save_persists_an_ordered_intro_selection_authorized_by_the_book_interior()
     {
         var settings = new StubBookInteriorSettingsService();

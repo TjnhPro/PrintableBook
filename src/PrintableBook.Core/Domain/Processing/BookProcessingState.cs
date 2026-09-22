@@ -42,7 +42,8 @@ public sealed record BookProcessingState(
     IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null,
     IReadOnlyList<PublishedInteriorPreview>? PublishedInteriorPreviews = null,
     InteriorOutputKind? PublishedInteriorKind = null,
-    DateTimeOffset? PublishedInteriorAtUtc = null)
+    DateTimeOffset? PublishedInteriorAtUtc = null,
+    string? SelectedBrandName = null)
 {
     public static BookProcessingState NotStarted(BookId bookId) => new(
         bookId,
@@ -195,6 +196,16 @@ public sealed record BookProcessingState(
         }
 
         return this with { SelectedCoverReference = coverReference };
+    }
+
+    public BookProcessingState SelectBrand(string brandName)
+    {
+        if (string.IsNullOrWhiteSpace(brandName))
+        {
+            throw new ArgumentException("A Brand name is required.", nameof(brandName));
+        }
+
+        return this with { SelectedBrandName = brandName };
     }
 
     public FrameMode GetInteriorFrameMode(string sourceKey)
