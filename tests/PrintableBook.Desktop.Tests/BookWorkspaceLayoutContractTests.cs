@@ -150,7 +150,7 @@ public sealed class BookWorkspaceLayoutContractTests
 
         Assert.Contains("Book Information", script, StringComparison.Ordinal);
         Assert.Contains("data-metadata-field=\"subcover\"", script, StringComparison.Ordinal);
-        Assert.Contains("Short description, usually 4–5 words; fewer than 100 characters", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Short description, usually 4–5 words; fewer than 100 characters", script, StringComparison.Ordinal);
         Assert.Contains("maxlength=\"99\"", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"save-book-metadata\"", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"assign-book-brand\"", script, StringComparison.Ordinal);
@@ -172,7 +172,11 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("Existing files and outputs will not be moved or changed", script, StringComparison.Ordinal);
         Assert.Contains("The existing assignment is preserved", script, StringComparison.Ordinal);
         Assert.Contains("Only Brands whose Author matches", script, StringComparison.Ordinal);
-        Assert.Contains("aria-describedby=\"book-subcover-help book-subcover-error\"", script, StringComparison.Ordinal);
+        Assert.Contains("aria-describedby=\"book-subcover-error\"", script, StringComparison.Ordinal);
+        Assert.Contains("const refreshBookCatalogCards", script, StringComparison.Ordinal);
+        Assert.Contains("const preserveCatalogDrawer", script, StringComparison.Ordinal);
+        Assert.Contains("state.bookListRefreshPending = true", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("card.replaceWith", script, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -368,8 +368,10 @@ flowchart LR
 
 Giữ drawer/tabs. Sau summary cards thêm:
 
-1. `Book Information`: Title, Subtitle, Author và Subcover là single-line inputs; Subcover có hint `usually 4–5 words, fewer than 100 characters` và chỉ validate giới hạn ký tự; Description là textarea; independent dirty/status; nút `Save Book Information`.
+1. `Book Information`: Title, Subtitle, Author và Subcover là single-line inputs; Subcover chỉ validate giới hạn ký tự và không thêm helper text làm lệch form; Description là textarea; independent dirty/status; nút `Save Book Information`.
 2. `Brand Assignment`: assigned Brand + status/reason; native select chỉ có matching Brands; explicit `Assign/Reassign Brand`; secondary `Unassign`; empty-state guidance. Reassign từ Brand A sang Brand B phải mở cảnh báo xác nhận rằng template/output cũ không tự bị xóa hoặc thay thế.
+
+Save metadata/assignment không dựng lại toàn drawer/card. UI giữ scroll/focus, cập nhật field/status tại chỗ khi snapshot mới về và chỉ refresh Book list phía sau sau khi đóng drawer.
 
 Không reuse header `Save changes` vì nút đó quản lý Interior draft. Metadata và Interior có dirty state độc lập. Đóng drawer khi metadata dirty phải cảnh báo/giữ nhất quán với unsaved changes, không silently discard.
 
