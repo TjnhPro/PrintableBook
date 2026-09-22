@@ -60,7 +60,7 @@ public sealed class DiskBackedInteriorPagePipeline(
         var prepared = new FileReference(Path.Combine(pageCache, "prepared.png"));
         var framed = new FileReference(Path.Combine(pageCache, "framed.png"));
         var working = new FileReference(Path.Combine(pageCache, "working-page.png"));
-        var finalPage = new FileReference(Path.Combine(processedInteriorDirectory, $"{request.PageId}.png"));
+        var finalPage = new FileReference(Path.Combine(processedInteriorDirectory, request.OutputFileName ?? $"{request.PageId}.png"));
         var cacheStampFile = Path.Combine(pageCache, "input-stamp.json");
         var legacyCacheStampFile = Path.Combine(processedInteriorDirectory, $"{request.PageId}.input-stamp.json");
         var currentStep = "classification";

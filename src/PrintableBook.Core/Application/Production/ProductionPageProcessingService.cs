@@ -57,7 +57,8 @@ public sealed class ProductionPageProcessingService(
             FrameMode.Disabled,
             settings.EffectiveArtworkSourceNormalization,
             settings.EffectiveBorderLineDetection,
-            InteriorPageProcessingKind.ProductionInterior), cancellationToken);
+            InteriorPageProcessingKind.ProductionInterior,
+            definition.ProcessedFileName), cancellationToken);
         var outputMetadata = await fileSystem.GetFileMetadataAsync(pipelineResult.FinalPage, cancellationToken)
             ?? throw new IOException("The processed Production page metadata is unavailable.");
         var state = await stateStore.LoadAsync(workspace, cancellationToken);

@@ -98,11 +98,13 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
             new ImageDensity(300, 300),
             null,
             FrameMode.Disabled,
-            processingKind: InteriorPageProcessingKind.ProductionInterior);
+            processingKind: InteriorPageProcessingKind.ProductionInterior,
+            outputFileName: "interior-cover.png");
 
         var result = await CreatePipeline(new ThrowingArtworkClassifier()).ProcessAsync(request);
 
         Assert.StartsWith(Path.Combine(workspace.ProcessedDirectory.Value, "production"), result.FinalPage.Value, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(Path.Combine(workspace.ProcessedDirectory.Value, "production", "interior-cover.png"), result.FinalPage.Value);
         var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "production-interior-cover");
         Assert.True(File.Exists(Path.Combine(cache, "input-stamp.json")));
         var classification = await File.ReadAllTextAsync(Path.Combine(cache, "classification.json"));

@@ -36,6 +36,22 @@ public sealed class InteriorPagePipelineRequestTests
         Assert.Throws<ArgumentException>(() => new InteriorPagePipelineRequest(workspace, new FileReference("production.png"), "production-interior-cover", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), new FileReference("frame.png"), FrameMode.Disabled, processingKind: InteriorPageProcessingKind.ProductionInterior));
     }
 
+    [Theory]
+    [InlineData("../outside.png")]
+    [InlineData("processed.jpg")]
+    [InlineData("")]
+    public void Request_rejects_an_unsafe_processed_output_filename(string outputFileName)
+    {
+        var workspace = new BookWorkspace(new BookId("book"), new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("temp"));
+
+        Assert.Throws<ArgumentException>(() => new InteriorPagePipelineRequest(
+            workspace, new FileReference("production.png"), "production-interior-cover",
+            new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100),
+            new ImageDensity(300, 300), null, FrameMode.Disabled,
+            processingKind: InteriorPageProcessingKind.ProductionInterior,
+            outputFileName: outputFileName));
+    }
+
     [Fact]
     public void Constructor_accepts_the_canonical_prepared_working_and_final_geometry()
     {

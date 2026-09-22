@@ -6,6 +6,7 @@ using PrintableBook.Core.Application.Pipelines;
 using PrintableBook.Core.Application.Execution;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Services;
+using PrintableBook.Core.Application.Production;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 using PrintableBook.Infrastructure.FileSystem;
@@ -572,6 +573,75 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var shuffleBeforeIntroOrderChange = (await shuffleStore.LoadAsync(workspace))!;
         Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command with { IntroTemplatePages = [introOne, introTwo] })).Status);
         Assert.Equal(shuffleBeforeIntroOrderChange.Entries, (await shuffleStore.LoadAsync(workspace))!.Entries);
+    }
+
+    [Fact]
+    public async Task ProcessBookAsync_builds_final_interior_directly_from_current_production_sources()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "ProductionInteriorBook"));
+        await CreateInteriorOnlyBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var workspace = await workspaceFactory.CreateAsync(new BookId("production-interior-book"), bookDirectory);
+        var productionCover = ProductionWorkspacePaths.SourceFile(workspace, ProductionAssetKind.InteriorCover);
+        var productionOwner = ProductionWorkspacePaths.SourceFile(workspace, ProductionAssetKind.BookOwner);
+        var background = new FileReference(Path.Combine(rootPath, "production-background.png"));
+        await WriteImageAsync(productionCover.Value, 35, 20, 270, 280);
+        await WriteImageAsync(productionOwner.Value, 20, 35, 280, 270);
+        await WriteImageAsync(background.Value, 1, 1, 298, 298);
+
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var productionStateStore = new JsonProductionWorkspaceStateStore(fileSystem);
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem),
+            workspaceFactory,
+            stateStore,
+            new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem),
+            CreatePagePipeline(),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new PdfSharpPrintableBookPdfExporter(),
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()),
+            productionStateStore,
+            fileSystem);
+        var command = CreateCommand("production-interior-book", bookDirectory) with
+        {
+            Mode = BookProcessingMode.ProductionInterior,
+            BackgroundPage = background,
+            ProductionPrefixSources =
+            [
+                new ProductionPrefixSource(ProductionAssetKind.InteriorCover, productionCover, ProductionAssets.Get(ProductionAssetKind.InteriorCover).StablePageId),
+                new ProductionPrefixSource(ProductionAssetKind.BookOwner, productionOwner, ProductionAssets.Get(ProductionAssetKind.BookOwner).StablePageId)
+            ]
+        };
+
+        var productionResult = await processor.ProcessBookAsync(command);
+
+        Assert.Equal(BookProcessingStatus.Completed, productionResult.Status);
+        using (var interiorPdf = PdfReader.Open(productionResult.PublishedInteriorOutput!.InteriorPdf.Value))
+        {
+            Assert.Equal(8, interiorPdf.Pages.Count);
+        }
+        Assert.True(File.Exists(ProductionWorkspacePaths.ProcessedFile(workspace, ProductionAssetKind.InteriorCover).Value));
+        Assert.True(File.Exists(ProductionWorkspacePaths.ProcessedFile(workspace, ProductionAssetKind.BookOwner).Value));
+        var productionState = await productionStateStore.LoadAsync(workspace);
+        Assert.NotNull(productionState.InteriorOutput);
+        Assert.Equal(2, productionState.ProcessedPages!.Count);
+        var publishedState = await stateStore.LoadAsync(workspace);
+        Assert.Equal(InteriorOutputKind.Production, publishedState!.PublishedInteriorKind);
+
+        var baseResult = await processor.ProcessBookAsync(command with
+        {
+            Mode = BookProcessingMode.InteriorOnly,
+            BackgroundPage = null,
+            ProductionPrefixSources = null
+        });
+
+        Assert.Equal(BookProcessingStatus.Completed, baseResult.Status);
+        Assert.Equal(productionResult.PublishedInteriorOutput.InteriorPdf, baseResult.PublishedInteriorOutput!.InteriorPdf);
+        Assert.Equal(InteriorOutputKind.Base, (await stateStore.LoadAsync(workspace))!.PublishedInteriorKind);
+        using var basePdf = PdfReader.Open(baseResult.PublishedInteriorOutput.InteriorPdf.Value);
+        Assert.Equal(2, basePdf.Pages.Count);
     }
 
     [Fact]

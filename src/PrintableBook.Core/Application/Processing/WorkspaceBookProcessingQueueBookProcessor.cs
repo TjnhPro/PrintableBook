@@ -155,7 +155,8 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     FrameMode.Disabled,
                     command.ArtworkSourceNormalization,
                     command.BorderLineDetection,
-                    InteriorPageProcessingKind.ProductionInterior))
+                    InteriorPageProcessingKind.ProductionInterior,
+                    ProductionAssets.Get(item.AssetKind).ProcessedFileName))
                 .ToArray();
             await using var concurrencyController = BookPageConcurrencyController.Create(command.MaximumPageConcurrency);
             var pageBatchProcessor = new BoundedInteriorPageBatchProcessor(interiorPagePipeline);

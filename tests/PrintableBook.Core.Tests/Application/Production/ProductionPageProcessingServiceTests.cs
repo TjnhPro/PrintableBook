@@ -30,6 +30,7 @@ public sealed class ProductionPageProcessingServiceTests
         Assert.Equal(output, result.FinalPage);
         Assert.Equal("production-book-owner", pipeline.Request!.PageId);
         Assert.Equal(InteriorPageProcessingKind.ProductionInterior, pipeline.Request.ProcessingKind);
+        Assert.Equal("interior-book-owner.png", pipeline.Request.OutputFileName);
         Assert.Equal(FrameMode.Disabled, pipeline.Request.FrameMode);
         Assert.Null(pipeline.Request.Frame);
         var recorded = Assert.Single(state.State.ProcessedPages!);
