@@ -142,6 +142,51 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
+    public void BookCatalogUiExposesMetadataAssignmentAndExactBrandFiltering()
+    {
+        var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
+        var script = File.ReadAllText(Path.Combine(frontend, "js", "app.js"));
+        var markup = File.ReadAllText(Path.Combine(frontend, "index.html"));
+
+        Assert.Contains("Book Information", script, StringComparison.Ordinal);
+        Assert.Contains("data-metadata-field=\"subcover\"", script, StringComparison.Ordinal);
+        Assert.Contains("Subcover must contain exactly 4 or 5 characters", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"save-book-metadata\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"assign-book-brand\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"unassign-book-brand\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"book-brand-filter\"", script, StringComparison.Ordinal);
+        Assert.Contains("assignedBrandName(summary) === state.bookBrandFilter", script, StringComparison.Ordinal);
+        Assert.Contains("state.selectedBookIds.clear()", script, StringComparison.Ordinal);
+        Assert.Contains("Processing Brand", markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CatalogUiWarnsBeforeInvalidatingAssignmentsAndBlocksUnsafeProcessing()
+    {
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
+
+        Assert.Contains("metadataAssignmentWarning", script, StringComparison.Ordinal);
+        Assert.Contains("assignmentReadiness", script, StringComparison.Ordinal);
+        Assert.Contains("Reassign this Book from", script, StringComparison.Ordinal);
+        Assert.Contains("Existing files and outputs will not be moved or changed", script, StringComparison.Ordinal);
+        Assert.Contains("The existing assignment is preserved", script, StringComparison.Ordinal);
+        Assert.Contains("Only Brands whose Author matches", script, StringComparison.Ordinal);
+        Assert.Contains("aria-describedby=\"book-subcover-help book-subcover-error\"", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BrandCatalogUiSupportsOneAuthorAndSurfacesImpactBeforeSave()
+    {
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
+
+        Assert.Contains("Brand Information", script, StringComparison.Ordinal);
+        Assert.Contains("MVP contract: one Brand has one Primary Author", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"brand-author-input\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"save-brand-author\"", script, StringComparison.Ordinal);
+        Assert.Contains("assigned Book${impactedBooks === 1", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BoundedBookWorkspaceKeepsPreviewLoadingAndMotionAccessibilityContracts()
     {
         var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
