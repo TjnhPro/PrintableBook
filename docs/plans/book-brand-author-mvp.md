@@ -2,6 +2,8 @@
 
 # MVP Book Metadata, Brand Author và Brand Assignment
 
+> Lưu ý: execution contract trong tài liệu này đã được phase sau thay thế bởi [book-brand-assignment-enforcement.md](book-brand-assignment-enforcement.md). Book unassigned hiện bị chặn ở mọi action đọc Brand assets và không còn Processing Brand selector toàn cục.
+
 ## 0. Trạng thái
 
 - Phase: **implemented** trên branch `plan/book-brand-author-mvp`; đang chờ review/merge.

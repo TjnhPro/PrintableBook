@@ -48,7 +48,7 @@ Với Book theo cấu trúc phẳng cũ, tiếp tục đặt `Book interior/`, `
 
 ## 4. Refresh Library
 
-Trong **Books**, chọn **Processing Brand** ở header rồi nhấn **Refresh**. Refresh quét local folders và dựng snapshot mới. Chỉ dữ liệu snapshot mới được dùng cho các mutation Book/Brand. Processing Brand là Brand pipeline sẽ dùng; nó độc lập với **Book Brand** filter.
+Trong **Books**, nhấn **Refresh** để quét local folders và dựng snapshot mới. Chỉ dữ liệu snapshot mới được dùng cho các mutation Book/Brand. Không còn Processing Brand toàn cục: mọi Book action cần Brand luôn lấy Brand từ assignment đã lưu của chính Book.
 
 ## 5. Book Overview
 
@@ -133,7 +133,7 @@ Trong **Books**, filter **Book Brand** có `All`, `Unassigned` và từng Brand.
 
 Dùng checkbox ở card hoặc **Select page** cạnh Search để chọn hàng loạt. **Clear selection** bỏ toàn bộ lựa chọn. Nút **Process Interior** chỉ đưa Book đã chọn vào session mới.
 
-Book legacy chưa assign vẫn dùng workflow cũ trong MVP. Với Book đã assign, **Processing Brand** phải trùng Brand được assign và assignment phải còn valid; UI sẽ disable action không an toàn và backend kiểm tra lại trước khi đọc Brand assets. Một batch chứa nhiều assigned Brand khác nhau bị từ chối thay vì tự tách hoặc tự đổi Brand.
+Mọi Book phải có assignment hợp lệ trước khi **Process Interior**, **Build Final Interior** hoặc **Copy Brand Templates**. Book chưa assign vẫn load và chỉnh metadata bình thường, nhưng các action đọc Brand assets sẽ bị chặn. Backend lấy fresh snapshot và resolve đúng assigned Brand trước khi đọc asset. Một batch chứa nhiều assigned Brand khác nhau bị từ chối thay vì tự tách hoặc tự đổi Brand.
 
 ## 10. Process queue
 
@@ -194,7 +194,7 @@ Phần advanced chứa normalized source size và BorderLine V3 pass 1/pass 2. �
 | Bridge không kết nối | Đóng app, chạy từ thư mục writable, kiểm tra Frontend còn trong thư mục cạnh executable. |
 | Book không xuất hiện | Kiểm tra folder nằm dưới `sources/`, sau đó nhấn **Refresh**. |
 | Không thấy Brand để assign | Save Book Author và Brand Author; kiểm tra hai giá trị match sau trim, không fuzzy match. |
-| Process/Copy Templates bị chặn do Brand | Chọn đúng **Processing Brand** đã assign, hoặc sửa/reassign/unassign assignment invalid. |
+| Process/Copy Templates bị chặn do Brand | Assign Brand cho Book; nếu assignment invalid thì sửa Author và reassign. Nếu Brand chưa được chứng nhận, mở **Brands & templates** và Validate Brand. |
 | Book không xuất hiện dưới Book Brand | Chỉ Book đã explicit assign mới xuất hiện; cùng Author là chưa đủ. |
 | CUSTOM Intro không chạy | Chọn ít nhất một Book Interior image và **Save changes**. |
 | Background lỗi | Kiểm tra Brand có `background.png` đúng Final Page size. |

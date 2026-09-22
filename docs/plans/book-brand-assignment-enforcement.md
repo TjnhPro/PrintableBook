@@ -4,10 +4,15 @@
 
 ## 1. Trạng thái và mục tiêu
 
-- Giai đoạn hiện tại: lập kế hoạch và review, chưa triển khai code.
+- Giai đoạn hiện tại: **implemented** trên branch `plan/book-brand-author-mvp`; đang chờ review/merge.
 - Branch: `plan/book-brand-author-mvp`.
 - Baseline đã review: commit `801e694`.
 - Hướng thay đổi: additive, không refactor pipeline Interior/Production hiện tại.
+
+Implementation được chia thành các commit reviewable:
+
+- `f60c89a` — resolve execution Brand từ fresh Book assignment ở Core, worker và bridge.
+- `5aa3f58` — loại bỏ Processing Brand override ở UI và khóa các Brand-dependent action theo assignment.
 
 Mục tiêu của phase này là biến `Book.AssignedBrand` đã persist thành nguồn sự thật duy nhất cho mọi thao tác Book-scoped có đọc asset của Brand. UI không còn cho phép chọn một `Processing Brand` toàn cục để ghi đè assignment của Book.
 
@@ -471,15 +476,13 @@ Exit criteria:
 - Không rollback output cũ vì guard fail trước side effect mới.
 - Standalone Production actions không đọc Brand không bị thêm conflict chỉ vì assignment; tránh mở rộng scope sang scheduler refactor.
 
-## 11. Rollout và commit strategy đề xuất
+## 11. Rollout và commit strategy đã thực hiện
 
-Triển khai sau khi plan được duyệt bằng các commit nhỏ, mỗi commit build/test được:
+Plan được triển khai thành các commit nhỏ, mỗi commit build/test được. Core, processing và template-copy contract được gom trong một commit vì cùng phụ thuộc shared resolver; UI và regression contract nằm trong commit riêng.
 
-1. `feat(core): require valid book brand execution context`
-2. `feat(processing): resolve processing brand from book assignment`
-3. `fix(templates): copy brand templates from assigned brand`
-4. `refactor(ui): remove processing brand override`
-5. `test(docs): cover assignment enforcement workflow`
+1. `f60c89a feat: resolve book execution brand from assignment`
+2. `5aa3f58 refactor(ui): enforce assigned brand execution context`
+3. Tài liệu user guide và implementation status được cập nhật trong commit docs riêng.
 
 Không trộn refactor unrelated. Không đổi pipeline algorithms. Không tạo database/migration.
 
