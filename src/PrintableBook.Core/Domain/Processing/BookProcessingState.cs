@@ -42,7 +42,9 @@ public sealed record BookProcessingState(
     IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null,
     IReadOnlyList<PublishedInteriorPreview>? PublishedInteriorPreviews = null,
     InteriorOutputKind? PublishedInteriorKind = null,
-    DateTimeOffset? PublishedInteriorAtUtc = null)
+    DateTimeOffset? PublishedInteriorAtUtc = null,
+    BookProductionMetadata? Metadata = null,
+    string? AssignedBrand = null)
 {
     public static BookProcessingState NotStarted(BookId bookId) => new(
         bookId,

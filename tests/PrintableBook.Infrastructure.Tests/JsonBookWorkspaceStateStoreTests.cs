@@ -33,6 +33,27 @@ public sealed class JsonBookWorkspaceStateStoreTests : IAsyncLifetime
         Assert.False(restored.IsInteriorActive("BOOK INTERIOR/B.PNG"));
     }
 
+    [Fact]
+    public async Task SaveAsync_round_trips_normalized_metadata_and_assignment()
+    {
+        var workspace = await CreateWorkspaceAsync();
+        var store = new JsonBookWorkspaceStateStore(new PhysicalFileSystem());
+        var state = BookProcessingState.NotStarted(new BookId("book")) with
+        {
+            Metadata = BookProductionMetadata.Create(" Title ", " Subtitle ", " ABCD ", " Line one\nLine two ", " Jane Doe "),
+            AssignedBrand = " Demo Brand "
+        };
+
+        await store.SaveAsync(workspace, state);
+        var restored = await store.LoadAsync(workspace);
+
+        Assert.Equal("Title", restored!.Metadata!.Title);
+        Assert.Equal("ABCD", restored.Metadata.Subcover);
+        Assert.Equal("Line one\nLine two", restored.Metadata.Description);
+        Assert.Equal("Jane Doe", restored.Metadata.Author);
+        Assert.Equal("Demo Brand", restored.AssignedBrand);
+    }
+
     private async Task<BookWorkspace> CreateWorkspaceAsync() => await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(new BookId("book"), new DirectoryReference(Path.Combine(root, "book")));
     public Task InitializeAsync() => Task.CompletedTask;
     public Task DisposeAsync() { if (Directory.Exists(root)) Directory.Delete(root, true); return Task.CompletedTask; }
