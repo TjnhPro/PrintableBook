@@ -9,7 +9,7 @@ const workspaceCss = read("src/PrintableBook.Desktop/Frontend/css/book-workspace
 const window = read("src/PrintableBook.Desktop/MainWindow.xaml");
 const windowCode = read("src/PrintableBook.Desktop/MainWindow.xaml.cs");
 
-for (const [source, value] of [[html, 'id="global-process-status"'], [html, 'id="refresh-button"'], [html, 'id="update-dialog-root"'], [html, 'aria-live="polite"'], [html, 'Version 0.1'], [html, 'assets/printable-book-logo.png'], [app, "aria-live=\"polite\""], [app, "role=\"dialog\""], [app, "updateGlobalRefreshControl"], [app, "renderUpdateDialog"], [app, 'escapeHtml(valueFor(snapshot, "releaseNotes"'], [app, "Refreshing…"], [css, "prefers-reduced-motion"], [css, "aspect-square"], [css, '[data-theme="dark"]'], [workspaceCss, ".update-dialog"], [workspaceCss, ".update-progress"], [workspaceCss, ".update-release-notes"], [window, 'Icon="Assets/app-icon.ico"'], [window, 'MinHeight="950"'], [window, 'MinWidth="1650"'], [windowCode, 'PreferredWindowSize = new(1650, 950)'], [windowCode, 'ConstrainToWorkingArea']]) {
+for (const [source, value] of [[html, 'id="global-process-status"'], [html, 'id="refresh-button"'], [html, 'id="update-dialog-root"'], [html, 'aria-live="polite"'], [html, 'Version 0.1'], [html, 'assets/printable-book-logo.png'], [app, "aria-live=\"polite\""], [app, "role=\"dialog\""], [app, "updateGlobalRefreshControl"], [app, "renderUpdateDialog"], [app, 'escapeHtml(valueFor(snapshot, "releaseNotes"'], [app, "Refreshing…"], [app, "renderProductionWorkspace"], [app, 'role="tablist"'], [app, 'role="tabpanel"'], [app, 'loading="lazy" decoding="async"'], [css, "prefers-reduced-motion"], [css, "aspect-square"], [css, '[data-theme="dark"]'], [workspaceCss, ".update-dialog"], [workspaceCss, ".update-progress"], [workspaceCss, ".update-release-notes"], [workspaceCss, ".production-asset-grid"], [workspaceCss, "object-fit:contain"], [window, 'Icon="Assets/app-icon.ico"'], [window, 'MinHeight="950"'], [window, 'MinWidth="1650"'], [windowCode, 'PreferredWindowSize = new(1650, 950)'], [windowCode, 'ConstrainToWorkingArea']]) {
   if (!source.includes(value)) throw new Error(`Production UI certification failed: ${value}`);
 }
 
@@ -26,4 +26,4 @@ for (const value of ['id="update-check-button"', "Check updates", 'id="update-ba
   if (html.includes(value) || app.includes(value)) throw new Error(`Production UI certification failed: removed update UI remains: ${value}`);
 }
 
-console.log("Production UI certification passed (26 checks).");
+console.log("Production UI certification passed.");
