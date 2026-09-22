@@ -888,6 +888,6 @@ Release gates:
 - documentation and diagrams contain no two-template or old-workspace claims
 
 UNRESOLVED DECISIONS: 0
-``` 
+```
 
 NO UNRESOLVED DECISIONS
