@@ -8,6 +8,18 @@ namespace PrintableBook.Core.Domain.Processing;
 /// </summary>
 public sealed record PublishedInteriorPreview(string PageId, string FinalPagePath);
 
+public enum PublishedArtifactKind
+{
+    Cover = 0,
+    Interior = 1
+}
+
+public enum InteriorOutputKind
+{
+    Base = 0,
+    Production = 1
+}
+
 /// <summary>
 /// Persistable state of a book project. Step names remain opaque to keep processing rules configurable.
 /// </summary>
@@ -28,7 +40,9 @@ public sealed record BookProcessingState(
     IReadOnlyList<string>? InactiveInteriorSourceKeys = null,
     bool HasIntro = false,
     IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null,
-    IReadOnlyList<PublishedInteriorPreview>? PublishedInteriorPreviews = null)
+    IReadOnlyList<PublishedInteriorPreview>? PublishedInteriorPreviews = null,
+    InteriorOutputKind? PublishedInteriorKind = null,
+    DateTimeOffset? PublishedInteriorAtUtc = null)
 {
     public static BookProcessingState NotStarted(BookId bookId) => new(
         bookId,
@@ -131,6 +145,28 @@ public sealed record BookProcessingState(
         ArgumentNullException.ThrowIfNull(artifactReferences);
         return this with { PublishedArtifactReferences = artifactReferences.ToArray() };
     }
+
+    public BookProcessingState RecordPublishedArtifact(PublishedArtifactKind kind, string artifactReference)
+    {
+        if (!Enum.IsDefined(kind)) throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported published artifact kind.");
+        if (string.IsNullOrWhiteSpace(artifactReference)) throw new ArgumentException("A published artifact reference is required.", nameof(artifactReference));
+        var suffix = kind == PublishedArtifactKind.Cover ? " - Cover.pdf" : " - Interior.pdf";
+        var artifacts = (PublishedArtifactReferences ?? [])
+            .Where(existing => !Path.GetFileName(existing).EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        artifacts.Add(artifactReference);
+        return this with { PublishedArtifactReferences = artifacts };
+    }
+
+    public BookProcessingState RecordPublishedInterior(
+        string artifactReference,
+        InteriorOutputKind kind,
+        DateTimeOffset publishedAtUtc) =>
+        RecordPublishedArtifact(PublishedArtifactKind.Interior, artifactReference) with
+        {
+            PublishedInteriorKind = kind,
+            PublishedInteriorAtUtc = publishedAtUtc
+        };
 
     public BookProcessingState RecordPublishedInteriorPreviews(IEnumerable<PublishedInteriorPreview> previews)
     {

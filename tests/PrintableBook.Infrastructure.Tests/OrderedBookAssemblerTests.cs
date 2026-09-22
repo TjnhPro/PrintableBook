@@ -72,6 +72,37 @@ public sealed class OrderedBookAssemblerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AssembleAsync_preserves_typed_production_prefix_order_before_intro_and_counts_background_units()
+    {
+        Directory.CreateDirectory(rootPath);
+        var fileSystem = new PhysicalFileSystem();
+        var workspace = await new PhysicalBookWorkspaceFactory(fileSystem).CreateAsync(
+            new BookId("production-order"), new DirectoryReference(Path.Combine(rootPath, "ProductionOrder")));
+        var productionCover = await CreatePngAsync("production-cover.png");
+        var productionOwner = await CreatePngAsync("production-owner.png");
+        var intro = await CreatePngAsync("production-intro.png");
+        var source = new FileReference("source.png");
+        var final = await CreatePngAsync("production-final.png");
+        var background = await CreatePngAsync("production-background.png");
+        var map = new InteriorShuffleMap([new InteriorShuffleEntry(source, 1)], 7);
+
+        var assembly = await new OrderedBookAssembler(fileSystem, new MagickImageInspector()).AssembleAsync(
+            new OrderedBookAssemblyRequest(
+                workspace,
+                [intro],
+                [new InteriorPageProcessingResult("page", source, final)],
+                map,
+                new ImageSize(100, 100),
+                background,
+                [productionCover, productionOwner]));
+
+        Assert.Equal([productionCover, productionOwner], assembly.ProductionPrefixPages);
+        Assert.Equal([intro], assembly.IntroPages);
+        Assert.Equal([final], assembly.OrderedInteriorPages);
+        Assert.Equal(8, assembly.OutputPageCount);
+    }
+
+    [Fact]
     public async Task AssembleAsync_rejects_a_missing_or_wrong_size_background()
     {
         Directory.CreateDirectory(rootPath);

@@ -9,6 +9,7 @@ using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Services;
 using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Application.Updates;
+using PrintableBook.Core.Application.Production;
 
 namespace PrintableBook.Core.DependencyInjection;
 
@@ -25,6 +26,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<BrandFingerprintCalculator>();
         services.AddSingleton<IBrandValidationService, BrandValidationService>();
         services.AddSingleton<IBrandTemplateCopyService, BrandTemplateCopyService>();
+        services.AddSingleton<IProductionPageProcessingService, ProductionPageProcessingService>();
+        services.AddSingleton<IProductionCoverPdfService, ProductionCoverPdfService>();
         services.AddSingleton<IBookCoverSelectionService, BookCoverSelectionService>();
         services.AddSingleton<IInteriorFrameModeService, InteriorFrameModeService>();
         services.AddSingleton<IBookInteriorSettingsService, BookInteriorSettingsService>();
@@ -32,6 +35,7 @@ public static class ServiceCollectionExtensions
         services.AddKeyedSingleton<IBackgroundTaskWorker, LibraryRefreshWorker>(BackgroundTaskKind.LibraryRefresh);
         services.AddKeyedSingleton<IBackgroundTaskWorker, ProcessingSessionWorker>(BackgroundTaskKind.ProcessingSession);
         services.AddKeyedSingleton<IBackgroundTaskWorker, CacheCleanupWorker>(BackgroundTaskKind.CacheCleanup);
+        services.AddKeyedSingleton<IBackgroundTaskWorker, ProductionActionWorker>(BackgroundTaskKind.ProductionAction);
         services.AddSingleton<IProcessSessionService, ProcessSessionService>();
         services.AddSingleton<IBookProcessingPipeline, BookProcessingPipeline>();
         services.AddSingleton<IBookProcessingQueueBookProcessor, WorkspaceBookProcessingQueueBookProcessor>();

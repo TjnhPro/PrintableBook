@@ -42,6 +42,17 @@ const expected = [
   ,"Fix these Brand assets"
   ,"Required image size"
   ,"Current size"
+  ,"Production Assets"
+  ,"Build Cover PDF"
+  ,"Process Interior Cover"
+  ,"Process Book Owner"
+  ,"Build Final Interior"
+  ,"book.production.asset.import"
+  ,"book.production.action.start"
+  ,"production-interior"
+  ,'role="tablist"'
+  ,'role="tabpanel"'
+  ,'aria-controls="book-panel-'
 ];
 
 for (const value of expected) {

@@ -125,12 +125,21 @@ public sealed class BrandFingerprintCalculatorTests
     {
         var baseline = new MetadataFileSystem(
             ("C:\\brands\\demo\\cover.psd", 10),
-            ("C:\\brands\\demo\\app_plus.psd", 11));
+            ("C:\\brands\\demo\\app_plus.psd", 11),
+            ("C:\\brands\\demo\\book_owner.psd", 12));
         var changed = new MetadataFileSystem(
             ("C:\\brands\\demo\\cover.psd", 99),
-            ("C:\\brands\\demo\\app_plus.psd", 11));
+            ("C:\\brands\\demo\\app_plus.psd", 11),
+            ("C:\\brands\\demo\\book_owner.psd", 12));
 
         Assert.NotEqual(await CalculateAsync(baseline), await CalculateAsync(changed));
+
+        var changedBookOwner = new MetadataFileSystem(
+            ("C:\\brands\\demo\\cover.psd", 10),
+            ("C:\\brands\\demo\\app_plus.psd", 11),
+            ("C:\\brands\\demo\\book_owner.psd", 99));
+
+        Assert.NotEqual(await CalculateAsync(baseline), await CalculateAsync(changedBookOwner));
     }
 
     private static ValueTask<string> CalculateAsync(MetadataFileSystem files, GlobalSettings? settings = null)

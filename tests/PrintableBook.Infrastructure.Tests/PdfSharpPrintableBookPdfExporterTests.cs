@@ -11,6 +11,25 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
     private readonly string rootPath = Path.Combine(Path.GetTempPath(), $"PrintableBook.PdfTests.{Guid.NewGuid():N}");
 
     [Fact]
+    public async Task ExportCoverAsync_embeds_the_original_raster_on_the_rounded_production_media_box()
+    {
+        Directory.CreateDirectory(rootPath);
+        var cover = await CreatePngAsync("production-cover.png", 5242, 2626);
+        var result = await new PdfSharpPrintableBookPdfExporter().ExportCoverAsync(new CoverPdfExportRequest(
+            cover,
+            new DirectoryReference(Path.Combine(rootPath, "production-cover-output")),
+            new PhysicalPageSize(17.47, 8.75)));
+
+        using var pdf = PdfReader.Open(result.CoverPdf.Value);
+        Assert.Single(pdf.Pages);
+        Assert.Equal(17.47 * 72d, pdf.Pages[0].Width.Point, precision: 3);
+        Assert.Equal(8.75 * 72d, pdf.Pages[0].Height.Point, precision: 3);
+        var pdfText = System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(result.CoverPdf.Value));
+        Assert.Contains("/Width 5242", pdfText, StringComparison.Ordinal);
+        Assert.Contains("/Height 2626", pdfText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExportAsync_writes_final_interior_rasters_at_their_density_derived_physical_size()
     {
         Directory.CreateDirectory(rootPath);
@@ -91,6 +110,29 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
 
         using var interiorPdf = PdfReader.Open(result.InteriorPdf.Value);
         Assert.Equal(8, interiorPdf.Pages.Count);
+    }
+
+    [Fact]
+    public async Task ExportInteriorAsync_interleaves_background_after_production_prefix_intro_and_interior_pages()
+    {
+        Directory.CreateDirectory(rootPath);
+        var productionCover = await CreatePngAsync("prefix-cover.png", 100, 100);
+        var productionOwner = await CreatePngAsync("prefix-owner.png", 100, 100);
+        var intro = await CreatePngAsync("prefix-intro.png", 100, 100);
+        var interior = await CreatePngAsync("prefix-interior.png", 100, 100);
+        var background = await CreatePngAsync("prefix-background.png", 100, 100);
+
+        var result = await new PdfSharpPrintableBookPdfExporter().ExportInteriorAsync(new InteriorPdfExportRequest(
+            IntroPages: [intro],
+            OrderedInteriorPages: [interior],
+            BackgroundPage: background,
+            TemporaryOutputDirectory: new DirectoryReference(Path.Combine(rootPath, "production-prefix-output")),
+            InteriorPageSize: new PhysicalPageSize(8.5, 8.5),
+            MaximumPageConcurrency: 2,
+            ProductionPrefixPages: [productionCover, productionOwner]));
+
+        using var pdf = PdfReader.Open(result.InteriorPdf.Value);
+        Assert.Equal(8, pdf.Pages.Count);
     }
 
     [Fact]

@@ -3,6 +3,9 @@ using PrintableBook.Core.Application.Execution;
 using PrintableBook.Core.Application.Scanning;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
+using PrintableBook.Core.Application.Production;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace PrintableBook.Core.Application.Processing;
 
@@ -18,7 +21,9 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
     IInteriorPagePipeline interiorPagePipeline,
     IOrderedBookAssembler bookAssembler,
     IPrintableBookPdfExporter pdfExporter,
-    IBookOutputPublisher outputPublisher) : IBookProcessingQueueBookProcessor
+    IBookOutputPublisher outputPublisher,
+    IProductionWorkspaceStateStore? productionStateStore = null,
+    IFileSystem? fileSystem = null) : IBookProcessingQueueBookProcessor
 {
     public async ValueTask<BookProcessingQueueBookResult> ProcessBookAsync(
         PrintableBookProcessingCommand command,
@@ -48,9 +53,9 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             state = await CompleteStepAsync(state, "scan", cancellationToken);
             var source = validation.Source;
             string? cover = null;
-            if (command.Mode == BookProcessingMode.InteriorOnly)
+            if (command.Mode is BookProcessingMode.InteriorOnly or BookProcessingMode.ProductionInterior)
             {
-                await stateStore.AppendLogAsync(workspace, new BookProcessingLogEntry(DateTimeOffset.UtcNow, "cover-validation.skipped", "Interior-only processing does not require a cover."), cancellationToken);
+                await stateStore.AppendLogAsync(workspace, new BookProcessingLogEntry(DateTimeOffset.UtcNow, "cover-validation.skipped", "Interior PDF processing does not require a source cover."), cancellationToken);
             }
             else
             {
@@ -135,8 +140,37 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     command.ArtworkSourceNormalization,
                     command.BorderLineDetection))
                 .ToArray();
+            var productionPrefixSources = ValidateProductionPrefixSources(command);
+            var productionRequests = productionPrefixSources
+                .Select(item => new InteriorPagePipelineRequest(
+                    workspace,
+                    item.Source,
+                    item.PageId,
+                    command.ArtworkDetectionThreshold,
+                    command.PreparedArtworkSize,
+                    command.WorkingPageSize,
+                    command.FinalPageSize,
+                    command.TargetInteriorDensity,
+                    null,
+                    FrameMode.Disabled,
+                    command.ArtworkSourceNormalization,
+                    command.BorderLineDetection,
+                    InteriorPageProcessingKind.ProductionInterior,
+                    ProductionAssets.Get(item.AssetKind).ProcessedFileName))
+                .ToArray();
             await using var concurrencyController = BookPageConcurrencyController.Create(command.MaximumPageConcurrency);
             var pageBatchProcessor = new BoundedInteriorPageBatchProcessor(interiorPagePipeline);
+            IReadOnlyList<InteriorPageProcessingResult> productionResults = [];
+            if (productionRequests.Length > 0)
+            {
+                state = await BeginStepAsync(state, "production-prefix-pages", cancellationToken);
+                productionResults = await pageBatchProcessor.ProcessAsync(
+                    productionRequests,
+                    concurrencyController,
+                    (completed, total) => progress?.Invoke(new BookProcessingProgress(command.BookId, BookProcessingStatus.Running, "production-prefix-pages", completed, total)),
+                    cancellationToken);
+                state = await CompleteStepAsync(state, "production-prefix-pages", cancellationToken);
+            }
             IReadOnlyList<InteriorPageProcessingResult> introResults = [];
             if (introRequests.Length > 0)
             {
@@ -182,10 +216,11 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 pageResults,
                 shuffleMap!,
                 command.FinalPageSize,
-                command.BackgroundPage), cancellationToken);
+                command.BackgroundPage,
+                productionResults.Select(result => result.FinalPage).ToArray()), cancellationToken);
             state = await CompleteStepAsync(state, "assembly", cancellationToken);
 
-            if (command.Mode == BookProcessingMode.InteriorOnly)
+            if (command.Mode is BookProcessingMode.InteriorOnly or BookProcessingMode.ProductionInterior)
             {
                 state = await BeginStepAsync(state, "interior-pdf-export", cancellationToken);
                 var interiorPdf = await pdfExporter.ExportInteriorAsync(new InteriorPdfExportRequest(
@@ -194,7 +229,8 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     assembly.BackgroundPage,
                     workspace.TemporaryOutputDirectory,
                     command.InteriorPdfPageSize,
-                    command.MaximumPageConcurrency), cancellationToken);
+                    command.MaximumPageConcurrency,
+                    assembly.ProductionPrefixPages), cancellationToken);
                 state = await CompleteStepAsync(state, "interior-pdf-export", cancellationToken);
                 state = await BeginStepAsync(state, "interior-publish", cancellationToken);
                 var publishedInterior = await outputPublisher.PublishInteriorAsync(new InteriorOutputPublicationRequest(
@@ -205,10 +241,27 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     command.InteriorPdfPageSize), cancellationToken);
                 state = state.CompleteStep("interior-publish", DateTimeOffset.UtcNow);
                 await PersistStateAsync(state, "step.completed", "interior-publish", CancellationToken.None);
+                var publishedAt = DateTimeOffset.UtcNow;
                 state = state
-                    .RecordPublishedArtifacts([publishedInterior.InteriorPdf.Value])
+                    .RecordPublishedInterior(
+                        publishedInterior.InteriorPdf.Value,
+                        command.Mode == BookProcessingMode.ProductionInterior ? InteriorOutputKind.Production : InteriorOutputKind.Base,
+                        publishedAt)
                     .RecordPublishedInteriorPreviews(pageResults.Select(page => new PublishedInteriorPreview(page.PageId, page.FinalPage.Value)))
-                    .Complete(DateTimeOffset.UtcNow);
+                    .Complete(publishedAt);
+                if (command.Mode == BookProcessingMode.ProductionInterior)
+                {
+                    await RecordProductionInteriorStateAsync(
+                        workspace,
+                        command,
+                        productionPrefixSources,
+                        productionResults,
+                        activeInteriorSources,
+                        shuffleMap!,
+                        publishedInterior.InteriorPdf,
+                        publishedAt,
+                        cancellationToken);
+                }
                 await PersistStateAsync(state, "book.completed", command.BookId.Value, CancellationToken.None);
                 return BookProcessingQueueBookResult.CompletedInterior(command.BookId, publishedInterior);
             }
@@ -222,7 +275,8 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 workspace.TemporaryOutputDirectory,
                 command.CoverPdfPageSize,
                 command.InteriorPdfPageSize,
-                command.MaximumPageConcurrency), cancellationToken);
+                command.MaximumPageConcurrency,
+                assembly.ProductionPrefixPages), cancellationToken);
             state = await CompleteStepAsync(state, "pdf-export", cancellationToken);
             state = await BeginStepAsync(state, "publish", cancellationToken);
             var published = await outputPublisher.PublishAsync(new BookOutputPublicationRequest(
@@ -238,7 +292,8 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 .CompleteStep("publish", DateTimeOffset.UtcNow);
             await PersistStateAsync(state, "step.completed", "publish", CancellationToken.None);
             state = state
-                .RecordPublishedArtifacts([published.CoverPdf.Value, published.InteriorPdf.Value])
+                .RecordPublishedArtifact(PublishedArtifactKind.Cover, published.CoverPdf.Value)
+                .RecordPublishedInterior(published.InteriorPdf.Value, InteriorOutputKind.Base, DateTimeOffset.UtcNow)
                 .RecordPublishedInteriorPreviews(pageResults.Select(page => new PublishedInteriorPreview(page.PageId, page.FinalPage.Value)))
                 .Complete(DateTimeOffset.UtcNow);
             await PersistStateAsync(state, "book.completed", command.BookId.Value, CancellationToken.None);
@@ -260,8 +315,11 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         catch (InteriorPageProcessingException failure)
         {
             var isIntro = failure.ProcessingKind is InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate;
-            var processingFailure = new ProcessingFailure(isIntro ? "intro.page_failed" : "interior.page_failed", failure.Message);
-            state = state.Fail(isIntro ? "intro-pages" : "interior-pages", processingFailure, DateTimeOffset.UtcNow);
+            var isProduction = failure.ProcessingKind == InteriorPageProcessingKind.ProductionInterior;
+            var failureCode = isIntro ? "intro.page_failed" : isProduction ? "production.page_failed" : "interior.page_failed";
+            var failureStep = isIntro ? "intro-pages" : isProduction ? "production-prefix-pages" : "interior-pages";
+            var processingFailure = new ProcessingFailure(failureCode, failure.Message);
+            state = state.Fail(failureStep, processingFailure, DateTimeOffset.UtcNow);
             await stateStore.SaveErrorAsync(workspace, processingFailure, CancellationToken.None);
             await PersistStateAsync(state, "book.failed", processingFailure.Message, CancellationToken.None);
             return new BookProcessingQueueBookResult(command.BookId, BookProcessingStatus.Failed, processingFailure, null);
@@ -301,6 +359,101 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         shuffleMap is not null &&
         shuffleMap.Entries.Select(entry => entry.Page.Value).OrderBy(page => page, StringComparer.OrdinalIgnoreCase)
             .SequenceEqual(pageResults.Select(page => page.Source.Value).OrderBy(page => page, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
+
+    private static IReadOnlyList<ProductionPrefixSource> ValidateProductionPrefixSources(PrintableBookProcessingCommand command)
+    {
+        var sources = command.EffectiveProductionPrefixSources;
+        if (command.Mode != BookProcessingMode.ProductionInterior)
+        {
+            if (sources.Count > 0)
+            {
+                throw new ArgumentException("Production prefix sources are only valid in Production Interior mode.", nameof(command));
+            }
+            return [];
+        }
+
+        var expected = new[] { ProductionAssetKind.InteriorCover, ProductionAssetKind.BookOwner };
+        if (sources.Count != expected.Length ||
+            !sources.Select(source => source.AssetKind).SequenceEqual(expected) ||
+            sources.Any(source => string.IsNullOrWhiteSpace(source.PageId)))
+        {
+            throw new BookProcessingFailureException(
+                "production-prefix-pages",
+                new ProcessingFailure("production_interior_assets_missing", "Upload both Interior Cover and Book Owner Production assets before building Final Interior."));
+        }
+        return sources;
+    }
+
+    private async ValueTask RecordProductionInteriorStateAsync(
+        BookWorkspace workspace,
+        PrintableBookProcessingCommand command,
+        IReadOnlyList<ProductionPrefixSource> sources,
+        IReadOnlyList<InteriorPageProcessingResult> results,
+        IReadOnlyList<InteriorSource> activeInteriorSources,
+        InteriorShuffleMap shuffleMap,
+        FileReference publishedInterior,
+        DateTimeOffset publishedAt,
+        CancellationToken cancellationToken)
+    {
+        if (productionStateStore is null || fileSystem is null)
+        {
+            return;
+        }
+
+        var state = await productionStateStore.LoadAsync(workspace, cancellationToken);
+        var settingsSignature = ProductionPageProcessingService.CreateSettingsSignature(command);
+        foreach (var source in sources)
+        {
+            var result = results.Single(item => string.Equals(item.PageId, source.PageId, StringComparison.Ordinal));
+            var sourceMetadata = await fileSystem.GetFileMetadataAsync(source.Source, cancellationToken)
+                ?? throw new FileNotFoundException("A Production source asset disappeared before state publication.", source.Source.Value);
+            var outputMetadata = await fileSystem.GetFileMetadataAsync(result.FinalPage, cancellationToken)
+                ?? throw new FileNotFoundException("A processed Production page disappeared before state publication.", result.FinalPage.Value);
+            state = state.RecordProcessedPage(
+                source.AssetKind,
+                ProductionFileSignature.From(sourceMetadata),
+                ProductionFileSignature.From(outputMetadata),
+                settingsSignature,
+                publishedAt);
+        }
+
+        IEnumerable<FileReference> inputFiles = sources.Select(source => source.Source)
+            .Concat(command.EffectiveIntroTemplatePages)
+            .Concat(activeInteriorSources.Select(source => source.Source));
+        if (command.BackgroundPage is not null)
+        {
+            inputFiles = inputFiles.Append(command.BackgroundPage);
+        }
+        var inputSignature = await CreateProductionInteriorInputSignatureAsync(
+            command,
+            inputFiles,
+            shuffleMap,
+            cancellationToken);
+        state = state.RecordInteriorOutput(Path.GetFileName(publishedInterior.Value), inputSignature, publishedAt);
+        await productionStateStore.SaveAsync(workspace, state, cancellationToken);
+    }
+
+    private async ValueTask<string> CreateProductionInteriorInputSignatureAsync(
+        PrintableBookProcessingCommand command,
+        IEnumerable<FileReference> files,
+        InteriorShuffleMap shuffleMap,
+        CancellationToken cancellationToken)
+    {
+        var parts = new List<string>
+        {
+            "production-interior-v1",
+            CreateConfigurationFingerprint(command),
+            $"shuffle:{shuffleMap.Seed}:{string.Join(',', shuffleMap.Entries.OrderBy(entry => entry.OutputIndex).Select(entry => $"{entry.OutputIndex}:{entry.Page.Value}"))}"
+        };
+        foreach (var file in files.OrderBy(file => file.Value, StringComparer.OrdinalIgnoreCase))
+        {
+            var metadata = await fileSystem!.GetFileMetadataAsync(file, cancellationToken)
+                ?? throw new FileNotFoundException("A Production Interior input disappeared before state publication.", file.Value);
+            parts.Add($"{file.Value}|{metadata.LengthBytes}|{metadata.LastWriteTimeUtc.UtcTicks}");
+        }
+
+        return $"sha256:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', parts)))).ToLowerInvariant()}";
+    }
 
     private static string CreateConfigurationFingerprint(PrintableBookProcessingCommand command) =>
         string.Join("|", command.PreparedArtworkSize.Width, command.PreparedArtworkSize.Height,

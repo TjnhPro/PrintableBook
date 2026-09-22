@@ -26,6 +26,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   let contentMarkup = "";
   let fullRenderCount = 0;
   let bookDrawerBodyRenderCount = 0;
+  let productionWorkspaceRenderCount = 0;
   let introWorkspaceRenderCount = 0;
   let artworkWorkspaceRenderCount = 0;
   const introPaginationFocus = { action: "", focus() { this.action = "focused"; } };
@@ -57,6 +58,13 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
       bookDrawerBodyRenderCount += 1;
       contentMarkup = contentMarkup.replace(/(<div class="book-drawer-body">)[\s\S]*(<\/div><\/section><\/div>)$/, `$1${markup}$2`);
     }
+  };
+  const productionWorkspace = {
+    attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    set outerHTML(_markup) { productionWorkspaceRenderCount += 1; }
   };
   const brandSelectListeners = {};
   const brandSelect = { innerHTML: "", value: "", addEventListener: (eventName, handler) => { brandSelectListeners[eventName] = handler; } };
@@ -112,6 +120,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
         if (selector === ".intro-template-workspace" && contentMarkup.includes('class="intro-template-workspace"')) return introWorkspace;
         if (selector === ".interior-artwork-workspace" && contentMarkup.includes('class="interior-artwork-workspace"')) return artworkWorkspace;
         if (selector === ".book-drawer-body" && contentMarkup.includes('class="book-drawer-body"')) return bookDrawerBody;
+        if (selector === ".production-workspace" && contentMarkup.includes('class="production-workspace"')) return productionWorkspace;
         if (selector === ".interior-artwork-grid-scroll" && contentMarkup.includes('class="interior-artwork-grid-scroll"')) return artworkGrid;
         if (selector.startsWith('[data-action="intro-template-page"]')) return introPaginationFocus;
         if (selector === ".pb-brand-version") return versionLabel;
@@ -123,7 +132,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSelect, brandSelectListeners, brandSettingsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, browserWindow, searchInput, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, brandSelect, brandSelectListeners, brandSettingsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, browserWindow, searchInput, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -149,7 +158,7 @@ const pdfLibrarySnapshot = () => ({
     {
       bookId: { value: "Book Beta" }, workspaceStatus: "Failed", lastRunAt: "2026-08-26T11:00:00Z", interiorSourcePageCount: 20, activeInteriorSourcePageCount: 20,
       validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
-      outputSummaries: [{ artifactReference: "D:\\PrintableBook\\sources\\Book Beta\\Output\\Book Beta - Interior.pdf", fileName: "Book Beta - Interior.pdf", verificationStatus: "Available", generatedAt: "2026-08-24T10:00:00Z", pageCount: 20, widthInches: 8.5, heightInches: 8.5, fileSizeBytes: 25 * 1024 * 1024 }]
+      outputSummaries: [{ artifactReference: "D:\\PrintableBook\\sources\\Book Beta\\Output\\Book Beta - Cover.pdf", fileName: "Book Beta - Cover.pdf", verificationStatus: "Available", generatedAt: "2026-08-24T10:00:00Z", pageCount: 1, widthInches: 17.47, heightInches: 8.75, fileSizeBytes: 25 * 1024 * 1024 }]
     },
     {
       bookId: { value: "Book Gamma" }, workspaceStatus: "Completed", lastRunAt: "2026-08-26T12:00:00Z", interiorSourcePageCount: 30, activeInteriorSourcePageCount: 30,
@@ -514,7 +523,7 @@ test("Book detail copies templates from the selected validated Brand for a ready
   assert.deepEqual(request.payload, { bookId: "Book 001", brandName: "Brand One" });
   assert.match(content.innerHTML, /Copying…/);
 
-  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "book.brand.templates.copied", payload: { copiedFileNames: ["cover.psd", "app_plus.psd"] } } });
+  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "book.brand.templates.copied", payload: { copiedFileNames: ["cover.psd", "app_plus.psd", "book_owner.psd"] } } });
   assert.equal(status.textContent, "Brand templates copied");
   assert.match(content.innerHTML, /Copy Brand Templates/);
 });
@@ -909,6 +918,107 @@ test("book filters render a recovered interrupted workspace without failing", ()
 
   assert.match(content.innerHTML, /Book 001/);
   assert.match(content.innerHTML, /data-action="open-book-detail"/);
+});
+
+const productionSnapshot = () => ({
+  discovery: {
+    paths: { root: { value: "D:/PrintableBook" } },
+    brands: [{ name: "Brand One", introTemplateAssets: [{ key: "intro.png", fileName: "intro.png", localImageUrl: "file:///intro.png" }] }],
+    books: [{ id: { value: "Book 001" }, name: "Book 001", directory: { value: "D:/PrintableBook/sources/Book 001" } }]
+  },
+  globalSettings: {},
+  brandSummaries: [{ brandName: "Brand One", validationStatus: 1 }],
+  bookSummaries: [{
+    bookId: { value: "Book 001" },
+    workspaceStatus: "Not started",
+    validationStatus: "Ready",
+    validationChecks: [], sourceFolders: [], publishedArtifacts: [], outputSummaries: [], interiorPages: [], logs: [], assets: [],
+    production: {
+      coverOutputStatus: "Ready to process",
+      interiorOutputStatus: "Ready to process",
+      interiorOutputKind: "Legacy",
+      assets: [
+        { assetKind: "final-cover", displayName: "Final Cover", fileName: "final_cover.png", sourceStatus: "Ready to process", sourceLocalImageUrl: "file:///final_cover.png", processedStatus: "Not applicable" },
+        { assetKind: "interior-cover", displayName: "Interior Cover", fileName: "interior_cover.png", sourceStatus: "Ready to process", sourceLocalImageUrl: "file:///interior_cover.png", processedStatus: "Ready to process" },
+        { assetKind: "book-owner", displayName: "Book Owner", fileName: "interior_book_owner.png", sourceStatus: "Ready to process", sourceLocalImageUrl: "file:///interior_book_owner.png", processedStatus: "Ready to process" }
+      ]
+    }
+  }]
+});
+
+const openProductionTab = (messageHandler, contentListeners) => {
+  messageHandler({ data: { version: 1, id: "production-snapshot", ok: true, command: "app.snapshot", payload: productionSnapshot() } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const productionTab = { dataset: { action: "book-tab", bookTab: "production" }, closest: () => productionTab };
+  contentListeners.click({ target: productionTab });
+};
+
+test("Production import preserves the open drawer while refreshing its snapshot", () => {
+  const { messageHandler, contentListeners, messages, getFullRenderCount, getBookDrawerBodyRenderCount, getProductionWorkspaceRenderCount } = loadBridge("books");
+  openProductionTab(messageHandler, contentListeners);
+  const fullRenders = getFullRenderCount();
+  const drawerRenders = getBookDrawerBodyRenderCount();
+
+  const upload = { dataset: { action: "upload-production-asset", productionAsset: "interior-cover", bookId: "Book 001" }, closest: () => upload };
+  contentListeners.click({ target: upload });
+  assert.equal(messages.at(-1).command, "book.production.asset.import");
+  assert.equal(getFullRenderCount(), fullRenders);
+  assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "book.production.asset.imported", payload: {} } });
+  assert.equal(messages.at(-1).command, "app.refresh");
+  assert.equal(getFullRenderCount(), fullRenders);
+  assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { taskId: "refresh-production", kind: "LibraryRefresh", state: "Completed" } } });
+  assert.equal(messages.at(-1).command, "app.refresh.result");
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: productionSnapshot() } });
+
+  assert.equal(getFullRenderCount(), fullRenders);
+  assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+  assert.equal(getProductionWorkspaceRenderCount(), 1);
+});
+
+test("Production task polling updates controls without redrawing the drawer", () => {
+  const { messageHandler, contentListeners, intervals, messages, getFullRenderCount, getBookDrawerBodyRenderCount, getProductionWorkspaceRenderCount } = loadBridge("books");
+  openProductionTab(messageHandler, contentListeners);
+  const fullRenders = getFullRenderCount();
+  const drawerRenders = getBookDrawerBodyRenderCount();
+
+  const action = { dataset: { action: "start-production-action", productionAction: "process-interior-cover", bookId: "Book 001" }, closest: () => action };
+  contentListeners.click({ target: action });
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { taskId: "production-action", kind: "ProductionAction", state: "Running", step: "Processing Interior Cover" } } });
+  intervals.at(-1)();
+  assert.equal(messages.at(-1).command, "task.get");
+  assert.equal(getFullRenderCount(), fullRenders);
+  assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+  assert.equal(getProductionWorkspaceRenderCount(), 0);
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { taskId: "production-action", kind: "ProductionAction", state: "Completed" } } });
+  assert.equal(messages.at(-1).command, "app.refresh");
+  assert.equal(getFullRenderCount(), fullRenders);
+  assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+});
+
+test("Final Interior progress preserves the open Production drawer", () => {
+  const { messageHandler, contentListeners, messages, getFullRenderCount, getBookDrawerBodyRenderCount, getProductionWorkspaceRenderCount } = loadBridge("books");
+  openProductionTab(messageHandler, contentListeners);
+  const fullRenders = getFullRenderCount();
+  const drawerRenders = getBookDrawerBodyRenderCount();
+
+  const build = { dataset: { action: "build-final-interior", bookId: "Book 001" }, closest: () => build };
+  contentListeners.click({ target: build });
+  assert.equal(messages.at(-1).command, "process.start");
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "process.snapshot", payload: { startedAt: "2026-09-22T08:00:00Z", isActive: true, isCancelling: false, currentStep: "Building Final Interior" } } });
+  assert.equal(getFullRenderCount(), fullRenders);
+  assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "process.snapshot", payload: { startedAt: "2026-09-22T08:00:00Z", isActive: false, isCancelling: false } } });
+  assert.equal(messages.at(-1).command, "app.refresh");
+  assert.equal(getFullRenderCount(), fullRenders);
+  assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+  assert.equal(getProductionWorkspaceRenderCount(), 0);
 });
 
 test("Book detail changes tabs without redrawing its drawer shell", () => {
@@ -1408,13 +1518,14 @@ test("Book detail keeps the Interior preflight action while cover work is deferr
   assert.doesNotMatch(content.innerHTML, /Cover is unavailable/);
 });
 
-test("PDF Library shows only Completed Books that currently have output", () => {
+test("PDF Library shows every Book with current output, including a retained Cover after failure", () => {
   const { messageHandler, content } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
 
   assert.match(content.innerHTML, /data-pdf-book-id="Book Alpha"/);
   assert.match(content.innerHTML, /data-pdf-book-id="Book Delta"/);
-  assert.doesNotMatch(content.innerHTML, /data-pdf-book-id="Book Beta"/);
+  assert.match(content.innerHTML, /data-pdf-book-id="Book Beta"/);
+  assert.match(content.innerHTML, /Book Beta - Cover\.pdf/);
   assert.doesNotMatch(content.innerHTML, /data-pdf-book-id="Book Gamma"/);
 });
 
@@ -1440,7 +1551,7 @@ test("PDF Library uses Book-centric copy and removes run history language", () =
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
 
   assert.match(content.innerHTML, /PDF Library/);
-  assert.match(content.innerHTML, /Completed Books with local PDF output/);
+  assert.match(content.innerHTML, /Books with local PDF output/);
   assert.doesNotMatch(content.innerHTML, /Latest outputs/i);
   assert.doesNotMatch(content.innerHTML, /Previous runs/i);
   assert.doesNotMatch(content.innerHTML, /before publishing/i);
@@ -1450,8 +1561,9 @@ test("PDF Library renders one top-level card per eligible Book", () => {
   const { messageHandler, content } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
 
-  assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 2);
+  assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 3);
   assert.match(content.innerHTML, /data-pdf-book-id="Book Alpha"/);
+  assert.match(content.innerHTML, /data-pdf-book-id="Book Beta"/);
   assert.match(content.innerHTML, /data-pdf-book-id="Book Delta"/);
 });
 

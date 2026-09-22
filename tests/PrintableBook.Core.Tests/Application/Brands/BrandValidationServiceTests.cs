@@ -174,6 +174,7 @@ public sealed class BrandValidationServiceTests
     [Theory]
     [InlineData("cover.psd")]
     [InlineData("app_plus.psd")]
+    [InlineData("book_owner.psd")]
     public async Task Missing_required_psd_template_keeps_the_brand_invalid_without_inspecting_it_as_an_image(string missingFile)
     {
         var files = FileSystem.ValidBrand();
@@ -236,6 +237,7 @@ public sealed class BrandValidationServiceTests
             result.Add("background.png", 30);
             result.Add("cover.psd", 40);
             result.Add("app_plus.psd", 50);
+            result.Add("book_owner.psd", 60);
             return result;
         }
 

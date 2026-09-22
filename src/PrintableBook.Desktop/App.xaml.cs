@@ -26,6 +26,7 @@ public partial class App : Application
         services.AddPrintableBookCore();
         services.AddPrintableBookInfrastructure();
         services.AddSingleton<ILocalOutputActionService, LocalOutputActionService>();
+        services.AddSingleton<IProductionFilePicker, ProductionFilePicker>();
         services.AddSingleton<IProcessShutdownPrompt, ProcessShutdownPrompt>();
         services.AddSingleton<ProcessWindowShutdownCoordinator>();
         services.AddSingleton<UiDiagnosticsService>();

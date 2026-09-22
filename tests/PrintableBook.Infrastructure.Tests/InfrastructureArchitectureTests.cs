@@ -45,6 +45,9 @@ public sealed class InfrastructureArchitectureTests
         using var provider = services.BuildServiceProvider();
 
         Assert.IsType<CacheCleanupWorker>(provider.GetRequiredKeyedService<IBackgroundTaskWorker>(BackgroundTaskKind.CacheCleanup));
+        Assert.Contains(services, descriptor =>
+            Equals(descriptor.ServiceKey, BackgroundTaskKind.ProductionAction) &&
+            descriptor.KeyedImplementationType == typeof(ProductionActionWorker));
         Assert.IsType<PhysicalBookStorageMaintenance>(provider.GetRequiredService<IBookStorageMaintenance>());
     }
 }

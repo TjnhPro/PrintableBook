@@ -20,9 +20,20 @@ public sealed record PrintableBookPdfExportRequest(
     DirectoryReference TemporaryOutputDirectory,
     PhysicalPageSize CoverPageSize,
     PhysicalPageSize InteriorPageSize,
-    int MaximumPageConcurrency);
+    int MaximumPageConcurrency,
+    IReadOnlyList<FileReference>? ProductionPrefixPages = null)
+{
+    public IReadOnlyList<FileReference> EffectiveProductionPrefixPages => ProductionPrefixPages ?? [];
+}
 
 public sealed record PrintableBookPdfExportResult(FileReference CoverPdf, FileReference InteriorPdf);
+
+public sealed record CoverPdfExportRequest(
+    FileReference Cover,
+    DirectoryReference TemporaryOutputDirectory,
+    PhysicalPageSize CoverPageSize);
+
+public sealed record CoverPdfExportResult(FileReference CoverPdf);
 
 public sealed record InteriorPdfExportRequest(
     IReadOnlyList<FileReference> IntroPages,
@@ -30,7 +41,11 @@ public sealed record InteriorPdfExportRequest(
     FileReference? BackgroundPage,
     DirectoryReference TemporaryOutputDirectory,
     PhysicalPageSize InteriorPageSize,
-    int MaximumPageConcurrency);
+    int MaximumPageConcurrency,
+    IReadOnlyList<FileReference>? ProductionPrefixPages = null)
+{
+    public IReadOnlyList<FileReference> EffectiveProductionPrefixPages => ProductionPrefixPages ?? [];
+}
 
 public sealed record InteriorPdfExportResult(FileReference InteriorPdf);
 
@@ -43,4 +58,9 @@ public interface IPrintableBookPdfExporter
     ValueTask<InteriorPdfExportResult> ExportInteriorAsync(
         InteriorPdfExportRequest request,
         CancellationToken cancellationToken = default);
+
+    ValueTask<CoverPdfExportResult> ExportCoverAsync(
+        CoverPdfExportRequest request,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Cover-only PDF export is not supported by this adapter.");
 }

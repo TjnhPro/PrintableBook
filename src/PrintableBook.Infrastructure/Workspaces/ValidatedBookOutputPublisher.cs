@@ -50,6 +50,21 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
             interiorPdf);
     }
 
+    public async ValueTask<PublishedCoverOutput> PublishCoverAsync(
+        CoverOutputPublicationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        await ValidateAsync(request.TemporaryOutput.CoverPdf, request.ExpectedCoverPageCount, request.ExpectedCoverPageSize, cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        Directory.CreateDirectory(request.FinalOutputRoot.Value);
+        var coverPdf = new FileReference(Path.Combine(request.FinalOutputRoot.Value, $"{request.BookId.Value} - Cover.pdf"));
+        ReplaceFile(request.TemporaryOutput.CoverPdf, coverPdf);
+        DeleteTemporaryDirectory(request.TemporaryOutput.CoverPdf);
+        return new PublishedCoverOutput(request.FinalOutputRoot, coverPdf);
+    }
+
     private static void ReplaceFile(FileReference temporaryFile, FileReference finalFile)
     {
         var pending = $"{finalFile.Value}.pending";

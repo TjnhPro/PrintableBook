@@ -6,7 +6,8 @@ public enum InteriorPageProcessingKind
 {
     Interior = 0,
     IntroTemplate = 1,
-    BrandIntroTemplate = 2
+    BrandIntroTemplate = 2,
+    ProductionInterior = 3
 }
 
 public sealed record InteriorPagePipelineRequest
@@ -24,7 +25,8 @@ public sealed record InteriorPagePipelineRequest
         FrameMode frameMode,
         ArtworkSourceNormalizationSettings? artworkSourceNormalization = null,
         BorderLineDetectionSettings? borderLineDetection = null,
-        InteriorPageProcessingKind processingKind = InteriorPageProcessingKind.Interior)
+        InteriorPageProcessingKind processingKind = InteriorPageProcessingKind.Interior,
+        string? outputFileName = null)
     {
         Workspace = workspace;
         Source = source;
@@ -39,12 +41,16 @@ public sealed record InteriorPagePipelineRequest
         ArtworkSourceNormalization = artworkSourceNormalization ?? ArtworkSourceNormalizationSettings.Default;
         BorderLineDetection = borderLineDetection;
         ProcessingKind = processingKind;
+        OutputFileName = outputFileName;
         if (!Enum.IsDefined(processingKind)) throw new ArgumentOutOfRangeException(nameof(processingKind), processingKind, "Unsupported page processing kind.");
-        if (processingKind is (InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate) &&
-            (frame is not null || frameMode != FrameMode.Disabled))
+        if (outputFileName is not null &&
+            (string.IsNullOrWhiteSpace(outputFileName) ||
+             !string.Equals(Path.GetFileName(outputFileName), outputFileName, StringComparison.Ordinal) ||
+             !string.Equals(Path.GetExtension(outputFileName), ".png", StringComparison.OrdinalIgnoreCase)))
         {
-            throw new ArgumentException("IntroTemplate pages must not apply a frame.", nameof(frameMode));
+            throw new ArgumentException("The processed output filename must be a plain PNG filename.", nameof(outputFileName));
         }
+        ValidateProcessingPolicy();
         ValidateGeometry();
     }
 
@@ -61,6 +67,21 @@ public sealed record InteriorPagePipelineRequest
     public ArtworkSourceNormalizationSettings ArtworkSourceNormalization { get; init; }
     public BorderLineDetectionSettings? BorderLineDetection { get; init; }
     public InteriorPageProcessingKind ProcessingKind { get; init; }
+    public string? OutputFileName { get; init; }
+
+    public void ValidateProcessingPolicy()
+    {
+        if (ProcessingKind is (InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate) &&
+            (Frame is not null || FrameMode != FrameMode.Disabled))
+        {
+            throw new ArgumentException("IntroTemplate pages must not apply a frame.", nameof(FrameMode));
+        }
+        if (ProcessingKind == InteriorPageProcessingKind.ProductionInterior &&
+            (Frame is not null || FrameMode != FrameMode.Disabled))
+        {
+            throw new ArgumentException("Production Interior pages must use No Frame.", nameof(FrameMode));
+        }
+    }
 
     public void ValidateGeometry()
     {

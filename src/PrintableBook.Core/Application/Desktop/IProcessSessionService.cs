@@ -37,6 +37,8 @@ public sealed class ProcessSessionService(IBackgroundTaskManager taskManager) : 
         if (bookIds.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("Book identifiers cannot be blank.", nameof(bookIds));
         if (bookIds.Distinct(StringComparer.Ordinal).Count() != bookIds.Count) throw new ArgumentException("Book identifiers must be distinct.", nameof(bookIds));
         if (string.IsNullOrWhiteSpace(brandName)) throw new ArgumentException("Select one Brand before starting processing.", nameof(brandName));
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported processing mode.");
+        if (mode == BookProcessingMode.ProductionInterior && bookIds.Count != 1) throw new ArgumentException("Build Final Interior requires exactly one Book.", nameof(bookIds));
 
         var startedAt = DateTimeOffset.UtcNow;
         var ids = bookIds.ToArray();

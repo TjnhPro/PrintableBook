@@ -4,7 +4,7 @@
   const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
   const bookStatuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
-  const state = { selectedBrand: "", inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "auto", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { selectedBrand: "", inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "auto", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -25,7 +25,7 @@
     const lastRun = new Date(valueFor(summary, "lastRunAt", 0)).getTime();
     return Number.isFinite(lastRun) ? lastRun : 0;
   };
-  const eligiblePdfLibraryBooks = () => books().map((book) => ({ book, summary: summaryFor(book) })).filter(({ summary }) => summary && workspaceStatus(summary) === "Completed" && valueFor(summary, "outputSummaries", []).length > 0);
+  const eligiblePdfLibraryBooks = () => books().map((book) => ({ book, summary: summaryFor(book) })).filter(({ summary }) => summary && valueFor(summary, "outputSummaries", []).length > 0);
   const pdfLibraryBooks = () => {
     const items = eligiblePdfLibraryBooks();
     const search = state.pdfLibrarySearch.trim().toLocaleLowerCase();
@@ -65,7 +65,7 @@
     if (modes.includes("disabled")) return "No frame";
     return "Auto";
   };
-  const statusClass = (value) => value === "Ready" || value === "Completed" || value === "Present" || value === "Validated" ? "status-good" : value === "Invalid" || value === "Failed" || value === "Unreadable" || value === "Needs attention" ? "status-bad" : value === "Needs selection" || value === "Needs validation" || value === "Running" ? "status-warn" : "status-muted";
+  const statusClass = (value) => value === "Ready" || value === "Completed" || value === "Present" || value === "Validated" || value === "Processed" || value === "Production" ? "status-good" : value === "Invalid" || value === "Failed" || value === "Unreadable" || value === "Needs attention" || value === "Missing" ? "status-bad" : value === "Needs selection" || value === "Needs validation" || value === "Running" || value === "Processing" || value === "Stale" || value === "Ready to process" ? "status-warn" : "status-muted";
   const badge = (value) => { const label = displayStatus(value); return `<span class="status-badge ${statusClass(label)}">${escapeHtml(label)}</span>`; };
   const bookSelectIcon = (selected) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="17" height="17" rx="4"></rect>${selected ? '<path d="m7.5 12.5 3 3 6-7"></path>' : ""}</svg>`;
   const bookEditIcon = () => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m4 20 4.1-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"></path><path d="m13.7 7.3 3 3"></path></svg>';
@@ -182,7 +182,7 @@
     const incoming = processStartedAt(snapshot);
     return current !== null && incoming !== null && incoming < current;
   };
-  const cacheCleanupBlocked = () => applicationIsLoading() || processIsActive() || state.cacheCleanupActive;
+  const cacheCleanupBlocked = () => applicationIsLoading() || processIsActive() || state.cacheCleanupActive || Boolean(state.productionActionTaskId);
   const updateGlobalRefreshControl = () => {
     const refreshButton = document.getElementById("refresh-button");
     if (!refreshButton) return;
@@ -200,7 +200,12 @@
     state.applicationLoadError = "";
     state.libraryRefreshTaskId = "";
     state.libraryRefreshResultRequested = false;
-    render(currentRoute(), false);
+    if (state.productionRefreshAwaitingSnapshot && state.bookDrawerOpen && state.selectedBookTab === "production" && currentRoute() === "books") {
+      updateGlobalRefreshControl();
+      updateProductionInteractionUi();
+    } else {
+      render(currentRoute(), false);
+    }
     send("app.refresh");
   };
   const pollLibraryRefresh = () => {
@@ -254,12 +259,76 @@
     status.textContent = taskState === "Cancelled" ? "Cache cleanup cancelled" : valueFor(task, "errorMessage", "Cache cleanup failed.");
     if (currentRoute() === "books") render("books", false);
   };
+  const pollProductionAction = () => {
+    if (state.productionActionTaskId) send("task.get", { taskId: state.productionActionTaskId });
+  };
+  const productionActionActive = () => Boolean(state.productionActionTaskId);
+  const updateProductionInteractionUi = () => {
+    const workspace = document.querySelector(".production-workspace");
+    if (!workspace) return;
+    const taskBusy = productionActionActive();
+    const controlsBusy = taskBusy || processIsActive() || state.cacheCleanupActive || applicationIsLoading();
+    workspace.setAttribute("aria-busy", String(taskBusy || state.processStartPending));
+    const feedback = workspace.querySelector?.("[data-production-feedback]");
+    if (feedback) {
+      feedback.hidden = !state.productionFeedback;
+      feedback.textContent = state.productionFeedback;
+      feedback.classList.toggle("is-error", state.productionFeedbackError);
+      feedback.setAttribute("role", state.productionFeedbackError ? "alert" : "status");
+    }
+    workspace.querySelectorAll?.('[data-action="upload-production-asset"]').forEach((button) => {
+      const importing = state.productionImportPending === button.dataset.productionAsset;
+      button.disabled = controlsBusy || importing;
+      button.textContent = importing ? "Selecting…" : button.dataset.productionIdleLabel;
+    });
+    workspace.querySelectorAll?.('[data-action="start-production-action"]').forEach((button) => {
+      const active = taskBusy && state.productionActionName === button.dataset.productionAction;
+      button.disabled = button.dataset.productionSourceExists !== "true" || controlsBusy;
+      button.textContent = active ? "Working…" : button.dataset.productionIdleLabel;
+      button.setAttribute("aria-busy", String(active));
+    });
+    const finalButton = workspace.querySelector?.('[data-action="build-final-interior"]');
+    if (finalButton) {
+      const busy = state.processStartPending || processIsActive();
+      finalButton.disabled = finalButton.dataset.productionReady !== "true" || busy || applicationIsLoading();
+      finalButton.textContent = busy ? "Building…" : "Build Final Interior";
+      finalButton.setAttribute("aria-busy", String(busy));
+    }
+  };
+  const observeProductionAction = (task) => {
+    const taskId = valueFor(task, "taskId", "");
+    if (!taskId) return;
+    const taskState = valueFor(task, "state", "Queued");
+    state.productionActionTaskId = taskId;
+    state.productionFeedback = valueFor(task, "step", "Preparing Production asset…") || "Preparing Production asset…";
+    state.productionFeedbackError = false;
+    if (["Queued", "Running", "Cancelling"].includes(taskState)) {
+      if (state.productionActionPollTimer === null) state.productionActionPollTimer = window.setInterval(pollProductionAction, 250);
+      if (state.bookDrawerOpen && state.selectedBookTab === "production") updateProductionInteractionUi();
+      return;
+    }
+    if (state.productionActionPollTimer !== null && window.clearInterval) window.clearInterval(state.productionActionPollTimer);
+    state.productionActionPollTimer = null;
+    state.productionActionTaskId = "";
+    state.productionActionName = "";
+    state.productionFeedbackError = taskState === "Failed";
+    state.productionFeedback = taskState === "Completed"
+      ? "Production action completed. Refreshing status…"
+      : taskState === "Cancelled"
+        ? "Production action cancelled."
+        : valueFor(task, "errorMessage", "Production action failed. The previous asset or PDF was kept.");
+    if (state.bookDrawerOpen && state.selectedBookTab === "production") updateProductionInteractionUi();
+    if (taskState === "Completed") {
+      state.productionRefreshAwaitingSnapshot = true;
+      beginApplicationRefresh();
+    }
+  };
   const selectedBook = () => books().find((book) => bookId(book) === state.selectedBookId);
   const brandTemplateCopyReadiness = (book, summary) => {
     if (!book || !summary || valueFor(summary, "validationStatus", "") !== "Ready") return { ready: false, reason: "Run Interior preflight and resolve Book errors first." };
     const brand = activeBrand();
     if (!brand) return { ready: false, reason: "Select a validated Brand first." };
-    return { ready: true, reason: `Copy cover.psd and app_plus.psd from ${valueFor(brand, "name", "the selected Brand")}.`, brand };
+    return { ready: true, reason: `Copy cover.psd, app_plus.psd, and book_owner.psd from ${valueFor(brand, "name", "the selected Brand")}.`, brand };
   };
   const assetsFor = (summary) => valueFor(summary, "assets", []);
   const assetForReference = (summary, sourceReference) => assetsFor(summary).find((asset) => valueFor(asset, "sourceReference", "") === sourceReference);
@@ -361,6 +430,24 @@
     if (hasInteriorDraft(bookId(book))) return { ready: false, reason: "Save Interior changes before processing." };
     if (valueFor(summary, "validationStatus", "Needs review") !== "Ready") return { ready: false, reason: "Run Interior preflight until this Book is ready." };
     return introReadiness(book, summary);
+  };
+  const productionSummaryFor = (summary) => valueFor(summary, "production", { assets: [] });
+  const productionAssetFor = (summary, kind) => valueFor(productionSummaryFor(summary), "assets", [])
+    .find((asset) => valueFor(asset, "assetKind", "") === kind) ?? null;
+  const productionFinalReadiness = (book, summary) => {
+    if (hasInteriorDraft(bookId(book))) return { ready: false, reason: "Save changes before building Final Interior." };
+    const standard = processingReadiness(book, summary);
+    if (!standard.ready) return standard;
+    const brand = activeBrand();
+    if (!brand) return { ready: false, reason: "Select and validate a Brand before building Final Interior." };
+    const missing = [["interior-cover", "Interior Cover"], ["book-owner", "Book Owner"]]
+      .filter(([kind]) => valueFor(productionAssetFor(summary, kind), "sourceStatus", "Missing") === "Missing")
+      .map(([, label]) => label);
+    if (missing.length) return { ready: false, reason: `Upload ${missing.join(" and ")} before building Final Interior.` };
+    if (processIsActive() || state.processStartPending) return { ready: false, reason: "Interior Processing is already running." };
+    if (productionActionActive()) return { ready: false, reason: "Wait for the active Production action to finish." };
+    if (state.cacheCleanupActive) return { ready: false, reason: "Wait for Clear Cache to finish." };
+    return { ready: true, reason: "Build a fresh Production Interior from current sources and saved settings.", brand };
   };
   const sameKeys = (left, right) => left.length === right.length && left.every((key, index) => key.toLowerCase() === String(right[index] ?? "").toLowerCase());
   const stageIntroChange = (book, summary, hasIntro, sourceReferences) => {
@@ -502,7 +589,7 @@
     const folders = assets.filter((asset) => valueFor(asset, "type", "") === "Folder");
     const files = assets.filter((asset) => valueFor(asset, "type", "") !== "Folder");
     const assetInventory = assets.length ? `<div class="brand-asset-inventory"><div class="brand-folder-list">${folders.map(renderFolder).join("")}</div><div class="brand-file-grid">${files.map(renderFile).join("")}</div></div>` : "<p class=\"empty-copy\">No brand assets found.</p>";
-    content.innerHTML = `<div class="page-header"><div><h1>Brands & templates</h1><p>Inspect reusable Brand assets and resolve exact file requirements before processing.</p></div></div><div class="master-detail"><section class="panel list-panel"><label class="brand-search"><span>Search Brands</span><input class="control" data-action="filter-brands" value="${escapeHtml(state.brandFilter)}" placeholder="Search by name" /></label><div class="list-title">Brands</div><ul class="item-list" data-brand-list>${brandListMarkup(allBrands)}</ul></section><section class="detail-pane">${selected ? panel(escapeHtml(valueFor(selected, "name", "")), `<div class="page-actions"><div>${badge(validationStatus)}<p class="panel-note">Validate IntroTemplate, frame.png, background.png, cover.psd, and app_plus.psd before processing.</p></div><button class="button-primary" data-action="validate-brand" ${processIsActive() ? "disabled" : ""}>Validate Brand</button></div>${validationMessage}${assetInventory}`) : panel("Brand detail", "<p class=\"empty-copy\">Select a Brand to inspect its assets.</p>")}</section></div>`;
+    content.innerHTML = `<div class="page-header"><div><h1>Brands & templates</h1><p>Inspect reusable Brand assets and resolve exact file requirements before processing.</p></div></div><div class="master-detail"><section class="panel list-panel"><label class="brand-search"><span>Search Brands</span><input class="control" data-action="filter-brands" value="${escapeHtml(state.brandFilter)}" placeholder="Search by name" /></label><div class="list-title">Brands</div><ul class="item-list" data-brand-list>${brandListMarkup(allBrands)}</ul></section><section class="detail-pane">${selected ? panel(escapeHtml(valueFor(selected, "name", "")), `<div class="page-actions"><div>${badge(validationStatus)}<p class="panel-note">Validate IntroTemplate, frame.png, background.png, cover.psd, app_plus.psd, and book_owner.psd before processing.</p></div><button class="button-primary" data-action="validate-brand" ${processIsActive() ? "disabled" : ""}>Validate Brand</button></div>${validationMessage}${assetInventory}`) : panel("Brand detail", "<p class=\"empty-copy\">Select a Brand to inspect its assets.</p>")}</section></div>`;
   };
 
   const renderProcessedInteriorPages = (summary) => {
@@ -517,18 +604,66 @@
     return `<section class="processed-interior-pages"><header class="processed-interior-pages-heading"><div><h3>Interior pages</h3><p>Read-only previews created by the most recent Interior Processing run.</p></div><span class="interior-artwork-count" role="status"><strong>${pages.length}</strong> processed</span></header><div class="processed-interior-pages-scroll"><div class="processed-interior-pages-grid">${pages.map(tile).join("")}</div></div></section>`;
   };
 
+  const renderProductionImage = (url, alt, fallback, className = "") => url
+    ? `<img class="${className}" src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async" data-local-image data-image-fallback="${escapeHtml(fallback)}">`
+    : `<span class="book-preview-fallback" aria-label="${escapeHtml(fallback)}">${escapeHtml(fallback)}</span>`;
+
+  const renderProductionWorkspace = (book, summary) => {
+    const production = productionSummaryFor(summary);
+    const assets = valueFor(production, "assets", []);
+    const taskBusy = productionActionActive();
+    const controlsBusy = taskBusy || processIsActive() || state.cacheCleanupActive || applicationIsLoading();
+    const actionFor = (kind) => kind === "final-cover" ? "build-cover-pdf" : kind === "interior-cover" ? "process-interior-cover" : "process-book-owner";
+    const actionLabel = (kind) => kind === "final-cover" ? "Build Cover PDF" : kind === "interior-cover" ? "Process Interior Cover" : "Process Book Owner";
+    const card = (asset) => {
+      const kind = valueFor(asset, "assetKind", "");
+      const label = valueFor(asset, "displayName", "Production asset");
+      const sourceStatus = valueFor(asset, "sourceStatus", "Missing");
+      const processedStatus = valueFor(asset, "processedStatus", "Not applicable");
+      const exists = sourceStatus !== "Missing";
+      const importing = state.productionImportPending === kind;
+      const activeAction = taskBusy && state.productionActionName === actionFor(kind);
+      const sourcePreview = renderProductionImage(valueFor(asset, "sourceLocalImageUrl", ""), `${label} source`, `Upload ${label}`, "production-source-image");
+      const processedPreview = kind === "final-cover" ? "" : `<div class="production-processed-preview"><span>Processed</span>${renderProductionImage(valueFor(asset, "processedLocalImageUrl", ""), `Processed ${label}`, "Not processed", "production-processed-image")}</div>`;
+      const actionStatus = kind === "final-cover" ? valueFor(production, "coverOutputStatus", "Missing") : processedStatus;
+      const actionDisabled = !exists || controlsBusy || importing;
+      const reason = !exists ? `Upload ${label} first.` : controlsBusy ? "Another processing action is active." : `${actionLabel(kind)} from the current canonical PNG.`;
+      return `<article class="production-asset-card production-asset-${kind}"><header><div><h3>${escapeHtml(label)}</h3><p>${escapeHtml(valueFor(asset, "fileName", ""))}</p></div>${badge(sourceStatus)}</header><div class="production-preview ${kind === "final-cover" ? "production-preview-cover" : ""}">${sourcePreview}</div>${processedPreview}<dl><div><dt>Derived output</dt><dd>${badge(actionStatus)}</dd></div><div><dt>Last processed</dt><dd>${dateTime(kind === "final-cover" ? valueFor(production, "coverBuiltAtUtc", null) : valueFor(asset, "processedAtUtc", null))}</dd></div></dl><div class="production-card-actions"><button class="button-secondary" data-action="upload-production-asset" data-production-asset="${kind}" data-production-idle-label="${exists ? "Replace" : "Upload"}" data-book-id="${escapeHtml(bookId(book))}" ${controlsBusy || importing ? "disabled" : ""}>${importing ? "Selecting…" : exists ? "Replace" : "Upload"}</button><button class="button-primary" data-action="start-production-action" data-production-action="${actionFor(kind)}" data-production-source-exists="${exists}" data-production-idle-label="${actionLabel(kind)}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-help-${kind}" aria-busy="${activeAction}" ${actionDisabled ? "disabled" : ""}>${activeAction ? "Working…" : actionLabel(kind)}</button></div><p class="production-action-help" id="production-help-${kind}">${escapeHtml(reason)}${kind === "final-cover" ? " Replaces the current Cover PDF only after a successful build." : " Final Interior remains unchanged."}</p></article>`;
+    };
+    const readiness = productionFinalReadiness(book, summary);
+    const feedback = `<p class="production-feedback ${state.productionFeedbackError ? "is-error" : ""}" data-production-feedback role="${state.productionFeedbackError ? "alert" : "status"}" ${state.productionFeedback ? "" : "hidden"}>${escapeHtml(state.productionFeedback)}</p>`;
+    const background = effectiveBackground(book, summary) ? "Enabled" : "Disabled";
+    const finalBusy = state.processStartPending || processIsActive() || applicationIsLoading();
+    return `<section class="production-workspace" aria-busy="${taskBusy || state.processStartPending}"><header class="production-summary"><div><h3>Production Assets</h3><p>Brand: <strong>${escapeHtml(valueFor(activeBrand(), "name", "No validated Brand selected"))}</strong> · Background: <strong>${background}</strong></p></div><div>${badge(valueFor(production, "interiorOutputKind", "Legacy"))} ${badge(valueFor(production, "interiorOutputStatus", "Missing"))}</div></header>${feedback}<div class="production-asset-grid">${assets.length ? assets.map(card).join("") : "<p class=\"empty-copy\">Production workspace status is unavailable. Refresh the library.</p>"}</div><section class="production-final-action"><div><h3>Final Interior</h3><p>Order: Interior Cover → Book Owner → Intro → randomized Interior. Background pages follow the saved HasBackground setting.</p><p id="production-final-help">${escapeHtml(readiness.reason)} Replaces the current Interior PDF on success; Process Interior can replace it later.</p><small>Current output: ${escapeHtml(valueFor(production, "interiorOutputKind", "Legacy"))} · ${dateTime(valueFor(production, "interiorBuiltAtUtc", null))}</small></div><button class="button-primary" data-action="build-final-interior" data-production-ready="${readiness.ready}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-final-help" aria-busy="${finalBusy}" ${readiness.ready && !finalBusy ? "" : "disabled"}>${finalBusy ? "Building…" : "Build Final Interior"}</button></section></section>`;
+  };
+
+  const refreshProductionWorkspace = (focusSelector = "") => {
+    const book = selectedBook();
+    const summary = book ? summaryFor(book) : null;
+    const workspace = document.querySelector(".production-workspace");
+    if (!book || !summary || !workspace) return;
+    const drawerBody = document.querySelector(".book-drawer-body");
+    if (drawerBody && Number.isFinite(drawerBody.scrollTop)) state.bookDrawerScrollTop = drawerBody.scrollTop;
+    workspace.outerHTML = renderProductionWorkspace(book, summary);
+    const refreshedDrawerBody = document.querySelector(".book-drawer-body");
+    if (refreshedDrawerBody && Number.isFinite(state.bookDrawerScrollTop)) refreshedDrawerBody.scrollTop = state.bookDrawerScrollTop;
+    if (focusSelector) document.querySelector(focusSelector)?.focus();
+  };
+
   const renderBookTabs = (book, summary) => {
-    const tabButton = (id, label) => `<button class="detail-tab ${state.selectedBookTab === id ? "active" : ""}" data-action="book-tab" data-book-tab="${id}">${label}</button>`;
+    const tabButton = (id, label) => `<button type="button" id="book-tab-${id}" class="detail-tab ${state.selectedBookTab === id ? "active" : ""}" data-action="book-tab" data-book-tab="${id}" role="tab" aria-selected="${state.selectedBookTab === id}" aria-controls="book-panel-${id}" tabindex="${state.selectedBookTab === id ? "0" : "-1"}">${label}</button>`;
     const readiness = processingReadiness(book, summary);
     const templateReadiness = brandTemplateCopyReadiness(book, summary);
-    const body = state.selectedBookTab === "settings"
+    const body = state.selectedBookTab === "production"
+      ? renderProductionWorkspace(book, summary)
+      : state.selectedBookTab === "settings"
       ? `<section class="interior-settings"><section class="asset-background-setting"><div><h3>Brand background</h3><p>Insert the selected Brand background after every active Interior page.</p></div><label class="asset-background-toggle"><input type="checkbox" data-action="set-book-background" data-book-id="${escapeHtml(bookId(book))}" ${effectiveBackground(book, summary) ? "checked" : ""} ${processIsActive() || state.bookInteriorSavePending ? "disabled" : ""}> Use Brand background</label></section>${renderIntroTemplateWorkspace(book, summary)}</section>`
       : state.selectedBookTab === "artwork"
         ? renderFolderAssetWorkspace(book, summary)
         : state.selectedBookTab === "pages"
           ? renderProcessedInteriorPages(summary)
-        : `<section class="book-overview"><div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Interior preflight</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div><section class="asset-background-setting"><div><h3>Brand PSD templates</h3><p>Copy cover.psd and app_plus.psd from the selected Brand into this Book workspace.</p></div><button class="button-secondary" data-action="copy-brand-templates" data-book-id="${escapeHtml(bookId(book))}" ${templateReadiness.ready && !state.brandTemplateCopyPending ? "" : "disabled"} title="${escapeHtml(templateReadiness.reason)}">${state.brandTemplateCopyPending ? "Copying…" : "Copy Brand Templates"}</button></section><p class="panel-note">Review the summary, then configure Brand background and Intro pages in Interior settings.</p></section>`;
-    return `<div class="book-heading"><div><h2>${escapeHtml(valueFor(book, "name", ""))}</h2><p>Interior-only production workspace</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs">${tabButton("overview", "Overview")}${tabButton("settings", "Interior settings")}${tabButton("artwork", "Interior artwork")}${tabButton("pages", "Interior pages")}</nav><div class="tab-body ${state.selectedBookTab === "artwork" ? "tab-body-artwork" : state.selectedBookTab === "pages" ? "tab-body-processed-pages" : ""}">${body}</div>`;
+        : `<section class="book-overview"><div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Interior preflight</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div><section class="asset-background-setting"><div><h3>Brand PSD templates</h3><p>Copy cover.psd, app_plus.psd, and book_owner.psd from the selected Brand into this Book workspace.</p></div><button class="button-secondary" data-action="copy-brand-templates" data-book-id="${escapeHtml(bookId(book))}" ${templateReadiness.ready && !state.brandTemplateCopyPending ? "" : "disabled"} title="${escapeHtml(templateReadiness.reason)}">${state.brandTemplateCopyPending ? "Copying…" : "Copy Brand Templates"}</button></section><p class="panel-note">Review the summary, then configure Brand background and Intro pages in Interior settings.</p></section>`;
+    return `<div class="book-heading"><div><h2>${escapeHtml(valueFor(book, "name", ""))}</h2><p>Interior-only production workspace</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs" role="tablist" aria-label="Book detail sections">${tabButton("overview", "Overview")}${tabButton("production", "Production")}${tabButton("settings", "Interior settings")}${tabButton("artwork", "Interior artwork")}${tabButton("pages", "Interior pages")}</nav><div id="book-panel-${state.selectedBookTab}" class="tab-body ${state.selectedBookTab === "artwork" ? "tab-body-artwork" : state.selectedBookTab === "pages" ? "tab-body-processed-pages" : ""}" role="tabpanel" aria-labelledby="book-tab-${state.selectedBookTab}" tabindex="0">${body}</div>`;
   };
 
   const renderIntroTemplateWorkspace = (book, summary) => {
@@ -848,7 +983,11 @@
     const outputRow = (summary, output) => {
       const pageCount = valueFor(output, "pageCount", "—");
       const dimensions = valueFor(output, "widthInches", null) ? `${inches(valueFor(output, "widthInches", 0))} × ${inches(valueFor(output, "heightInches", 0))} in` : "—";
-      return `<li class="pdf-library-file"><div class="pdf-library-file-mark">PDF</div><div class="pdf-library-file-copy"><div class="pdf-library-file-title"><strong title="${escapeHtml(valueFor(output, "fileName", "PDF output"))}">${escapeHtml(valueFor(output, "fileName", "PDF output"))}</strong><span class="pdf-library-file-status">${badge(valueFor(output, "verificationStatus", "Available"))}</span></div><small>${escapeHtml(String(pageCount))} pages · ${escapeHtml(dimensions)} · ${fileSize(valueFor(output, "fileSizeBytes", 0))}</small>${actions(summary, output, state.pdfLibraryView === "grid")}</div></li>`;
+      const fileName = valueFor(output, "fileName", "PDF output");
+      const isInterior = String(fileName).endsWith(" - Interior.pdf");
+      const provenance = isInterior ? valueFor(productionSummaryFor(summary), "interiorOutputKind", "Legacy") : "";
+      const provenanceBadge = isInterior ? ` ${badge(provenance)}` : "";
+      return `<li class="pdf-library-file"><div class="pdf-library-file-mark">PDF</div><div class="pdf-library-file-copy"><div class="pdf-library-file-title"><strong title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</strong><span class="pdf-library-file-status">${badge(valueFor(output, "verificationStatus", "Available"))}${provenanceBadge}</span></div><small>${escapeHtml(String(pageCount))} pages · ${escapeHtml(dimensions)} · ${fileSize(valueFor(output, "fileSizeBytes", 0))}</small>${actions(summary, output, state.pdfLibraryView === "grid")}</div></li>`;
     };
     const bookCard = ({ book, summary }) => {
       const name = pdfLibraryBookName(book, summary);
@@ -863,7 +1002,7 @@
       : `<section class="pdf-library-empty"><strong>No PDF Books match your search.</strong><p>Try a different Book name.</p></section>`;
     const pagination = library.length ? `<footer class="book-pagination pdf-library-pagination" data-pdf-library-total-pages="${totalPages}"><span>${start}–${end} of ${library.length}</span><div><button class="button-secondary" data-action="pdf-library-page" data-pdf-library-page="first" ${state.pdfLibraryPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="pdf-library-page" data-pdf-library-page="previous" ${state.pdfLibraryPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.pdfLibraryPage} of ${totalPages}</span><button class="button-secondary" data-action="pdf-library-page" data-pdf-library-page="next" ${state.pdfLibraryPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="pdf-library-page" data-pdf-library-page="last" ${state.pdfLibraryPage === totalPages ? "disabled" : ""}>Last</button></div></footer>` : "";
     const results = library.length ? `<section class="${state.pdfLibraryView === "grid" ? "pdf-library-grid" : "pdf-library-list"}">${pageItems.map(bookCard).join("")}</section>` : empty;
-    content.innerHTML = `<section class="pdf-library-page"><div class="page-header"><div><h1>PDF Library</h1><p>Completed Books with local PDF output.</p></div></div><div class="pdf-library-toolbar"><label class="field"><span>Search Books</span><input class="control" type="search" value="${escapeHtml(state.pdfLibrarySearch)}" placeholder="Search Books..." data-action="pdf-library-search"></label><label class="field pdf-library-sort"><span>Sort</span><select class="control" data-action="pdf-library-sort"><option value="newest" ${state.pdfLibrarySort === "newest" ? "selected" : ""}>Newest</option><option value="name" ${state.pdfLibrarySort === "name" ? "selected" : ""}>Name</option><option value="size" ${state.pdfLibrarySort === "size" ? "selected" : ""}>Size</option></select></label><div class="asset-view-toggle" aria-label="PDF Library view"><button class="${state.pdfLibraryView === "grid" ? "active" : ""}" data-action="pdf-library-view" data-pdf-library-view="grid" aria-pressed="${state.pdfLibraryView === "grid"}">Grid</button><button class="${state.pdfLibraryView === "list" ? "active" : ""}" data-action="pdf-library-view" data-pdf-library-view="list" aria-pressed="${state.pdfLibraryView === "list"}">List</button></div></div><section class="pdf-library-results"><div class="pdf-library-grid-scroll">${results}</div>${pagination}</section></section>`;
+    content.innerHTML = `<section class="pdf-library-page"><div class="page-header"><div><h1>PDF Library</h1><p>Books with local PDF output.</p></div></div><div class="pdf-library-toolbar"><label class="field"><span>Search Books</span><input class="control" type="search" value="${escapeHtml(state.pdfLibrarySearch)}" placeholder="Search Books..." data-action="pdf-library-search"></label><label class="field pdf-library-sort"><span>Sort</span><select class="control" data-action="pdf-library-sort"><option value="newest" ${state.pdfLibrarySort === "newest" ? "selected" : ""}>Newest</option><option value="name" ${state.pdfLibrarySort === "name" ? "selected" : ""}>Name</option><option value="size" ${state.pdfLibrarySort === "size" ? "selected" : ""}>Size</option></select></label><div class="asset-view-toggle" aria-label="PDF Library view"><button class="${state.pdfLibraryView === "grid" ? "active" : ""}" data-action="pdf-library-view" data-pdf-library-view="grid" aria-pressed="${state.pdfLibraryView === "grid"}">Grid</button><button class="${state.pdfLibraryView === "list" ? "active" : ""}" data-action="pdf-library-view" data-pdf-library-view="list" aria-pressed="${state.pdfLibraryView === "list"}">List</button></div></div><section class="pdf-library-results"><div class="pdf-library-grid-scroll">${results}</div>${pagination}</section></section>`;
     if (state.pdfLibrarySearchFocused) {
       const input = content.querySelector('[data-action="pdf-library-search"]');
       if (input) {
@@ -1009,6 +1148,17 @@
     document.querySelector(`[data-action="open-book-detail"][data-book-id="${CSS.escape(state.selectedBookId)}"]`)?.focus();
   };
   document.addEventListener("keydown", (event) => {
+    const activeTab = event.target.closest?.('[role="tab"][data-action="book-tab"]');
+    if (activeTab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      const tabs = [...activeTab.closest('[role="tablist"]')?.querySelectorAll('[role="tab"][data-action="book-tab"]') ?? []];
+      if (tabs.length) {
+        event.preventDefault();
+        const current = tabs.indexOf(activeTab);
+        const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+        tabs[next].click();
+      }
+      return;
+    }
     if (event.key !== "Escape" || !state.bookDrawerOpen) return;
     event.preventDefault();
     closeBookDrawer();
@@ -1036,6 +1186,34 @@
       state.brandTemplateCopyPending = true;
       refreshBookDrawerBody();
       send("book.brand.templates.copy", { bookId: target.dataset.bookId, brandName: valueFor(readiness.brand, "name", "") });
+    }
+    if (action === "upload-production-asset" && !state.productionImportPending && !productionActionActive()) {
+      state.productionImportPending = target.dataset.productionAsset;
+      state.productionFocusSelector = `[data-action="upload-production-asset"][data-production-asset="${target.dataset.productionAsset}"]`;
+      state.productionFeedback = "Choose a PNG file in the system dialog.";
+      state.productionFeedbackError = false;
+      updateProductionInteractionUi();
+      send("book.production.asset.import", { bookId: target.dataset.bookId, assetKind: target.dataset.productionAsset });
+    }
+    if (action === "start-production-action" && !productionActionActive()) {
+      state.productionActionName = target.dataset.productionAction;
+      state.productionFocusSelector = `[data-action="start-production-action"][data-production-action="${target.dataset.productionAction}"]`;
+      state.productionFeedback = "Queuing Production action…";
+      state.productionFeedbackError = false;
+      updateProductionInteractionUi();
+      send("book.production.action.start", { bookId: target.dataset.bookId, action: target.dataset.productionAction });
+    }
+    if (action === "build-final-interior" && !state.processStartPending) {
+      const book = books().find((item) => bookId(item) === target.dataset.bookId);
+      const readiness = book ? productionFinalReadiness(book, summaryFor(book)) : { ready: false, reason: "Choose a Book first." };
+      if (!readiness.ready) { state.productionFeedback = readiness.reason; state.productionFeedbackError = true; updateProductionInteractionUi(); return; }
+      state.processStartPending = true;
+      state.productionFinalBuildActive = true;
+      state.productionFocusSelector = '[data-action="build-final-interior"]';
+      state.productionFeedback = "Starting Final Interior build…";
+      state.productionFeedbackError = false;
+      updateProductionInteractionUi();
+      send("process.start", { bookIds: [target.dataset.bookId], brandName: valueFor(readiness.brand, "name", null), mode: "production-interior" });
     }
     if (action === "select-book" || action === "open-book-detail") openBookDrawer(target.dataset.bookId);
     if (action === "close-book-drawer") closeBookDrawer();
@@ -1138,7 +1316,7 @@
         refreshInteriorArtworkWorkspace();
       }
     }
-    if (action === "book-tab") { state.selectedBookTab = ["settings", "artwork", "pages"].includes(target.dataset.bookTab) ? target.dataset.bookTab : "overview"; refreshBookDrawerBody(state.selectedBookTab); }
+    if (action === "book-tab") { state.selectedBookTab = ["production", "settings", "artwork", "pages"].includes(target.dataset.bookTab) ? target.dataset.bookTab : "overview"; refreshBookDrawerBody(state.selectedBookTab); }
     if (action === "select-asset") { state.selectedAssetReference = target.dataset.sourceReference; render("books", false); }
     if (action === "asset-view") { state.assetView = target.dataset.assetView; render("books", false); }
     if (action === "asset-status") { const status = ["Active", "Inactive"].includes(target.dataset.assetStatus) ? target.dataset.assetStatus : ""; state.assetStatus = state.assetStatus === status ? "" : status; state.artworkGridScrollTop = 0; refreshInteriorArtworkWorkspace(); }
@@ -1254,10 +1432,14 @@
       observeLibraryRefresh(valueFor(response, "payload", {}));
     } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "CacheCleanup") {
       observeCacheCleanup(valueFor(response, "payload", {}));
+    } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "ProductionAction") {
+      observeProductionAction(valueFor(response, "payload", {}));
     } else if (ok && command === "app.snapshot") {
       const preserveBookDrawer = state.bookInteriorSaveAwaitingSnapshot && state.bookDrawerOpen && currentRoute() === "books";
+      const preserveProductionDrawer = state.productionRefreshAwaitingSnapshot && state.bookDrawerOpen && state.selectedBookTab === "production" && currentRoute() === "books";
       state.bookInteriorSaveAwaitingSnapshot = false;
       state.bookInteriorSaveTaskId = "";
+      state.productionRefreshAwaitingSnapshot = false;
       window.appSnapshot = valueFor(response, "payload", {});
       state.applicationLoadState = "ready";
       state.applicationLoadError = "";
@@ -1273,6 +1455,12 @@
         if (state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();
         else updateInteriorSaveUi();
         status.textContent = "Interior changes saved";
+      } else if (preserveProductionDrawer) {
+        state.productionFeedback = state.productionFeedback.replace(" Refreshing status…", "");
+        refreshProductionWorkspace(state.productionFocusSelector);
+        state.productionFocusSelector = "";
+        updateGlobalRefreshControl();
+        status.textContent = "Connected";
       } else {
         render(document.querySelector(".nav-item-active")?.dataset.route ?? "books", false);
         status.textContent = "Connected";
@@ -1301,10 +1489,20 @@
       const terminal = !valueFor(window.processSnapshot, "isActive", false) && !valueFor(window.processSnapshot, "isCancelling", false);
       if (terminal && startedAt && state.lastTerminalRefreshSession !== startedAt) {
         state.lastTerminalRefreshSession = startedAt;
+        if (state.productionFinalBuildActive && state.bookDrawerOpen && state.selectedBookTab === "production" && currentRoute() === "books") {
+          state.productionRefreshAwaitingSnapshot = true;
+        }
         beginApplicationRefresh();
       }
       updateGlobalProcessStatus();
       if (document.querySelector(".nav-item-active")?.dataset.route === "process") render("process", false);
+      if (state.bookDrawerOpen && state.selectedBookTab === "production" && currentRoute() === "books") {
+        state.productionFeedback = valueFor(window.processSnapshot, "isActive", false)
+          ? valueFor(window.processSnapshot, "currentStep", "Building Final Interior…")
+          : state.productionFeedback;
+        updateProductionInteractionUi();
+      }
+      if (terminal) state.productionFinalBuildActive = false;
       status.textContent = "Connected";
     } else if (ok && command === "brand.validation.result") {
       state.brandValidationResult = { ...valueFor(response, "payload", {}), brandName: validationRequestBrand };
@@ -1316,6 +1514,23 @@
       state.brandTemplateCopyPending = false;
       if (state.bookDrawerOpen && currentRoute() === "books") refreshBookDrawerBody();
       status.textContent = "Brand templates copied";
+    } else if (ok && command === "book.production.asset.import.cancelled") {
+      const assetKind = state.productionImportPending;
+      state.productionImportPending = "";
+      state.productionFeedback = "";
+      state.productionFeedbackError = false;
+      if (state.bookDrawerOpen && state.selectedBookTab === "production") {
+        updateProductionInteractionUi();
+        document.querySelector(`[data-action="upload-production-asset"][data-production-asset="${assetKind}"]`)?.focus();
+      }
+      state.productionFocusSelector = "";
+    } else if (ok && command === "book.production.asset.imported") {
+      state.productionImportPending = "";
+      state.productionFeedback = "Production PNG imported. Refreshing status…";
+      state.productionFeedbackError = false;
+      if (state.bookDrawerOpen && state.selectedBookTab === "production") updateProductionInteractionUi();
+      state.productionRefreshAwaitingSnapshot = true;
+      beginApplicationRefresh();
     } else if (ok && command === "book.output.action.completed") {
       status.textContent = "Output action completed";
     } else if (ok && command === "diagnostics.snapshot") {
@@ -1340,7 +1555,38 @@
         state.bookInteriorSavePending = false;
         updateInteriorSaveUi();
       }
+      if (requestCommand === "book.production.asset.import") {
+        state.productionImportPending = "";
+        state.productionFeedback = error === "production_cover_size_invalid"
+          ? "Final Cover must be exactly 5242 × 2626 px. The previous asset was kept."
+          : "The Production asset could not be imported. The previous asset was kept.";
+        state.productionFeedbackError = true;
+        if (state.bookDrawerOpen && state.selectedBookTab === "production") updateProductionInteractionUi();
+      }
+      if (requestCommand === "book.production.action.start") {
+        state.productionActionName = "";
+        state.productionFeedback = error === "production_action_active"
+          ? "Another Production action is already running."
+          : error === "processing_active"
+            ? "Interior Processing is running."
+            : error === "cache_cleanup_active"
+              ? "Clear Cache is running."
+              : "Production action could not start. The previous asset or PDF was kept.";
+        state.productionFeedbackError = true;
+        if (state.bookDrawerOpen && state.selectedBookTab === "production") updateProductionInteractionUi();
+      }
       if (requestCommand === "app.refresh") {
+        if (state.productionRefreshAwaitingSnapshot && state.bookDrawerOpen && state.selectedBookTab === "production" && currentRoute() === "books") {
+          state.productionRefreshAwaitingSnapshot = false;
+          state.applicationLoadState = window.appSnapshot ? "ready" : "idle";
+          state.applicationLoadError = "";
+          state.productionFeedback = "Production status refresh failed. The completed file was kept; use Refresh to retry.";
+          state.productionFeedbackError = true;
+          updateGlobalRefreshControl();
+          updateProductionInteractionUi();
+          status.textContent = "Production status refresh failed";
+          return;
+        }
         if (error === "cache_cleanup_active") {
           state.applicationLoadState = window.appSnapshot ? "ready" : "idle";
           state.applicationLoadError = "";
@@ -1352,11 +1598,11 @@
         state.applicationLoadError = error;
         render(currentRoute(), false);
       }
-      if (requestCommand === "cache.clear" && ["cache_cleanup_processing_active", "cache_cleanup_refresh_active"].includes(error)) {
+      if (requestCommand === "cache.clear" && ["cache_cleanup_processing_active", "cache_cleanup_refresh_active", "cache_cleanup_production_active"].includes(error)) {
         state.cacheCleanupTaskId = "";
         state.cacheCleanupResultRequested = false;
         state.cacheCleanupActive = false;
-        status.textContent = error === "cache_cleanup_processing_active" ? "Interior Processing is running" : "Library refresh is running";
+        status.textContent = error === "cache_cleanup_processing_active" ? "Interior Processing is running" : error === "cache_cleanup_production_active" ? "A Production action is running" : "Library refresh is running";
         if (currentRoute() === "books") render("books", false);
         return;
       }
@@ -1367,10 +1613,23 @@
         return;
       }
       if (requestCommand === "process.start") {
+        const productionBuildFailedToStart = state.productionFinalBuildActive;
         state.processStartPending = false;
+        state.productionFinalBuildActive = false;
         if (error === "cache_cleanup_active") {
           status.textContent = "Clear Cache is running";
           return;
+        }
+        if (error === "production_action_active") {
+          state.productionFeedback = "Wait for the active Production action to finish.";
+          state.productionFeedbackError = true;
+          if (state.bookDrawerOpen && state.selectedBookTab === "production") updateProductionInteractionUi();
+          return;
+        }
+        if (productionBuildFailedToStart && state.bookDrawerOpen && state.selectedBookTab === "production") {
+          state.productionFeedback = "Final Interior could not start. The previous Interior PDF was kept.";
+          state.productionFeedbackError = true;
+          updateProductionInteractionUi();
         }
       }
       status.textContent = `Bridge error: ${error}`;

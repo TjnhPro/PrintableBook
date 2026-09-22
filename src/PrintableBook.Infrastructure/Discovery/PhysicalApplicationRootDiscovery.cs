@@ -42,7 +42,8 @@ public sealed class PhysicalApplicationRootDiscovery(IFileSystem fileSystem, IBo
             ("frame.png", "Image", false),
             ("background.png", "Image", false),
             (BrandTemplateFiles.Cover, "File", false),
-            (BrandTemplateFiles.AppPlus, "File", false)
+            (BrandTemplateFiles.AppPlus, "File", false),
+            (BrandTemplateFiles.BookOwner, "File", false)
         };
         var assets = new List<DiscoveredBrandAsset>(candidates.Length);
         foreach (var (name, type, isDirectory) in candidates)
