@@ -85,7 +85,7 @@ Không thêm telemetry trong MVP; đo bằng automated tests và manual acceptan
 | Vấn đề | Quyết định | Lý do |
 |---|---|---|
 | Filter có đủ an toàn? | Không; thêm backend guard cho assigned Book. | Pipeline nhận một `BrandName`; client không phải authority. |
-| Bắt legacy Book assign? | Không. | Trái compatibility; unassigned giữ behavior cũ. |
+| Bắt legacy Book assign? | Chưa trong MVP. | Unassigned tạm thời giữ behavior cũ; phase sau sẽ khóa sau khi có kế hoạch chuyển đổi dữ liệu. |
 | Bỏ global Brand và derive từ assignment? | Không. Assigned Book chỉ chạy khi hai giá trị trùng. | Giữ request/pipeline hiện tại. |
 | Batch nhiều assigned Brand? | Reject; không partition. | Worker hiện hỗ trợ một Brand/session. |
 | Lưu Brand UUID? | Không; lưu canonical folder name. | UUID/manifest là migration ngoài scope. |
@@ -93,7 +93,9 @@ Không thêm telemetry trong MVP; đo bằng automated tests và manual acceptan
 | Thêm `Needs assignment` filter? | Không. Invalid ở `All` và Brand filter, có badge. | Hold scope. |
 | Có Unassign? | Có, explicit secondary action. | Cần rescue path. |
 | Auto-select/auto-switch? | Không. | Assignment và execution context đều explicit. |
-| `Subcover` là gì? | Optional free-text secondary cover copy; không phải file/path. | Khóa ambiguity, không mở scope. |
+| `Subcover` là gì? | Optional single-line text, dài đúng 4 hoặc 5 ký tự sau trim; không phải file/path. | Quyết định sản phẩm đã xác nhận. |
+| Processing Brand khác assigned Brand? | Backend chặn action và trả lỗi rõ ràng; không auto-switch. | Assignment phải là safety boundary thật. |
+| Reassign Brand A → B? | Hiện cảnh báo xác nhận; không xóa/copy lại template hoặc output. | Tránh silent side effect và làm rõ asset cũ vẫn còn. |
 | Book persistence? | Nested metadata + assignment trong existing workspace state. | Atomic boundary hiện có, không migration. |
 | Brand persistence? | File riêng `brand.metadata.json`. | Không trộn vào validation certificate/settings. |
 | Đổi dữ liệu khi process? | Chặn mutation mới trong active session. | Tránh race snapshot/effective Brand. |
@@ -115,7 +117,9 @@ BookProductionMetadata
 - Empty/whitespace-only canonicalize thành `null`.
 - `Unknown` chỉ là display/placeholder, không persist literal `"Unknown"`.
 - Author là Primary Author duy nhất.
-- Title/Subtitle/Author single-line; Subcover/Description multiline, giữ line breaks và trim outer whitespace.
+- Title/Subtitle/Author single-line.
+- Subcover là optional single-line text. Sau outer trim, nếu có giá trị thì phải dài đúng **4 hoặc 5 ký tự**; không áp thêm regex, casing hoặc semantic rule trong MVP.
+- Description là multiline free text; giữ line breaks và trim outer whitespace.
 - Title có giá trị là display title; fallback tên folder. Folder name vẫn là secondary text/tooltip.
 - Search match display title, folder name và Author; không rename source folder.
 
@@ -214,7 +218,7 @@ Unassigned
 
 | Book state | Requested Brand | Kết quả |
 |---|---|---|
-| Legacy/unassigned | Hợp rule cũ | Allow; behavior cũ. |
+| Legacy/unassigned | Hợp rule cũ | Tạm thời allow trong MVP; phase sau sẽ chuyển sang bắt buộc assignment. |
 | Assigned + `Valid` | Trùng assignment | Allow; pipeline cũ. |
 | Assigned + `Valid` | Khác assignment | Reject rõ ràng. |
 | Assigned + invalid | Bất kỳ | Reject; reassign/unassign. |
@@ -363,8 +367,8 @@ flowchart LR
 
 Giữ drawer/tabs. Sau summary cards thêm:
 
-1. `Book Information`: Title, Subtitle, Author inputs; Subcover compact textarea; Description larger textarea; independent dirty/status; nút `Save Book Information`.
-2. `Brand Assignment`: assigned Brand + status/reason; native select chỉ có matching Brands; explicit `Assign/Reassign Brand`; secondary `Unassign`; empty-state guidance.
+1. `Book Information`: Title, Subtitle, Author và Subcover là single-line inputs; Subcover có hint `4–5 characters` và inline validation; Description là textarea; independent dirty/status; nút `Save Book Information`.
+2. `Brand Assignment`: assigned Brand + status/reason; native select chỉ có matching Brands; explicit `Assign/Reassign Brand`; secondary `Unassign`; empty-state guidance. Reassign từ Brand A sang Brand B phải mở cảnh báo xác nhận rằng template/output cũ không tự bị xóa hoặc thay thế.
 
 Không reuse header `Save changes` vì nút đó quản lý Interior draft. Metadata và Interior có dirty state độc lập. Đóng drawer khi metadata dirty phải cảnh báo/giữ nhất quán với unsaved changes, không silently discard.
 
@@ -404,13 +408,14 @@ Thêm card `Brand Information` phía trên asset inventory: Author input, own Sa
 | Hidden selection | Filter change clear selection. | Chọn lại visible Books. |
 | Multi-Brand batch | Reject, không partition. | Filter một Brand. |
 | Atomic write fail | Old file giữ nguyên; báo lỗi. | Retry sau filesystem fix. |
-| Reassign sau template cũ | Không xóa file; chỉ future actions guard Brand mới. | Copy templates lại; provenance deferred. |
+| Reassign sau template cũ | Cảnh báo và yêu cầu xác nhận; không xóa file; chỉ future actions guard Brand mới. | User chủ động Copy Templates lại; provenance deferred. |
 
 ## 11. Test plan
 
 ### Domain/Core
 
 - `AuthorMatchPolicyTests`: case/trim, blank, internal spaces, punctuation.
+- Book metadata validation tests: Subcover blank/null hợp lệ; sau trim chỉ length 4 hoặc 5 hợp lệ; length khác bị reject với field error.
 - `BookBrandAssignmentEvaluatorTests`: mọi status, missing Brand/metadata.
 - `BookProcessingStateTests`: metadata/assignment survive start/complete/fail/settings; Unassign chỉ clear assignment.
 - Metadata service tests: partial save, whitespace→null, assign/reassign/unassign, stale/mismatch reject.
@@ -434,9 +439,10 @@ Thêm card `Brand Information` phía trên asset inventory: Author input, own Sa
 
 ### UI/manual
 
-- Unknown không persist literal; partial Save survives restart.
+- Unknown không persist literal; partial Save survives restart; Subcover chỉ nhận text dài 4–5 ký tự sau trim.
 - Candidates exact match; unsaved Author không authorize.
 - Invalid reason/rescue cho mọi state.
+- Reassign A → B luôn yêu cầu confirmation và nêu rõ template/output cũ không tự đổi.
 - Same-author unassigned Book không xuất hiện dưới Brand filter.
 - Filter clears selection; grid/compact show title/author/badge.
 - Keyboard/focus/error announcements.
@@ -515,7 +521,7 @@ Không nhận vào MVP vì trái scope: bắt legacy migration, bulk assignment,
 ## 15. Final acceptance criteria
 
 1. Data cũ load bình thường; regression suite pass.
-2. Partial metadata Save; null hiển thị Unknown.
+2. Partial metadata Save; null hiển thị Unknown; Subcover optional nhưng nếu có phải là text dài đúng 4 hoặc 5 ký tự sau trim.
 3. Brand Author độc lập Brand asset validation.
 4. Assign chỉ khi saved Authors match trim + ordinal-ignore-case.
 5. Author change giữ assignment và chuyển invalid.
@@ -523,10 +529,11 @@ Không nhận vào MVP vì trái scope: bắt legacy migration, bulk assignment,
 7. Brand filter dùng persisted assignment, không Author equality.
 8. Invalid Book vẫn tìm thấy với reason rõ.
 9. Filter change clear hidden selection.
-10. Assigned valid Book chỉ copy/process với assigned Brand.
+10. Assigned valid Book chỉ copy/process với assigned Brand; Brand mismatch bị backend chặn và trả lỗi actionable.
 11. Invalid/missing Brand Book bị backend reject trước asset read.
-12. Legacy unassigned Book giữ workflow cũ.
-13. Không database, Author entity, direct ChatGPT, auto assignment hoặc pipeline refactor.
+12. Legacy unassigned Book tạm thời giữ workflow cũ trong MVP; việc bắt buộc assignment được hoãn sang phase sau.
+13. Reassign Brand luôn có cảnh báo xác nhận; không tự xóa/copy lại template hoặc output cũ.
+14. Không database, Author entity, direct ChatGPT, auto assignment hoặc pipeline refactor.
 
 ## 16. Follow-up candidates
 
@@ -536,6 +543,7 @@ Không nhận vào MVP vì trái scope: bắt legacy migration, bulk assignment,
 - Structured metadata paste/export nếu manual copy là bottleneck.
 - Edition/ProductionJob nếu một source cần nhiều Brand outputs.
 - Bulk assignment nếu legacy adoption chậm.
+- Phase khóa processing đối với Book chưa assign, kèm migration/adoption plan cho Book legacy.
 
 ## 17. `/autoplan` report
 
