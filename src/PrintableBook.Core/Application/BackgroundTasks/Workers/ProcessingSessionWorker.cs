@@ -255,6 +255,28 @@ public sealed class ProcessingSessionWorker(
             Fail(request, context, "process_book_not_found", "One or more selected Books no longer exist.");
         }
         var summaries = snapshot.BookSummaries.ToDictionary(summary => summary.BookId.Value, StringComparer.Ordinal);
+        var selectedSummaries = selected
+            .Select(book => summaries.TryGetValue(book.Id.Value, out var summary) ? summary : null)
+            .Where(summary => summary is not null)
+            .Cast<BookDesktopSummary>()
+            .ToArray();
+        var assignedBrands = selectedSummaries
+            .Where(summary => !string.IsNullOrWhiteSpace(summary.AssignedBrand))
+            .Select(summary => summary.AssignedBrand!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (assignedBrands.Length > 1)
+        {
+            Fail(request, context, "mixed_assigned_brands_not_supported", "Selected Books belong to different Brands. Filter and process one Brand at a time.");
+        }
+        foreach (var summary in selectedSummaries)
+        {
+            var execution = BookBrandExecutionPolicy.Evaluate(summary.AssignedBrand, summary.AssignmentStatus, request.BrandName);
+            if (!execution.IsAllowed)
+            {
+                Fail(request, context, execution.Code!, execution.Message!, summary.BookId);
+            }
+        }
         var notReady = selected.FirstOrDefault(book => !summaries.TryGetValue(book.Id.Value, out var summary) || !string.Equals(summary.ValidationStatus, "Ready", StringComparison.Ordinal));
         if (notReady is not null)
         {

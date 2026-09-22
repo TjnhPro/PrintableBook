@@ -12,6 +12,7 @@ using PrintableBook.Core.Application.Brands;
 using PrintableBook.Desktop.BackgroundTasks;
 using PrintableBook.Desktop.Updates;
 using PrintableBook.Core.Application.Production;
+using PrintableBook.Core.Domain.Books;
 
 namespace PrintableBook.Desktop.Bridge;
 
@@ -34,7 +35,8 @@ internal sealed class WebViewBridgeRouter(
     IBrandTemplateCopyService? brandTemplateCopyService = null,
     IDesktopUpdateCoordinator? updateCoordinator = null,
     IProductionFilePicker? productionFilePicker = null,
-    IProductionAssetImportService? productionAssetImportService = null)
+    IProductionAssetImportService? productionAssetImportService = null,
+    IBookCatalogMetadataService? bookCatalogMetadataService = null)
 {
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
     private readonly ProcessingMutationGate processingMutationGate = processingMutationGate ?? new ProcessingMutationGate();
@@ -201,6 +203,89 @@ internal sealed class WebViewBridgeRouter(
             {
                 if (applicationLoadCoordinator is null || request.Payload is not { } validationPayload || !validationPayload.TryGetProperty("bookId", out var bookId) || string.IsNullOrWhiteSpace(bookId.GetString())) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
                 return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
+            }
+
+            if (request.Command is "book.metadata.save" or "book.brand.assign" or "book.brand.unassign" or "brand.author.save")
+            {
+                if (applicationLoadCoordinator is null || bookCatalogMetadataService is null || request.Payload is not { } metadataPayload)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_catalog_metadata_request");
+                }
+
+                await using (await processingMutationGate.EnterAsync(cancellationToken))
+                {
+                    if (await IsProcessingActiveAsync(cancellationToken)) return new BridgeResponse(Version, request.Id, false, null, "processing_active");
+                    var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                    if (snapshot is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+
+                    try
+                    {
+                        if (request.Command == "brand.author.save")
+                        {
+                            if (!TryGetRequiredString(metadataPayload, "brandName", out var brandName) ||
+                                !TryGetOptionalString(metadataPayload, "author", out var author))
+                            {
+                                return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_author");
+                            }
+                            var brand = snapshot.Discovery.Brands.FirstOrDefault(item => string.Equals(item.Name, brandName, StringComparison.Ordinal));
+                            if (brand is null) return new BridgeResponse(Version, request.Id, false, null, "brand_not_found");
+                            await bookCatalogMetadataService.SaveBrandAuthorAsync(brand, author, cancellationToken);
+                        }
+                        else
+                        {
+                            if (!TryGetRequiredString(metadataPayload, "bookId", out var bookId))
+                            {
+                                return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+                            }
+                            var book = snapshot.Discovery.Books.FirstOrDefault(item => string.Equals(item.Id.Value, bookId, StringComparison.Ordinal));
+                            if (book is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+
+                            if (request.Command == "book.metadata.save")
+                            {
+                                if (!TryGetOptionalString(metadataPayload, "title", out var title) ||
+                                    !TryGetOptionalString(metadataPayload, "subtitle", out var subtitle) ||
+                                    !TryGetOptionalString(metadataPayload, "subcover", out var subcover) ||
+                                    !TryGetOptionalString(metadataPayload, "description", out var description) ||
+                                    !TryGetOptionalString(metadataPayload, "author", out var bookAuthor))
+                                {
+                                    return new BridgeResponse(Version, request.Id, false, null, "invalid_book_metadata");
+                                }
+                                await bookCatalogMetadataService.SaveBookMetadataAsync(
+                                    book,
+                                    BookProductionMetadata.Create(title, subtitle, subcover, description, bookAuthor),
+                                    cancellationToken);
+                            }
+                            else if (request.Command == "book.brand.assign")
+                            {
+                                if (!TryGetRequiredString(metadataPayload, "brandName", out var brandName))
+                                {
+                                    return new BridgeResponse(Version, request.Id, false, null, "brand_not_found");
+                                }
+                                var brand = snapshot.Discovery.Brands.FirstOrDefault(item => string.Equals(item.Name, brandName, StringComparison.Ordinal));
+                                if (brand is null) return new BridgeResponse(Version, request.Id, false, null, "brand_not_found");
+                                await bookCatalogMetadataService.AssignBrandAsync(book, brand, cancellationToken);
+                            }
+                            else
+                            {
+                                await bookCatalogMetadataService.UnassignBrandAsync(book, cancellationToken);
+                            }
+                        }
+                    }
+                    catch (BookCatalogMetadataException exception)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, exception.Code);
+                    }
+                    catch (ArgumentException)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "invalid_book_metadata");
+                    }
+                    catch (JsonException)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "brand_metadata_invalid");
+                    }
+
+                    return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
+                }
             }
 
             if (request.Command == "book.cover.select")
@@ -538,12 +623,15 @@ internal sealed class WebViewBridgeRouter(
                     return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_template_copy");
                 }
 
-                var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
-                if (snapshot is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+                await using var mutation = await processingMutationGate.EnterAsync(cancellationToken);
+                if (await IsProcessingActiveAsync(cancellationToken)) return new BridgeResponse(Version, request.Id, false, null, "processing_active");
+                var snapshot = await applicationLoadCoordinator.GetFreshAsync(cancellationToken);
 
                 var book = snapshot.Discovery.Books.FirstOrDefault(item => string.Equals(item.Id.Value, bookIdElement.GetString(), StringComparison.Ordinal));
                 var bookSummary = book is null ? null : snapshot.BookSummaries.FirstOrDefault(item => item.BookId == book.Id);
                 if (book is null || bookSummary is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+                var execution = BookBrandExecutionPolicy.Evaluate(bookSummary.AssignedBrand, bookSummary.AssignmentStatus, brandNameElement.GetString());
+                if (!execution.IsAllowed) return new BridgeResponse(Version, request.Id, false, null, execution.Code);
                 if (!string.Equals(bookSummary.ValidationStatus, "Ready", StringComparison.Ordinal))
                 {
                     return new BridgeResponse(Version, request.Id, false, null, "book_not_ready");
@@ -676,9 +764,26 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
+
+    private static bool TryGetRequiredString(JsonElement payload, string propertyName, out string value)
+    {
+        value = string.Empty;
+        if (!payload.TryGetProperty(propertyName, out var element) || element.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(element.GetString())) return false;
+        value = element.GetString()!;
+        return true;
+    }
+
+    private static bool TryGetOptionalString(JsonElement payload, string propertyName, out string? value)
+    {
+        value = null;
+        if (!payload.TryGetProperty(propertyName, out var element) || element.ValueKind == JsonValueKind.Null) return true;
+        if (element.ValueKind != JsonValueKind.String) return false;
+        value = element.GetString();
+        return true;
+    }
 
     private static bool TryParseRequest(string? json, out BridgeRequest request)
     {

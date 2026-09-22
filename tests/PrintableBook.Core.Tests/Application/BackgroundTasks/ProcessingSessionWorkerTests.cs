@@ -120,6 +120,59 @@ public sealed class ProcessingSessionWorkerTests
     private static ProcessingSessionWorkerRequest Request() => new(["book-one"], "Brand", BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow);
 
     [Fact]
+    public async Task Assigned_book_rejects_a_different_processing_brand_before_output_work()
+    {
+        var initial = Snapshot();
+        var summary = initial.BookSummaries[0] with
+        {
+            AssignedBrand = "Other Brand",
+            AssignmentStatus = BookBrandAssignmentStatus.Valid
+        };
+        var application = new Application();
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(initial with { BookSummaries = [summary] }), application, new FrameResolver(), new FileSystem(), new ImageInspector());
+
+        var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(Request(), new Context(), CancellationToken.None).AsTask());
+
+        Assert.Equal("book_brand_mismatch", failure.Code);
+        Assert.Null(application.Request);
+    }
+
+    [Fact]
+    public async Task Invalid_assignment_is_rejected_even_when_the_brand_name_matches()
+    {
+        var initial = Snapshot();
+        var summary = initial.BookSummaries[0] with
+        {
+            AssignedBrand = "Brand",
+            AssignmentStatus = BookBrandAssignmentStatus.AuthorMismatch
+        };
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(initial with { BookSummaries = [summary] }), new Application(), new FrameResolver(), new FileSystem(), new ImageInspector());
+
+        var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(Request(), new Context(), CancellationToken.None).AsTask());
+
+        Assert.Equal("book_brand_assignment_invalid", failure.Code);
+    }
+
+    [Fact]
+    public async Task Batch_with_multiple_assigned_brands_is_rejected_without_partitioning()
+    {
+        var initial = MixedSnapshot();
+        var summaries =
+            initial.BookSummaries.Select((summary, index) => summary with
+            {
+                AssignedBrand = index == 0 ? "Brand" : "Other Brand",
+                AssignmentStatus = BookBrandAssignmentStatus.Valid
+            }).ToArray();
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(initial with { BookSummaries = summaries }), new Application(), new FrameResolver(), new FileSystem(), new ImageInspector());
+
+        var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(
+            new ProcessingSessionWorkerRequest(["book-one", "book-two"], "Brand", BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow),
+            new Context(), CancellationToken.None).AsTask());
+
+        Assert.Equal("mixed_assigned_brands_not_supported", failure.Code);
+    }
+
+    [Fact]
     public async Task Production_mode_resolves_the_two_canonical_prefix_sources_in_fixed_order()
     {
         var application = new Application();

@@ -300,7 +300,7 @@ public sealed class BridgeMessageContractTests
         Assert.Equal("book.brand.templates.copied", response.Command);
         Assert.Equal(new DirectoryReference("brands/Brand One"), copy.BrandDirectory);
         Assert.Equal(new DirectoryReference("workspace"), copy.BookWorkspace?.WorkingDirectory);
-        Assert.Equal(0, manager.Starts);
+        Assert.Equal(1, manager.Starts);
     }
 
     [Fact]
@@ -338,6 +338,30 @@ public sealed class BridgeMessageContractTests
         var response = await router.HandleAsync("""{"version":1,"id":"copy-templates","command":"book.brand.templates.copy","payload":{"bookId":"Book One","brandName":"Brand One"}}""");
 
         Assert.Equal("book_not_ready", response.Error);
+        Assert.Null(copy.BrandDirectory);
+    }
+
+    [Fact]
+    public async Task Brand_template_copy_rejects_a_processing_brand_that_differs_from_assignment()
+    {
+        var copy = new StubBrandTemplateCopyService();
+        var current = CreateSnapshot();
+        var snapshot = current with
+        {
+            BookSummaries = [current.BookSummaries[0] with
+            {
+                AssignedBrand = "Other Brand",
+                AssignmentStatus = BookBrandAssignmentStatus.Valid
+            }],
+            BrandSummaries = [new BrandDesktopSummary("Brand One", BrandValidationStatus.Validated, null, null)]
+        };
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
+            brandTemplateCopyService: copy);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"copy-templates","command":"book.brand.templates.copy","payload":{"bookId":"Book One","brandName":"Brand One"}}""");
+
+        Assert.Equal("book_brand_mismatch", response.Error);
         Assert.Null(copy.BrandDirectory);
     }
 
@@ -396,6 +420,59 @@ public sealed class BridgeMessageContractTests
 
         Assert.True(response.Ok);
         Assert.Equal("background.task", response.Command);
+    }
+
+    [Fact]
+    public async Task Catalog_metadata_commands_route_authorized_entities_and_refresh()
+    {
+        var service = new StubBookCatalogMetadataService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), bookCatalogMetadataService: service);
+
+        var save = await router.HandleAsync("""{"version":1,"id":"metadata","command":"book.metadata.save","payload":{"bookId":"Book One","title":"Title","subtitle":"Subtitle","subcover":"ABCD","description":"Description","author":"Jane Doe"}}""");
+        var assign = await router.HandleAsync("""{"version":1,"id":"assign","command":"book.brand.assign","payload":{"bookId":"Book One","brandName":"Brand One"}}""");
+        var unassign = await router.HandleAsync("""{"version":1,"id":"unassign","command":"book.brand.unassign","payload":{"bookId":"Book One"}}""");
+        var brand = await router.HandleAsync("""{"version":1,"id":"brand","command":"brand.author.save","payload":{"brandName":"Brand One","author":"Jane Doe"}}""");
+
+        Assert.All([save, assign, unassign, brand], response => Assert.True(response.Ok));
+        Assert.Equal("Title", service.Metadata!.Title);
+        Assert.Equal("ABCD", service.Metadata.Subcover);
+        Assert.Equal("Brand One", service.AssignedBrand);
+        Assert.True(service.Unassigned);
+        Assert.Equal("Jane Doe", service.BrandAuthor);
+        Assert.Equal(4, manager.Starts);
+    }
+
+    [Theory]
+    [InlineData("ABC")]
+    [InlineData("ABCDEF")]
+    public async Task Book_metadata_save_rejects_invalid_subcover(string subcover)
+    {
+        var service = new StubBookCatalogMetadataService();
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync($"{{\"version\":1,\"id\":\"metadata\",\"command\":\"book.metadata.save\",\"payload\":{{\"bookId\":\"Book One\",\"subcover\":\"{subcover}\"}}}}");
+
+        Assert.Equal("invalid_book_metadata", response.Error);
+        Assert.Null(service.Metadata);
+    }
+
+    [Fact]
+    public async Task Catalog_metadata_mutations_are_rejected_while_processing()
+    {
+        var service = new StubBookCatalogMetadataService();
+        var process = new StubProcessSessionService(new ProcessSessionSnapshot(true, false, "Brand One", null, "Running", []));
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            processSessionService: process,
+            bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"metadata","command":"book.metadata.save","payload":{"bookId":"Book One","title":"Title"}}""");
+
+        Assert.Equal("processing_active", response.Error);
+        Assert.Null(service.Metadata);
     }
 
     [Fact]
@@ -1015,6 +1092,38 @@ public sealed class BridgeMessageContractTests
         public ValueTask SetHasBackgroundAsync(DiscoveredBook book, bool enabled, CancellationToken cancellationToken = default) { Background = (book.Id.Value, enabled); return ValueTask.CompletedTask; }
         public ValueTask SetActiveAsync(DiscoveredBook book, FileReference source, bool isActive, CancellationToken cancellationToken = default) { Active = (book.Id.Value, source.Value, isActive); return ValueTask.CompletedTask; }
         public ValueTask SaveAsync(DiscoveredBook book, BookInteriorSettingsChange change, CancellationToken cancellationToken = default) { Batch = change; return ValueTask.CompletedTask; }
+    }
+
+    private sealed class StubBookCatalogMetadataService : IBookCatalogMetadataService
+    {
+        public BookProductionMetadata? Metadata { get; private set; }
+        public string? AssignedBrand { get; private set; }
+        public bool Unassigned { get; private set; }
+        public string? BrandAuthor { get; private set; }
+
+        public ValueTask SaveBookMetadataAsync(DiscoveredBook book, BookProductionMetadata metadata, CancellationToken cancellationToken = default)
+        {
+            Metadata = metadata;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask AssignBrandAsync(DiscoveredBook book, DiscoveredBrand brand, CancellationToken cancellationToken = default)
+        {
+            AssignedBrand = brand.Name;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask UnassignBrandAsync(DiscoveredBook book, CancellationToken cancellationToken = default)
+        {
+            Unassigned = true;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask SaveBrandAuthorAsync(DiscoveredBrand brand, string? author, CancellationToken cancellationToken = default)
+        {
+            BrandAuthor = author;
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class GatedProcessSessionService(bool pauseStart = true) : IProcessSessionService
