@@ -19,12 +19,10 @@ public sealed class BookBrandAssignmentTests
     public void Author_match_rejects_missing_or_non_equivalent_values(string? bookAuthor, string? brandAuthor) =>
         Assert.False(AuthorMatchPolicy.IsMatch(bookAuthor, brandAuthor));
 
-    [Theory]
-    [InlineData("ABCD")]
-    [InlineData("ABCDE")]
-    [InlineData("  ABCD  ")]
-    public void Book_metadata_accepts_four_or_five_character_subcover(string subcover)
+    [Fact]
+    public void Book_metadata_accepts_descriptive_subcover_under_one_hundred_characters()
     {
+        var subcover = new string('a', 99);
         var metadata = BookProductionMetadata.Create(" Title ", null, subcover, " Description ", " Author ");
 
         Assert.Equal("Title", metadata.Title);
@@ -33,11 +31,9 @@ public sealed class BookBrandAssignmentTests
         Assert.Equal("Author", metadata.Author);
     }
 
-    [Theory]
-    [InlineData("ABC")]
-    [InlineData("ABCDEF")]
-    public void Book_metadata_rejects_other_subcover_lengths(string subcover) =>
-        Assert.Throws<ArgumentException>(() => BookProductionMetadata.Create(null, null, subcover, null, null));
+    [Fact]
+    public void Book_metadata_rejects_subcover_at_one_hundred_characters() =>
+        Assert.Throws<ArgumentException>(() => BookProductionMetadata.Create(null, null, new string('a', 100), null, null));
 
     [Fact]
     public void Book_metadata_allows_blank_subcover_and_partial_values()

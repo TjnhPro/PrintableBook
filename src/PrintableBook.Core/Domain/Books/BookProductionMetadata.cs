@@ -20,9 +20,9 @@ public sealed record BookProductionMetadata(
         if (normalizedSubcover is not null)
         {
             var length = StringInfo.ParseCombiningCharacters(normalizedSubcover).Length;
-            if (length is not (4 or 5))
+            if (length >= 100)
             {
-                throw new ArgumentException("Subcover must contain exactly 4 or 5 characters.", nameof(subcover));
+                throw new ArgumentException("Subcover must contain fewer than 100 characters.", nameof(subcover));
             }
         }
 

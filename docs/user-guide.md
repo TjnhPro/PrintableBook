@@ -21,7 +21,7 @@ Kích thước hợp lệ: `frame.png` phải là `Artwork maximum side × Artwo
 Trong tab **Overview** của Book detail, card **Book Information** lưu riêng:
 
 - Title, Subtitle, Description và Primary Author; có thể Save thiếu một phần, field trống hiển thị `Unknown`.
-- Subcover là text tùy chọn, sau khi trim phải có đúng 4 hoặc 5 ký tự.
+- Subcover là mô tả ngắn tùy chọn, thường gồm 4–5 từ. Ứng dụng không bắt buộc số từ; sau khi trim chỉ yêu cầu text dưới 100 ký tự.
 - Title đã lưu là tên hiển thị; tên folder vẫn được giữ làm thông tin phụ và không bị rename.
 
 Sau khi Save Author, dùng card **Brand Assignment** để chọn một Brand có Author match rồi nhấn **Assign Brand**. Ứng dụng không auto-assign. Khi reassign hoặc unassign, template, cache và output cũ được giữ nguyên; chúng không tự chuyển sang Brand mới.

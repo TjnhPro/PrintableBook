@@ -150,7 +150,8 @@ public sealed class BookWorkspaceLayoutContractTests
 
         Assert.Contains("Book Information", script, StringComparison.Ordinal);
         Assert.Contains("data-metadata-field=\"subcover\"", script, StringComparison.Ordinal);
-        Assert.Contains("Subcover must contain exactly 4 or 5 characters", script, StringComparison.Ordinal);
+        Assert.Contains("Short description, usually 4–5 words; fewer than 100 characters", script, StringComparison.Ordinal);
+        Assert.Contains("maxlength=\"99\"", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"save-book-metadata\"", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"assign-book-brand\"", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"unassign-book-brand\"", script, StringComparison.Ordinal);

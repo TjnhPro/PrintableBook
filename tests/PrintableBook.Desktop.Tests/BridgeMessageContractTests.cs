@@ -443,11 +443,10 @@ public sealed class BridgeMessageContractTests
         Assert.Equal(4, manager.Starts);
     }
 
-    [Theory]
-    [InlineData("ABC")]
-    [InlineData("ABCDEF")]
-    public async Task Book_metadata_save_rejects_invalid_subcover(string subcover)
+    [Fact]
+    public async Task Book_metadata_save_rejects_subcover_at_one_hundred_characters()
     {
+        var subcover = new string('a', 100);
         var service = new StubBookCatalogMetadataService();
         var router = new WebViewBridgeRouter(
             new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),

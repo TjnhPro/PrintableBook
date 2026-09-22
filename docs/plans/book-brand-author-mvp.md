@@ -94,7 +94,7 @@ Không thêm telemetry trong MVP; đo bằng automated tests và manual acceptan
 | Thêm `Needs assignment` filter? | Không. Invalid ở `All` và Brand filter, có badge. | Hold scope. |
 | Có Unassign? | Có, explicit secondary action. | Cần rescue path. |
 | Auto-select/auto-switch? | Không. | Assignment và execution context đều explicit. |
-| `Subcover` là gì? | Optional single-line text, dài đúng 4 hoặc 5 ký tự sau trim; không phải file/path. | Quyết định sản phẩm đã xác nhận. |
+| `Subcover` là gì? | Optional single-line description, thường gồm 4–5 từ; không validate số từ, chỉ giới hạn dưới 100 ký tự sau trim. | Quyết định sản phẩm đã cập nhật. |
 | Processing Brand khác assigned Brand? | Backend chặn action và trả lỗi rõ ràng; không auto-switch. | Assignment phải là safety boundary thật. |
 | Reassign Brand A → B? | Hiện cảnh báo xác nhận; không xóa/copy lại template hoặc output. | Tránh silent side effect và làm rõ asset cũ vẫn còn. |
 | Book persistence? | Nested metadata + assignment trong existing workspace state. | Atomic boundary hiện có, không migration. |
@@ -119,7 +119,7 @@ BookProductionMetadata
 - `Unknown` chỉ là display/placeholder, không persist literal `"Unknown"`.
 - Author là Primary Author duy nhất.
 - Title/Subtitle/Author single-line.
-- Subcover là optional single-line text. Sau outer trim, nếu có giá trị thì phải dài đúng **4 hoặc 5 ký tự**; không áp thêm regex, casing hoặc semantic rule trong MVP.
+- Subcover là optional single-line description, thường gồm **4–5 từ**. Đây chỉ là hướng dẫn nội dung, không validate số từ; sau outer trim chỉ yêu cầu độ dài dưới **100 ký tự** và không áp regex, casing hoặc semantic rule.
 - Description là multiline free text; giữ line breaks và trim outer whitespace.
 - Title có giá trị là display title; fallback tên folder. Folder name vẫn là secondary text/tooltip.
 - Search match display title, folder name và Author; không rename source folder.
@@ -368,7 +368,7 @@ flowchart LR
 
 Giữ drawer/tabs. Sau summary cards thêm:
 
-1. `Book Information`: Title, Subtitle, Author và Subcover là single-line inputs; Subcover có hint `4–5 characters` và inline validation; Description là textarea; independent dirty/status; nút `Save Book Information`.
+1. `Book Information`: Title, Subtitle, Author và Subcover là single-line inputs; Subcover có hint `usually 4–5 words, fewer than 100 characters` và chỉ validate giới hạn ký tự; Description là textarea; independent dirty/status; nút `Save Book Information`.
 2. `Brand Assignment`: assigned Brand + status/reason; native select chỉ có matching Brands; explicit `Assign/Reassign Brand`; secondary `Unassign`; empty-state guidance. Reassign từ Brand A sang Brand B phải mở cảnh báo xác nhận rằng template/output cũ không tự bị xóa hoặc thay thế.
 
 Không reuse header `Save changes` vì nút đó quản lý Interior draft. Metadata và Interior có dirty state độc lập. Đóng drawer khi metadata dirty phải cảnh báo/giữ nhất quán với unsaved changes, không silently discard.
@@ -416,7 +416,7 @@ Thêm card `Brand Information` phía trên asset inventory: Author input, own Sa
 ### Domain/Core
 
 - `AuthorMatchPolicyTests`: case/trim, blank, internal spaces, punctuation.
-- Book metadata validation tests: Subcover blank/null hợp lệ; sau trim chỉ length 4 hoặc 5 hợp lệ; length khác bị reject với field error.
+- Book metadata validation tests: Subcover blank/null hợp lệ; 99 ký tự hợp lệ; từ 100 ký tự bị reject với field error; không validate số từ.
 - `BookBrandAssignmentEvaluatorTests`: mọi status, missing Brand/metadata.
 - `BookProcessingStateTests`: metadata/assignment survive start/complete/fail/settings; Unassign chỉ clear assignment.
 - Metadata service tests: partial save, whitespace→null, assign/reassign/unassign, stale/mismatch reject.
@@ -440,7 +440,7 @@ Thêm card `Brand Information` phía trên asset inventory: Author input, own Sa
 
 ### UI/manual
 
-- Unknown không persist literal; partial Save survives restart; Subcover chỉ nhận text dài 4–5 ký tự sau trim.
+- Unknown không persist literal; partial Save survives restart; Subcover là description thường 4–5 từ nhưng chỉ enforce dưới 100 ký tự sau trim.
 - Candidates exact match; unsaved Author không authorize.
 - Invalid reason/rescue cho mọi state.
 - Reassign A → B luôn yêu cầu confirmation và nêu rõ template/output cũ không tự đổi.
@@ -522,7 +522,7 @@ Không nhận vào MVP vì trái scope: bắt legacy migration, bulk assignment,
 ## 15. Final acceptance criteria
 
 1. Data cũ load bình thường; regression suite pass.
-2. Partial metadata Save; null hiển thị Unknown; Subcover optional nhưng nếu có phải là text dài đúng 4 hoặc 5 ký tự sau trim.
+2. Partial metadata Save; null hiển thị Unknown; Subcover optional, thường 4–5 từ nhưng không hardcode số từ và chỉ enforce text dưới 100 ký tự sau trim.
 3. Brand Author độc lập Brand asset validation.
 4. Assign chỉ khi saved Authors match trim + ordinal-ignore-case.
 5. Author change giữ assignment và chuyển invalid.
