@@ -138,6 +138,23 @@ public sealed class ProcessingSessionWorkerTests
     }
 
     [Fact]
+    public async Task Assigned_book_allows_its_matching_processing_brand()
+    {
+        var initial = Snapshot();
+        var summary = initial.BookSummaries[0] with
+        {
+            AssignedBrand = "Brand",
+            AssignmentStatus = BookBrandAssignmentStatus.Valid
+        };
+        var application = new Application();
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(initial with { BookSummaries = [summary] }), application, new FrameResolver(), new FileSystem(), new ImageInspector());
+
+        await worker.ExecuteAsync(Request(), new Context(), CancellationToken.None);
+
+        Assert.NotNull(application.Request);
+    }
+
+    [Fact]
     public async Task Invalid_assignment_is_rejected_even_when_the_brand_name_matches()
     {
         var initial = Snapshot();

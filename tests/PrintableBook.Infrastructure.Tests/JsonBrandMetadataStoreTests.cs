@@ -27,6 +27,14 @@ public sealed class JsonBrandMetadataStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SaveAsync_round_trips_blank_author_as_null()
+    {
+        await Store().SaveAsync(BrandDirectory(), BrandMetadata.Create("   "));
+
+        Assert.Null((await Store().LoadAsync(BrandDirectory()))!.Author);
+    }
+
+    [Fact]
     public async Task LoadAsync_rejects_malformed_json()
     {
         Directory.CreateDirectory(BrandDirectory().Value);

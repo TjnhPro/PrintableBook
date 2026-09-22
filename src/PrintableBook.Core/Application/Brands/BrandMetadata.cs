@@ -9,6 +9,10 @@ public sealed record BrandMetadata(string? Author)
     public static string? NormalizeAuthor(string? author)
     {
         var normalized = author?.Trim();
+        if (normalized?.IndexOfAny(['\r', '\n']) >= 0)
+        {
+            throw new ArgumentException("Author must be a single line.", nameof(author));
+        }
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 }

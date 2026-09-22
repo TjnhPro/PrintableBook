@@ -460,6 +460,20 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Brand_author_save_returns_a_specific_error_for_multiline_text()
+    {
+        var service = new StubBookCatalogMetadataService();
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"brand","command":"brand.author.save","payload":{"brandName":"Brand One","author":"Jane\nDoe"}}""");
+
+        Assert.Equal("invalid_brand_author", response.Error);
+        Assert.Null(service.BrandAuthor);
+    }
+
+    [Fact]
     public async Task Catalog_metadata_mutations_are_rejected_while_processing()
     {
         var service = new StubBookCatalogMetadataService();

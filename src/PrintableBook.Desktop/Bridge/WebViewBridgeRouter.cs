@@ -229,7 +229,7 @@ internal sealed class WebViewBridgeRouter(
                             }
                             var brand = snapshot.Discovery.Brands.FirstOrDefault(item => string.Equals(item.Name, brandName, StringComparison.Ordinal));
                             if (brand is null) return new BridgeResponse(Version, request.Id, false, null, "brand_not_found");
-                            await bookCatalogMetadataService.SaveBrandAuthorAsync(brand, author, cancellationToken);
+                            await bookCatalogMetadataService.SaveBrandAuthorAsync(brand, BrandMetadata.Create(author).Author, cancellationToken);
                         }
                         else
                         {
@@ -277,7 +277,8 @@ internal sealed class WebViewBridgeRouter(
                     }
                     catch (ArgumentException)
                     {
-                        return new BridgeResponse(Version, request.Id, false, null, "invalid_book_metadata");
+                        return new BridgeResponse(Version, request.Id, false, null,
+                            request.Command == "brand.author.save" ? "invalid_brand_author" : "invalid_book_metadata");
                     }
                     catch (JsonException)
                     {

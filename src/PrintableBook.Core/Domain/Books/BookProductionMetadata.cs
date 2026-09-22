@@ -39,6 +39,10 @@ public sealed record BookProductionMetadata(
     public static string? NormalizeSingleLine(string? value)
     {
         var normalized = value?.Trim();
+        if (normalized?.IndexOfAny(['\r', '\n']) >= 0)
+        {
+            throw new ArgumentException("Value must be a single line.", nameof(value));
+        }
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 

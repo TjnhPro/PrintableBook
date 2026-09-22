@@ -51,6 +51,17 @@ public sealed class BookBrandAssignmentTests
     }
 
     [Theory]
+    [InlineData("Title\nSecond line", null, null)]
+    [InlineData(null, "Subtitle\rSecond line", null)]
+    [InlineData(null, null, "Author\nSecond line")]
+    public void Book_metadata_rejects_line_breaks_in_single_line_fields(string? title, string? subtitle, string? author) =>
+        Assert.Throws<ArgumentException>(() => BookProductionMetadata.Create(title, subtitle, null, null, author));
+
+    [Fact]
+    public void Brand_author_rejects_line_breaks() =>
+        Assert.Throws<ArgumentException>(() => BrandMetadata.Create("Jane\nDoe"));
+
+    [Theory]
     [InlineData(null, BookBrandAssignmentStatus.Unassigned)]
     [InlineData("", BookBrandAssignmentStatus.Unassigned)]
     public void Evaluator_reports_unassigned(string? assignedBrand, BookBrandAssignmentStatus expected) =>
