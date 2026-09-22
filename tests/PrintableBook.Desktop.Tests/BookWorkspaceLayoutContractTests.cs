@@ -184,6 +184,7 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("data-action=\"brand-author-input\"", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"save-brand-author\"", script, StringComparison.Ordinal);
         Assert.Contains("assigned Book${impactedBooks === 1", script, StringComparison.Ordinal);
+        Assert.Contains("metadataStatus\", \"Missing\") === \"Unavailable\"", script, StringComparison.Ordinal);
     }
 
     [Fact]

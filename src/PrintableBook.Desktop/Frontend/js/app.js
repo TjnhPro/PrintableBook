@@ -77,6 +77,7 @@
     return trimmed && ![4, 5].includes(length) ? "Subcover must contain exactly 4 or 5 characters." : "";
   };
   const brandAuthorDraftFor = (brand) => state.brandAuthorDrafts.get(valueFor(brand, "name", "")) ?? brandAuthor(brand);
+  const brandAuthorIsDirty = (brand, value) => value !== brandAuthor(brand) || valueFor(brandSummaryFor(brand), "metadataStatus", "Missing") === "Unavailable";
   const metadataAssignmentWarning = (draft, summary) => {
     const assigned = assignedBrandName(summary);
     if (!assigned) return "";
@@ -645,7 +646,7 @@
     const files = assets.filter((asset) => valueFor(asset, "type", "") !== "Folder");
     const assetInventory = assets.length ? `<div class="brand-asset-inventory"><div class="brand-folder-list">${folders.map(renderFolder).join("")}</div><div class="brand-file-grid">${files.map(renderFile).join("")}</div></div>` : "<p class=\"empty-copy\">No brand assets found.</p>";
     const authorDraft = selected ? brandAuthorDraftFor(selected) : "";
-    const authorDirty = selected ? authorDraft !== brandAuthor(selected) : false;
+    const authorDirty = selected ? brandAuthorIsDirty(selected, authorDraft) : false;
     const impactedBooks = selected && authorDirty ? books().filter((book) => {
       const summary = summaryFor(book);
       return assignedBrandName(summary) === valueFor(selected, "name", "") && !authorMatches(valueFor(metadataFor(summary), "author", ""), authorDraft);
@@ -1526,7 +1527,7 @@
       state.brandAuthorDrafts.set(event.target.dataset.brandName, event.target.value);
       const selected = brands().find((brand) => valueFor(brand, "name", "") === event.target.dataset.brandName);
       const save = document.querySelector('[data-action="save-brand-author"]');
-      if (save) save.disabled = !selected || event.target.value === brandAuthor(selected) || state.catalogMutationPending || processIsActive();
+      if (save) save.disabled = !selected || !brandAuthorIsDirty(selected, event.target.value) || state.catalogMutationPending || processIsActive();
     }
   });
   content.addEventListener("change", (event) => {
