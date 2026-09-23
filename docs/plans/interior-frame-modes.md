@@ -4,8 +4,8 @@
 
 ## Trạng thái tài liệu
 
-- Branch kế hoạch: `plan/interior-frame-modes`, tạo từ `main` tại `395f2e7` (`v0.2.3`).
-- Phase hiện tại chỉ lập kế hoạch và review; không triển khai code.
+- Branch triển khai: `feat/interior-frame-no-auto`, tạo từ `main` tại `395f2e7` (`v0.2.3`).
+- Implementation và automated regression đã hoàn tất ngày 2026-09-23; manual artifact smoke vẫn là release gate riêng.
 - Review `autoplan` đã hoàn tất qua CEO, Design, Engineering, DX và outside voice; giữ scope hẹp, additive/minimal diff, không refactor pipeline.
 
 ## Kết quả cần đạt
@@ -409,11 +409,11 @@ DX mode: `POLISH`; persona chính là maintainer triển khai/review feature tro
 
 ## Implementation tasks
 
-- [ ] **T1 (P1) — State contract:** thêm v2/load provenance/canonical writer và raw migration fixtures; verify bằng Core + Infrastructure targeted tests.
-- [ ] **T2 (P1) — Fault isolation:** degrade/disable riêng corrupt Book và đưa queue state load vào structured failure boundary; verify mixed snapshot, stale-request rejection và healthy-Book separate process.
-- [ ] **T3 (P1) — Wire/UI:** phát string mode ở final WebView JSON, bỏ ordinal/Auto/sentinel ngoài Interior; verify C# serialization + Node bridge tests.
-- [ ] **T4 (P1) — Processing/cache:** stage/hash frame, validate trước cache hit, bump stamp và giữ structured failure xuyên queue; verify missing/corrupt/wrong-size/same-metadata fixtures.
-- [ ] **T5 (P2) — UX/docs/release:** cập nhật UI two-state, migration warning, docs và downgrade note; verify keyboard/responsive/manual smoke + full suite.
+- [x] **T1 (P1) — State contract:** thêm v2/load provenance/canonical writer và raw migration fixtures; verify bằng Core + Infrastructure targeted tests.
+- [x] **T2 (P1) — Fault isolation:** degrade/disable riêng corrupt Book và đưa queue state load vào structured failure boundary; verify snapshot, stale-request rejection và backend state guard.
+- [x] **T3 (P1) — Wire/UI:** phát string mode ở final WebView JSON, bỏ ordinal/Auto/sentinel ngoài Interior; verify C# serialization + Node bridge tests.
+- [x] **T4 (P1) — Processing/cache:** stage/hash frame, validate trước cache hit, bump stamp và giữ structured failure xuyên queue; verify missing/corrupt/wrong-size/same-metadata fixtures.
+- [ ] **T5 (P2) — UX/docs/release:** UI two-state, migration warning, docs, downgrade note và full automated suite đã hoàn tất; manual artifact smoke giữ lại cho release gate.
 
 ## Acceptance criteria
 

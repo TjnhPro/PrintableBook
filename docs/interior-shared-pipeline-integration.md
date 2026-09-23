@@ -26,16 +26,15 @@ The working page centers the 2270-square artwork at `(140, 140)`. The final page
 
 ## Brand-frame policy
 
-Frame availability, automatic recommendation, and user mode remain separate at the overlay stage. `FrameMode.Auto` uses `AutoFrameRecommended`; `FrameMode.Enabled` forces a compatible available frame; `FrameMode.Disabled` suppresses it. Before preparation, however, Disabled is also an explicit user override: it skips the classifier and selects CropArt.
+Normal Interior exposes exactly two modes. `FrameMode.Enabled` runs detected preparation and requires a compatible Brand frame. `FrameMode.Disabled` is the default, skips the classifier, selects CropArt and suppresses framing.
 
 ```text
-ShouldApplyFrame = FrameAvailable &&
-  (Auto => AutoFrameRecommended, Enabled => true, Disabled => false)
+ShouldApplyFrame = (Enabled => true, Disabled => false)
 ```
 
-Thus BorderArt and FullArt frame in Auto, CropArt stays unframed in Auto, and any detected type can be framed with Enabled. Disabled always prepares as CropArt and remains unframed; it no longer preserves a detected BorderArt/FullArt preparation path.
+Enabled can frame any detected artwork type. Disabled always prepares as CropArt and remains unframed; it does not preserve a detected BorderArt/FullArt preparation path. `AutoFrameRecommended` remains detector metadata only and is no longer a user mode.
 
-An applied frame must already match the prepared artwork size. It is not silently resized. If no frame applies, `framed.png` is an exact pass-through artifact so downstream stages have a stable input.
+An applied frame must already match the prepared artwork size. It is not silently resized. A Book run with any Frame page copies the Brand frame into an immutable run input, hashes that staged file once, and every Frame request uses that staged path/digest. Missing, unreadable or wrong-size frame input fails before any cache-success return. For No Frame, `framed.png` is an exact pass-through artifact so downstream stages have a stable input.
 
 ## Cache and recovery
 
@@ -51,9 +50,9 @@ Each page has these durable artifacts:
 .workspace/cache/<PageId>/input-stamp.json
 ```
 
-The v4 input stamp includes source identity, classification policy, threshold, detector/preparation versions, all three image sizes, density, frame identity, and `FrameMode`. Cache invalidation follows policy-specific dependencies: `Auto ↔ Enabled` reuses classification/prepared; `Disabled ↔ Auto|Enabled` rebuilds from classification; detector settings do not invalidate forced No Frame; trim threshold changes invalidate its preparation.
+The v5 input stamp includes source identity, classification policy, detector/preparation versions, all three image sizes, density, `FrameMode`, and the staged frame content SHA-256. `Disabled ↔ Enabled` rebuilds from classification. BorderLine detector settings do not invalidate forced No Frame; the trim threshold remains a preparation dependency. Same-length/same-timestamp frame replacement still invalidates Frame output through its digest.
 
-`classification.json` v2 persists effective type, origin (`detected`, `forced-no-frame`, `forced-intro`), detection status and optional detector evidence. Forced entries must have null evidence. Recognized v3 Auto/Enabled metadata is upgraded without rewriting compatible preparation, while legacy Interior Disabled is rebuilt. Corrupt, contradictory or unknown schemas fail closed. Classification metadata is atomically replaced and the v4 stamp is committed last, so cancellation retains a retryable workspace.
+`classification.json` v2 persists effective type, origin (`detected`, `forced-no-frame`, `forced-intro`), detection status and optional detector evidence. Forced entries must have null evidence. Legacy cache schemas rebuild into the binary policy contract; corrupt, contradictory or unknown schemas fail closed. Classification metadata is atomically replaced and the v5 stamp is committed last, so cancellation retains a retryable workspace.
 
 ## Local product workflow certification
 
@@ -72,4 +71,4 @@ $env:PRINTABLEBOOK_RUN_LOCAL_CORPUS = "true"
 dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "FullyQualifiedName~InteriorWorkflowLocalCorpusTests"
 ```
 
-Visual review remains required: BorderArt should have its source border removed before the Brand frame overlay, FullArt should retain an acceptable min-side crop, and CropArt in Auto should preserve all trimmed artwork without a Brand frame.
+Visual review remains required: Frame output should remove the detected source border before Brand overlay where applicable, FullArt should retain an acceptable min-side crop, and No Frame should preserve all trimmed CropArt without a Brand frame.
