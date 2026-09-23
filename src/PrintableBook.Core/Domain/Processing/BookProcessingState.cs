@@ -44,7 +44,9 @@ public sealed record BookProcessingState(
     InteriorOutputKind? PublishedInteriorKind = null,
     DateTimeOffset? PublishedInteriorAtUtc = null,
     string? PublishedCoverPreviewReference = null,
-    string? PublishedInteriorPreviewReference = null)
+    string? PublishedInteriorPreviewReference = null,
+    BookProductionMetadata? Metadata = null,
+    string? AssignedBrand = null)
 {
     public static BookProcessingState NotStarted(BookId bookId) => new(
         bookId,

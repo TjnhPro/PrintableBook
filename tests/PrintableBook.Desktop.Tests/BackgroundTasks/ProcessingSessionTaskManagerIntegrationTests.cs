@@ -25,7 +25,7 @@ public sealed class ProcessingSessionTaskManagerIntegrationTests
             .BuildServiceProvider();
         using var manager = new BackgroundTaskManager(services, new NullDiagnostics());
 
-        var task = await manager.StartAsync(BackgroundTaskKind.ProcessingSession, "processing", "book-one", new ProcessingSessionWorkerRequest(["book-one", "book-two"], "Brand", BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow));
+        var task = await manager.StartAsync(BackgroundTaskKind.ProcessingSession, "processing", "book-one", new ProcessingSessionWorkerRequest(["book-one", "book-two"], BookProcessingMode.InteriorOnly, DateTimeOffset.UtcNow));
         await application.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
         await manager.CancelAsync(task.TaskId);
         application.Release.TrySetResult();
@@ -58,7 +58,20 @@ public sealed class ProcessingSessionTaskManagerIntegrationTests
         return new DiscoveredBook(id, bookId, new DirectoryReference(id), new BookWorkspace(bookId, new DirectoryReference($"{id}/workspace"), new DirectoryReference($"{id}/processed"), new DirectoryReference($"{id}/temporary")));
     }
 
-    private static BookDesktopSummary Summary(BookId id) => new(id, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 1, HasBackground: false);
+    private static BookDesktopSummary Summary(BookId id) => new(
+        id,
+        "Ready",
+        [],
+        BookProcessingStatus.NotStarted,
+        null,
+        null,
+        [],
+        [],
+        [],
+        1,
+        HasBackground: false,
+        AssignedBrand: "Brand",
+        AssignmentStatus: BookBrandAssignmentStatus.Valid);
 
     private sealed class SnapshotProvider(ApplicationSnapshot snapshot) : IApplicationSnapshotProvider
     {

@@ -37,14 +37,21 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
                 .Where(key => !string.IsNullOrWhiteSpace(key))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
-                .ToArray() is { Length: > 0 } inactive ? inactive : null
+                .ToArray() is { Length: > 0 } inactive ? inactive : null,
+            Metadata = state.Metadata?.Normalize(),
+            AssignedBrand = string.IsNullOrWhiteSpace(state.AssignedBrand) ? null : state.AssignedBrand.Trim()
         };
     }
 
     public ValueTask SaveAsync(BookWorkspace workspace, BookProcessingState state, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(state);
-        return fileSystem.WriteTextAtomicallyAsync(StateFile(workspace), JsonSerializer.Serialize(state, JsonOptions), cancellationToken);
+        var normalized = state with
+        {
+            Metadata = state.Metadata?.Normalize(),
+            AssignedBrand = string.IsNullOrWhiteSpace(state.AssignedBrand) ? null : state.AssignedBrand.Trim()
+        };
+        return fileSystem.WriteTextAtomicallyAsync(StateFile(workspace), JsonSerializer.Serialize(normalized, JsonOptions), cancellationToken);
     }
 
     public ValueTask AppendLogAsync(BookWorkspace workspace, BookProcessingLogEntry entry, CancellationToken cancellationToken = default)

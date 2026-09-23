@@ -392,13 +392,13 @@ public sealed class BridgeMessageContractTests
             new ApplicationLoadCoordinator(manager),
             brandTemplateCopyService: copy);
 
-        var response = await router.HandleAsync("""{"version":1,"id":"copy-templates","command":"book.brand.templates.copy","payload":{"bookId":"Book One","brandName":"Brand One"}}""");
+        var response = await router.HandleAsync("""{"version":1,"id":"copy-templates","command":"book.brand.templates.copy","payload":{"bookId":"Book One"}}""");
 
         Assert.True(response.Ok);
         Assert.Equal("book.brand.templates.copied", response.Command);
         Assert.Equal(new DirectoryReference("brands/Brand One"), copy.BrandDirectory);
         Assert.Equal(new DirectoryReference("workspace"), copy.BookWorkspace?.WorkingDirectory);
-        Assert.Equal(0, manager.Starts);
+        Assert.Equal(1, manager.Starts);
     }
 
     [Fact]
@@ -413,7 +413,7 @@ public sealed class BridgeMessageContractTests
             new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
             brandTemplateCopyService: copy);
 
-        var response = await router.HandleAsync("""{"version":1,"id":"copy-templates","command":"book.brand.templates.copy","payload":{"bookId":"Book One","brandName":"Brand One"}}""");
+        var response = await router.HandleAsync("""{"version":1,"id":"copy-templates","command":"book.brand.templates.copy","payload":{"bookId":"Book One"}}""");
 
         Assert.Equal("brand_not_validated", response.Error);
         Assert.Null(copy.BrandDirectory);
@@ -433,9 +433,49 @@ public sealed class BridgeMessageContractTests
             new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
             brandTemplateCopyService: copy);
 
-        var response = await router.HandleAsync("""{"version":1,"id":"copy-templates","command":"book.brand.templates.copy","payload":{"bookId":"Book One","brandName":"Brand One"}}""");
+        var response = await router.HandleAsync("""{"version":1,"id":"copy-templates","command":"book.brand.templates.copy","payload":{"bookId":"Book One"}}""");
 
         Assert.Equal("book_not_ready", response.Error);
+        Assert.Null(copy.BrandDirectory);
+    }
+
+    [Fact]
+    public async Task Brand_template_copy_rejects_a_legacy_brand_that_differs_from_assignment()
+    {
+        var copy = new StubBrandTemplateCopyService();
+        var current = CreateSnapshot();
+        var snapshot = current with { BrandSummaries = [new BrandDesktopSummary("Brand One", BrandValidationStatus.Validated, null, null)] };
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
+            brandTemplateCopyService: copy);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"copy-templates","command":"book.brand.templates.copy","payload":{"bookId":"Book One","brandName":"Other Brand"}}""");
+
+        Assert.Equal("book_brand_mismatch", response.Error);
+        Assert.Null(copy.BrandDirectory);
+    }
+
+    [Fact]
+    public async Task Brand_template_copy_rejects_an_unassigned_book_before_copying_files()
+    {
+        var copy = new StubBrandTemplateCopyService();
+        var current = CreateSnapshot();
+        var snapshot = current with
+        {
+            BookSummaries = [current.BookSummaries[0] with
+            {
+                AssignedBrand = null,
+                AssignmentStatus = BookBrandAssignmentStatus.Unassigned
+            }],
+            BrandSummaries = [new BrandDesktopSummary("Brand One", BrandValidationStatus.Validated, null, null)]
+        };
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
+            brandTemplateCopyService: copy);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"copy-templates","command":"book.brand.templates.copy","payload":{"bookId":"Book One"}}""");
+
+        Assert.Equal("book_brand_assignment_required", response.Error);
         Assert.Null(copy.BrandDirectory);
     }
 
@@ -494,6 +534,72 @@ public sealed class BridgeMessageContractTests
 
         Assert.True(response.Ok);
         Assert.Equal("background.task", response.Command);
+    }
+
+    [Fact]
+    public async Task Catalog_metadata_commands_route_authorized_entities_and_refresh()
+    {
+        var service = new StubBookCatalogMetadataService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), bookCatalogMetadataService: service);
+
+        var save = await router.HandleAsync("""{"version":1,"id":"metadata","command":"book.metadata.save","payload":{"bookId":"Book One","title":"Title","subtitle":"Subtitle","subcover":"ABCD","description":"Description","author":"Jane Doe"}}""");
+        var assign = await router.HandleAsync("""{"version":1,"id":"assign","command":"book.brand.assign","payload":{"bookId":"Book One","brandName":"Brand One"}}""");
+        var unassign = await router.HandleAsync("""{"version":1,"id":"unassign","command":"book.brand.unassign","payload":{"bookId":"Book One"}}""");
+        var brand = await router.HandleAsync("""{"version":1,"id":"brand","command":"brand.author.save","payload":{"brandName":"Brand One","author":"Jane Doe"}}""");
+
+        Assert.All([save, assign, unassign, brand], response => Assert.True(response.Ok));
+        Assert.Equal("Title", service.Metadata!.Title);
+        Assert.Equal("ABCD", service.Metadata.Subcover);
+        Assert.Equal("Brand One", service.AssignedBrand);
+        Assert.True(service.Unassigned);
+        Assert.Equal("Jane Doe", service.BrandAuthor);
+        Assert.Equal(4, manager.Starts);
+    }
+
+    [Fact]
+    public async Task Book_metadata_save_rejects_subcover_at_one_hundred_characters()
+    {
+        var subcover = new string('a', 100);
+        var service = new StubBookCatalogMetadataService();
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync($"{{\"version\":1,\"id\":\"metadata\",\"command\":\"book.metadata.save\",\"payload\":{{\"bookId\":\"Book One\",\"subcover\":\"{subcover}\"}}}}");
+
+        Assert.Equal("invalid_book_metadata", response.Error);
+        Assert.Null(service.Metadata);
+    }
+
+    [Fact]
+    public async Task Brand_author_save_returns_a_specific_error_for_multiline_text()
+    {
+        var service = new StubBookCatalogMetadataService();
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"brand","command":"brand.author.save","payload":{"brandName":"Brand One","author":"Jane\nDoe"}}""");
+
+        Assert.Equal("invalid_brand_author", response.Error);
+        Assert.Null(service.BrandAuthor);
+    }
+
+    [Fact]
+    public async Task Catalog_metadata_mutations_are_rejected_while_processing()
+    {
+        var service = new StubBookCatalogMetadataService();
+        var process = new StubProcessSessionService(new ProcessSessionSnapshot(true, false, "Brand One", null, "Running", []));
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            processSessionService: process,
+            bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"metadata","command":"book.metadata.save","payload":{"bookId":"Book One","title":"Title"}}""");
+
+        Assert.Equal("processing_active", response.Error);
+        Assert.Null(service.Metadata);
     }
 
     [Fact]
@@ -751,7 +857,7 @@ public sealed class BridgeMessageContractTests
         var session = new StubProcessSessionService(new ProcessSessionSnapshot(false, false, "Amazon", id, null, []));
 
         var response = await new WebViewBridgeRouter(processSessionService: session)
-            .HandleAsync("""{"version":1,"id":"request-interior-only","command":"process.start","payload":{"bookIds":["Book One"],"brandName":"Amazon","mode":"interior-only"}}""");
+            .HandleAsync("""{"version":1,"id":"request-interior-only","command":"process.start","payload":{"bookIds":["Book One"],"mode":"interior-only"}}""");
 
         Assert.True(response.Ok);
         Assert.Equal(BookProcessingMode.InteriorOnly, session.LastMode);
@@ -763,10 +869,49 @@ public sealed class BridgeMessageContractTests
         var session = new StubProcessSessionService(new ProcessSessionSnapshot(false, false, "Brand One", null, null, []));
 
         var response = await new WebViewBridgeRouter(processSessionService: session)
-            .HandleAsync("""{"version":1,"id":"production-interior","command":"process.start","payload":{"bookIds":["Book One"],"brandName":"Brand One","mode":"production-interior"}}""");
+            .HandleAsync("""{"version":1,"id":"production-interior","command":"process.start","payload":{"bookIds":["Book One"],"mode":"production-interior"}}""");
 
         Assert.True(response.Ok);
         Assert.Equal(BookProcessingMode.ProductionInterior, session.LastMode);
+    }
+
+    [Fact]
+    public async Task Process_start_rejects_an_unassigned_book_during_fresh_bridge_preflight()
+    {
+        var current = CreateSnapshot();
+        var snapshot = current with
+        {
+            BookSummaries = [current.BookSummaries[0] with
+            {
+                AssignedBrand = null,
+                AssignmentStatus = BookBrandAssignmentStatus.Unassigned
+            }]
+        };
+        var session = new StubProcessSessionService(new ProcessSessionSnapshot(false, false, null, null, null, []));
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
+            processSessionService: session);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"start","command":"process.start","payload":{"bookIds":["Book One"],"mode":"interior-only"}}""");
+
+        Assert.Equal("book_brand_assignment_required", response.Error);
+        Assert.Null(session.LastMode);
+    }
+
+    [Fact]
+    public async Task Process_start_treats_legacy_brand_name_as_a_match_assertion_only()
+    {
+        var session = new StubProcessSessionService(new ProcessSessionSnapshot(false, false, null, null, null, []));
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            processSessionService: session);
+
+        var mismatch = await router.HandleAsync("""{"version":1,"id":"mismatch","command":"process.start","payload":{"bookIds":["Book One"],"brandName":"Other Brand","mode":"interior-only"}}""");
+        var matching = await router.HandleAsync("""{"version":1,"id":"matching","command":"process.start","payload":{"bookIds":["Book One"],"brandName":"Brand One","mode":"interior-only"}}""");
+
+        Assert.Equal("book_brand_mismatch", mismatch.Error);
+        Assert.True(matching.Ok);
+        Assert.Equal(BookProcessingMode.InteriorOnly, session.LastMode);
     }
 
     [Fact]
@@ -844,7 +989,7 @@ public sealed class BridgeMessageContractTests
         new(new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())), processSessionService: process, bookInteriorSettingsService: settings);
 
     private static string ProcessStartRequest() =>
-        """{"version":1,"id":"start","command":"process.start","payload":{"bookIds":["Book One"],"brandName":"Brand","mode":"interior-only"}}""";
+        """{"version":1,"id":"start","command":"process.start","payload":{"bookIds":["Book One"],"mode":"interior-only"}}""";
 
     private static string InteriorSettingsSaveRequest() =>
         """{"version":1,"id":"save","command":"book.interior.settings.save","payload":{"bookId":"Book One","assets":[{"sourceReference":"Book interior/page-001.png","active":false}]}}""";
@@ -1053,7 +1198,7 @@ public sealed class BridgeMessageContractTests
         public ProcessSessionSnapshot? CancelSnapshot { get; init; }
         public Exception? StartException { get; init; }
         public ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(current);
-        public ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default)
+        public ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, BookProcessingMode mode, CancellationToken cancellationToken = default)
         {
             if (StartException is not null) return ValueTask.FromException<ProcessSessionSnapshot>(StartException);
             LastMode = mode;
@@ -1130,6 +1275,38 @@ public sealed class BridgeMessageContractTests
         public ValueTask SaveAsync(DiscoveredBook book, BookInteriorSettingsChange change, CancellationToken cancellationToken = default) { Batch = change; return ValueTask.CompletedTask; }
     }
 
+    private sealed class StubBookCatalogMetadataService : IBookCatalogMetadataService
+    {
+        public BookProductionMetadata? Metadata { get; private set; }
+        public string? AssignedBrand { get; private set; }
+        public bool Unassigned { get; private set; }
+        public string? BrandAuthor { get; private set; }
+
+        public ValueTask SaveBookMetadataAsync(DiscoveredBook book, BookProductionMetadata metadata, CancellationToken cancellationToken = default)
+        {
+            Metadata = metadata;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask AssignBrandAsync(DiscoveredBook book, DiscoveredBrand brand, CancellationToken cancellationToken = default)
+        {
+            AssignedBrand = brand.Name;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask UnassignBrandAsync(DiscoveredBook book, CancellationToken cancellationToken = default)
+        {
+            Unassigned = true;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask SaveBrandAuthorAsync(DiscoveredBrand brand, string? author, CancellationToken cancellationToken = default)
+        {
+            BrandAuthor = author;
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private sealed class GatedProcessSessionService(bool pauseStart = true) : IProcessSessionService
     {
         private bool active;
@@ -1138,7 +1315,7 @@ public sealed class BridgeMessageContractTests
 
         public ValueTask<ProcessSessionSnapshot> GetAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(Snapshot());
 
-        public async ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, string? brandName, BookProcessingMode mode, CancellationToken cancellationToken = default)
+        public async ValueTask<ProcessSessionSnapshot> StartAsync(IReadOnlyList<string> bookIds, BookProcessingMode mode, CancellationToken cancellationToken = default)
         {
             active = true;
             StartEntered.TrySetResult(null);
@@ -1191,7 +1368,7 @@ public sealed class BridgeMessageContractTests
             [
                 new InteriorSourcePageSummary("Book interior/page-001.png", FrameMode.Auto, SourceKey: "Book interior/page-001.png"),
                 new InteriorSourcePageSummary("Book interior/page-002.png", FrameMode.Auto, SourceKey: "Book interior/page-002.png")
-            ])],
+            ], AssignedBrand: "Brand One", AssignmentStatus: BookBrandAssignmentStatus.Valid)],
             DateTimeOffset.UnixEpoch);
     }
 }

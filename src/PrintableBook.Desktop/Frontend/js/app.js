@@ -1,17 +1,15 @@
 (() => {
   const status = document.getElementById("bridge-status");
   const content = document.getElementById("app-content");
-  const brandSelect = document.getElementById("brand-select");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
   const bookStatuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
-  const state = { selectedBrand: "", inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "auto", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookListRefreshPending: false, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), subcoverTouchedBooks: new Set(), brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "auto", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
   const discovery = () => valueFor(window.appSnapshot, "discovery", {});
   const books = () => valueFor(discovery(), "books", []);
   const brands = () => valueFor(discovery(), "brands", []);
-  const activeBrand = () => selectableBrands().find((brand) => valueFor(brand, "name", "") === (state.selectedBrand || brandSelect?.value || "")) ?? null;
   const summaries = () => valueFor(window.appSnapshot, "bookSummaries", []);
   const bookId = (book) => valueFor(valueFor(book, "id", {}), "value", valueFor(book, "name", ""));
   const summaryFor = (book) => summaries().find((summary) => valueFor(valueFor(summary, "bookId", {}), "value", "") === bookId(book));
@@ -40,8 +38,56 @@
   const brandValidationStatus = (value) => typeof value === "number" ? ["Not validated", "Validated", "Needs validation"][value] ?? "Not validated" : String(value ?? "NotValidated").replace(/([a-z])([A-Z])/g, "$1 $2");
   const brandSummaries = () => valueFor(window.appSnapshot, "brandSummaries", []);
   const brandSummaryFor = (brand) => brandSummaries().find((summary) => valueFor(summary, "brandName", "") === valueFor(brand, "name", ""));
+  const assignmentStatus = (summary) => {
+    const value = valueFor(summary, "assignmentStatus", "Unassigned");
+    return typeof value === "number" ? ["Unassigned", "Valid", "BookAuthorMissing", "BrandAuthorMissing", "AuthorMismatch", "MissingBrand", "BrandMetadataUnavailable"][value] ?? "Unassigned" : String(value ?? "Unassigned");
+  };
+  const assignmentLabel = (summary) => ({ BookAuthorMissing: "Book Author missing", BrandAuthorMissing: "Brand Author missing", AuthorMismatch: "Author mismatch", MissingBrand: "Brand missing", BrandMetadataUnavailable: "Brand metadata unavailable" })[assignmentStatus(summary)] ?? assignmentStatus(summary);
+  const metadataFor = (summary) => valueFor(summary, "metadata", {}) ?? {};
+  const bookDisplayTitle = (book, summary = summaryFor(book)) => String(valueFor(metadataFor(summary), "title", "") || valueFor(book, "name", bookId(book)) || "Unknown");
+  const normalizedAuthor = (value) => String(value ?? "").trim().toLowerCase();
+  const authorMatches = (left, right) => Boolean(normalizedAuthor(left)) && normalizedAuthor(left) === normalizedAuthor(right);
+  const assignedBrandName = (summary) => String(valueFor(summary, "assignedBrand", "") ?? "").trim();
+  const assignedBrandFor = (summary) => {
+    const assigned = assignedBrandName(summary);
+    return assigned ? brands().find((brand) => valueFor(brand, "name", "") === assigned) ?? null : null;
+  };
+  const brandAuthor = (brand) => String(valueFor(brandSummaryFor(brand), "author", "") ?? "");
+  const matchingBrandsFor = (summary) => {
+    const author = valueFor(metadataFor(summary), "author", "");
+    return brands().filter((brand) => authorMatches(author, brandAuthor(brand)));
+  };
+  const metadataValues = (summary) => {
+    const metadata = metadataFor(summary);
+    return { title: String(valueFor(metadata, "title", "") ?? ""), subtitle: String(valueFor(metadata, "subtitle", "") ?? ""), subcover: String(valueFor(metadata, "subcover", "") ?? ""), description: String(valueFor(metadata, "description", "") ?? ""), author: String(valueFor(metadata, "author", "") ?? "") };
+  };
+  const metadataDraftFor = (book, summary, create = false) => {
+    const id = bookId(book);
+    let draft = state.bookMetadataDrafts.get(id);
+    if (!draft && create) { draft = { ...metadataValues(summary) }; state.bookMetadataDrafts.set(id, draft); }
+    return draft ?? metadataValues(summary);
+  };
+  const hasMetadataDraft = (book, summary) => {
+    const draft = state.bookMetadataDrafts.get(bookId(book));
+    if (!draft) return false;
+    const persisted = metadataValues(summary);
+    return Object.keys(persisted).some((key) => draft[key] !== persisted[key]);
+  };
+  const subcoverError = (value) => {
+    const trimmed = String(value ?? "").trim();
+    const length = trimmed && typeof Intl?.Segmenter === "function" ? [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(trimmed)].length : [...trimmed].length;
+    return length >= 100 ? "Subcover must contain fewer than 100 characters." : "";
+  };
+  const brandAuthorDraftFor = (brand) => state.brandAuthorDrafts.get(valueFor(brand, "name", "")) ?? brandAuthor(brand);
+  const brandAuthorIsDirty = (brand, value) => value !== brandAuthor(brand) || valueFor(brandSummaryFor(brand), "metadataStatus", "Missing") === "Unavailable";
+  const catalogMutationBusy = () => state.catalogMutationPending || state.catalogMutationAwaitingSnapshot;
+  const metadataAssignmentWarning = (draft, summary) => {
+    const assigned = assignedBrandName(summary);
+    if (!assigned) return "";
+    const brand = brands().find((item) => valueFor(item, "name", "") === assigned);
+    return brand && authorMatches(draft.author, brandAuthor(brand)) ? "" : `Saving this Author will make the '${assigned}' assignment invalid. The assignment will be kept for review.`;
+  };
   const isValidatedBrand = (brand) => brandValidationStatus(valueFor(brandSummaryFor(brand), "validationStatus", "NotValidated")) === "Validated";
-  const selectableBrands = () => brands().filter(isValidatedBrand);
   const frameModeValue = (value) => {
     if (typeof value === "number") return ["auto", "enabled", "disabled"][value] ?? "auto";
     const normalized = String(value ?? "auto").toLowerCase();
@@ -65,7 +111,7 @@
     if (modes.includes("disabled")) return "No frame";
     return "Auto";
   };
-  const statusClass = (value) => value === "Ready" || value === "Completed" || value === "Present" || value === "Validated" || value === "Processed" || value === "Production" ? "status-good" : value === "Invalid" || value === "Failed" || value === "Unreadable" || value === "Needs attention" || value === "Missing" ? "status-bad" : value === "Needs selection" || value === "Needs validation" || value === "Running" || value === "Processing" || value === "Stale" || value === "Ready to process" ? "status-warn" : "status-muted";
+  const statusClass = (value) => value === "Ready" || value === "Completed" || value === "Present" || value === "Validated" || value === "Processed" || value === "Production" ? "status-good" : value === "Invalid" || value === "Failed" || value === "Unreadable" || value === "Needs attention" || value === "Missing" || value === "Author mismatch" || value === "Book Author missing" || value === "Brand Author missing" || value === "Brand missing" || value === "Brand metadata unavailable" ? "status-bad" : value === "Needs selection" || value === "Needs validation" || value === "Running" || value === "Processing" || value === "Stale" || value === "Ready to process" ? "status-warn" : "status-muted";
   const badge = (value) => { const label = displayStatus(value); return `<span class="status-badge ${statusClass(label)}">${escapeHtml(label)}</span>`; };
   const bookSelectIcon = (selected) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="17" height="17" rx="4"></rect>${selected ? '<path d="m7.5 12.5 3 3 6-7"></path>' : ""}</svg>`;
   const bookEditIcon = () => '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m4 20 4.1-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"></path><path d="m13.7 7.3 3 3"></path></svg>';
@@ -324,11 +370,26 @@
     }
   };
   const selectedBook = () => books().find((book) => bookId(book) === state.selectedBookId);
+  const assignmentReadiness = (summary) => {
+    const assigned = assignedBrandName(summary);
+    if (!assigned) return { ready: false, reason: "Assign a Brand to this Book before continuing." };
+    if (assignmentStatus(summary) !== "Valid") return { ready: false, reason: valueFor(summary, "assignmentReason", "This Book's Brand assignment is invalid. Reassign or unassign it before continuing.") };
+    const brand = assignedBrandFor(summary);
+    if (!brand) return { ready: false, reason: `Assigned Brand '${assigned}' is no longer available. Reassign this Book before continuing.` };
+    return { ready: true, reason: "", brand };
+  };
+  const assignedBrandExecutionReadiness = (summary) => {
+    const assignment = assignmentReadiness(summary);
+    if (!assignment.ready) return assignment;
+    if (!isValidatedBrand(assignment.brand)) return { ready: false, reason: `Validate assigned Brand '${assignedBrandName(summary)}' before continuing.`, brand: assignment.brand };
+    return assignment;
+  };
   const brandTemplateCopyReadiness = (book, summary) => {
     if (!book || !summary || valueFor(summary, "validationStatus", "") !== "Ready") return { ready: false, reason: "Run Interior preflight and resolve Book errors first." };
-    const brand = activeBrand();
-    if (!brand) return { ready: false, reason: "Select a validated Brand first." };
-    return { ready: true, reason: `Copy cover.psd, app_plus.psd, and book_owner.psd from ${valueFor(brand, "name", "the selected Brand")}.`, brand };
+    const assignment = assignedBrandExecutionReadiness(summary);
+    if (!assignment.ready) return assignment;
+    const brand = assignment.brand;
+    return { ready: true, reason: `Copy cover.psd, app_plus.psd, and book_owner.psd from ${valueFor(brand, "name", "the assigned Brand")}.`, brand };
   };
   const assetsFor = (summary) => valueFor(summary, "assets", []);
   const assetForReference = (summary, sourceReference) => assetsFor(summary).find((asset) => valueFor(asset, "sourceReference", "") === sourceReference);
@@ -391,7 +452,7 @@
       sourceReferences: draft?.introSourceReferences ?? persistedIntroSourceReferences(summary)
     };
   };
-  const introTemplateAssetId = (asset) => encodeURIComponent(`${valueFor(activeBrand(), "name", "")}\u0000${valueFor(asset, "key", "")}`);
+  const introTemplateAssetId = (asset, brandName = "") => encodeURIComponent(`${brandName}\u0000${valueFor(asset, "key", "")}`);
   const finalInteriorPageSize = () => {
     const settings = valueFor(window.appSnapshot, "globalSettings", {});
     return {
@@ -418,17 +479,20 @@
       if (selection.sourceReferences.some((reference) => !sources.has(String(reference).toLowerCase()))) return { ready: false, reason: "A selected custom Intro page is missing from Book interior." };
       return { ready: true, reason: "" };
     }
-    const brand = activeBrand();
-    if (!brand) return { ready: false, reason: "Choose a Brand before processing Intro templates." };
+    const assignment = assignmentReadiness(summary);
+    if (!assignment.ready) return assignment;
+    const brand = assignment.brand;
     const templates = (valueFor(brand, "introTemplateAssets", []) ?? []).filter((asset) => /\.(png|jpe?g)$/i.test(valueFor(asset, "fileName", "")));
-    if (!templates.length) return { ready: false, reason: "The current Brand has no eligible Intro templates." };
+    if (!templates.length) return { ready: false, reason: `Assigned Brand '${assignedBrandName(summary)}' has no eligible Intro templates.` };
     const effectiveTemplates = templates;
-    if (effectiveTemplates.some((asset) => state.introTemplateDimensions.get(introTemplateAssetId(asset))?.valid === false)) return { ready: false, reason: `An effective Intro template is unreadable or must be ${introTemplateSizeDescription()}.` };
+    if (effectiveTemplates.some((asset) => state.introTemplateDimensions.get(introTemplateAssetId(asset, valueFor(brand, "name", "")))?.valid === false)) return { ready: false, reason: `An effective Intro template is unreadable or must be ${introTemplateSizeDescription()}.` };
     return { ready: true, reason: "" };
   };
   const processingReadiness = (book, summary) => {
     if (hasInteriorDraft(bookId(book))) return { ready: false, reason: "Save Interior changes before processing." };
     if (valueFor(summary, "validationStatus", "Needs review") !== "Ready") return { ready: false, reason: "Run Interior preflight until this Book is ready." };
+    const assignment = assignedBrandExecutionReadiness(summary);
+    if (!assignment.ready) return assignment;
     return introReadiness(book, summary);
   };
   const productionSummaryFor = (summary) => valueFor(summary, "production", { assets: [] });
@@ -438,8 +502,7 @@
     if (hasInteriorDraft(bookId(book))) return { ready: false, reason: "Save changes before building Final Interior." };
     const standard = processingReadiness(book, summary);
     if (!standard.ready) return standard;
-    const brand = activeBrand();
-    if (!brand) return { ready: false, reason: "Select and validate a Brand before building Final Interior." };
+    const brand = standard.brand ?? assignedBrandFor(summary);
     const missing = [["interior-cover", "Interior Cover"], ["book-owner", "Book Owner"]]
       .filter(([kind]) => valueFor(productionAssetFor(summary, kind), "sourceStatus", "Missing") === "Missing")
       .map(([, label]) => label);
@@ -448,6 +511,26 @@
     if (productionActionActive()) return { ready: false, reason: "Wait for the active Production action to finish." };
     if (state.cacheCleanupActive) return { ready: false, reason: "Wait for Clear Cache to finish." };
     return { ready: true, reason: "Build a fresh Production Interior from current sources and saved settings.", brand };
+  };
+
+  const selectedProcessingReadiness = () => {
+    const selected = [...state.selectedBookIds]
+      .map((id) => books().find((book) => bookId(book) === id))
+      .filter(Boolean);
+    for (const book of selected) {
+      const readiness = processingReadiness(book, summaryFor(book));
+      if (!readiness.ready) return { ready: false, reason: `${valueFor(book, "name", "Book")}: ${readiness.reason}`, book };
+    }
+    const groups = new Map();
+    selected.forEach((book) => {
+      const brandName = assignedBrandName(summaryFor(book));
+      groups.set(brandName, (groups.get(brandName) ?? 0) + 1);
+    });
+    if (groups.size > 1) {
+      const detail = [...groups.entries()].map(([brand, count]) => `${brand}: ${count}`).join("; ");
+      return { ready: false, reason: `Selected Books belong to different Brands (${detail}). Filter and process one Brand at a time.`, mixed: true };
+    }
+    return { ready: selected.length > 0, reason: selected.length ? "" : "Select at least one Book.", brandName: groups.keys().next().value ?? "" };
   };
   const sameKeys = (left, right) => left.length === right.length && left.every((key, index) => key.toLowerCase() === String(right[index] ?? "").toLowerCase());
   const stageIntroChange = (book, summary, hasIntro, sourceReferences) => {
@@ -483,10 +566,10 @@
       ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="256" height="256" loading="lazy" decoding="async" data-local-image data-image-fallback="${escapeHtml(fallback)}">`
       : `<span class="book-preview-fallback" aria-label="${escapeHtml(fallback)}">${escapeHtml(fallback)}</span>`;
   };
-  const introTemplateImageMarkup = (asset, alt, fallback = "Image unavailable") => {
+  const introTemplateImageMarkup = (asset, alt, brandName, fallback = "Image unavailable") => {
     const url = valueFor(asset, "localImageUrl", "");
     return url
-      ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="256" height="256" loading="lazy" decoding="async" data-local-image data-intro-template-id="${escapeHtml(introTemplateAssetId(asset))}" data-image-fallback="${escapeHtml(fallback)}">`
+      ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" width="256" height="256" loading="lazy" decoding="async" data-local-image data-intro-template-id="${escapeHtml(introTemplateAssetId(asset, brandName))}" data-image-fallback="${escapeHtml(fallback)}">`
       : `<span class="book-preview-fallback" aria-label="${escapeHtml(fallback)}">${escapeHtml(fallback)}</span>`;
   };
   const bookThumbnailMarkup = (book, summary, fallback = "Preview unavailable") => {
@@ -589,7 +672,14 @@
     const folders = assets.filter((asset) => valueFor(asset, "type", "") === "Folder");
     const files = assets.filter((asset) => valueFor(asset, "type", "") !== "Folder");
     const assetInventory = assets.length ? `<div class="brand-asset-inventory"><div class="brand-folder-list">${folders.map(renderFolder).join("")}</div><div class="brand-file-grid">${files.map(renderFile).join("")}</div></div>` : "<p class=\"empty-copy\">No brand assets found.</p>";
-    content.innerHTML = `<div class="page-header"><div><h1>Brands & templates</h1><p>Inspect reusable Brand assets and resolve exact file requirements before processing.</p></div></div><div class="master-detail"><section class="panel list-panel"><label class="brand-search"><span>Search Brands</span><input class="control" data-action="filter-brands" value="${escapeHtml(state.brandFilter)}" placeholder="Search by name" /></label><div class="list-title">Brands</div><ul class="item-list" data-brand-list>${brandListMarkup(allBrands)}</ul></section><section class="detail-pane">${selected ? panel(escapeHtml(valueFor(selected, "name", "")), `<div class="page-actions"><div>${badge(validationStatus)}<p class="panel-note">Validate IntroTemplate, frame.png, background.png, cover.psd, app_plus.psd, and book_owner.psd before processing.</p></div><button class="button-primary" data-action="validate-brand" ${processIsActive() ? "disabled" : ""}>Validate Brand</button></div>${validationMessage}${assetInventory}`) : panel("Brand detail", "<p class=\"empty-copy\">Select a Brand to inspect its assets.</p>")}</section></div>`;
+    const authorDraft = selected ? brandAuthorDraftFor(selected) : "";
+    const authorDirty = selected ? brandAuthorIsDirty(selected, authorDraft) : false;
+    const impactedBooks = selected && authorDirty ? books().filter((book) => {
+      const summary = summaryFor(book);
+      return assignedBrandName(summary) === valueFor(selected, "name", "") && !authorMatches(valueFor(metadataFor(summary), "author", ""), authorDraft);
+    }).length : 0;
+    const brandInfo = selected ? `<section class="catalog-card"><div class="catalog-card-heading"><div><h3>Brand Information</h3><p>MVP contract: one Brand has one Primary Author.</p></div>${badge(valueFor(selectedValidation, "metadataStatus", "Missing"))}</div><label class="field"><span>Author</span><input class="control" data-action="brand-author-input" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" value="${escapeHtml(authorDraft)}" placeholder="Unknown" autocomplete="off"></label>${impactedBooks ? `<p class="catalog-warning" role="alert">Saving this Author will make ${impactedBooks} assigned Book${impactedBooks === 1 ? "" : "s"} invalid. Their assignments will be kept for review.</p>` : ""}<div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" role="${state.catalogFeedbackError ? "alert" : "status"}">${state.catalogMutationTarget === valueFor(selected, "name", "") ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-brand-author" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" ${!authorDirty || state.catalogMutationPending || processIsActive() ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "brand.author.save" ? "Saving…" : "Save Author"}</button></div></section>` : "";
+    content.innerHTML = `<div class="page-header"><div><h1>Brands & templates</h1><p>Inspect reusable Brand assets and resolve exact file requirements before processing.</p></div></div><div class="master-detail"><section class="panel list-panel"><label class="brand-search"><span>Search Brands</span><input class="control" data-action="filter-brands" value="${escapeHtml(state.brandFilter)}" placeholder="Search by name" /></label><div class="list-title">Brands</div><ul class="item-list" data-brand-list>${brandListMarkup(allBrands)}</ul></section><section class="detail-pane">${selected ? panel(escapeHtml(valueFor(selected, "name", "")), `${brandInfo}<div class="page-actions brand-validation-actions"><div>${badge(validationStatus)}<p class="panel-note">Validate IntroTemplate, frame.png, background.png, cover.psd, app_plus.psd, and book_owner.psd before processing.</p></div><button class="button-primary" data-action="validate-brand" ${processIsActive() ? "disabled" : ""}>Validate Brand</button></div>${validationMessage}${assetInventory}`) : panel("Brand detail", "<p class=\"empty-copy\">Select a Brand to inspect its assets.</p>")}</section></div>`;
   };
 
   const renderProcessedInteriorPages = (summary) => {
@@ -634,7 +724,37 @@
     const feedback = `<p class="production-feedback ${state.productionFeedbackError ? "is-error" : ""}" data-production-feedback role="${state.productionFeedbackError ? "alert" : "status"}" ${state.productionFeedback ? "" : "hidden"}>${escapeHtml(state.productionFeedback)}</p>`;
     const background = effectiveBackground(book, summary) ? "Enabled" : "Disabled";
     const finalBusy = state.processStartPending || processIsActive() || applicationIsLoading();
-    return `<section class="production-workspace" aria-busy="${taskBusy || state.processStartPending}"><header class="production-summary"><div><h3>Production Assets</h3><p>Brand: <strong>${escapeHtml(valueFor(activeBrand(), "name", "No validated Brand selected"))}</strong> · Background: <strong>${background}</strong></p></div><div>${badge(valueFor(production, "interiorOutputKind", "Legacy"))} ${badge(valueFor(production, "interiorOutputStatus", "Missing"))}</div></header>${feedback}<div class="production-asset-grid">${assets.length ? assets.map(card).join("") : "<p class=\"empty-copy\">Production workspace status is unavailable. Refresh the library.</p>"}</div><section class="production-final-action"><div><h3>Final Interior</h3><p>Order: Interior Cover → Book Owner → Intro → randomized Interior. Background pages follow the saved HasBackground setting.</p><p id="production-final-help">${escapeHtml(readiness.reason)} Replaces the current Interior PDF on success; Process Interior can replace it later.</p><small>Current output: ${escapeHtml(valueFor(production, "interiorOutputKind", "Legacy"))} · ${dateTime(valueFor(production, "interiorBuiltAtUtc", null))}</small></div><button class="button-primary" data-action="build-final-interior" data-production-ready="${readiness.ready}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-final-help" aria-busy="${finalBusy}" ${readiness.ready && !finalBusy ? "" : "disabled"}>${finalBusy ? "Building…" : "Build Final Interior"}</button></section></section>`;
+    return `<section class="production-workspace" aria-busy="${taskBusy || state.processStartPending}"><header class="production-summary"><div><h3>Production Assets</h3><p>Assigned Brand: <strong>${escapeHtml(assignedBrandName(summary) || "Unassigned")}</strong> · Background: <strong>${background}</strong></p></div><div>${badge(valueFor(production, "interiorOutputKind", "Legacy"))} ${badge(valueFor(production, "interiorOutputStatus", "Missing"))}</div></header>${feedback}<div class="production-asset-grid">${assets.length ? assets.map(card).join("") : "<p class=\"empty-copy\">Production workspace status is unavailable. Refresh the library.</p>"}</div><section class="production-final-action"><div><h3>Final Interior</h3><p>Order: Interior Cover → Book Owner → Intro → randomized Interior. Background pages follow the saved HasBackground setting.</p><p id="production-final-help">${escapeHtml(readiness.reason)} Replaces the current Interior PDF on success; Process Interior can replace it later.</p><small>Current output: ${escapeHtml(valueFor(production, "interiorOutputKind", "Legacy"))} · ${dateTime(valueFor(production, "interiorBuiltAtUtc", null))}</small></div><button class="button-primary" data-action="build-final-interior" data-production-ready="${readiness.ready}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-final-help" aria-busy="${finalBusy}" ${readiness.ready && !finalBusy ? "" : "disabled"}>${finalBusy ? "Building…" : "Build Final Interior"}</button></section></section>`;
+  };
+
+  const renderBookInformation = (book, summary) => {
+    const draft = metadataDraftFor(book, summary);
+    const dirty = hasMetadataDraft(book, summary);
+    const error = subcoverError(draft.subcover);
+    const showError = Boolean(error) && state.subcoverTouchedBooks.has(bookId(book));
+    const assignmentWarning = metadataAssignmentWarning(draft, summary);
+    const disabled = catalogMutationBusy() || processIsActive();
+    const field = (label, name, placeholder = "Unknown") => `<label class="field"><span>${label}</span><input class="control" data-action="book-metadata-input" data-metadata-field="${name}" data-book-id="${escapeHtml(bookId(book))}" value="${escapeHtml(draft[name])}" placeholder="${placeholder}" autocomplete="off"></label>`;
+    return `<section class="catalog-card" data-book-information-card><div class="catalog-card-heading"><div><h3>Book Information</h3><p>Paste production metadata from your ChatGPT Web analysis. Blank fields remain Unknown.</p></div>${dirty ? '<span class="status-badge status-warn">Unsaved</span>' : ""}</div><div class="catalog-form-grid">${field("Title", "title")}${field("Subtitle", "subtitle")}<label class="field"><span>Subcover</span><input class="control ${showError ? "control-invalid" : ""}" data-action="book-metadata-input" data-metadata-field="subcover" data-book-id="${escapeHtml(bookId(book))}" value="${escapeHtml(draft.subcover)}" placeholder="Unknown" maxlength="99" aria-describedby="book-subcover-error" aria-invalid="${showError}" autocomplete="off"><small id="book-subcover-error" class="field-error" ${showError ? "" : "hidden"}>${escapeHtml(error)}</small></label>${field("Author", "author", "Primary Author or Unknown")}<label class="field catalog-description-field"><span>Description</span><textarea class="control" rows="4" data-action="book-metadata-input" data-metadata-field="description" data-book-id="${escapeHtml(bookId(book))}" placeholder="Unknown">${escapeHtml(draft.description)}</textarea></label></div><p id="book-author-assignment-warning" class="catalog-warning" role="alert" ${assignmentWarning ? "" : "hidden"}>${escapeHtml(assignmentWarning)}</p><div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="metadata" role="${state.catalogFeedbackError ? "alert" : "status"}">${state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand === "book.metadata.save" ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-book-metadata" data-book-id="${escapeHtml(bookId(book))}" ${!dirty || error || disabled ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save" ? "Saving…" : "Save Book Information"}</button></div></section>`;
+  };
+
+  const renderBookBrandAssignment = (book, summary) => {
+    const assigned = assignedBrandName(summary);
+    const currentStatus = assignmentStatus(summary);
+    const candidates = matchingBrandsFor(summary);
+    const valid = currentStatus === "Valid";
+    const unavailableCurrent = assigned && !candidates.some((brand) => valueFor(brand, "name", "") === assigned);
+    const options = [`<option value="">Select a matching Brand…</option>`, ...(unavailableCurrent ? [`<option value="${escapeHtml(assigned)}" selected disabled>${escapeHtml(assigned)} — ${escapeHtml(assignmentLabel(summary))}</option>`] : []), ...candidates.map((brand) => `<option value="${escapeHtml(valueFor(brand, "name", ""))}" ${valid && valueFor(brand, "name", "") === assigned ? "selected" : ""}>${escapeHtml(valueFor(brand, "name", ""))}</option>`)].join("");
+    const author = valueFor(metadataFor(summary), "author", "");
+    const reason = assigned && !valid ? valueFor(summary, "assignmentReason", "Choose another Brand or unassign this Book.") : "";
+    const disabled = catalogMutationBusy() || processIsActive();
+    return `<section class="catalog-card" data-book-assignment-card><div class="catalog-card-heading"><div><h3>Brand Assignment</h3><p>Only Brands whose Author matches this Book's saved Author are available.</p></div>${badge(assigned ? assignmentLabel(summary) : "Unassigned")}</div><dl class="catalog-assignment-summary"><div><dt>Book Author</dt><dd>${escapeHtml(author || "Unknown")}</dd></div><div><dt>Assigned Brand</dt><dd>${escapeHtml(assigned || "Unassigned")}</dd></div></dl>${reason ? `<p class="catalog-warning" role="alert">${escapeHtml(reason)} The existing assignment is preserved until you choose what to do.</p>` : ""}<label class="field"><span>Select Brand</span><select class="control" data-action="book-brand-select" data-book-id="${escapeHtml(bookId(book))}" ${!author || disabled ? "disabled" : ""}>${options}</select><small>${author ? candidates.length ? `${candidates.length} matching Brand${candidates.length === 1 ? "" : "s"}.` : "No Brand Author matches this Book Author." : "Save a Book Author before assigning a Brand."}</small></label><div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="assignment" role="${state.catalogFeedbackError ? "alert" : "status"}">${state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand !== "book.metadata.save" ? escapeHtml(state.catalogFeedback) : ""}</p><div><button class="button-secondary" data-action="unassign-book-brand" data-book-id="${escapeHtml(bookId(book))}" ${!assigned || disabled ? "disabled" : ""}>Unassign</button><button class="button-primary" data-action="assign-book-brand" data-book-id="${escapeHtml(bookId(book))}" disabled>${state.catalogMutationPending && state.catalogMutationCommand === "book.brand.assign" ? "Assigning…" : "Assign Brand"}</button></div></div></section>`;
+  };
+
+  const renderBrandTemplateCopyCard = (book, summary) => {
+    const readiness = brandTemplateCopyReadiness(book, summary);
+    const assigned = assignedBrandName(summary) || "Unassigned";
+    return `<section class="asset-background-setting" data-brand-template-copy-card><div><h3>Brand PSD templates</h3><p>Assigned Brand: <strong>${escapeHtml(assigned)}</strong>. Copy cover.psd, app_plus.psd, and book_owner.psd into this Book workspace.</p><small>${escapeHtml(readiness.reason)}</small></div><button class="button-secondary" data-action="copy-brand-templates" data-book-id="${escapeHtml(bookId(book))}" ${readiness.ready && !state.brandTemplateCopyPending ? "" : "disabled"} title="${escapeHtml(readiness.reason)}">${state.brandTemplateCopyPending ? "Copying…" : "Copy Brand Templates"}</button></section>`;
   };
 
   const refreshProductionWorkspace = (focusSelector = "") => {
@@ -653,21 +773,21 @@
   const renderBookTabs = (book, summary) => {
     const tabButton = (id, label) => `<button type="button" id="book-tab-${id}" class="detail-tab ${state.selectedBookTab === id ? "active" : ""}" data-action="book-tab" data-book-tab="${id}" role="tab" aria-selected="${state.selectedBookTab === id}" aria-controls="book-panel-${id}" tabindex="${state.selectedBookTab === id ? "0" : "-1"}">${label}</button>`;
     const readiness = processingReadiness(book, summary);
-    const templateReadiness = brandTemplateCopyReadiness(book, summary);
     const body = state.selectedBookTab === "production"
       ? renderProductionWorkspace(book, summary)
       : state.selectedBookTab === "settings"
-      ? `<section class="interior-settings"><section class="asset-background-setting"><div><h3>Brand background</h3><p>Insert the selected Brand background after every active Interior page.</p></div><label class="asset-background-toggle"><input type="checkbox" data-action="set-book-background" data-book-id="${escapeHtml(bookId(book))}" ${effectiveBackground(book, summary) ? "checked" : ""} ${processIsActive() || state.bookInteriorSavePending ? "disabled" : ""}> Use Brand background</label></section>${renderIntroTemplateWorkspace(book, summary)}</section>`
+      ? `<section class="interior-settings"><section class="asset-background-setting"><div><h3>Brand background</h3><p>Insert the assigned Brand background after every active Interior page.</p></div><label class="asset-background-toggle"><input type="checkbox" data-action="set-book-background" data-book-id="${escapeHtml(bookId(book))}" ${effectiveBackground(book, summary) ? "checked" : ""} ${processIsActive() || state.bookInteriorSavePending ? "disabled" : ""}> Use Brand background</label></section>${renderIntroTemplateWorkspace(book, summary)}</section>`
       : state.selectedBookTab === "artwork"
         ? renderFolderAssetWorkspace(book, summary)
         : state.selectedBookTab === "pages"
           ? renderProcessedInteriorPages(summary)
-        : `<section class="book-overview"><div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Interior preflight</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div><section class="asset-background-setting"><div><h3>Brand PSD templates</h3><p>Copy cover.psd, app_plus.psd, and book_owner.psd from the selected Brand into this Book workspace.</p></div><button class="button-secondary" data-action="copy-brand-templates" data-book-id="${escapeHtml(bookId(book))}" ${templateReadiness.ready && !state.brandTemplateCopyPending ? "" : "disabled"} title="${escapeHtml(templateReadiness.reason)}">${state.brandTemplateCopyPending ? "Copying…" : "Copy Brand Templates"}</button></section><p class="panel-note">Review the summary, then configure Brand background and Intro pages in Interior settings.</p></section>`;
-    return `<div class="book-heading"><div><h2>${escapeHtml(valueFor(book, "name", ""))}</h2><p>Interior-only production workspace</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs" role="tablist" aria-label="Book detail sections">${tabButton("overview", "Overview")}${tabButton("production", "Production")}${tabButton("settings", "Interior settings")}${tabButton("artwork", "Interior artwork")}${tabButton("pages", "Interior pages")}</nav><div id="book-panel-${state.selectedBookTab}" class="tab-body ${state.selectedBookTab === "artwork" ? "tab-body-artwork" : state.selectedBookTab === "pages" ? "tab-body-processed-pages" : ""}" role="tabpanel" aria-labelledby="book-tab-${state.selectedBookTab}" tabindex="0">${body}</div>`;
+        : `<section class="book-overview"><div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Interior preflight</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div>${renderBookInformation(book, summary)}${renderBookBrandAssignment(book, summary)}${renderBrandTemplateCopyCard(book, summary)}<p class="panel-note">Review the summary, then configure Brand background and Intro pages in Interior settings.</p></section>`;
+    return `<div class="book-heading"><div><h2>${escapeHtml(bookDisplayTitle(book, summary))}</h2><p>Folder: ${escapeHtml(valueFor(book, "name", bookId(book)))}</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs" role="tablist" aria-label="Book detail sections">${tabButton("overview", "Overview")}${tabButton("production", "Production")}${tabButton("settings", "Interior settings")}${tabButton("artwork", "Interior artwork")}${tabButton("pages", "Interior pages")}</nav><div id="book-panel-${state.selectedBookTab}" class="tab-body ${state.selectedBookTab === "artwork" ? "tab-body-artwork" : state.selectedBookTab === "pages" ? "tab-body-processed-pages" : ""}" role="tabpanel" aria-labelledby="book-tab-${state.selectedBookTab}" tabindex="0">${body}</div>`;
   };
 
   const renderIntroTemplateWorkspace = (book, summary) => {
-    const brand = activeBrand();
+    const assignment = assignmentReadiness(summary);
+    const brand = assignment.ready ? assignment.brand : null;
     const allTemplates = valueFor(brand, "introTemplateAssets", []) ?? [];
     const templates = allTemplates.filter((asset) => /\.(png|jpe?g)$/i.test(valueFor(asset, "fileName", "")));
     const selection = effectiveIntro(book, summary);
@@ -681,7 +801,7 @@
       return `<article class="intro-template-tile"><span class="intro-template-preview">${localImageMarkup(asset, `Custom Intro ${valueFor(asset, "fileName", "")}`, "Image unavailable")}</span><strong>Intro #${index + 1}</strong><span title="${escapeHtml(valueFor(asset, "fileName", ""))}">${escapeHtml(valueFor(asset, "fileName", ""))}</span><div class="intro-template-actions"><button class="button-secondary" data-action="intro-move-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-index="${index}" data-intro-direction="up" aria-label="Move ${escapeHtml(valueFor(asset, "fileName", ""))} earlier" ${index === 0 || disabled ? "disabled" : ""}>Earlier</button><button class="button-secondary" data-action="intro-move-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-index="${index}" data-intro-direction="down" aria-label="Move ${escapeHtml(valueFor(asset, "fileName", ""))} later" ${index === selected.length - 1 || disabled ? "disabled" : ""}>Later</button><button class="button-secondary" data-action="intro-remove-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-source-reference="${escapeHtml(reference)}" ${disabled ? "disabled" : ""}>Remove</button></div></article>`;
     };
     const availableOption = (asset) => `<button class="intro-template-add" data-action="intro-add-template" data-book-id="${escapeHtml(bookId(book))}" data-intro-source-reference="${escapeHtml(valueFor(asset, "sourceReference", ""))}" ${disabled ? "disabled" : ""}>${localImageMarkup(asset, `Available Book interior page ${valueFor(asset, "fileName", "")}`, "Image unavailable")}<span>${escapeHtml(valueFor(asset, "fileName", ""))}</span><small>Add as Intro</small></button>`;
-    const brandCopy = brand ? `${escapeHtml(valueFor(brand, "name", ""))} · ${templates.length} eligible local template${templates.length === 1 ? "" : "s"}` : "Choose a Brand in the header to see local templates.";
+    const brandCopy = brand ? `${escapeHtml(valueFor(brand, "name", ""))} · ${templates.length} eligible local template${templates.length === 1 ? "" : "s"}` : escapeHtml(assignment.reason);
     const allItems = selection.hasIntro ? candidates : templates;
     const introPageSize = 6;
     const totalPages = Math.max(1, Math.ceil(allItems.length / introPageSize));
@@ -693,7 +813,7 @@
         const index = selection.sourceReferences.findIndex((reference) => String(reference).toLowerCase() === String(valueFor(asset, "sourceReference", "")).toLowerCase());
         return index >= 0 ? selectedTile(asset, index) : availableOption(asset);
       }).join("")
-      : pageItems.map((asset) => `<article class="intro-template-tile"><span class="intro-template-preview">${introTemplateImageMarkup(asset, `Automatic Intro template ${valueFor(asset, "fileName", "")}`)}</span><strong>Automatic</strong><span title="${escapeHtml(valueFor(asset, "fileName", ""))}">${escapeHtml(valueFor(asset, "fileName", ""))}</span></article>`).join("");
+      : pageItems.map((asset) => `<article class="intro-template-tile"><span class="intro-template-preview">${introTemplateImageMarkup(asset, `Automatic Intro template ${valueFor(asset, "fileName", "")}`, valueFor(brand, "name", ""))}</span><strong>Automatic</strong><span title="${escapeHtml(valueFor(asset, "fileName", ""))}">${escapeHtml(valueFor(asset, "fileName", ""))}</span></article>`).join("");
     const paging = `<footer class="intro-template-pagination" data-intro-total-pages="${totalPages}"><span>${allItems.length ? `${start + 1}–${Math.min(start + introPageSize, allItems.length)} of ${allItems.length}` : "0 pages"}</span><div><button class="button-secondary" data-action="intro-template-page" data-intro-template-page="previous" ${state.introTemplatePage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.introTemplatePage} of ${totalPages}</span><button class="button-secondary" data-action="intro-template-page" data-intro-template-page="next" ${state.introTemplatePage === totalPages ? "disabled" : ""}>Next</button></div></footer>`;
     const sourceCopy = selection.hasIntro
       ? `${selected.length ? `${selected.length} selected Intro page${selected.length === 1 ? "" : "s"}. Use each card to preserve order or remove it.` : "Select at least one Book interior page to make this Book ready."}`
@@ -789,17 +909,133 @@
     const cover = assetForReference(summary, valueFor(summary, "representativeCoverReference", ""));
     const dirty = hasInteriorDraft(bookId(book));
     const saveDisabled = !dirty || processIsActive() || state.bookInteriorSavePending;
-    return `<div class="book-drawer-layer"><section class="book-drawer" role="dialog" aria-labelledby="book-drawer-title"><header class="book-drawer-header"><span class="book-drawer-preview">${localImageMarkup(cover, `Cover for ${valueFor(book, "name", "")}`)}</span><div><p class="eyebrow">Book detail</p><h2 id="book-drawer-title" tabindex="-1">${escapeHtml(valueFor(book, "name", ""))}</h2><div>${badge(productionStatus(summary, book))} ${badge(bookFrameState(summary))}</div></div><div class="book-drawer-actions"><span data-book-interior-unsaved role="status" ${dirty ? "" : "hidden"}>Unsaved changes</span><button class="button-primary" data-action="save-book-interior-settings" data-book-id="${escapeHtml(bookId(book))}" ${saveDisabled ? "disabled" : ""} aria-busy="${state.bookInteriorSavePending}">${state.bookInteriorSavePending ? "Saving…" : "Save changes"}</button><button class="button-secondary" data-action="close-book-drawer" aria-label="Close Book detail">Close</button></div></header><div class="book-drawer-body">${renderBookTabs(book, summary)}</div></section></div>`;
+    const metadataDirty = hasMetadataDraft(book, summary);
+    return `<div class="book-drawer-layer"><section class="book-drawer" role="dialog" aria-labelledby="book-drawer-title"><header class="book-drawer-header"><span class="book-drawer-preview">${localImageMarkup(cover, `Cover for ${bookDisplayTitle(book, summary)}`)}</span><div><p class="eyebrow">Book detail</p><h2 id="book-drawer-title" tabindex="-1">${escapeHtml(bookDisplayTitle(book, summary))}</h2><p class="book-folder-name">${escapeHtml(valueFor(book, "name", bookId(book)))}</p><div>${badge(productionStatus(summary, book))} ${badge(bookFrameState(summary))} <span data-book-assigned-brand-badge>${badge(assignedBrandName(summary) || "Unassigned")}</span></div></div><div class="book-drawer-actions"><span data-book-interior-unsaved role="status" ${dirty || metadataDirty ? "" : "hidden"}>Unsaved changes</span><button class="button-primary" data-action="save-book-interior-settings" data-book-id="${escapeHtml(bookId(book))}" ${saveDisabled ? "disabled" : ""} aria-busy="${state.bookInteriorSavePending}">${state.bookInteriorSavePending ? "Saving…" : "Save Interior changes"}</button><button class="button-secondary" data-action="close-book-drawer" aria-label="Close Book detail">Close</button></div></header><div class="book-drawer-body">${renderBookTabs(book, summary)}</div></section></div>`;
   };
 
+  const updateBookCatalogMutationUi = () => {
+    if (!state.bookDrawerOpen || currentRoute() !== "books") return;
+    const book = selectedBook();
+    const summary = book ? summaryFor(book) : null;
+    if (!book || !summary) return;
+    const busy = catalogMutationBusy() || processIsActive();
+    const metadataCard = document.querySelector("[data-book-information-card]");
+    const metadataSave = metadataCard?.querySelector('[data-action="save-book-metadata"]');
+    const metadataError = subcoverError(metadataDraftFor(book, summary).subcover);
+    metadataCard?.querySelectorAll("input, textarea").forEach((control) => { control.disabled = busy; });
+    if (metadataSave) {
+      metadataSave.disabled = busy || !hasMetadataDraft(book, summary) || Boolean(metadataError);
+      metadataSave.textContent = state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save" ? "Saving…" : "Save Book Information";
+    }
+    const metadataFeedback = metadataCard?.querySelector('[data-catalog-feedback="metadata"]');
+    if (metadataFeedback) {
+      const visible = state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand === "book.metadata.save";
+      metadataFeedback.textContent = visible ? state.catalogFeedback : "";
+      metadataFeedback.classList.toggle("is-error", visible && state.catalogFeedbackError);
+      metadataFeedback.setAttribute("role", visible && state.catalogFeedbackError ? "alert" : "status");
+    }
+    const assignmentCard = document.querySelector("[data-book-assignment-card]");
+    const select = assignmentCard?.querySelector('[data-action="book-brand-select"]');
+    if (select) select.disabled = busy || !valueFor(metadataFor(summary), "author", "");
+    const assign = assignmentCard?.querySelector('[data-action="assign-book-brand"]');
+    if (assign) {
+      assign.disabled = busy || !select?.value || select.value === assignedBrandName(summary);
+      assign.textContent = state.catalogMutationPending && state.catalogMutationCommand === "book.brand.assign" ? "Assigning…" : "Assign Brand";
+    }
+    const unassign = assignmentCard?.querySelector('[data-action="unassign-book-brand"]');
+    if (unassign) unassign.disabled = busy || !assignedBrandName(summary);
+    const assignmentFeedback = assignmentCard?.querySelector('[data-catalog-feedback="assignment"]');
+    if (assignmentFeedback) {
+      const visible = state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand !== "book.metadata.save";
+      assignmentFeedback.textContent = visible ? state.catalogFeedback : "";
+      assignmentFeedback.classList.toggle("is-error", visible && state.catalogFeedbackError);
+      assignmentFeedback.setAttribute("role", visible && state.catalogFeedbackError ? "alert" : "status");
+    }
+  };
+
+  const refreshBookCatalogCards = (command) => {
+    const book = selectedBook();
+    const summary = book ? summaryFor(book) : null;
+    if (!book || !summary || !state.bookDrawerOpen || state.selectedBookTab !== "overview") return;
+    const drawerBody = document.querySelector(".book-drawer-body");
+    const scrollTop = drawerBody?.scrollTop ?? state.bookDrawerScrollTop;
+    const syncAssignmentCard = () => {
+      const card = document.querySelector("[data-book-assignment-card]");
+      if (!card) return;
+      const template = document.createElement("template");
+      template.innerHTML = renderBookBrandAssignment(book, summary);
+      const next = template.content.firstElementChild;
+      const badgeCurrent = card.querySelector(".catalog-card-heading > .status-badge");
+      const badgeNext = next.querySelector(".catalog-card-heading > .status-badge");
+      if (badgeCurrent && badgeNext) { badgeCurrent.className = badgeNext.className; badgeCurrent.textContent = badgeNext.textContent; }
+      const summaryCurrent = card.querySelectorAll(".catalog-assignment-summary dd");
+      const summaryNext = next.querySelectorAll(".catalog-assignment-summary dd");
+      summaryCurrent.forEach((item, index) => { item.textContent = summaryNext[index]?.textContent ?? ""; });
+      const warningCurrent = card.querySelector(":scope > .catalog-warning");
+      const warningNext = next.querySelector(":scope > .catalog-warning");
+      if (warningCurrent && warningNext) warningCurrent.textContent = warningNext.textContent;
+      else if (warningCurrent) warningCurrent.remove();
+      else if (warningNext) card.querySelector(":scope > .field")?.before(warningNext.cloneNode(true));
+      const selectCurrent = card.querySelector('[data-action="book-brand-select"]');
+      const selectNext = next.querySelector('[data-action="book-brand-select"]');
+      if (selectCurrent && selectNext) { selectCurrent.innerHTML = selectNext.innerHTML; selectCurrent.disabled = selectNext.disabled; }
+      const helpCurrent = card.querySelector(":scope > .field small");
+      const helpNext = next.querySelector(":scope > .field small");
+      if (helpCurrent && helpNext) helpCurrent.textContent = helpNext.textContent;
+    };
+    if (command === "book.metadata.save") {
+      const metadataCard = document.querySelector("[data-book-information-card]");
+      const persisted = metadataValues(summary);
+      metadataCard?.querySelectorAll("[data-metadata-field]").forEach((control) => { control.value = persisted[control.dataset.metadataField] ?? ""; });
+      metadataCard?.querySelector(".catalog-card-heading > .status-badge")?.remove();
+      syncAssignmentCard();
+      const title = document.getElementById("book-drawer-title");
+      if (title) title.textContent = bookDisplayTitle(book, summary);
+    } else {
+      syncAssignmentCard();
+    }
+    if (drawerBody) drawerBody.scrollTop = scrollTop;
+    updateBookCatalogMutationUi();
+  };
+
+  const refreshBrandDependentBookUi = (command) => {
+    const book = selectedBook();
+    const summary = book ? summaryFor(book) : null;
+    if (!book || !summary || !state.bookDrawerOpen) return;
+    const drawerBody = document.querySelector(".book-drawer-body");
+    const scrollTop = drawerBody?.scrollTop ?? state.bookDrawerScrollTop;
+    const readiness = processingReadiness(book, summary);
+    const processButton = document.querySelector('[data-action="queue-selected-book"]');
+    if (processButton) {
+      processButton.disabled = !readiness.ready;
+      processButton.title = readiness.reason;
+    }
+    const assignedBadge = document.querySelector("[data-book-assigned-brand-badge]");
+    if (assignedBadge) assignedBadge.innerHTML = badge(assignedBrandName(summary) || "Unassigned");
+
+    if (state.selectedBookTab === "overview") {
+      refreshBookCatalogCards(command);
+      const copyCard = document.querySelector("[data-brand-template-copy-card]");
+      if (copyCard) copyCard.outerHTML = renderBrandTemplateCopyCard(book, summary);
+    } else if (state.selectedBookTab === "settings") {
+      refreshIntroTemplateWorkspace();
+    } else if (state.selectedBookTab === "production") {
+      refreshProductionWorkspace();
+    }
+    if (drawerBody) drawerBody.scrollTop = scrollTop;
+  };
+
+  const matchesBookBrandFilter = (summary) => state.bookBrandFilter === "All" || (state.bookBrandFilter === "Unassigned" ? !assignedBrandName(summary) : assignedBrandName(summary) === state.bookBrandFilter);
   const filteredBooks = () => books().filter((book) => {
     const summary = summaryFor(book);
-    return valueFor(book, "name", "").toLowerCase().includes(state.bookFilter.toLowerCase()) &&
+    const metadata = metadataFor(summary);
+    const searchable = `${bookDisplayTitle(book, summary)} ${valueFor(book, "name", "")} ${valueFor(metadata, "author", "")}`.toLocaleLowerCase();
+    return searchable.includes(state.bookFilter.toLocaleLowerCase()) && matchesBookBrandFilter(summary) &&
       (state.bookStatus === "All" || productionStatus(summary, book) === state.bookStatus);
   }).sort((left, right) => {
     const leftSummary = summaryFor(left);
     const rightSummary = summaryFor(right);
-    if (state.bookSort === "name") return valueFor(left, "name", "").localeCompare(valueFor(right, "name", ""));
+    if (state.bookSort === "name") return bookDisplayTitle(left, leftSummary).localeCompare(bookDisplayTitle(right, rightSummary));
     return new Date(valueFor(rightSummary, "lastRunAt", 0)).getTime() - new Date(valueFor(leftSummary, "lastRunAt", 0)).getTime();
   });
 
@@ -852,7 +1088,8 @@
       state.assetSearchCaret = activeElement.selectionStart ?? activeElement.value.length;
     }
     const allBooks = books();
-    const statusCounts = bookStatuses.map((name) => ({ name, count: name === "All" ? allBooks.length : allBooks.filter((book) => productionStatus(summaryFor(book), book) === name).length }));
+    const brandScopedBooks = allBooks.filter((book) => matchesBookBrandFilter(summaryFor(book)));
+    const statusCounts = bookStatuses.map((name) => ({ name, count: name === "All" ? brandScopedBooks.length : brandScopedBooks.filter((book) => productionStatus(summaryFor(book), book) === name).length }));
     const filtered = filteredBooks();
     const pageSize = 12;
     const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -868,8 +1105,11 @@
       const active = interiorAssets.length ? interiorAssets.filter((asset) => effectiveInteriorAsset(item, asset).isActive).length : valueFor(itemSummary, "activeInteriorSourcePageCount", total);
       const status = productionStatus(itemSummary, item);
       const selected = state.selectedBookIds.has(id);
-      const name = valueFor(item, "name", "");
-      return `<article class="book-card ${selected ? "selected" : ""}" data-book-card-id="${escapeHtml(id)}"><button type="button" class="book-card-main" data-action="toggle-book-selection" data-book-id="${escapeHtml(id)}" aria-label="${selected ? "Remove" : "Select"} ${escapeHtml(name)} ${selected ? "from" : "for"} Interior Processing" aria-pressed="${selected}"><span class="book-card-preview"><span class="book-card-selection-icon" data-book-selection-icon aria-hidden="true">${bookSelectIcon(selected)}</span>${thumbnail}</span><span class="book-card-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong><small>${active} / ${total} Interior active</small><span>${badge(status)} ${badge(bookFrameState(itemSummary))}</span></span></button><button type="button" class="book-card-edit" data-action="open-book-detail" data-book-id="${escapeHtml(id)}" aria-label="Open Book detail for ${escapeHtml(name)}" title="Open Book detail">${bookEditIcon()}</button></article>`;
+      const name = bookDisplayTitle(item, itemSummary);
+      const folder = valueFor(item, "name", id);
+      const assignment = assignedBrandName(itemSummary);
+      const assignmentBadges = assignmentStatus(itemSummary) === "Valid" ? badge(assignment) : assignment ? `${badge(assignment)} ${badge(assignmentLabel(itemSummary))}` : badge("Unassigned");
+      return `<article class="book-card ${selected ? "selected" : ""}" data-book-card-id="${escapeHtml(id)}"><button type="button" class="book-card-main" data-action="toggle-book-selection" data-book-id="${escapeHtml(id)}" aria-label="${selected ? "Remove" : "Select"} ${escapeHtml(name)} ${selected ? "from" : "for"} Interior Processing" aria-pressed="${selected}"><span class="book-card-preview"><span class="book-card-selection-icon" data-book-selection-icon aria-hidden="true">${bookSelectIcon(selected)}</span>${thumbnail}</span><span class="book-card-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong><small title="${escapeHtml(folder)}">${escapeHtml(folder)} · ${escapeHtml(valueFor(metadataFor(itemSummary), "author", "") || "Unknown Author")} · ${active} / ${total} Interior active</small><span>${badge(status)} ${assignmentBadges}</span></span></button><button type="button" class="book-card-edit" data-action="open-book-detail" data-book-id="${escapeHtml(id)}" aria-label="Open Book detail for ${escapeHtml(name)}" title="Open Book detail">${bookEditIcon()}</button></article>`;
     };
     const start = filtered.length ? (state.bookPage - 1) * pageSize + 1 : 0;
     const end = Math.min(state.bookPage * pageSize, filtered.length);
@@ -877,7 +1117,8 @@
     const pageSelectedCount = pageItems.filter((item) => state.selectedBookIds.has(bookId(item))).length;
     const allPageSelected = pageItems.length > 0 && pageSelectedCount === pageItems.length;
     const processLabel = selectedCount ? `Process Interior · ${selectedCount} selected` : "Process Interior";
-    content.innerHTML = `<section class="book-library-page"><div class="page-header"><div><h1>Books</h1><p>Filter local Books, validate only what needs review, and send selected Books to Interior Processing.</p></div><div class="page-actions">${refreshAction()}<button class="button-secondary" data-action="clear-cache" ${cacheCleanupBlocked() ? "disabled" : ""}>${state.cacheCleanupActive ? "Clearing…" : "Clear Cache"}</button><button class="button-secondary" data-action="validate-all">Validate all</button><button class="button-primary" data-action="go-process">${processLabel}</button></div></div><section class="book-toolbar"><label class="book-selection-page book-toolbar-selection"><input type="checkbox" data-action="toggle-book-page-selection" ${allPageSelected ? "checked" : ""} ${pageItems.length ? "" : "disabled"}> Select page <span>(${pageItems.length})</span></label><label class="field book-search-field"><span>Search books</span><input class="control" data-action="filter-books" value="${escapeHtml(state.bookFilter)}" placeholder="Book name"></label><label class="field"><span>Sort</span><select class="control" data-action="book-sort"><option value="activity" ${state.bookSort === "activity" ? "selected" : ""}>Last activity</option><option value="name" ${state.bookSort === "name" ? "selected" : ""}>Book name</option></select></label><label class="field book-status-filter"><span>Status</span><select class="control" data-action="book-status">${statusCounts.map(({ name, count }) => `<option value="${escapeHtml(name)}" ${state.bookStatus === name ? "selected" : ""}>${escapeHtml(name)} (${count})</option>`).join("")}</select></label><div class="asset-view-toggle" aria-label="Book view"><button class="${state.bookView === "grid" ? "active" : ""}" data-action="book-view" data-book-view="grid" aria-pressed="${state.bookView === "grid"}">Grid</button><button class="${state.bookView === "list" ? "active" : ""}" data-action="book-view" data-book-view="list" aria-pressed="${state.bookView === "list"}">Compact list</button></div></section><section class="book-library-results"><div class="book-library-grid-scroll"><section class="${state.bookView === "grid" ? "book-grid" : "book-compact-list"}">${pageItems.length ? pageItems.map(card).join("") : `<div class="book-grid-empty"><strong>No Books match this view.</strong><span>Adjust the search or status filter, or refresh the local source folders.</span></div>`}</section></div><footer class="book-pagination" data-book-total-pages="${totalPages}"><span>${start}–${end} of ${filtered.length}</span><div><button class="button-secondary" data-action="book-page" data-book-page="first" ${state.bookPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="book-page" data-book-page="previous" ${state.bookPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.bookPage} of ${totalPages}</span><button class="button-secondary" data-action="book-page" data-book-page="next" ${state.bookPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="book-page" data-book-page="last" ${state.bookPage === totalPages ? "disabled" : ""}>Last</button></div></footer></section></section>`;
+    const brandFilterOptions = [{ value: "All", label: "All", count: allBooks.length }, { value: "Unassigned", label: "Unassigned", count: allBooks.filter((book) => !assignedBrandName(summaryFor(book))).length }, ...[...brands()].sort((left, right) => valueFor(left, "name", "").localeCompare(valueFor(right, "name", ""), undefined, { sensitivity: "base" })).map((brand) => { const name = valueFor(brand, "name", ""); return { value: name, label: name, count: allBooks.filter((book) => assignedBrandName(summaryFor(book)) === name).length }; })];
+    content.innerHTML = `<section class="book-library-page"><div class="page-header"><div><h1>Books</h1><p>Filter local Books by their explicit Brand assignment before continuing production.</p></div><div class="page-actions">${refreshAction()}<button class="button-secondary" data-action="clear-cache" ${cacheCleanupBlocked() ? "disabled" : ""}>${state.cacheCleanupActive ? "Clearing…" : "Clear Cache"}</button><button class="button-secondary" data-action="validate-all">Validate all</button><button class="button-primary" data-action="go-process">${processLabel}</button></div></div><section class="book-toolbar"><label class="book-selection-page book-toolbar-selection"><input type="checkbox" data-action="toggle-book-page-selection" ${allPageSelected ? "checked" : ""} ${pageItems.length ? "" : "disabled"}> Select page <span>(${pageItems.length})</span></label><label class="field book-search-field"><span>Search books</span><input class="control" data-action="filter-books" value="${escapeHtml(state.bookFilter)}" placeholder="Title, folder or Author"></label><label class="field"><span>Book Brand</span><select class="control" data-action="book-brand-filter">${brandFilterOptions.map(({ value, label, count }) => `<option value="${escapeHtml(value)}" ${state.bookBrandFilter === value ? "selected" : ""}>${escapeHtml(label)} (${count})</option>`).join("")}</select></label><label class="field"><span>Sort</span><select class="control" data-action="book-sort"><option value="activity" ${state.bookSort === "activity" ? "selected" : ""}>Last activity</option><option value="name" ${state.bookSort === "name" ? "selected" : ""}>Book title</option></select></label><label class="field book-status-filter"><span>Status</span><select class="control" data-action="book-status">${statusCounts.map(({ name, count }) => `<option value="${escapeHtml(name)}" ${state.bookStatus === name ? "selected" : ""}>${escapeHtml(name)} (${count})</option>`).join("")}</select></label><div class="asset-view-toggle" aria-label="Book view"><button class="${state.bookView === "grid" ? "active" : ""}" data-action="book-view" data-book-view="grid" aria-pressed="${state.bookView === "grid"}">Grid</button><button class="${state.bookView === "list" ? "active" : ""}" data-action="book-view" data-book-view="list" aria-pressed="${state.bookView === "list"}">Compact list</button></div></section><section class="book-library-results"><div class="book-library-grid-scroll"><section class="${state.bookView === "grid" ? "book-grid" : "book-compact-list"}">${pageItems.length ? pageItems.map(card).join("") : `<div class="book-grid-empty"><strong>No Books match this view.</strong><span>Adjust the search, Book Brand or status filter.</span></div>`}</section></div><footer class="book-pagination" data-book-total-pages="${totalPages}"><span>${start}–${end} of ${filtered.length}</span><div><button class="button-secondary" data-action="book-page" data-book-page="first" ${state.bookPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="book-page" data-book-page="previous" ${state.bookPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.bookPage} of ${totalPages}</span><button class="button-secondary" data-action="book-page" data-book-page="next" ${state.bookPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="book-page" data-book-page="last" ${state.bookPage === totalPages ? "disabled" : ""}>Last</button></div></footer></section></section>`;
     const pageSelection = document.querySelector('[data-action="toggle-book-page-selection"]');
     if (pageSelection) pageSelection.indeterminate = pageSelectedCount > 0 && !allPageSelected;
     const selected = selectedBook();
@@ -916,11 +1157,7 @@
       const book = books().find((candidate) => bookId(candidate) === id);
       return { bookId: { value: id }, status: "Ready", detail: valueFor(book, "name", id) };
     });
-    const blockedSelection = [...state.selectedBookIds]
-      .map((id) => books().find((book) => bookId(book) === id))
-      .filter(Boolean)
-      .map((book) => ({ book, readiness: processingReadiness(book, summaryFor(book)) }))
-      .find((item) => !item.readiness.ready);
+    const selectionReadiness = selectedProcessingReadiness();
     const queue = queueLocked ? sessionQueue : pendingQueue;
     const queueCurrentBook = sessionQueue.find((entry) => ["Running", "Processing"].includes(displayStatus(valueFor(entry, "status", "")))) ?? sessionQueue[0];
     const currentBook = valueFor(valueFor(session, "currentBookId", {}), "value", valueFor(valueFor(queueCurrentBook, "bookId", {}), "value", terminal ? "Last session" : "No active Book"));
@@ -965,7 +1202,8 @@
       return `<article class="process-queue-card">${main}<footer>${action}</footer></article>`;
     };
     const queueTab = `<section class="process-queue-workspace" aria-labelledby="selected-queue-title"><header class="process-queue-heading"><div><h2 id="selected-queue-title">Selected queue <span>${queue.length}</span></h2><p>${queueLocked ? "Queue is locked while Interior Processing is running." : "Review selected Books before starting Interior Processing."}</p></div><span class="process-queue-range" aria-live="polite">${queueRangeStart}–${queueRangeEnd} of ${queue.length}</span></header><div class="process-queue-grid-scroll"><div class="process-queue-grid">${queueItems.length ? queueItems.map(renderQueueCard).join("") : `<div class="process-queue-empty"><strong>No Books selected</strong><span>Select ready Books from the Books workspace, then return here to process them.</span><button class="button-secondary" data-action="go-books">Go to Books</button></div>`}</div></div><footer class="process-queue-pagination" data-process-queue-total-pages="${queueTotalPages}"><span>${queueRangeStart}–${queueRangeEnd} of ${queue.length}</span><div><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="first" ${state.processQueuePage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="previous" ${state.processQueuePage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.processQueuePage} of ${queueTotalPages}</span><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="next" ${state.processQueuePage === queueTotalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="last" ${state.processQueuePage === queueTotalPages ? "disabled" : ""}>Last</button></div></footer></section>`;
-    const overviewTab = `<section class="process-overview-grid"><section class="panel process-summary-panel"><div class="process-panel-heading"><div><h2 class="panel-title">Summary</h2><p>${terminal ? "Last completed Interior Processing session" : queueLocked ? "Current Interior Processing session" : "Books ready to process"}</p></div>${badge(stage)}</div><div class="process-summary-stats" aria-live="polite"><div><span>Selected queue</span><strong>${queueLocked ? sessionQueue.length : pendingQueue.length}</strong></div><div><span>Completed</span><strong>${completedBooks}</strong></div><div><span>Failed</span><strong>${failedBooks}</strong></div><div><span>Workers</span><strong>${valueFor(session, "workerLimit", 0) || "—"}</strong></div><div><span>Elapsed</span><strong>${elapsedTime(valueFor(session, "startedAt", null))}</strong></div><div><span>Progress</span><strong>${completed} / ${total || "?"}</strong></div></div><ol class="process-stages">${stages.map((item, index) => `<li class="${index < currentStageIndex ? "complete" : index === currentStageIndex && queueLocked ? "active" : ""}"><span>${index + 1}</span>${item}</li>`).join("")}</ol></section><section class="panel process-current-stage-panel"><div class="process-panel-heading"><div><h2 class="panel-title">Current stage</h2><p>${queueLocked ? "Live progress for the active Book" : terminal ? "Final state of the last session" : "Start processing when the selected queue is ready"}</p></div></div><div class="process-book"><strong>${escapeHtml(currentBook)}</strong><span>${escapeHtml(currentStep)}</span></div><div class="progress-track"><span style="width:${percent}%"></span></div><p class="progress-copy">${completed} / ${total || "?"} pages · ${valueFor(session, "workerLimit", 0) || "?"} workers</p>${blockedSelection ? `<div class="process-failure" role="alert"><strong>Selected Book needs review</strong><p>${escapeHtml(valueFor(blockedSelection.book, "name", "Book"))}: ${escapeHtml(blockedSelection.readiness.reason)}</p></div>` : ""}${failureDetails.length ? `<div class="process-failure" role="alert"><strong>Run needs review</strong>${failureDetails.map((entry) => `<p>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}: ${escapeHtml(valueFor(entry, "detail", ""))}</p>`).join("")}</div>` : ""}<div class="page-actions mt-4">${queueLocked ? "" : `<button class="button-primary" data-action="start-process" ${state.selectedBookIds.size && !blockedSelection ? "" : "disabled"}>${terminal ? "Start New Interior Processing" : "Start Interior Processing"}</button>`}</div></section></section>`;
+    const resolvedQueueBrand = queueLocked ? valueFor(session, "brandName", "Resolving") || "Resolving" : selectionReadiness.brandName || "—";
+    const overviewTab = `<section class="process-overview-grid"><section class="panel process-summary-panel"><div class="process-panel-heading"><div><h2 class="panel-title">Summary</h2><p>${terminal ? "Last completed Interior Processing session" : queueLocked ? "Current Interior Processing session" : "Books ready to process"} · Assigned Brand: ${escapeHtml(resolvedQueueBrand)}</p></div>${badge(stage)}</div><div class="process-summary-stats" aria-live="polite"><div><span>Selected queue</span><strong>${queueLocked ? sessionQueue.length : pendingQueue.length}</strong></div><div><span>Completed</span><strong>${completedBooks}</strong></div><div><span>Failed</span><strong>${failedBooks}</strong></div><div><span>Workers</span><strong>${valueFor(session, "workerLimit", 0) || "—"}</strong></div><div><span>Elapsed</span><strong>${elapsedTime(valueFor(session, "startedAt", null))}</strong></div><div><span>Progress</span><strong>${completed} / ${total || "?"}</strong></div></div><ol class="process-stages">${stages.map((item, index) => `<li class="${index < currentStageIndex ? "complete" : index === currentStageIndex && queueLocked ? "active" : ""}"><span>${index + 1}</span>${item}</li>`).join("")}</ol></section><section class="panel process-current-stage-panel"><div class="process-panel-heading"><div><h2 class="panel-title">Current stage</h2><p>${queueLocked ? "Live progress for the active Book" : terminal ? "Final state of the last session" : "Start processing when the selected queue is ready"}</p></div></div><div class="process-book"><strong>${escapeHtml(currentBook)}</strong><span>${escapeHtml(currentStep)}</span></div><div class="progress-track"><span style="width:${percent}%"></span></div><p class="progress-copy">${completed} / ${total || "?"} pages · ${valueFor(session, "workerLimit", 0) || "?"} workers</p>${!selectionReadiness.ready && state.selectedBookIds.size ? `<div class="process-failure" role="alert"><strong>${selectionReadiness.mixed ? "Selected queue contains multiple Brands" : "Selected Book needs review"}</strong><p>${escapeHtml(selectionReadiness.reason)}</p></div>` : ""}${failureDetails.length ? `<div class="process-failure" role="alert"><strong>Run needs review</strong>${failureDetails.map((entry) => `<p>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}: ${escapeHtml(valueFor(entry, "detail", ""))}</p>`).join("")}</div>` : ""}<div class="page-actions mt-4">${queueLocked ? "" : `<button class="button-primary" data-action="start-process" ${selectionReadiness.ready ? "" : "disabled"}>${terminal ? "Start New Interior Processing" : "Start Interior Processing"}</button>`}</div></section></section>`;
     content.innerHTML = `<section class="process-page"><div class="page-header"><div><h1>Process Interior</h1><p>${cancelling ? "Stopping Interior Processing session…" : active ? "Active Interior Processing session" : terminal ? "Last Interior Processing session" : "Prepare a selected interior-only book queue."}</p></div>${active ? cancelling ? '<button class="button-danger" disabled>Stopping processing…</button>' : '<button class="button-danger" data-action="cancel-process">Cancel session</button>' : ""}</div><nav class="process-tabs" role="tablist" aria-label="Interior Processing workspace"><button class="${state.processTab === "overview" ? "active" : ""}" data-action="process-tab" data-process-tab="overview" role="tab" aria-selected="${state.processTab === "overview"}">Overview</button><button class="${state.processTab === "queue" ? "active" : ""}" data-action="process-tab" data-process-tab="queue" role="tab" aria-selected="${state.processTab === "queue"}">Selected queue <span>${queue.length}</span></button></nav><div class="process-tab-body">${state.processTab === "queue" ? queueTab : overviewTab}</div></section>`;
     if (requestProcess) send("process.get");
   };
@@ -1139,14 +1377,37 @@
     document.getElementById("book-drawer-title")?.focus();
   };
   const closeBookDrawer = () => {
-    if (state.bookInteriorSavePending) return;
-    if (hasInteriorDraft(state.selectedBookId) && !window.confirm("Discard unsaved Interior changes?")) return;
+    if (state.bookInteriorSavePending || state.catalogMutationPending) return;
+    const book = selectedBook();
+    const summary = book ? summaryFor(book) : null;
+    if ((hasInteriorDraft(state.selectedBookId) || (book && summary && hasMetadataDraft(book, summary))) && !window.confirm("Discard unsaved Book changes?")) return;
     clearInteriorDraft(state.selectedBookId);
+    state.bookMetadataDrafts.delete(state.selectedBookId);
+    state.subcoverTouchedBooks.delete(state.selectedBookId);
     state.bookDrawerScrollTop = 0;
     state.bookDrawerOpen = false;
     document.querySelector(".book-drawer-layer")?.remove();
+    if (state.bookListRefreshPending) {
+      state.bookListRefreshPending = false;
+      state.restoreBookFocus = true;
+      render("books", false);
+      return;
+    }
     document.querySelector(`[data-action="open-book-detail"][data-book-id="${CSS.escape(state.selectedBookId)}"]`)?.focus();
   };
+  const beginCatalogMutation = (command, target, payload) => {
+    if (state.catalogMutationPending || processIsActive()) return;
+    state.catalogMutationPending = true;
+    state.catalogMutationAwaitingSnapshot = false;
+    state.catalogMutationCommand = command;
+    state.catalogMutationTarget = target;
+    state.catalogFeedback = "Saving…";
+    state.catalogFeedbackError = false;
+    send(command, payload);
+    if (currentRoute() === "books" && state.bookDrawerOpen) updateBookCatalogMutationUi();
+    if (currentRoute() === "brands") render("brands", false);
+  };
+  const catalogErrorMessage = (code) => ({ invalid_book_metadata: "Book Information is invalid. Single-line fields cannot contain line breaks, and Subcover must contain fewer than 100 characters.", invalid_brand_author: "Brand Author must be a single line.", book_author_required: "Save a Book Author before assigning a Brand.", brand_author_required: "The selected Brand does not have an Author.", book_brand_author_mismatch: "Book Author must match Brand Author before assignment.", brand_metadata_invalid: "Brand metadata could not be read. Fix the metadata file and retry.", processing_active: "Interior Processing is running. Try again when it finishes.", snapshot_unavailable: "The library snapshot is unavailable. Refresh and retry.", book_not_found: "This Book is no longer available. Refresh the library.", brand_not_found: "This Brand is no longer available. Refresh the library." })[code] ?? "The change could not be saved. Refresh and retry.";
   document.addEventListener("keydown", (event) => {
     const activeTab = event.target.closest?.('[role="tab"][data-action="book-tab"]');
     if (activeTab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
@@ -1179,13 +1440,40 @@
     if (action === "save-settings") { const payload = {}; document.querySelectorAll("[data-setting]").forEach((input) => { const group = input.dataset.settingGroup; if (group) { payload[group] ??= {}; payload[group][input.dataset.setting] = Number(input.value); } else payload[input.dataset.setting] = Number(input.value); }); send("settings.save", payload); }
     if (action === "select-brand") { state.inspectedBrand = target.dataset.brandName; state.brandValidationResult = null; render("brands"); }
     if (action === "validate-brand") { const requestId = send("brand.validate", { brandName: state.inspectedBrand }); state.brandValidationRequestBrands.set(requestId, state.inspectedBrand); }
+    if (action === "save-brand-author") {
+      const brandName = target.dataset.brandName;
+      beginCatalogMutation("brand.author.save", brandName, { brandName, author: state.brandAuthorDrafts.get(brandName) ?? "" });
+    }
+    if (action === "save-book-metadata") {
+      const book = books().find((item) => bookId(item) === target.dataset.bookId);
+      const summary = book ? summaryFor(book) : null;
+      const draft = book && summary ? metadataDraftFor(book, summary, true) : null;
+      const error = draft ? subcoverError(draft.subcover) : "Book not found.";
+      if (error) { state.catalogFeedback = error; state.catalogFeedbackError = true; refreshBookDrawerBody(); return; }
+      beginCatalogMutation("book.metadata.save", target.dataset.bookId, { bookId: target.dataset.bookId, ...draft });
+    }
+    if (action === "assign-book-brand") {
+      const bookIdValue = target.dataset.bookId;
+      const summary = summaryFor(books().find((item) => bookId(item) === bookIdValue));
+      const select = document.querySelector('[data-action="book-brand-select"]');
+      const brandName = select?.value ?? "";
+      if (!brandName) { state.catalogFeedback = "Select a matching Brand first."; state.catalogFeedbackError = true; refreshBookDrawerBody(); return; }
+      const current = assignedBrandName(summary);
+      if (current && current !== brandName && !window.confirm(`Reassign this Book from '${current}' to '${brandName}'? Existing files and outputs will not be moved or changed.`)) return;
+      beginCatalogMutation("book.brand.assign", bookIdValue, { bookId: bookIdValue, brandName });
+    }
+    if (action === "unassign-book-brand") {
+      const bookIdValue = target.dataset.bookId;
+      if (!window.confirm("Unassign this Book from its Brand? Existing files and outputs will be kept.")) return;
+      beginCatalogMutation("book.brand.unassign", bookIdValue, { bookId: bookIdValue });
+    }
     if (action === "copy-brand-templates" && !state.brandTemplateCopyPending) {
       const book = books().find((item) => bookId(item) === target.dataset.bookId);
       const readiness = book ? brandTemplateCopyReadiness(book, summaryFor(book)) : { ready: false, reason: "Choose a Book first." };
       if (!readiness.ready) { status.textContent = readiness.reason; return; }
       state.brandTemplateCopyPending = true;
       refreshBookDrawerBody();
-      send("book.brand.templates.copy", { bookId: target.dataset.bookId, brandName: valueFor(readiness.brand, "name", "") });
+      send("book.brand.templates.copy", { bookId: target.dataset.bookId });
     }
     if (action === "upload-production-asset" && !state.productionImportPending && !productionActionActive()) {
       state.productionImportPending = target.dataset.productionAsset;
@@ -1213,7 +1501,7 @@
       state.productionFeedback = "Starting Final Interior build…";
       state.productionFeedbackError = false;
       updateProductionInteractionUi();
-      send("process.start", { bookIds: [target.dataset.bookId], brandName: valueFor(readiness.brand, "name", null), mode: "production-interior" });
+      send("process.start", { bookIds: [target.dataset.bookId], mode: "production-interior" });
     }
     if (action === "select-book" || action === "open-book-detail") openBookDrawer(target.dataset.bookId);
     if (action === "close-book-drawer") closeBookDrawer();
@@ -1247,7 +1535,7 @@
       const book = selectedBook();
       const summary = book ? summaryFor(book) : null;
       const selection = book && summary ? effectiveIntro(book, summary) : null;
-      const itemCount = selection?.hasIntro ? assetsFor(summary).filter((asset) => valueFor(asset, "kind", "") === "Interior").length : (valueFor(activeBrand(), "introTemplateAssets", []) ?? []).filter((asset) => /\.(png|jpe?g)$/i.test(valueFor(asset, "fileName", ""))).length;
+      const itemCount = selection?.hasIntro ? assetsFor(summary).filter((asset) => valueFor(asset, "kind", "") === "Interior").length : (valueFor(assignedBrandFor(summary), "introTemplateAssets", []) ?? []).filter((asset) => /\.(png|jpe?g)$/i.test(valueFor(asset, "fileName", ""))).length;
       const last = Math.max(1, Math.ceil(itemCount / 6));
       state.introTemplatePage = Math.min(last, Math.max(1, state.introTemplatePage + (target.dataset.introTemplatePage === "next" ? 1 : -1)));
       refreshIntroTemplateWorkspace(target.dataset.introTemplatePage);
@@ -1346,10 +1634,10 @@
     if (action === "go-process") render("process");
     if (action === "go-books") render("books", false);
     if (action === "start-process" && !state.processStartPending) {
-      const blocked = [...state.selectedBookIds].map((id) => books().find((book) => bookId(book) === id)).filter(Boolean).map((book) => ({ book, readiness: processingReadiness(book, summaryFor(book)) })).find((item) => !item.readiness.ready);
-      if (blocked) { status.textContent = `${valueFor(blocked.book, "name", "Book")}: ${blocked.readiness.reason}`; return; }
+      const readiness = selectedProcessingReadiness();
+      if (!readiness.ready) { status.textContent = readiness.reason; return; }
       state.processStartPending = true;
-      send("process.start", { bookIds: [...state.selectedBookIds], brandName: valueFor(activeBrand(), "name", null), mode: "interior-only" });
+      send("process.start", { bookIds: [...state.selectedBookIds], mode: "interior-only" });
     }
     if (action === "cancel-process") send("process.cancel");
     if (action === "preview-output") send("book.output.preview", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
@@ -1362,6 +1650,34 @@
     if (event.target.dataset.action === "filter-brands") { state.brandFilter = event.target.value; refreshBrandList(); }
     if (event.target.dataset.action === "filter-assets") { state.assetFilter = event.target.value; state.artworkGridScrollTop = 0; refreshInteriorArtworkWorkspace(); }
     if (event.target.dataset.action === "pdf-library-search") { state.pdfLibrarySearch = event.target.value; state.pdfLibraryPage = 1; state.pdfLibrarySearchFocused = true; state.pdfLibrarySearchCaret = event.target.selectionStart ?? event.target.value.length; render("outputs", false); }
+    if (event.target.dataset.action === "book-metadata-input") {
+      const book = books().find((item) => bookId(item) === event.target.dataset.bookId);
+      const summary = book ? summaryFor(book) : null;
+      if (book && summary) {
+        const draft = metadataDraftFor(book, summary, true);
+        draft[event.target.dataset.metadataField] = event.target.value;
+        const error = subcoverError(draft.subcover);
+        const save = document.querySelector('[data-action="save-book-metadata"]');
+        if (save) save.disabled = !hasMetadataDraft(book, summary) || Boolean(error) || state.catalogMutationPending || processIsActive();
+        const subcover = document.querySelector('[data-metadata-field="subcover"]');
+        const errorElement = document.getElementById("book-subcover-error");
+        const showError = Boolean(error) && state.subcoverTouchedBooks.has(bookId(book));
+        subcover?.classList.toggle("control-invalid", showError);
+        subcover?.setAttribute("aria-invalid", String(showError));
+        if (errorElement) { errorElement.hidden = !showError; errorElement.textContent = error; }
+        const assignmentWarning = metadataAssignmentWarning(draft, summary);
+        const assignmentWarningElement = document.getElementById("book-author-assignment-warning");
+        if (assignmentWarningElement) { assignmentWarningElement.hidden = !assignmentWarning; assignmentWarningElement.textContent = assignmentWarning; }
+        const unsaved = document.querySelector("[data-book-interior-unsaved]");
+        if (unsaved) unsaved.hidden = !(hasInteriorDraft(bookId(book)) || hasMetadataDraft(book, summary));
+      }
+    }
+    if (event.target.dataset.action === "brand-author-input") {
+      state.brandAuthorDrafts.set(event.target.dataset.brandName, event.target.value);
+      const selected = brands().find((brand) => valueFor(brand, "name", "") === event.target.dataset.brandName);
+      const save = document.querySelector('[data-action="save-brand-author"]');
+      if (save) save.disabled = !selected || !brandAuthorIsDirty(selected, event.target.value) || state.catalogMutationPending || processIsActive();
+    }
   });
   content.addEventListener("change", (event) => {
     if (event.target.dataset.action === "book-status") { state.bookStatus = bookStatuses.includes(event.target.value) ? event.target.value : "All"; state.bookPage = 1; render("books", false); }
@@ -1384,6 +1700,10 @@
     if (event.target.dataset.action === "set-artwork-bulk-active") { state.assetBulkActive = ["active", "inactive"].includes(event.target.value) ? event.target.value : "unchanged"; refreshInteriorArtworkWorkspace(); }
     if (event.target.dataset.action === "set-artwork-bulk-frame-mode") { state.assetBulkFrameMode = ["auto", "enabled", "disabled"].includes(event.target.value) ? event.target.value : "unchanged"; refreshInteriorArtworkWorkspace(); }
     if (event.target.dataset.action === "book-sort") { state.bookSort = event.target.value; state.bookPage = 1; render("books", false); }
+    if (event.target.dataset.action === "book-brand-filter") { state.bookBrandFilter = event.target.value; state.bookPage = 1; state.selectedBookIds.clear(); render("books", false); }
+    if (event.target.dataset.action === "book-brand-select") { const assign = document.querySelector('[data-action="assign-book-brand"]'); const book = selectedBook(); const summary = book ? summaryFor(book) : null; if (assign) assign.disabled = !event.target.value || event.target.value === assignedBrandName(summary) || catalogMutationBusy() || processIsActive(); }
+    if (event.target.dataset.action === "book-metadata-input" && event.target.dataset.metadataField === "subcover") { state.subcoverTouchedBooks.add(event.target.dataset.bookId); refreshBookDrawerBody(); }
+    if (event.target.dataset.action === "brand-author-input") render("brands", false);
     if (event.target.dataset.action === "pdf-library-sort") { state.pdfLibrarySort = ["newest", "name", "size"].includes(event.target.value) ? event.target.value : "newest"; state.pdfLibraryPage = 1; render("outputs", false); }
   });
   content.addEventListener("error", (event) => {
@@ -1430,6 +1750,14 @@
         status.textContent = "Interior changes saved";
         updateInteriorSaveUi();
       }
+      if (["book.metadata.save", "book.brand.assign", "book.brand.unassign", "brand.author.save"].includes(requestCommand)) {
+        state.catalogMutationPending = false;
+        state.catalogMutationAwaitingSnapshot = true;
+        state.catalogFeedback = "Saved. Refreshing library…";
+        state.catalogFeedbackError = false;
+        if (currentRoute() === "books" && state.bookDrawerOpen) updateBookCatalogMutationUi();
+        if (currentRoute() === "brands") render("brands", false);
+      }
       observeLibraryRefresh(valueFor(response, "payload", {}));
     } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "CacheCleanup") {
       observeCacheCleanup(valueFor(response, "payload", {}));
@@ -1438,20 +1766,27 @@
     } else if (ok && command === "app.snapshot") {
       const preserveBookDrawer = state.bookInteriorSaveAwaitingSnapshot && state.bookDrawerOpen && currentRoute() === "books";
       const preserveProductionDrawer = state.productionRefreshAwaitingSnapshot && state.bookDrawerOpen && state.selectedBookTab === "production" && currentRoute() === "books";
+      const preserveCatalogDrawer = state.catalogMutationAwaitingSnapshot && state.bookDrawerOpen && currentRoute() === "books" && state.catalogMutationCommand.startsWith("book.");
       state.bookInteriorSaveAwaitingSnapshot = false;
       state.bookInteriorSaveTaskId = "";
       state.productionRefreshAwaitingSnapshot = false;
+      const catalogWasAwaiting = state.catalogMutationAwaitingSnapshot;
+      const catalogTarget = state.catalogMutationTarget;
+      const catalogCommand = state.catalogMutationCommand;
       window.appSnapshot = valueFor(response, "payload", {});
+      if (catalogWasAwaiting) {
+        if (catalogCommand === "book.metadata.save") { state.bookMetadataDrafts.delete(catalogTarget); state.subcoverTouchedBooks.delete(catalogTarget); }
+        if (catalogCommand === "brand.author.save") state.brandAuthorDrafts.delete(catalogTarget);
+        state.catalogMutationAwaitingSnapshot = false;
+        state.catalogFeedback = "Saved";
+        state.catalogFeedbackError = false;
+      }
       state.applicationLoadState = "ready";
       state.applicationLoadError = "";
       state.libraryRefreshTaskId = "";
       state.libraryRefreshResultRequested = false;
       const allBrands = valueFor(discovery(), "brands", []);
-      const availableBrands = allBrands.filter(isValidatedBrand);
-      if (!availableBrands.some((brand) => valueFor(brand, "name", "") === state.selectedBrand)) state.selectedBrand = valueFor(availableBrands[0], "name", "");
       if (!allBrands.some((brand) => valueFor(brand, "name", "") === state.inspectedBrand)) state.inspectedBrand = valueFor(allBrands[0], "name", "");
-      if (brandSelect) brandSelect.innerHTML = availableBrands.length ? availableBrands.map((brand) => `<option>${escapeHtml(valueFor(brand, "name", ""))}</option>`).join("") : "<option value=\"\">No validated brands</option>";
-      if (brandSelect) brandSelect.value = state.selectedBrand;
       if (preserveBookDrawer) {
         if (state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();
         else updateInteriorSaveUi();
@@ -1461,7 +1796,12 @@
         refreshProductionWorkspace(state.productionFocusSelector);
         state.productionFocusSelector = "";
         updateGlobalRefreshControl();
-        status.textContent = "Connected";
+        status.textContent = catalogWasAwaiting ? "Catalog changes saved" : "Connected";
+      } else if (preserveCatalogDrawer) {
+        refreshBrandDependentBookUi(catalogCommand);
+        state.bookListRefreshPending = true;
+        updateGlobalRefreshControl();
+        status.textContent = "Catalog changes saved";
       } else {
         render(document.querySelector(".nav-item-active")?.dataset.route ?? "books", false);
         status.textContent = "Connected";
@@ -1558,6 +1898,14 @@
         state.bookInteriorSavePending = false;
         updateInteriorSaveUi();
       }
+      if (["book.metadata.save", "book.brand.assign", "book.brand.unassign", "brand.author.save"].includes(requestCommand)) {
+        state.catalogMutationPending = false;
+        state.catalogMutationAwaitingSnapshot = false;
+        state.catalogFeedback = catalogErrorMessage(error);
+        state.catalogFeedbackError = true;
+        if (currentRoute() === "books" && state.bookDrawerOpen) updateBookCatalogMutationUi();
+        if (currentRoute() === "brands") render("brands", false);
+      }
       if (requestCommand === "book.production.asset.import") {
         state.productionImportPending = "";
         state.productionFeedback = error === "production_cover_size_invalid"
@@ -1651,10 +1999,6 @@
   const globalProcessStatus = document.getElementById("global-process-status");
   if (globalProcessStatus) globalProcessStatus.addEventListener("click", () => render("process"));
   updateGlobalProcessStatus();
-  if (brandSelect) brandSelect.addEventListener("change", () => {
-    state.selectedBrand = brandSelect.value;
-    render(document.querySelector(".nav-item-active")?.dataset.route ?? "books", false);
-  });
   window.setInterval(() => { if (valueFor(window.processSnapshot, "isActive", false) || valueFor(window.processSnapshot, "isCancelling", false)) send("process.get"); }, 1000);
   send("app.ping");
   beginUpdateCheck();

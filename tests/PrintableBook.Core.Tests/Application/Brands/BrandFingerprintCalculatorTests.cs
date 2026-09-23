@@ -58,7 +58,8 @@ public sealed class BrandFingerprintCalculatorTests
             ("C:\\brands\\demo\\BackCover.psd", 501),
             ("C:\\brands\\demo\\brand.json", 502),
             ("C:\\brands\\demo\\brand.validation.json", 503),
-            ("C:\\brands\\demo\\untracked.png", 504));
+            ("C:\\brands\\demo\\brand.metadata.json", 504),
+            ("C:\\brands\\demo\\untracked.png", 505));
 
         Assert.NotEqual(await CalculateAsync(baseline), await CalculateAsync(changed));
         Assert.Equal(await CalculateAsync(baseline), await CalculateAsync(excludedOnly));

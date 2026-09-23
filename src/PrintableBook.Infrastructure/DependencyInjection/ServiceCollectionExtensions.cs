@@ -6,6 +6,7 @@ using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Brands;
 using PrintableBook.Infrastructure.BrandValidation;
+using PrintableBook.Infrastructure.Brands;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Infrastructure.FileSystem;
 using PrintableBook.Infrastructure.Discovery;
@@ -34,6 +35,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBrandFrameResolver, PhysicalBrandFrameResolver>();
         services.AddSingleton<IGlobalSettingsStore, JsonGlobalSettingsStore>();
         services.AddSingleton<IBrandValidationStateStore, JsonBrandValidationStateStore>();
+        services.AddSingleton<IBrandMetadataStore, JsonBrandMetadataStore>();
         services.AddSingleton<IImageInspector, MagickImageInspector>();
         services.AddSingleton<IArtworkSourceNormalizer, MagickArtworkSourceNormalizer>();
         services.AddSingleton<IBorderLineDetector, MagickBorderLineDetector>();

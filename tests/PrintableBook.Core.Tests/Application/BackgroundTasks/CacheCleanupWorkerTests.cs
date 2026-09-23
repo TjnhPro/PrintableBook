@@ -28,6 +28,8 @@ public sealed class CacheCleanupWorkerTests
     {
         var book = CreateBook("completed");
         var state = Completed(book, "output.pdf")
+            with { Metadata = BookProductionMetadata.Create("Title", null, "ABCD", null, "Jane Doe"), AssignedBrand = "Brand" };
+        state = state
             .RecordPublishedInteriorPreviews([new PublishedInteriorPreview("page-0001", "processed/interior/page-0001.png")]);
         var stateStore = new StubStateStore([state]);
         var worker = new CacheCleanupWorker(
@@ -36,7 +38,10 @@ public sealed class CacheCleanupWorkerTests
         var result = Assert.IsType<CacheCleanupResult>(await ((IBackgroundTaskWorker)worker).ExecuteAsync(new CacheCleanupRequest(), new StubContext(), CancellationToken.None));
 
         Assert.Equal("Cleaned", Assert.Single(result.Books).Status);
-        Assert.Empty((await stateStore.LoadAsync(book.Workspace))!.PublishedInteriorPreviews!);
+        var restored = (await stateStore.LoadAsync(book.Workspace))!;
+        Assert.Empty(restored.PublishedInteriorPreviews!);
+        Assert.Equal("Title", restored.Metadata!.Title);
+        Assert.Equal("Brand", restored.AssignedBrand);
     }
 
     [Fact]
