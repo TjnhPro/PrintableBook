@@ -5,7 +5,6 @@ using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 using PrintableBook.Core.Application.Production;
 using System.Security.Cryptography;
-using System.Text;
 
 namespace PrintableBook.Core.Application.Processing;
 
@@ -308,6 +307,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     productionResults,
                     activeInteriorSources,
                     shuffleMap!,
+                    priorState ?? BookProcessingState.NotStarted(command.BookId),
                     publishedInterior.InteriorPdf,
                     publishedInterior.PreviewPdf,
                     interiorPublishedAt,
@@ -513,6 +513,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         IReadOnlyList<InteriorPageProcessingResult> results,
         IReadOnlyList<InteriorSource> activeInteriorSources,
         InteriorShuffleMap shuffleMap,
+        BookProcessingState recipeState,
         FileReference publishedInterior,
         FileReference? publishedPreview,
         DateTimeOffset publishedAt,
@@ -540,18 +541,34 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 publishedAt);
         }
 
-        IEnumerable<FileReference> inputFiles = sources.Select(source => source.Source)
-            .Concat(command.EffectiveIntroTemplatePages)
-            .Concat(activeInteriorSources.Select(source => source.Source));
-        if (command.BackgroundPage is not null)
-        {
-            inputFiles = inputFiles.Append(command.BackgroundPage);
-        }
-        var inputSignature = await CreateProductionInteriorInputSignatureAsync(
-            command,
-            inputFiles,
+        var prefixFacts = await Task.WhenAll(sources.Select(source =>
+            CreateProductionInteriorFileFactAsync(source.AssetKind.ToString(), source.Source, cancellationToken).AsTask()));
+        var introFacts = await Task.WhenAll(command.EffectiveIntroTemplatePages.Select(page =>
+            CreateProductionInteriorFileFactAsync("intro", page, cancellationToken).AsTask()));
+        var interiorFacts = await Task.WhenAll(activeInteriorSources.Select(async source =>
+            new ProductionInteriorPageFact(
+                source.SourceKey,
+                await CreateProductionInteriorFileFactAsync("interior", source.Source, cancellationToken),
+                recipeState.GetInteriorFrameMode(source.SourceKey))));
+        var needsFrame = interiorFacts.Any(page => page.FrameMode == FrameMode.Enabled);
+        var frameFact = needsFrame
+            ? await CreateProductionInteriorFileFactAsync(
+                "frame",
+                command.Frame ?? throw new FileNotFoundException("The Production Interior frame input is missing."),
+                cancellationToken)
+            : null;
+        var backgroundFact = command.BackgroundPage is null
+            ? null
+            : await CreateProductionInteriorFileFactAsync("background", command.BackgroundPage, cancellationToken);
+        var inputSignature = ProductionInteriorSignature.Create(new ProductionInteriorSignatureRecipe(
+            ProductionInteriorSignature.CreateRenderingSignature(command),
+            prefixFacts,
+            introFacts,
+            interiorFacts,
             shuffleMap,
-            cancellationToken);
+            frameFact,
+            command.BackgroundPage is not null,
+            backgroundFact));
         state = state.RecordInteriorOutput(
             Path.GetFileName(publishedInterior.Value),
             inputSignature,
@@ -560,26 +577,14 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         await productionStateStore.SaveAsync(workspace, state, cancellationToken);
     }
 
-    private async ValueTask<string> CreateProductionInteriorInputSignatureAsync(
-        PrintableBookProcessingCommand command,
-        IEnumerable<FileReference> files,
-        InteriorShuffleMap shuffleMap,
+    private async ValueTask<ProductionInteriorFileFact> CreateProductionInteriorFileFactAsync(
+        string role,
+        FileReference file,
         CancellationToken cancellationToken)
     {
-        var parts = new List<string>
-        {
-            "production-interior-v1",
-            CreateConfigurationFingerprint(command),
-            $"shuffle:{shuffleMap.Seed}:{string.Join(',', shuffleMap.Entries.OrderBy(entry => entry.OutputIndex).Select(entry => $"{entry.OutputIndex}:{entry.Page.Value}"))}"
-        };
-        foreach (var file in files.OrderBy(file => file.Value, StringComparer.OrdinalIgnoreCase))
-        {
-            var metadata = await fileSystem!.GetFileMetadataAsync(file, cancellationToken)
-                ?? throw new FileNotFoundException("A Production Interior input disappeared before state publication.", file.Value);
-            parts.Add($"{file.Value}|{metadata.LengthBytes}|{metadata.LastWriteTimeUtc.UtcTicks}");
-        }
-
-        return $"sha256:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('\n', parts)))).ToLowerInvariant()}";
+        var metadata = await fileSystem!.GetFileMetadataAsync(file, cancellationToken)
+            ?? throw new FileNotFoundException("A Production Interior input disappeared before state publication.", file.Value);
+        return new ProductionInteriorFileFact(role, file.Value, ProductionFileSignature.From(metadata));
     }
 
     private static string CreateConfigurationFingerprint(PrintableBookProcessingCommand command) =>

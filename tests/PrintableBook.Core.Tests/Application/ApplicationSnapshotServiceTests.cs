@@ -199,7 +199,7 @@ public sealed class ApplicationSnapshotServiceTests
     }
 
     [Fact]
-    public async Task RefreshAsync_projects_processed_production_metadata_and_output_provenance()
+    public async Task RefreshAsync_projects_production_metadata_and_marks_a_legacy_output_signature_stale()
     {
         var timestamp = DateTimeOffset.Parse("2026-09-22T01:02:03Z");
         var workspace = new BookWorkspace(new BookId("Book A"), new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("temp"));
@@ -234,7 +234,7 @@ public sealed class ApplicationSnapshotServiceTests
 
         var production = Assert.Single(snapshot.BookSummaries).Production!;
         Assert.Equal("Production", production.InteriorOutputKind);
-        Assert.Equal("Processed", production.InteriorOutputStatus);
+        Assert.Equal("Stale", production.InteriorOutputStatus);
         Assert.Equal(timestamp, production.InteriorBuiltAtUtc);
         Assert.All(production.Assets.Where(asset => asset.AssetKind != "final-cover"), asset =>
         {
