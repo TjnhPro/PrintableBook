@@ -48,6 +48,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         }
         var state = (priorState ?? BookProcessingState.NotStarted(command.BookId)).Start(DateTimeOffset.UtcNow, CreateConfigurationFingerprint(command));
         DirectoryReference? stagedFrameDirectory = null;
+        var processedPreviewMayHaveChanged = false;
         await PersistStateAsync(state, "book.started", command.BookId.Value, cancellationToken);
 
         try
@@ -212,6 +213,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             IReadOnlyList<InteriorPageProcessingResult> introResults = [];
             if (introRequests.Length > 0)
             {
+                processedPreviewMayHaveChanged = command.Mode == BookProcessingMode.InteriorOnly;
                 state = await BeginStepAsync(state, "intro-pages", cancellationToken);
                 introResults = await pageBatchProcessor.ProcessAsync(
                     introRequests,
@@ -221,6 +223,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 state = await CompleteStepAsync(state, "intro-pages", cancellationToken);
             }
 
+            processedPreviewMayHaveChanged = command.Mode == BookProcessingMode.InteriorOnly;
             state = await BeginStepAsync(state, "interior-pages", cancellationToken);
             var pageResults = await pageBatchProcessor.ProcessAsync(
                 interiorRequests,
@@ -258,7 +261,17 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 productionResults.Select(result => result.FinalPage).ToArray()), cancellationToken);
             state = await CompleteStepAsync(state, "assembly", cancellationToken);
 
-            if (command.Mode is BookProcessingMode.InteriorOnly or BookProcessingMode.ProductionInterior)
+            if (command.Mode == BookProcessingMode.InteriorOnly)
+            {
+                var completedAt = DateTimeOffset.UtcNow;
+                state = state
+                    .RecordProcessedInteriorPreviews(pageResults.Select(page => new PublishedInteriorPreview(page.PageId, page.FinalPage.Value)))
+                    .Complete(completedAt);
+                await PersistStateAsync(state, "book.completed", command.BookId.Value, CancellationToken.None);
+                return BookProcessingQueueBookResult.CompletedPreparation(command.BookId);
+            }
+
+            if (command.Mode == BookProcessingMode.ProductionInterior)
             {
                 state = await BeginStepAsync(state, "interior-pdf-export", cancellationToken);
                 var interiorPdf = await pdfExporter.ExportInteriorAsync(new InteriorPdfExportRequest(
@@ -283,25 +296,22 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 state = state
                     .RecordPublishedInterior(
                         publishedInterior.InteriorPdf.Value,
-                        command.Mode == BookProcessingMode.ProductionInterior ? InteriorOutputKind.Production : InteriorOutputKind.Base,
+                        InteriorOutputKind.Production,
                         interiorPublishedAt,
                         publishedInterior.PreviewPdf?.Value)
-                    .RecordPublishedInteriorPreviews(pageResults.Select(page => new PublishedInteriorPreview(page.PageId, page.FinalPage.Value)))
+                    .RecordProcessedInteriorPreviews(pageResults.Select(page => new PublishedInteriorPreview(page.PageId, page.FinalPage.Value)))
                     .Complete(interiorPublishedAt);
-                if (command.Mode == BookProcessingMode.ProductionInterior)
-                {
-                    await RecordProductionInteriorStateAsync(
-                        workspace,
-                        command,
-                        productionPrefixSources,
-                        productionResults,
-                        activeInteriorSources,
-                        shuffleMap!,
-                        publishedInterior.InteriorPdf,
-                        publishedInterior.PreviewPdf,
-                        interiorPublishedAt,
-                        cancellationToken);
-                }
+                await RecordProductionInteriorStateAsync(
+                    workspace,
+                    command,
+                    productionPrefixSources,
+                    productionResults,
+                    activeInteriorSources,
+                    shuffleMap!,
+                    publishedInterior.InteriorPdf,
+                    publishedInterior.PreviewPdf,
+                    interiorPublishedAt,
+                    cancellationToken);
                 await PersistStateAsync(state, "book.completed", command.BookId.Value, CancellationToken.None);
                 return BookProcessingQueueBookResult.CompletedInterior(command.BookId, publishedInterior);
             }
@@ -335,19 +345,21 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             state = state
                 .RecordPublishedArtifact(PublishedArtifactKind.Cover, published.CoverPdf.Value, published.CoverPreviewPdf?.Value)
                 .RecordPublishedInterior(published.InteriorPdf.Value, InteriorOutputKind.Base, publishedAt, published.InteriorPreviewPdf?.Value)
-                .RecordPublishedInteriorPreviews(pageResults.Select(page => new PublishedInteriorPreview(page.PageId, page.FinalPage.Value)))
+                .RecordProcessedInteriorPreviews(pageResults.Select(page => new PublishedInteriorPreview(page.PageId, page.FinalPage.Value)))
                 .Complete(publishedAt);
             await PersistStateAsync(state, "book.completed", command.BookId.Value, CancellationToken.None);
             return BookProcessingQueueBookResult.Completed(command.BookId, published);
         }
         catch (OperationCanceledException)
         {
+            if (processedPreviewMayHaveChanged) state = state.ClearProcessedInteriorPreviews();
             state = state.Cancel(DateTimeOffset.UtcNow);
             await PersistStateAsync(state, "book.cancelled", command.BookId.Value, CancellationToken.None);
             return new BookProcessingQueueBookResult(command.BookId, BookProcessingStatus.Cancelled, null, null);
         }
         catch (BookProcessingFailureException failure)
         {
+            if (processedPreviewMayHaveChanged) state = state.ClearProcessedInteriorPreviews();
             state = state.Fail(failure.Step, failure.Failure, DateTimeOffset.UtcNow);
             await stateStore.SaveErrorAsync(workspace, failure.Failure, CancellationToken.None);
             await PersistStateAsync(state, "book.failed", failure.Failure.Message, CancellationToken.None);
@@ -360,6 +372,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             var failureCode = failure.FailureCode ?? (isIntro ? "intro.page_failed" : isProduction ? "production.page_failed" : "interior.page_failed");
             var failureStep = isIntro ? "intro-pages" : isProduction ? "production-prefix-pages" : "interior-pages";
             var processingFailure = new ProcessingFailure(failureCode, failure.Message);
+            if (processedPreviewMayHaveChanged) state = state.ClearProcessedInteriorPreviews();
             state = state.Fail(failureStep, processingFailure, DateTimeOffset.UtcNow);
             await stateStore.SaveErrorAsync(workspace, processingFailure, CancellationToken.None);
             await PersistStateAsync(state, "book.failed", processingFailure.Message, CancellationToken.None);
@@ -368,6 +381,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         catch (Exception exception)
         {
             var processingFailure = new ProcessingFailure("book.processing_failed", exception.Message);
+            if (processedPreviewMayHaveChanged) state = state.ClearProcessedInteriorPreviews();
             state = state.Fail(state.CurrentStep ?? "processing", processingFailure, DateTimeOffset.UtcNow);
             await stateStore.SaveErrorAsync(workspace, processingFailure, CancellationToken.None);
             await PersistStateAsync(state, "book.failed", processingFailure.Message, CancellationToken.None);

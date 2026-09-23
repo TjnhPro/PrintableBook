@@ -31,7 +31,6 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
         var prepared = Path.Combine(cache, "prepared.png");
         var normalized = Path.Combine(cache, "normalized-source.png");
         var processed = Path.Combine(fixture.Workspace.ProcessedDirectory.Value, "interior", "page-0001.png");
-        var published = fixture.First.PublishedInteriorOutput!.InteriorPdf.Value;
         var classificationBytes = await File.ReadAllBytesAsync(classification);
 
         await new PhysicalBookStorageMaintenance().ClearHeavyProcessingCacheAsync(fixture.Workspace);
@@ -41,12 +40,11 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
         Assert.False(File.Exists(normalized));
         Assert.False(File.Exists(prepared));
         Assert.False(File.Exists(processed));
-        Assert.True(File.Exists(published));
 
         var repeated = await fixture.Processor.ProcessBookAsync(fixture.Command);
 
         Assert.Equal(BookProcessingStatus.Completed, repeated.Status);
-        Assert.True(File.Exists(repeated.PublishedInteriorOutput!.InteriorPdf.Value));
+        Assert.Null(repeated.PublishedInteriorOutput);
         Assert.True(File.Exists(prepared));
         Assert.True(File.Exists(normalized));
         Assert.True(File.Exists(processed));
@@ -163,11 +161,9 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
             new ArtworkDetectionThreshold(20), null, 123) { Mode = BookProcessingMode.InteriorOnly };
         var first = await processor.ProcessBookAsync(command);
         Assert.Equal(BookProcessingStatus.Completed, first.Status);
-        Assert.Equal(
-            Path.Combine(bookDirectory.Value, "Output", $"{bookId} - Interior.pdf"),
-            first.PublishedInteriorOutput!.InteriorPdf.Value);
-        Assert.True(File.Exists(first.PublishedInteriorOutput.InteriorPdf.Value));
+        Assert.Null(first.PublishedInteriorOutput);
         var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        Assert.Equal(2, (await new JsonBookWorkspaceStateStore(fileSystem).LoadAsync(workspace))!.PublishedInteriorPreviews!.Count);
         return new ProcessedFixture(bookDirectory, workspace, command, processor, first);
     }
 
