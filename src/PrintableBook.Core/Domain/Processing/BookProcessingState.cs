@@ -4,7 +4,7 @@ using PrintableBook.Core.Application.Processing;
 namespace PrintableBook.Core.Domain.Processing;
 
 /// <summary>
-/// A rendered Interior page belonging to the most recently published successful run.
+/// A rendered Interior page belonging to the most recent usable processed preview set.
 /// </summary>
 public sealed record PublishedInteriorPreview(string PageId, string FinalPagePath);
 
@@ -189,7 +189,7 @@ public sealed record BookProcessingState(
             PublishedInteriorAtUtc = publishedAtUtc
         };
 
-    public BookProcessingState RecordPublishedInteriorPreviews(IEnumerable<PublishedInteriorPreview> previews)
+    public BookProcessingState RecordProcessedInteriorPreviews(IEnumerable<PublishedInteriorPreview> previews)
     {
         ArgumentNullException.ThrowIfNull(previews);
         var published = previews.ToArray();
@@ -206,7 +206,14 @@ public sealed record BookProcessingState(
         return this with { PublishedInteriorPreviews = published };
     }
 
-    public BookProcessingState ClearPublishedInteriorPreviews() => this with { PublishedInteriorPreviews = [] };
+    public BookProcessingState ClearProcessedInteriorPreviews() => this with { PublishedInteriorPreviews = [] };
+
+    // Compatibility aliases retain the persisted contract and existing callers while the
+    // preview state is no longer coupled to publishing an Interior PDF.
+    public BookProcessingState RecordPublishedInteriorPreviews(IEnumerable<PublishedInteriorPreview> previews) =>
+        RecordProcessedInteriorPreviews(previews);
+
+    public BookProcessingState ClearPublishedInteriorPreviews() => ClearProcessedInteriorPreviews();
 
     public BookProcessingState SelectCover(string coverReference)
     {

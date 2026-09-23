@@ -170,6 +170,24 @@ public sealed class BookProcessingStateTests
     }
 
     [Fact]
+    public void Processed_preview_updates_preserve_published_interior_provenance()
+    {
+        var publishedAt = DateTimeOffset.Parse("2026-09-21T12:30:00Z");
+        var state = BookProcessingState.NotStarted(new BookId("book"))
+            .RecordPublishedInterior(
+                "C:\\output\\book - Interior.pdf",
+                InteriorOutputKind.Production,
+                publishedAt,
+                "C:\\output\\book - Interior_thumbnail.pdf")
+            .RecordProcessedInteriorPreviews([new PublishedInteriorPreview("page-0001", "processed/interior/page-0001.png")]);
+
+        Assert.Equal(["C:\\output\\book - Interior.pdf"], state.PublishedArtifactReferences);
+        Assert.Equal(InteriorOutputKind.Production, state.PublishedInteriorKind);
+        Assert.Equal(publishedAt, state.PublishedInteriorAtUtc);
+        Assert.Equal("C:\\output\\book - Interior_thumbnail.pdf", state.PublishedInteriorPreviewReference);
+    }
+
+    [Fact]
     public void RecordPublishedInteriorPreviews_rejects_duplicate_page_ids()
     {
         var state = BookProcessingState.NotStarted(new BookId("book"));
