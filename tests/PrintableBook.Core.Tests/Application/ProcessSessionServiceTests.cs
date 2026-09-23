@@ -15,12 +15,13 @@ public sealed class ProcessSessionServiceTests
         var manager = new Manager();
         var service = new ProcessSessionService(manager);
 
-        var started = await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
-        var duplicate = await service.StartAsync(["book-one"], "Brand", BookProcessingMode.InteriorOnly);
+        var started = await service.StartAsync(["book-one"], BookProcessingMode.InteriorOnly);
+        var duplicate = await service.StartAsync(["book-one"], BookProcessingMode.InteriorOnly);
 
         Assert.Equal(1, manager.Starts);
         Assert.True(started.IsActive);
         Assert.Equal("Queued", started.CurrentStep);
+        Assert.Null(started.BrandName);
         Assert.Equal(started.CurrentBookId, duplicate.CurrentBookId);
         Assert.IsType<ProcessingSessionWorkerRequest>(manager.Request);
     }
@@ -81,7 +82,7 @@ public sealed class ProcessSessionServiceTests
         var service = new ProcessSessionService(new Manager());
         foreach (var ids in new[] { Array.Empty<string>(), new[] { "" }, new[] { "book", "book" } })
         {
-            await Assert.ThrowsAsync<ArgumentException>(() => service.StartAsync(ids, "Brand", BookProcessingMode.InteriorOnly).AsTask());
+            await Assert.ThrowsAsync<ArgumentException>(() => service.StartAsync(ids, BookProcessingMode.InteriorOnly).AsTask());
         }
     }
 
@@ -91,7 +92,7 @@ public sealed class ProcessSessionServiceTests
         var manager = new Manager();
         var service = new ProcessSessionService(manager);
 
-        await service.StartAsync(["book-one"], "Brand", BookProcessingMode.FullBook);
+        await service.StartAsync(["book-one"], BookProcessingMode.FullBook);
 
         var request = Assert.IsType<ProcessingSessionWorkerRequest>(manager.Request);
         Assert.Equal(BookProcessingMode.FullBook, request.Mode);
@@ -104,7 +105,6 @@ public sealed class ProcessSessionServiceTests
 
         await Assert.ThrowsAsync<ArgumentException>(() => service.StartAsync(
             ["book-one", "book-two"],
-            "Brand",
             BookProcessingMode.ProductionInterior).AsTask());
     }
 

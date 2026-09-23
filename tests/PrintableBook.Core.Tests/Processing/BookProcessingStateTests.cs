@@ -7,6 +7,26 @@ namespace PrintableBook.Core.Tests.Processing;
 public sealed class BookProcessingStateTests
 {
     [Fact]
+    public void Processing_transitions_preserve_book_metadata_and_assignment()
+    {
+        var metadata = BookProductionMetadata.Create("Title", null, "ABCD", null, "Jane Doe");
+        var state = BookProcessingState.NotStarted(new BookId("book")) with
+        {
+            Metadata = metadata,
+            AssignedBrand = "Demo Brand"
+        };
+
+        var completed = state
+            .Start(DateTimeOffset.UtcNow)
+            .BeginStep("scan", DateTimeOffset.UtcNow)
+            .CompleteStep("scan", DateTimeOffset.UtcNow)
+            .Complete(DateTimeOffset.UtcNow);
+
+        Assert.Same(metadata, completed.Metadata);
+        Assert.Equal("Demo Brand", completed.AssignedBrand);
+    }
+
+    [Fact]
     public void RecordPublishedArtifact_merges_by_output_role_and_preserves_the_counterpart()
     {
         var state = BookProcessingState.NotStarted(new BookId("book"))

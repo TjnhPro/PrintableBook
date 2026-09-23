@@ -10,11 +10,21 @@ Printable Book làm việc hoàn toàn trên thư mục local: Brand trong `bran
 
 Tạo một thư mục Brand dưới `brands/`. Một Brand gồm hai folder tùy chọn `IntroTemplate/`, `AppPlus/`, hai ảnh `frame.png`, `background.png`, và ba template bắt buộc `cover.psd`, `app_plus.psd`, `book_owner.psd` ở root Brand. `BackCover.psd` và `brand.json` không còn được dùng hay đọc bởi ứng dụng. Màn hình **Brands & templates** hiển thị từng folder dưới dạng danh sách `Name | Extension | Size | Status`, còn các file root là các card riêng.
 
+Trong card **Brand Information**, nhập một Primary Author rồi nhấn **Save Author**. MVP dùng contract `1 Brand = 1 Author`; Author có thể để trống nhưng Brand đó sẽ không xuất hiện trong danh sách assign của Book. So sánh Author bỏ qua chữ hoa/thường và khoảng trắng ở đầu/cuối, nhưng không sửa khoảng trắng ở giữa hay dấu câu. Nếu việc đổi Author làm các Book đang assign trở nên invalid, ứng dụng hiển thị số Book bị ảnh hưởng trước khi Save và không tự đổi assignment.
+
 Kích thước hợp lệ: `frame.png` phải là `Artwork maximum side × Artwork maximum side`; `background.png` phải đúng `Final Interior Page`; ảnh trong `IntroTemplate/` phải là `1024 × 1024 px`, `2048 × 2048 px`, hoặc đúng `Final Interior Page` (mặc định `2588 × 2625 px`). Ba file PSD chỉ được kiểm tra tồn tại, không được đọc như ảnh. Với ảnh Intro đúng Final Interior Page, ứng dụng đưa thẳng artwork đó vào PDF, không thêm viền hay xử lý ảnh. Sau khi chọn **Validate Brand**, lỗi chỉ rõ file nào sai, kích thước hiện tại và kích thước cần sửa.
 
 ![Brands and templates](assets/screenshots/0.1/12-brands-templates.png)
 
 ## 3. Chuẩn bị Book
+
+Trong tab **Overview** của Book detail, card **Book Information** lưu riêng:
+
+- Title, Subtitle, Description và Primary Author; có thể Save thiếu một phần, field trống hiển thị `Unknown`.
+- Subcover là mô tả ngắn tùy chọn, thường gồm 4–5 từ. Ứng dụng không bắt buộc số từ; sau khi trim chỉ yêu cầu text dưới 100 ký tự.
+- Title đã lưu là tên hiển thị; tên folder vẫn được giữ làm thông tin phụ và không bị rename.
+
+Sau khi Save Author, dùng card **Brand Assignment** để chọn một Brand có Author match rồi nhấn **Assign Brand**. Ứng dụng không auto-assign. Khi reassign hoặc unassign, template, cache và output cũ được giữ nguyên; chúng không tự chuyển sang Brand mới.
 
 Trong Book detail, nút **Copy Brand Templates** khả dụng khi Book ở trạng thái `Ready` và Brand đang chọn đã `Validated`. Nút này copy đè `cover.psd`, `app_plus.psd` và `book_owner.psd` vào `.workspace/templates/`; thao tác không chạy processing và không tạo state/cache riêng.
 
@@ -38,11 +48,11 @@ Với Book theo cấu trúc phẳng cũ, tiếp tục đặt `Book interior/`, `
 
 ## 4. Refresh Library
 
-Trong **Books**, chọn Brand ở header rồi nhấn **Refresh**. Refresh quét local folders và dựng snapshot mới. Chỉ dữ liệu snapshot mới được dùng cho các mutation Book/Brand.
+Trong **Books**, nhấn **Refresh** để quét local folders và dựng snapshot mới. Chỉ dữ liệu snapshot mới được dùng cho các mutation Book/Brand. Không còn Processing Brand toàn cục: mọi Book action cần Brand luôn lấy Brand từ assignment đã lưu của chính Book.
 
 ## 5. Book Overview
 
-Card cho biết số trang Interior active, trạng thái và Frame summary. Nhấn icon edit để mở Book detail; checkbox/card dùng để queue Book vào **Process Interior**.
+Card dùng Title đã lưu (fallback về tên folder), đồng thời hiển thị folder, Author, assignment badge, số trang Interior active và trạng thái. Nhấn icon edit để mở Book detail; checkbox/card dùng để queue Book vào **Process Interior**.
 
 ![Book overview](assets/screenshots/0.1/02-book-overview.png)
 
@@ -119,7 +129,11 @@ Khi `HasBackground=true`, background được chèn sau từng trang artwork ở
 
 ## 9. Chọn Books để Process
 
-Trong **Books**, dùng checkbox ở card hoặc **Select page** cạnh Search để chọn hàng loạt. **Clear selection** bỏ toàn bộ lựa chọn. Nút **Process Interior** chỉ đưa Book đã chọn vào session mới.
+Trong **Books**, filter **Book Brand** có `All`, `Unassigned` và từng Brand. Một Brand chỉ hiển thị Book đã explicit assign cho Brand đó; Book chỉ trùng Author nhưng chưa assign không xuất hiện. Đổi Book Brand sẽ reset trang và xóa toàn bộ selection để tránh process Book đang bị ẩn.
+
+Dùng checkbox ở card hoặc **Select page** cạnh Search để chọn hàng loạt. **Clear selection** bỏ toàn bộ lựa chọn. Nút **Process Interior** chỉ đưa Book đã chọn vào session mới.
+
+Mọi Book phải có assignment hợp lệ trước khi **Process Interior**, **Build Final Interior** hoặc **Copy Brand Templates**. Book chưa assign vẫn load và chỉnh metadata bình thường, nhưng các action đọc Brand assets sẽ bị chặn. Backend lấy fresh snapshot và resolve đúng assigned Brand trước khi đọc asset. Một batch chứa nhiều assigned Brand khác nhau bị từ chối thay vì tự tách hoặc tự đổi Brand.
 
 ## 10. Process queue
 
@@ -169,7 +183,7 @@ Phần advanced chứa normalized source size và BorderLine V3 pass 1/pass 2. �
 
 ## 17. Các trạng thái Needs review / Invalid
 
-**Needs review** nghĩa là Book cần quyết định của user, ví dụ CUSTOM Intro đã bật nhưng chưa chọn ảnh. **Invalid** nghĩa là dữ liệu source/setting không đạt điều kiện. Mở Book detail, đọc reason, sửa input hoặc selection, **Save changes**, rồi Refresh/Preflight lại.
+**Needs review** nghĩa là Book cần quyết định của user, ví dụ CUSTOM Intro đã bật nhưng chưa chọn ảnh. **Invalid** nghĩa là dữ liệu source/setting hoặc Brand assignment không đạt điều kiện. Assignment có thể invalid khi Book/Brand Author đổi, Brand thiếu Author, Brand bị rename/xóa hoặc metadata Brand không đọc được. Ứng dụng giữ nguyên tên Brand cũ và không tự reassign; mở Book detail để sửa Author rồi reassign, hoặc chọn **Unassign**.
 
 ![Needs review](assets/screenshots/0.1/15-needs-review.png)
 
@@ -179,6 +193,9 @@ Phần advanced chứa normalized source size và BorderLine V3 pass 1/pass 2. �
 | --- | --- |
 | Bridge không kết nối | Đóng app, chạy từ thư mục writable, kiểm tra Frontend còn trong thư mục cạnh executable. |
 | Book không xuất hiện | Kiểm tra folder nằm dưới `sources/`, sau đó nhấn **Refresh**. |
+| Không thấy Brand để assign | Save Book Author và Brand Author; kiểm tra hai giá trị match sau trim, không fuzzy match. |
+| Process/Copy Templates bị chặn do Brand | Assign Brand cho Book; nếu assignment invalid thì sửa Author và reassign. Nếu Brand chưa được chứng nhận, mở **Brands & templates** và Validate Brand. |
+| Book không xuất hiện dưới Book Brand | Chỉ Book đã explicit assign mới xuất hiện; cùng Author là chưa đủ. |
 | CUSTOM Intro không chạy | Chọn ít nhất một Book Interior image và **Save changes**. |
 | Background lỗi | Kiểm tra Brand có `background.png` đúng Final Page size. |
 | Không thấy preview sau process | Kiểm tra session Completed và mở lại Book detail/Interior pages. |

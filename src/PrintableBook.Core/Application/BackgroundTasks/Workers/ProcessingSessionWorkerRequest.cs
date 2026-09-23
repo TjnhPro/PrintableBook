@@ -5,6 +5,5 @@ namespace PrintableBook.Core.Application.BackgroundTasks.Workers;
 
 public sealed record ProcessingSessionWorkerRequest(
     IReadOnlyList<string> BookIds,
-    string BrandName,
     BookProcessingMode Mode,
     DateTimeOffset StartedAt);
