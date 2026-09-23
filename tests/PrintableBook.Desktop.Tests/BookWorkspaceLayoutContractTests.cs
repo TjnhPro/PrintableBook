@@ -35,7 +35,7 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.DoesNotContain("book-frame-filter", script, StringComparison.Ordinal);
         Assert.DoesNotContain("bookFrameFilter", script, StringComparison.Ordinal);
         Assert.DoesNotContain("clear-book-filters", script, StringComparison.Ordinal);
-        Assert.DoesNotContain(">Clear filters<", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"clear-artwork-filters\"", script, StringComparison.Ordinal);
         Assert.Contains("book-status-filter", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"book-status\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain("book-status-filters", script, StringComparison.Ordinal);

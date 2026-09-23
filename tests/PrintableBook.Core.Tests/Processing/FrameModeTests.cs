@@ -5,9 +5,9 @@ namespace PrintableBook.Core.Tests.Processing;
 public sealed class FrameModeTests
 {
     [Fact]
-    public void Auto_is_the_default_and_only_supported_frame_mode()
+    public void No_frame_is_the_default_and_only_two_modes_are_supported()
     {
-        Assert.Equal(FrameMode.Auto, default);
-        Assert.Equal([FrameMode.Auto, FrameMode.Enabled, FrameMode.Disabled], Enum.GetValues<FrameMode>());
+        Assert.Equal(FrameMode.Disabled, default);
+        Assert.Equal([FrameMode.Disabled, FrameMode.Enabled], Enum.GetValues<FrameMode>());
     }
 }

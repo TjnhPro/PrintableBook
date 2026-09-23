@@ -246,6 +246,19 @@ public sealed class ProcessingSessionWorker(
             Fail(request, context, "production_single_book_required", "Build Final Interior requires exactly one Book.");
         }
         var ids = request.BookIds.Distinct(StringComparer.Ordinal).ToArray();
+        var summaryById = snapshot.BookSummaries.ToDictionary(summary => summary.BookId.Value, StringComparer.Ordinal);
+        var unavailableStateBookId = ids.FirstOrDefault(id =>
+            summaryById.TryGetValue(id, out var summary) && !summary.WorkspaceStateAvailable);
+        if (unavailableStateBookId is not null)
+        {
+            var summary = summaryById[unavailableStateBookId];
+            Fail(
+                request,
+                context,
+                "WORKSPACE_STATE_CORRUPT",
+                summary.WorkspaceStateError ?? $"Book '{unavailableStateBookId}' has an unavailable workspace state. Restore or repair it, then refresh.",
+                summary.BookId);
+        }
         var resolution = BookBrandExecutionResolver.ResolveBatch(snapshot, ids);
         if (!resolution.IsSuccess)
         {

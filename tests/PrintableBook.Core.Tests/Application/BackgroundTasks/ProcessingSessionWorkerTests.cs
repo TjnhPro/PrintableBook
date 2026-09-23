@@ -46,6 +46,34 @@ public sealed class ProcessingSessionWorkerTests
         Assert.Equal("Failed", context.View.CurrentStep);
     }
 
+    [Fact]
+    public async Task Stale_request_with_corrupt_workspace_state_is_rejected_with_the_state_failure_code()
+    {
+        var initial = Snapshot();
+        var summary = initial.BookSummaries[0] with
+        {
+            ValidationStatus = "Invalid",
+            WorkspaceStateAvailable = false,
+            WorkspaceStateError = "Book 'book-one' workspace state is invalid. The state file was left unchanged.",
+            AssignedBrand = null,
+            AssignmentStatus = BookBrandAssignmentStatus.Unassigned
+        };
+        var context = new Context();
+        IBackgroundTaskWorker worker = CreateWorker(
+            new Provider(initial with { BookSummaries = [summary] }),
+            new Application(),
+            new FrameResolver(),
+            new FileSystem(),
+            new ImageInspector());
+
+        var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() =>
+            worker.ExecuteAsync(Request(), context, CancellationToken.None).AsTask());
+
+        Assert.Equal("WORKSPACE_STATE_CORRUPT", failure.Code);
+        Assert.Contains("left unchanged", failure.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(BookProcessingStatus.Failed, Assert.Single(context.View!.Queue).Status);
+    }
+
     [Theory]
     [InlineData(BrandValidationStatus.NotValidated)]
     [InlineData(BrandValidationStatus.NeedsValidation)]
@@ -499,9 +527,9 @@ public sealed class ProcessingSessionWorkerTests
             settings ?? GlobalSettings.Default,
             [new BookDesktopSummary(bookId, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 3, HasBackground: hasBackground, InteriorSourcePages:
             [
-                new InteriorSourcePageSummary(Path.Combine("book-one", "Book interior", "page-001.png"), FrameMode.Auto, SourceKey: "Book interior/page-001.png"),
-                new InteriorSourcePageSummary(Path.Combine("book-one", "Book interior", "page-002.png"), FrameMode.Auto, SourceKey: "Book interior/page-002.png"),
-                new InteriorSourcePageSummary(Path.Combine("book-one", "Book interior", "page-003.png"), FrameMode.Auto, SourceKey: "Book interior/page-003.png")
+                new InteriorSourcePageSummary(Path.Combine("book-one", "Book interior", "page-001.png"), FrameMode.Disabled, SourceKey: "Book interior/page-001.png"),
+                new InteriorSourcePageSummary(Path.Combine("book-one", "Book interior", "page-002.png"), FrameMode.Disabled, SourceKey: "Book interior/page-002.png"),
+                new InteriorSourcePageSummary(Path.Combine("book-one", "Book interior", "page-003.png"), FrameMode.Disabled, SourceKey: "Book interior/page-003.png")
             ], AssignedBrand: "Brand", AssignmentStatus: BookBrandAssignmentStatus.Valid)],
             DateTimeOffset.UtcNow);
     }

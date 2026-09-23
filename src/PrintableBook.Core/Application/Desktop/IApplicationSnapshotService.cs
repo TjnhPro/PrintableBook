@@ -14,7 +14,7 @@ public sealed record BookValidationCheck(string Code, string Message, bool IsSuc
 public sealed record InteriorPageSummary(string PageId, string Status, string FinalPagePath, string LocalImageUrl = "");
 public sealed record InteriorSourcePageSummary(string SourceReference, FrameMode FrameMode, bool IsActive = true, string? SourceKey = null);
 public sealed record BookFolderSummary(string Name, string Status, int FileCount, int ImageCount);
-public sealed record BookAssetSummary(string SourceReference, string RelativePath, string FileName, string Folder, string Kind, int? Width, int? Height, FrameMode FrameMode, string LocalImageUrl, bool IsActive = true);
+public sealed record BookAssetSummary(string SourceReference, string RelativePath, string FileName, string Folder, string Kind, int? Width, int? Height, FrameMode? FrameMode, string LocalImageUrl, bool IsActive = true);
 public sealed record BookOutputSummary(
     string ArtifactReference,
     string FileName,
@@ -55,7 +55,7 @@ public interface ILocalOutputActionService
     ValueTask RevealAsync(FileReference file, CancellationToken cancellationToken = default);
     ValueTask CopyPathAsync(FileReference file, CancellationToken cancellationToken = default);
 }
-public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = true, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null, ProductionDesktopSummary? Production = null, BookProductionMetadata? Metadata = null, string? AssignedBrand = null, BookBrandAssignmentStatus AssignmentStatus = BookBrandAssignmentStatus.Unassigned, string? AssignmentReason = null);
+public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = true, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null, ProductionDesktopSummary? Production = null, BookProductionMetadata? Metadata = null, string? AssignedBrand = null, BookBrandAssignmentStatus AssignmentStatus = BookBrandAssignmentStatus.Unassigned, string? AssignmentReason = null, bool WorkspaceStateAvailable = true, string? WorkspaceStateError = null, int LegacyFrameModePageCount = 0);
 public sealed record BrandDesktopSummary(string BrandName, BrandValidationStatus ValidationStatus, DateTimeOffset? ValidatedAtUtc, string? Fingerprint, string? Author = null, string MetadataStatus = "Missing", string? MetadataError = null);
 public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt, IReadOnlyList<BrandDesktopSummary>? BrandSummaries = null, IReadOnlyList<BrandImageSizeRequirement>? BrandImageSizeRequirements = null);
 
@@ -188,7 +188,20 @@ public sealed class ApplicationSnapshotService(
         var sourceFailure = scan.Failure ?? validation?.Failure;
         var isSourceValid = scan.IsSuccess && validation!.IsSuccess;
         var processingRoot = scan.Metadata?.ProcessingRoot ?? book.Directory;
-        var state = await stateStore.LoadAsync(book.Workspace, cancellationToken) ?? BookProcessingState.NotStarted(book.Id);
+        BookWorkspaceStateLoadResult stateLoad;
+        var stateAvailable = true;
+        string? stateError = null;
+        try
+        {
+            stateLoad = await stateStore.LoadWithMetadataAsync(book.Workspace, cancellationToken);
+        }
+        catch (InvalidDataException exception)
+        {
+            stateAvailable = false;
+            stateError = exception.Message;
+            stateLoad = new(BookProcessingState.NotStarted(book.Id), BookProcessingState.CurrentFrameModeContractVersion, LegacyFrameContractDetected: false);
+        }
+        var state = stateLoad.State ?? BookProcessingState.NotStarted(book.Id);
         assignmentTargets.TryGetValue(state.AssignedBrand ?? string.Empty, out var assignmentTarget);
         var assignment = BookBrandAssignmentEvaluator.Evaluate(state.AssignedBrand, state.Metadata?.Author, assignmentTarget);
         var coverCandidates = source?.GetAssets(BookAssetKind.Cover).Select(asset => asset.Reference).ToArray() ?? [];
@@ -198,6 +211,10 @@ public sealed class ApplicationSnapshotService(
             .OrderBy(page => page.PageId, StringComparer.Ordinal)
             .ToArray();
         var checks = new List<BookValidationCheck>();
+        if (!stateAvailable)
+        {
+            checks.Add(new BookValidationCheck("workspace_state_corrupt", stateError!, false));
+        }
         if (isSourceValid)
         {
             checks.Add(new BookValidationCheck("book.interior_ready", "Interior source images were discovered.", true));
@@ -271,8 +288,21 @@ public sealed class ApplicationSnapshotService(
         {
             fullBookChecks.Add(introCheck);
         }
-        var isReady = isSourceValid;
+        var isReady = isSourceValid && stateAvailable;
         var normalInteriorPages = sourcePages.Where(page => !introKeys.Contains(page.SourceKey!)).ToArray();
+        var explicitLegacyKeys = new HashSet<string>(stateLoad.ExplicitLegacyFrameSourceKeys ?? [], StringComparer.OrdinalIgnoreCase);
+        var explicitAutoKeys = new HashSet<string>(stateLoad.ExplicitLegacyAutoSourceKeys ?? [], StringComparer.OrdinalIgnoreCase);
+        var legacyFrameModePageCount = stateLoad.LegacyFrameContractDetected
+            ? normalInteriorPages.Count(page => explicitAutoKeys.Contains(page.SourceKey!) || !explicitLegacyKeys.Contains(page.SourceKey!))
+            : 0;
+        if (legacyFrameModePageCount > 0)
+        {
+            checks.Add(new BookValidationCheck(
+                "book.frame_mode_migrated",
+                $"{legacyFrameModePageCount} Interior page(s) previously using Auto now use No Frame. Review Interior artwork before reprocessing.",
+                true,
+                true));
+        }
         var activeInteriorSourcePageCount = normalInteriorPages.Count(page => page.IsActive);
         if (isSourceValid && activeInteriorSourcePageCount == 0)
         {
@@ -314,7 +344,10 @@ public sealed class ApplicationSnapshotService(
             Metadata: state.Metadata,
             AssignedBrand: state.AssignedBrand,
             AssignmentStatus: assignment.Status,
-            AssignmentReason: assignment.Reason);
+            AssignmentReason: assignment.Reason,
+            WorkspaceStateAvailable: stateAvailable,
+            WorkspaceStateError: stateError,
+            LegacyFrameModePageCount: legacyFrameModePageCount);
     }
 
     private async ValueTask<ProductionDesktopSummary> DescribeProductionAsync(
@@ -466,7 +499,7 @@ public sealed class ApplicationSnapshotService(
                 asset.Kind.ToString(),
                 null,
                 null,
-                sourceKey is null ? FrameMode.Auto : state.GetInteriorFrameMode(sourceKey),
+                sourceKey is null ? null : state.GetInteriorFrameMode(sourceKey),
                 ToLocalImageUrl(asset.Reference),
                 sourceKey is null || state.IsInteriorActive(sourceKey)));
         }
@@ -483,7 +516,7 @@ public sealed class ApplicationSnapshotService(
                 "Representative",
                 null,
                 null,
-                FrameMode.Auto,
+                null,
                 ToLocalImageUrl(representativeImage.Value)));
         }
 

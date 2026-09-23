@@ -14,6 +14,40 @@ namespace PrintableBook.Core.Tests.Application;
 public sealed class ApplicationSnapshotServiceTests
 {
     [Fact]
+    public async Task RefreshAsync_projects_legacy_missing_frame_override_as_no_frame_with_review_count()
+    {
+        var legacyState = BookProcessingState.NotStarted(new BookId("Book A"));
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(),
+            new StubSettingsStore(),
+            new StubScanner(),
+            new MetadataStateStore(new BookWorkspaceStateLoadResult(legacyState, 1, LegacyFrameContractDetected: true)),
+            new StubFileSystem()).RefreshAsync();
+
+        var summary = Assert.Single(snapshot.BookSummaries);
+        Assert.Equal(1, summary.LegacyFrameModePageCount);
+        Assert.Equal(FrameMode.Disabled, Assert.Single(summary.InteriorSourcePages!).FrameMode);
+        Assert.Contains(summary.ValidationChecks, check => check.Code == "book.frame_mode_migrated" && check.IsWarning);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_isolates_corrupt_workspace_state_to_its_book_summary()
+    {
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(),
+            new StubSettingsStore(),
+            new StubScanner(),
+            new MetadataStateStore(exception: new InvalidDataException("state token is invalid; file unchanged")),
+            new StubFileSystem()).RefreshAsync();
+
+        var summary = Assert.Single(snapshot.BookSummaries);
+        Assert.False(summary.WorkspaceStateAvailable);
+        Assert.Equal("Invalid", summary.ValidationStatus);
+        Assert.Contains("file unchanged", summary.WorkspaceStateError);
+        Assert.Contains(summary.ValidationChecks, check => check.Code == "workspace_state_corrupt" && !check.IsSuccess);
+    }
+
+    [Fact]
     public async Task RefreshAsync_projects_only_the_current_smaller_preview_companion()
     {
         var root = Path.Combine(Path.GetTempPath(), $"PrintableBook.SnapshotPreview.{Guid.NewGuid():N}");
@@ -765,6 +799,22 @@ public sealed class ApplicationSnapshotServiceTests
             ValueTask.FromResult<BookProcessingState?>(explicitState ?? (selectedCoverReference is null
                 ? null
                 : BookProcessingState.NotStarted(workspace.BookId).SelectCover(selectedCoverReference)));
+        public ValueTask SaveAsync(BookWorkspace workspace, BookProcessingState state, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask AppendLogAsync(BookWorkspace workspace, BookProcessingLogEntry entry, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask<IReadOnlyList<BookProcessingLogEntry>> LoadLogsAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<BookProcessingLogEntry>>([]);
+        public ValueTask SaveErrorAsync(BookWorkspace workspace, ProcessingFailure failure, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    }
+
+    private sealed class MetadataStateStore(BookWorkspaceStateLoadResult? result = null, Exception? exception = null) : IBookWorkspaceStateStore
+    {
+        public ValueTask<BookWorkspaceStateLoadResult> LoadWithMetadataAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) =>
+            exception is null
+                ? ValueTask.FromResult(result ?? new BookWorkspaceStateLoadResult(null, BookProcessingState.CurrentFrameModeContractVersion, false))
+                : ValueTask.FromException<BookWorkspaceStateLoadResult>(exception);
+
+        public ValueTask<BookProcessingState?> LoadAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(result?.State);
+
         public ValueTask SaveAsync(BookWorkspace workspace, BookProcessingState state, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask AppendLogAsync(BookWorkspace workspace, BookProcessingLogEntry entry, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask<IReadOnlyList<BookProcessingLogEntry>> LoadLogsAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<BookProcessingLogEntry>>([]);

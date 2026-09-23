@@ -21,7 +21,7 @@ public sealed class InteriorPagePipelineRequestTests
         var workspace = new BookWorkspace(new BookId("book"), new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("temp"));
 
         Assert.Throws<ArgumentException>(() => new InteriorPagePipelineRequest(workspace, new FileReference("intro.png"), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), new FileReference("frame.png"), FrameMode.Disabled, processingKind: InteriorPageProcessingKind.IntroTemplate));
-        Assert.Throws<ArgumentException>(() => new InteriorPagePipelineRequest(workspace, new FileReference("intro.png"), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), null, FrameMode.Auto, processingKind: InteriorPageProcessingKind.IntroTemplate));
+        Assert.Throws<ArgumentException>(() => new InteriorPagePipelineRequest(workspace, new FileReference("intro.png"), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), new FileReference("frame.png"), FrameMode.Enabled, processingKind: InteriorPageProcessingKind.IntroTemplate));
         Assert.Throws<ArgumentException>(() => new InteriorPagePipelineRequest(workspace, new FileReference("intro.png"), "intro-0001", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), new FileReference("frame.png"), FrameMode.Disabled, processingKind: InteriorPageProcessingKind.BrandIntroTemplate));
     }
 
@@ -32,7 +32,7 @@ public sealed class InteriorPagePipelineRequestTests
         var request = new InteriorPagePipelineRequest(workspace, new FileReference("production.png"), "production-interior-cover", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), null, FrameMode.Disabled, processingKind: InteriorPageProcessingKind.ProductionInterior);
 
         Assert.Equal(3, (int)request.ProcessingKind);
-        Assert.Throws<ArgumentException>(() => (request with { FrameMode = FrameMode.Auto }).ValidateProcessingPolicy());
+        Assert.Throws<ArgumentException>(() => (request with { FrameMode = FrameMode.Enabled }).ValidateProcessingPolicy());
         Assert.Throws<ArgumentException>(() => new InteriorPagePipelineRequest(workspace, new FileReference("production.png"), "production-interior-cover", new ArtworkDetectionThreshold(20), new ImageSize(100, 100), new ImageSize(100, 100), new ImageSize(100, 100), new ImageDensity(300, 300), new FileReference("frame.png"), FrameMode.Disabled, processingKind: InteriorPageProcessingKind.ProductionInterior));
     }
 
@@ -60,16 +60,15 @@ public sealed class InteriorPagePipelineRequestTests
         Assert.Equal(new ImageSize(2270, 2270), request.PreparedArtworkSize);
         Assert.Equal(new ImageSize(2550, 2550), request.WorkingPageSize);
         Assert.Equal(new ImageSize(2588, 2625), request.FinalPageSize);
-        Assert.Equal(FrameMode.Auto, request.FrameMode);
+        Assert.Equal(FrameMode.Disabled, request.FrameMode);
     }
 
     [Theory]
-    [InlineData(FrameMode.Auto)]
     [InlineData(FrameMode.Enabled)]
     [InlineData(FrameMode.Disabled)]
     public void Constructor_preserves_the_page_frame_mode(FrameMode mode)
     {
-        var request = CreateRequest(new ImageSize(2270, 2270), new ImageSize(2550, 2550), new ImageSize(2588, 2625), mode);
+        var request = CreateRequest(new ImageSize(2270, 2270), new ImageSize(2550, 2550), new ImageSize(2588, 2625), mode, mode == FrameMode.Enabled ? new FileReference("frame.png") : null);
 
         Assert.Equal(mode, request.FrameMode);
     }
@@ -84,7 +83,7 @@ public sealed class InteriorPagePipelineRequestTests
         Assert.Throws<ArgumentException>(() => CreateRequest(
             new ImageSize(2270, 2270), new ImageSize(2589, 2550), new ImageSize(2588, 2625)));
 
-    private static InteriorPagePipelineRequest CreateRequest(ImageSize prepared, ImageSize working, ImageSize final, FrameMode mode = FrameMode.Auto) => new(
+    private static InteriorPagePipelineRequest CreateRequest(ImageSize prepared, ImageSize working, ImageSize final, FrameMode mode = FrameMode.Disabled, FileReference? frame = null) => new(
         new BookWorkspace(new BookId("book"), new DirectoryReference("work"), new DirectoryReference("processed"), new DirectoryReference("output")),
         new FileReference("source.png"),
         "page-01",
@@ -93,6 +92,6 @@ public sealed class InteriorPagePipelineRequestTests
         working,
         final,
         new ImageDensity(300, 300),
-        null,
+        frame,
         mode);
 }

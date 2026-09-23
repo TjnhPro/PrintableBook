@@ -78,7 +78,7 @@ public sealed class InteriorWorkflowLocalCorpusTests
                         FinalSize,
                         new ImageDensity(300, 300),
                         frame,
-                        FrameMode.Auto));
+                        frame is null ? FrameMode.Disabled : FrameMode.Enabled));
                     stopwatch.Stop();
 
                     var cache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01");
@@ -92,8 +92,8 @@ public sealed class InteriorWorkflowLocalCorpusTests
                     var opaque = IsOpaque(outputPaths.Prepared);
                     var framedDiffersFromPrepared = !HashesMatch(outputPaths.Prepared, outputPaths.Framed);
                     var actualAutoFrameRecommended = actualType != ArtworkType.CropArt;
-                    var frameMode = FrameMode.Auto;
-                    var frameApplied = frame is not null && frameMode == FrameMode.Auto && actualAutoFrameRecommended && framedDiffersFromPrepared;
+                    var frameMode = frame is null ? FrameMode.Disabled : FrameMode.Enabled;
+                    var frameApplied = frame is not null && framedDiffersFromPrepared;
                     results.Add(WorkflowCorpusResult.Completed(
                         category.Name,
                         input,
@@ -281,7 +281,7 @@ public sealed class InteriorWorkflowLocalCorpusTests
         {
             var valid = expectedType == actualType &&
                 expectedAutoFrameRecommended == actualAutoFrameRecommended &&
-                frameApplied == (frameAvailable && frameMode == global::PrintableBook.Core.Application.Processing.FrameMode.Auto && actualAutoFrameRecommended) &&
+                frameApplied == (frameAvailable && frameMode == global::PrintableBook.Core.Application.Processing.FrameMode.Enabled) &&
                 (actualAutoFrameRecommended || !framedDiffersFromPrepared) &&
                 preparedSize == InteriorWorkflowLocalCorpusTests.PreparedSize &&
                 framedSize == InteriorWorkflowLocalCorpusTests.PreparedSize &&

@@ -20,7 +20,10 @@ namespace PrintableBook.Desktop;
 public partial class MainWindow : Window
 {
     private static readonly Size PreferredWindowSize = new(1650, 950);
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new FrameModeJsonConverter() }
+    };
     private readonly WebViewBridgeRouter bridgeRouter;
     private readonly IOperationDiagnostics diagnostics;
     private readonly ProcessWindowShutdownCoordinator shutdownCoordinator;
@@ -141,8 +144,11 @@ public partial class MainWindow : Window
             response = BridgeResponse.Failed("desktop-message", "desktop_bridge_failed", exception);
         }
 
-        Browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(response, JsonOptions));
+        Browser.CoreWebView2.PostWebMessageAsJson(SerializeBridgeResponse(response));
     }
+
+    internal static string SerializeBridgeResponse(BridgeResponse response) =>
+        JsonSerializer.Serialize(response, JsonOptions);
 
     private async void OnClosing(object? sender, CancelEventArgs e)
     {

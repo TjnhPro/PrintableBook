@@ -46,8 +46,11 @@ public sealed record BookProcessingState(
     string? PublishedCoverPreviewReference = null,
     string? PublishedInteriorPreviewReference = null,
     BookProductionMetadata? Metadata = null,
-    string? AssignedBrand = null)
+    string? AssignedBrand = null,
+    int FrameModeContractVersion = 2)
 {
+    public const int CurrentFrameModeContractVersion = 2;
+
     public static BookProcessingState NotStarted(BookId bookId) => new(
         bookId,
         BookProcessingStatus.NotStarted,
@@ -218,7 +221,7 @@ public sealed record BookProcessingState(
     public FrameMode GetInteriorFrameMode(string sourceKey)
     {
         ValidateSourceKey(sourceKey);
-        return InteriorFrameOverrides is not null && InteriorFrameOverrides.TryGetValue(sourceKey, out var mode) ? mode : FrameMode.Auto;
+        return InteriorFrameOverrides is not null && InteriorFrameOverrides.TryGetValue(sourceKey, out var mode) ? mode : FrameMode.Disabled;
     }
 
     public BookProcessingState SetInteriorFrameMode(string sourceKey, FrameMode mode)
@@ -228,7 +231,7 @@ public sealed record BookProcessingState(
         var overrides = InteriorFrameOverrides is null
             ? new Dictionary<string, FrameMode>(StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, FrameMode>(InteriorFrameOverrides, StringComparer.OrdinalIgnoreCase);
-        if (mode == FrameMode.Auto) overrides.Remove(sourceKey); else overrides[sourceKey] = mode;
+        if (mode == FrameMode.Disabled) overrides.Remove(sourceKey); else overrides[sourceKey] = mode;
         return this with { InteriorFrameOverrides = overrides.Count == 0 ? null : overrides };
     }
 

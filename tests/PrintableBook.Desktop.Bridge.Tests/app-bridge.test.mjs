@@ -179,7 +179,7 @@ const completedPdfBook = (index, {
   summary: {
     bookId: { value: `Book ${String(index).padStart(2, "0")}` }, workspaceStatus: "Completed", lastRunAt: generatedAt,
     representativeCoverReference: `D:\\PrintableBook\\sources\\Book ${index}\\Book cover\\cover.png`,
-    assets: [{ sourceReference: `D:\\PrintableBook\\sources\\Book ${index}\\Book cover\\cover.png`, relativePath: "Book cover/cover.png", fileName: "cover.png", folder: "Book cover", kind: "Cover", width: 2588, height: 2625, frameMode: "auto", localImageUrl: coverUrl, isActive: true }],
+    assets: [{ sourceReference: `D:\\PrintableBook\\sources\\Book ${index}\\Book cover\\cover.png`, relativePath: "Book cover/cover.png", fileName: "cover.png", folder: "Book cover", kind: "Cover", width: 2588, height: 2625, frameMode: null, localImageUrl: coverUrl, isActive: true }],
     outputSummaries: [{ artifactReference: `D:\\PrintableBook\\sources\\Book ${index}\\Output\\Book ${index} - Interior.pdf`, fileName: `Book ${index} - Interior.pdf`, artifactKind: "Interior", previewState: "Missing", verificationStatus: "Verified", generatedAt, pageCount: 40 + index, widthInches: 8.5, heightInches: 8.5, fileSizeBytes }]
   }
 });
@@ -487,6 +487,51 @@ test("Book card selection and detail entry do not redraw the Book Library", () =
   contentListeners.click({ target: edit });
   assert.match(content.innerHTML, /Book detail/);
   assert.equal(getFullRenderCount(), rendersBeforeDetail, "opening Book detail must preserve the grid and its scroll position");
+});
+
+test("a corrupt workspace stays inspectable but cannot be selected, edited, or processed", () => {
+  const { messageHandler, content, contentListeners, messages, status } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "corrupt-book", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, validationStatus: "Invalid", workspaceStatus: "Not started",
+      workspaceStateAvailable: false, workspaceStateError: "Book 'Book 001' workspace state is invalid. The state file was left unchanged.",
+      validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: []
+    }]
+  } } });
+
+  assert.match(content.innerHTML, /book-card[^>]*is-disabled/);
+  assert.match(content.innerHTML, /data-action="toggle-book-selection"[^>]*disabled/);
+  const select = { dataset: { action: "toggle-book-selection", bookId: "Book 001" }, closest: () => select };
+  contentListeners.click({ target: select });
+  assert.match(status.textContent, /workspace state is unavailable/i);
+
+  const edit = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => edit };
+  contentListeners.click({ target: edit });
+  assert.match(content.innerHTML, /Workspace state unavailable/);
+  assert.match(content.innerHTML, /original state file has not been changed/);
+  assert.match(content.innerHTML, /data-action="save-book-interior-settings"[^>]*disabled[^>]*>Save Interior changes<\/button>/);
+  assert.equal(messages.filter((message) => message.command === "process.start").length, 0);
+});
+
+test("legacy Auto migration is shown as a non-blocking No Frame review warning", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "legacy-warning", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, validationStatus: "Needs review", workspaceStatus: "Not started",
+      workspaceStateAvailable: true, legacyFrameModePageCount: 3,
+      validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: []
+    }]
+  } } });
+  const edit = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => edit };
+  contentListeners.click({ target: edit });
+
+  assert.match(content.innerHTML, /3 Interior pages previously using Auto now use No Frame/);
+  assert.match(content.innerHTML, /Review Interior artwork before reprocessing/);
+  assert.match(content.innerHTML, /data-action="book-tab" data-book-tab="artwork">Review Interior artwork/);
 });
 
 test("Interior processing derives Brand from assignment and omits brandName from the request", () => {
@@ -1117,7 +1162,7 @@ test("Book detail changes tabs without redrawing its drawer shell", () => {
   assert.match(content.innerHTML, /interior-artwork-grid-scroll/);
   assert.match(content.innerHTML, /No artwork matches this view/);
   assert.match(content.innerHTML, /data-asset-status="Active" aria-pressed="true"/);
-  assert.match(content.innerHTML, /data-asset-frame-mode="auto" aria-pressed="true"/);
+  assert.match(content.innerHTML, /data-asset-frame-mode="" aria-pressed="true">All/);
   assert.match(content.innerHTML, /data-action="asset-frame-mode"/);
   assert.doesNotMatch(content.innerHTML, /All folders/);
   assert.doesNotMatch(content.innerHTML, /data-action="asset-folder"/);
@@ -1136,8 +1181,8 @@ test("Book detail changes tabs without redrawing its drawer shell", () => {
   const frameOnly = { dataset: { action: "asset-frame-mode", assetFrameMode: "enabled" }, closest: () => frameOnly };
   contentListeners.click({ target: frameOnly });
   assert.match(content.innerHTML, /No artwork matches this view/);
-  const autoFrame = { dataset: { action: "asset-frame-mode", assetFrameMode: "auto" }, closest: () => autoFrame };
-  contentListeners.click({ target: autoFrame });
+  const allFrames = { dataset: { action: "asset-frame-mode", assetFrameMode: "" }, closest: () => allFrames };
+  contentListeners.click({ target: allFrames });
   assert.match(content.innerHTML, /page-001\.png/);
 
   messageHandler({ data: { version: 1, id: "book-2", ok: true, command: "app.snapshot", payload: snapshot(1) } });
@@ -1153,8 +1198,8 @@ test("Interior artwork clears saved bulk selection without redrawing the Book dr
       bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
       interiorSourcePageCount: 2, activeInteriorSourcePageCount: 2,
       assets: [
-        { sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto", isActive: true },
-        { sourceReference: "Book interior/page-002.png", relativePath: "Book interior/page-002.png", fileName: "page-002.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto", isActive: true }
+        { sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "disabled", isActive: true },
+        { sourceReference: "Book interior/page-002.png", relativePath: "Book interior/page-002.png", fileName: "page-002.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "disabled", isActive: true }
       ]
     }]
   };
@@ -1164,6 +1209,7 @@ test("Interior artwork clears saved bulk selection without redrawing the Book dr
   contentListeners.click({ target: openBook });
   const artworkTab = { dataset: { action: "book-tab", bookTab: "artwork" }, closest: () => artworkTab };
   contentListeners.click({ target: artworkTab });
+  assert.match(content.innerHTML, /aria-label="Select page-001\.png; Active; No Frame"/);
   const fullRendersBeforeEdit = getFullRenderCount();
   const bridgeMessagesBeforeEdit = messages.length;
 
@@ -1182,12 +1228,12 @@ test("Interior artwork clears saved bulk selection without redrawing the Book dr
   assert.equal(getFullRenderCount(), fullRendersBeforeEdit);
   assert.match(content.innerHTML, /<strong>1<\/strong> active/);
   assert.match(content.innerHTML, /Inactive/);
-  assert.match(content.innerHTML, /No frame/);
+  assert.match(content.innerHTML, /No Frame/);
   assert.equal(messages.length, bridgeMessagesBeforeEdit);
 
   const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
   contentListeners.click({ target: save });
-  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", assets: [{ sourceReference: "Book interior/page-001.png", active: false, frameMode: "disabled" }] });
+  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", assets: [{ sourceReference: "Book interior/page-001.png", active: false }] });
 
   const artworkRendersBeforeSavedSnapshot = getArtworkWorkspaceRenderCount();
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { kind: "LibraryRefresh", taskId: "save-refresh", state: "Completed" } } });
@@ -1245,8 +1291,8 @@ test("Interior artwork hides custom Intro pages and batches only remaining artwo
       bookId: { value: "Book 001" }, workspaceStatus: "Not started", hasIntro: true, selectedIntroInteriorSourceKeys: ["Book interior/page-001.png"], validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
       interiorSourcePageCount: 2, activeInteriorSourcePageCount: 2,
       assets: [
-        { sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", frameMode: "auto", isActive: true },
-        { sourceReference: "Book interior/page-002.png", relativePath: "Book interior/page-002.png", fileName: "page-002.png", folder: "Book interior", kind: "Interior", frameMode: "auto", isActive: true }
+        { sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", frameMode: "disabled", isActive: true },
+        { sourceReference: "Book interior/page-002.png", relativePath: "Book interior/page-002.png", fileName: "page-002.png", folder: "Book interior", kind: "Interior", frameMode: "disabled", isActive: true }
       ]
     }]
   };
@@ -1280,7 +1326,7 @@ test("Book Interior edits stay local until one explicit save request", () => {
     bookSummaries: [{
       bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
       interiorSourcePageCount: 1, activeInteriorSourcePageCount: 1, hasBackground: false,
-      assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto", isActive: true }]
+      assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "disabled", isActive: true }]
     }]
   };
 
@@ -1319,7 +1365,7 @@ test("Saving Book Interior settings accepts the refreshed snapshot without redra
     bookSummaries: [{
       bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
       interiorSourcePageCount: 1, activeInteriorSourcePageCount: 1, hasBackground: true,
-      assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto", isActive: true }]
+      assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "disabled", isActive: true }]
     }]
   };
 
@@ -1351,7 +1397,7 @@ test("Book detail configures an ordered custom Intro selection from Book interio
     ] }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
     bookSummaries: [{ bookId: { value: "Book 001" }, hasIntro: false, selectedIntroInteriorSourceKeys: [], validationChecks: [], sourceFolders: [{ name: "Book interior" }], publishedArtifacts: [], interiorPages: [], logs: [], assets: [
-      { sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", frameMode: "auto", isActive: true, localImageUrl: "file:///page-001.png" },
+      { sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", frameMode: "disabled", isActive: true, localImageUrl: "file:///page-001.png" },
       { sourceReference: "Book interior/page-003.png", relativePath: "Book interior/page-003.png", fileName: "page-003.png", folder: "Book interior", kind: "Interior", frameMode: "enabled", isActive: false, localImageUrl: "file:///page-003.png" }
     ] }]
   } } });
@@ -1416,12 +1462,12 @@ test("Adding to a persisted custom Intro submits asset source references instead
     bookSummaries: [{
       bookId: { value: "Book 001" }, hasIntro: true, selectedIntroInteriorSourceKeys: ["Book interior/page-001.png"], validationChecks: [], sourceFolders: [{ name: "Book interior" }], publishedArtifacts: [], interiorPages: [], logs: [],
       interiorSourcePages: [
-        { sourceReference: firstReference, sourceKey: "Book interior/page-001.png", frameMode: "auto", isActive: true },
-        { sourceReference: secondReference, sourceKey: "Book interior/page-002.png", frameMode: "auto", isActive: true }
+        { sourceReference: firstReference, sourceKey: "Book interior/page-001.png", frameMode: "disabled", isActive: true },
+        { sourceReference: secondReference, sourceKey: "Book interior/page-002.png", frameMode: "disabled", isActive: true }
       ],
       assets: [
-        { sourceReference: firstReference, relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", frameMode: "auto", isActive: true },
-        { sourceReference: secondReference, relativePath: "Book interior/page-002.png", fileName: "page-002.png", folder: "Book interior", kind: "Interior", frameMode: "auto", isActive: true }
+        { sourceReference: firstReference, relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", frameMode: "disabled", isActive: true },
+        { sourceReference: secondReference, relativePath: "Book interior/page-002.png", fileName: "page-002.png", folder: "Book interior", kind: "Interior", frameMode: "disabled", isActive: true }
       ]
     }]
   } } });
@@ -1447,7 +1493,7 @@ test("custom Book interior Intro selection has no global Brand override", () => 
     ], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
     brandSummaries: [{ brandName: "Brand A", validationStatus: "Validated" }, { brandName: "Brand B", validationStatus: "Validated" }],
-    bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Ready", assignedBrand: "Brand A", assignmentStatus: "Valid", hasIntro: true, selectedIntroInteriorSourceKeys: ["Book interior/page-001.png"], validationChecks: [], sourceFolders: [{ name: "Book interior" }], publishedArtifacts: [], interiorPages: [], logs: [], assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", frameMode: "auto", isActive: true, localImageUrl: "file:///page-001.png" }] }]
+    bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Ready", assignedBrand: "Brand A", assignmentStatus: "Valid", hasIntro: true, selectedIntroInteriorSourceKeys: ["Book interior/page-001.png"], validationChecks: [], sourceFolders: [{ name: "Book interior" }], publishedArtifacts: [], interiorPages: [], logs: [], assets: [{ sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", frameMode: "disabled", isActive: true, localImageUrl: "file:///page-001.png" }] }]
   } } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
@@ -1493,8 +1539,8 @@ test("Books render direct Cover and Interior local image URLs and replace a fail
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
     bookSummaries: [{ bookId: { value: "Book 001" }, representativeCoverReference: "Book cover/cover.png", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [
-      { sourceReference: "Book cover/cover.png", localImageUrl: "file:///D:/Printable%20Book/Cover%20%231%20%25.png", relativePath: "Book cover/cover.png", fileName: "cover.png", folder: "Book cover", kind: "Cover", width: 2550, height: 2550, frameMode: "auto" },
-      { sourceReference: "Book interior/page-001.png", localImageUrl: "file:///D:/Printable%20Book/B%E1%BB%99%20s%C3%A1ch%20%231%20%25/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "auto" }
+      { sourceReference: "Book cover/cover.png", localImageUrl: "file:///D:/Printable%20Book/Cover%20%231%20%25.png", relativePath: "Book cover/cover.png", fileName: "cover.png", folder: "Book cover", kind: "Cover", width: 2550, height: 2550, frameMode: null },
+      { sourceReference: "Book interior/page-001.png", localImageUrl: "file:///D:/Printable%20Book/B%E1%BB%99%20s%C3%A1ch%20%231%20%25/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "disabled" }
     ] }]
   } } });
 
@@ -1527,8 +1573,8 @@ test("Books use the display-only Main representative instead of the Clone proces
       coverCandidates: ["D:\\sources\\Book 001\\Clone book\\Book cover\\clone.png"],
       validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
       assets: [
-        { sourceReference: "D:\\sources\\Book 001\\Main book\\Book cover\\main.png", localImageUrl: "file:///D:/sources/Book%20001/Main%20book/Book%20cover/main.png", relativePath: "Main book/Book cover/main.png", fileName: "main.png", folder: "Main book/Book cover", kind: "Representative", frameMode: "auto" },
-        { sourceReference: "D:\\sources\\Book 001\\Clone book\\Book cover\\clone.png", localImageUrl: "file:///D:/sources/Book%20001/Clone%20book/Book%20cover/clone.png", relativePath: "Clone book/Book cover/clone.png", fileName: "clone.png", folder: "Clone book/Book cover", kind: "Cover", frameMode: "auto" }
+        { sourceReference: "D:\\sources\\Book 001\\Main book\\Book cover\\main.png", localImageUrl: "file:///D:/sources/Book%20001/Main%20book/Book%20cover/main.png", relativePath: "Main book/Book cover/main.png", fileName: "main.png", folder: "Main book/Book cover", kind: "Representative", frameMode: null },
+        { sourceReference: "D:\\sources\\Book 001\\Clone book\\Book cover\\clone.png", localImageUrl: "file:///D:/sources/Book%20001/Clone%20book/Book%20cover/clone.png", relativePath: "Clone book/Book cover/clone.png", fileName: "clone.png", folder: "Clone book/Book cover", kind: "Cover", frameMode: null }
       ]
     }]
   } } });
