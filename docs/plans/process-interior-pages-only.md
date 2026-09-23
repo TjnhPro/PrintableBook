@@ -589,15 +589,15 @@ Independent skill-aligned CEO, Design, and Engineering agents completed read-onl
 
 ## Implementation Task Checklist
 
-- [ ] **P1 / Phase 1 — Contracts:** add pages-only completion and processed-preview state semantics.
-- [ ] **P1 / Phase 2 — Boundary:** stop `InteriorOnly` after validated assembly; zero exporter/publisher calls.
-- [ ] **P1 / Phase 2 — Preservation:** keep existing PDF, thumbnail, timestamps, provenance, and Production output record unchanged.
-- [ ] **P1 / Phase 2 — Recovery:** atomically replace previews on success; clear them after post-start fail/cancel.
-- [ ] **P1 / Phase 3 — Freshness:** compute/compare the full versioned Production Interior recipe.
-- [ ] **P1 / Phase 4 — UX:** add session mode and truthful stages/messages/busy states.
-- [ ] **P2 / Phase 5 — Cleanup:** support completed preview-only workspaces.
-- [ ] **P1 / Phase 6 — Tests:** replace old Base-overwrite assertions and add the full preservation/failure matrix.
-- [ ] **P2 / Phase 6 — Docs:** make Build Final the sole Interior PDF owner everywhere current behavior is documented.
+- [x] **P1 / Phase 1 — Contracts:** add pages-only completion and processed-preview state semantics.
+- [x] **P1 / Phase 2 — Boundary:** stop `InteriorOnly` after validated assembly; zero exporter/publisher calls.
+- [x] **P1 / Phase 2 — Preservation:** keep existing PDF, thumbnail, timestamps, provenance, and Production output record unchanged.
+- [x] **P1 / Phase 2 — Recovery:** atomically replace previews on success; clear them after post-start fail/cancel.
+- [x] **P1 / Phase 3 — Freshness:** compute/compare the full versioned Production Interior recipe.
+- [x] **P1 / Phase 4 — UX:** add session mode and truthful stages/messages/busy states.
+- [x] **P2 / Phase 5 — Cleanup:** support completed preview-only workspaces.
+- [x] **P1 / Phase 6 — Tests:** replace old Base-overwrite assertions and add the full preservation/failure matrix.
+- [x] **P2 / Phase 6 — Docs:** make Build Final the sole Interior PDF owner everywhere current behavior is documented.
 
 ## GSTACK REVIEW REPORT
 

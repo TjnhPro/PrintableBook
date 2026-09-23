@@ -33,7 +33,8 @@ Mỗi thư mục trực tiếp trong `sources/` là một Book. Gói Book mới 
 3. Thêm Brand vào `brands/` và Book vào `sources/`. Brand hợp lệ cần `cover.psd`, `app_plus.psd` và `book_owner.psd` ở root.
 4. Trong **Books**, nhấn **Refresh** và chọn Brand.
 5. Mở Book detail để kiểm tra Interior, Intro, Active và Frame mode.
-6. Chọn Book, nhấn **Process Interior**, sau đó xem PDF trong **PDF Library**.
+6. Chọn Book, nhấn **Process Interior**, rồi kiểm tra các trang đã chuẩn bị trong tab **Interior pages**.
+7. Khi cần PDF giao production, mở tab **Production** và nhấn **Build Final Interior**; PDF xuất hiện trong **PDF Library**.
 
 Để dùng workflow Production, mở tab **Production** trong Book detail, upload ba PNG canonical, build Cover và Final Interior theo hướng dẫn trong [User Guide](docs/user-guide.md#8-production-assets).
 
@@ -44,10 +45,12 @@ Brand + Book folders
 → Refresh
 → kiểm tra/chọn Interior
 → Process Interior
+→ kiểm tra Interior pages
+→ Build Final Interior
 → PDF Library
 ```
 
-Mỗi trang Interior được chuẩn hoá thành `normalized-source.png`, sau đó classification dùng BorderLine V3 và BorderPixel V1 fallback, preparation, frame (nếu có), assembly và export PDF. Chi tiết kỹ thuật nằm trong [architecture](docs/architecture.md).
+Mỗi trang Interior được chuẩn hoá thành `normalized-source.png`, sau đó classification dùng BorderLine V3 và BorderPixel V1 fallback, preparation, frame (nếu có) và assembly. **Process Interior** dừng tại đây, lưu preview trang và không tạo/ghi đè PDF. **Build Final Interior** dùng lại pipeline hiện tại rồi export/publish PDF. Chi tiết kỹ thuật nằm trong [architecture](docs/architecture.md).
 
 Interior bình thường chỉ có hai mode: **Frame** và **No Frame**. Book/page mới mặc định **No Frame**. **Frame** bắt buộc dùng `frame.png` hợp lệ của Brand và sẽ fail rõ ràng nếu asset bị thiếu hoặc sai; **No Frame** dùng CropArt và không overlay frame. State cũ dùng Auto được đọc thành No Frame và có cảnh báo review theo Book; PDF đã publish không tự thay đổi cho đến khi user process/publish lại.
 
@@ -62,13 +65,13 @@ Intro legacy và Custom luôn được xử lý theo CropArt, không chạy dete
 
 ## Process Interior
 
-**Process** hiển thị queue, current stage, số worker và tiến độ. Mỗi session chỉ xử lý một Book tại một thời điểm; concurrency chỉ áp dụng các trang trong Book hiện tại, từ 1 đến 12 worker. Bạn có thể request **Cancel session**; cancellation là cooperative nên trạng thái sẽ chuyển terminal khi worker đã dừng an toàn.
+**Process** hiển thị queue, current stage, số worker và tiến độ. Action này chuẩn bị Intro + Interior page để preview, không build hay thay thế PDF. Mỗi session chỉ xử lý một Book tại một thời điểm; concurrency chỉ áp dụng các trang trong Book hiện tại, từ 1 đến 12 worker. Bạn có thể request **Cancel session**; cancellation là cooperative nên trạng thái sẽ chuyển terminal khi worker đã dừng an toàn. Nếu fail/cancel sau khi bắt đầu, preview dở dang bị xóa nhưng PDF hiện có được giữ nguyên.
 
 ![Process running](docs/assets/screenshots/0.1/09-process-running.png)
 
 ## Production Assets
 
-Workflow Production chạy song song và không thay đổi **Process Interior** cũ:
+Workflow Production sở hữu việc publish PDF; **Process Interior** chỉ chuẩn bị page preview:
 
 ```text
 final_cover.png             → Build Cover PDF
@@ -77,11 +80,11 @@ interior_book_owner.png     → No Frame / CropArt ├→ Build Final Interior
 Intro + randomized Interior ─────────────────────┘
 ```
 
-Cover PNG phải đúng `5242 × 2626 px`; PDF Cover dùng trang `17.47 × 8.75 inch`. Hai trang prefix Interior không bắt buộc kích thước input nhưng luôn dùng policy No Frame/CropArt. **Build Final Interior** tạo lại `<BookId> - Interior.pdf` theo thứ tự Interior Cover, Book Owner, Intro, rồi Interior đã shuffle; nếu `HasBackground` bật, một background được xen sau mỗi artwork. PDF Library ghi rõ Interior hiện tại là `Base`, `Production` hay `Legacy`.
+Cover PNG phải đúng `5242 × 2626 px`; PDF Cover dùng trang `17.47 × 8.75 inch`. Hai trang prefix Interior không bắt buộc kích thước input nhưng luôn dùng policy No Frame/CropArt. **Build Final Interior** là action duy nhất tạo mới/thay thế `<BookId> - Interior.pdf`, theo thứ tự Interior Cover, Book Owner, Intro, rồi Interior đã shuffle; nếu `HasBackground` bật, một background được xen sau mỗi artwork. PDF Library vẫn đọc provenance `Base` và `Legacy` từ output cũ, nhưng output Interior mới luôn là `Production`.
 
 ## PDF Library
 
-**PDF Library** hiển thị mọi Cover/Interior PDF đã publish, kể cả output thành công gần nhất còn được giữ lại sau một lần chạy lỗi. Từ card bạn có thể **Open**, **Reveal** trong Explorer hoặc **Copy** path. Clear Cache chỉ xoá raster trung gian của Book đã hoàn thành, không xoá PDF đã publish.
+**PDF Library** hiển thị mọi Cover/Interior PDF đã publish, kể cả output thành công gần nhất còn được giữ lại sau một lần chạy lỗi. Từ card bạn có thể **Open**, **Reveal** trong Explorer hoặc **Copy** path. Clear Cache xóa raster trung gian của Book Completed có output hợp lệ hoặc processed previews; không xóa PDF đã publish.
 
 ![PDF Library](docs/assets/screenshots/0.1/11-pdf-library.png)
 

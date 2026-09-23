@@ -270,6 +270,47 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProcessBookAsync_clears_processed_previews_after_pages_only_cancellation_but_preserves_pdf_provenance()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "CancelledPreparationBook"));
+        await CreateInteriorOnlyBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var command = CreateCommand("cancelled-preparation-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        var publishedAt = DateTimeOffset.Parse("2026-09-22T10:30:00Z");
+        await stateStore.SaveAsync(workspace, BookProcessingState.NotStarted(command.BookId)
+            .RecordPublishedInterior("existing - Interior.pdf", InteriorOutputKind.Production, publishedAt, "existing - Interior_thumbnail.pdf")
+            .RecordProcessedInteriorPreviews([new PublishedInteriorPreview("page-0001", "old-preview.png")]));
+        var blockingPipeline = new BlockingInteriorPagePipeline(CreatePagePipeline());
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem),
+            workspaceFactory,
+            stateStore,
+            new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem),
+            blockingPipeline,
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new RejectingPdfExporter(),
+            new RejectingOutputPublisher());
+        using var cancellation = new CancellationTokenSource();
+
+        var processing = processor.ProcessBookAsync(command, cancellationToken: cancellation.Token).AsTask();
+        await blockingPipeline.WaitUntilStartedAsync();
+        cancellation.Cancel();
+        var result = await processing;
+
+        Assert.Equal(BookProcessingStatus.Cancelled, result.Status);
+        var state = (await stateStore.LoadAsync(workspace))!;
+        Assert.Empty(state.PublishedInteriorPreviews!);
+        Assert.Equal(InteriorOutputKind.Production, state.PublishedInteriorKind);
+        Assert.Equal(publishedAt, state.PublishedInteriorAtUtc);
+        Assert.Equal("existing - Interior_thumbnail.pdf", state.PublishedInteriorPreviewReference);
+        Assert.Contains("existing - Interior.pdf", state.PublishedArtifactReferences!);
+    }
+
+    [Fact]
     public async Task ProcessBookAsync_rejects_an_unsupported_only_interior_after_discovery()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "UnsupportedInteriorBook"));
