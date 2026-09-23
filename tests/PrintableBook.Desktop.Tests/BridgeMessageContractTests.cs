@@ -264,6 +264,104 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Output_preview_opens_only_the_typed_companion_from_the_retained_snapshot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"PrintableBook.OutputPreview.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var main = Path.Combine(root, "Book One - Interior.pdf");
+            var preview = Path.Combine(root, "Book One - Interior_thumbnail.pdf");
+            await File.WriteAllBytesAsync(main, [1]);
+            await File.WriteAllBytesAsync(preview, [2]);
+            var current = CreateSnapshot();
+            var book = current.BookSummaries[0] with
+            {
+                PublishedArtifacts = [main],
+                OutputSummaries =
+                [
+                    new BookOutputSummary(
+                        main,
+                        Path.GetFileName(main),
+                        100,
+                        10,
+                        8.5,
+                        8.5,
+                        "Verified",
+                        DateTimeOffset.UtcNow,
+                        "Interior",
+                        preview,
+                        10,
+                        "Ready",
+                        DateTimeOffset.UtcNow)
+                ]
+            };
+            var snapshot = current with { BookSummaries = [book] };
+            var actions = new RecordingOutputActionService();
+            var router = new WebViewBridgeRouter(
+                new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
+                outputActionService: actions);
+            var request = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                version = 1,
+                id = "preview",
+                command = "book.output.preview",
+                payload = new { bookId = "Book One", artifactReference = main }
+            });
+
+            var response = await router.HandleAsync(request);
+
+            Assert.True(response.Ok);
+            Assert.Equal(preview, actions.Opened?.Value);
+            Assert.Contains("\"fallbackToOriginal\":false", System.Text.Json.JsonSerializer.Serialize(response.Payload));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Output_preview_falls_back_to_the_original_without_accepting_a_preview_path_from_the_client()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"PrintableBook.OutputPreview.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var main = Path.Combine(root, "Book One - Cover.pdf");
+            await File.WriteAllBytesAsync(main, [1]);
+            var current = CreateSnapshot();
+            var book = current.BookSummaries[0] with
+            {
+                PublishedArtifacts = [main],
+                OutputSummaries = [new BookOutputSummary(main, Path.GetFileName(main), 100, 1, 17.47, 8.75, "Verified", DateTimeOffset.UtcNow, "Cover")]
+            };
+            var snapshot = current with { BookSummaries = [book] };
+            var actions = new RecordingOutputActionService();
+            var router = new WebViewBridgeRouter(
+                new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
+                outputActionService: actions);
+            var request = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                version = 1,
+                id = "preview-fallback",
+                command = "book.output.preview",
+                payload = new { bookId = "Book One", artifactReference = main }
+            });
+
+            var response = await router.HandleAsync(request);
+
+            Assert.True(response.Ok);
+            Assert.Equal(main, actions.Opened?.Value);
+            Assert.Contains("\"fallbackToOriginal\":true", System.Text.Json.JsonSerializer.Serialize(response.Payload));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Brand_validate_uses_the_retained_snapshot_and_returns_the_validation_result()
     {
         var validation = new StubBrandValidationService();
@@ -1067,6 +1165,21 @@ public sealed class BridgeMessageContractTests
                 new ImageSize(100, 100),
                 new ProductionFileSignature(1, DateTimeOffset.UnixEpoch)));
         }
+    }
+
+    private sealed class RecordingOutputActionService : ILocalOutputActionService
+    {
+        public FileReference? Opened { get; private set; }
+
+        public ValueTask OpenAsync(FileReference file, CancellationToken cancellationToken = default)
+        {
+            Opened = file;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask RevealAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+
+        public ValueTask CopyPathAsync(FileReference file, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 
     private sealed class StubProcessSessionService : IProcessSessionService

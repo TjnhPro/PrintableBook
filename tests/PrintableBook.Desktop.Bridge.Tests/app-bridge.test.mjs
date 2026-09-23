@@ -149,14 +149,14 @@ const pdfLibrarySnapshot = () => ({
       bookId: { value: "Book Alpha" }, workspaceStatus: "Completed", lastRunAt: "2026-08-25T10:00:00Z", interiorSourcePageCount: 40, activeInteriorSourcePageCount: 40,
       validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
       outputSummaries: [
-        { artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Interior.pdf", fileName: "Book Alpha - Interior.pdf", verificationStatus: "Verified", generatedAt: "2026-08-25T10:00:00Z", pageCount: 80, widthInches: 8.626666666666667, heightInches: 8.75, fileSizeBytes: 80 * 1024 * 1024 },
-        { artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Cover.pdf", fileName: "Book Alpha - Cover.pdf", verificationStatus: "Verified", generatedAt: "2026-08-25T10:00:00Z", pageCount: 1, widthInches: 17, heightInches: 11, fileSizeBytes: 12 * 1024 * 1024 }
+        { artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Interior.pdf", fileName: "Book Alpha - Interior.pdf", artifactKind: "Interior", previewState: "Ready", previewArtifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Interior_thumbnail.pdf", previewFileSizeBytes: 8 * 1024 * 1024, verificationStatus: "Verified", generatedAt: "2026-08-25T10:00:00Z", pageCount: 80, widthInches: 8.626666666666667, heightInches: 8.75, fileSizeBytes: 80 * 1024 * 1024 },
+        { artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Cover.pdf", fileName: "Book Alpha - Cover.pdf", artifactKind: "Cover", previewState: "Ready", previewArtifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Cover_thumbnail.pdf", previewFileSizeBytes: 3 * 1024 * 1024, verificationStatus: "Verified", generatedAt: "2026-08-25T10:00:00Z", pageCount: 1, widthInches: 17, heightInches: 11, fileSizeBytes: 12 * 1024 * 1024 }
       ]
     },
     {
       bookId: { value: "Book Beta" }, workspaceStatus: "Failed", lastRunAt: "2026-08-26T11:00:00Z", interiorSourcePageCount: 20, activeInteriorSourcePageCount: 20,
       validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
-      outputSummaries: [{ artifactReference: "D:\\PrintableBook\\sources\\Book Beta\\Output\\Book Beta - Cover.pdf", fileName: "Book Beta - Cover.pdf", verificationStatus: "Available", generatedAt: "2026-08-24T10:00:00Z", pageCount: 1, widthInches: 17.47, heightInches: 8.75, fileSizeBytes: 25 * 1024 * 1024 }]
+      outputSummaries: [{ artifactReference: "D:\\PrintableBook\\sources\\Book Beta\\Output\\Book Beta - Cover.pdf", fileName: "Book Beta - Cover.pdf", artifactKind: "Cover", previewState: "Missing", verificationStatus: "Available", generatedAt: "2026-08-24T10:00:00Z", pageCount: 1, widthInches: 17.47, heightInches: 8.75, fileSizeBytes: 25 * 1024 * 1024 }]
     },
     {
       bookId: { value: "Book Gamma" }, workspaceStatus: "Completed", lastRunAt: "2026-08-26T12:00:00Z", interiorSourcePageCount: 30, activeInteriorSourcePageCount: 30,
@@ -165,7 +165,7 @@ const pdfLibrarySnapshot = () => ({
     {
       bookId: { value: "Book Delta" }, workspaceStatus: "Completed", lastRunAt: "2026-08-26T13:00:00Z", interiorSourcePageCount: 24, activeInteriorSourcePageCount: 24,
       validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
-      outputSummaries: [{ artifactReference: "D:\\PrintableBook\\sources\\Book Delta\\Output\\Book Delta - Interior.pdf", fileName: "Book Delta - Interior.pdf", verificationStatus: "Verified", generatedAt: "2026-08-26T13:00:00Z", pageCount: 48, widthInches: 8.5, heightInches: 8.5, fileSizeBytes: 42 * 1024 * 1024 }]
+      outputSummaries: [{ artifactReference: "D:\\PrintableBook\\sources\\Book Delta\\Output\\Book Delta - Interior.pdf", fileName: "Book Delta - Interior.pdf", artifactKind: "Interior", previewState: "Missing", verificationStatus: "Verified", generatedAt: "2026-08-26T13:00:00Z", pageCount: 48, widthInches: 8.5, heightInches: 8.5, fileSizeBytes: 42 * 1024 * 1024 }]
     }
   ]
 });
@@ -180,7 +180,7 @@ const completedPdfBook = (index, {
     bookId: { value: `Book ${String(index).padStart(2, "0")}` }, workspaceStatus: "Completed", lastRunAt: generatedAt,
     representativeCoverReference: `D:\\PrintableBook\\sources\\Book ${index}\\Book cover\\cover.png`,
     assets: [{ sourceReference: `D:\\PrintableBook\\sources\\Book ${index}\\Book cover\\cover.png`, relativePath: "Book cover/cover.png", fileName: "cover.png", folder: "Book cover", kind: "Cover", width: 2588, height: 2625, frameMode: "auto", localImageUrl: coverUrl, isActive: true }],
-    outputSummaries: [{ artifactReference: `D:\\PrintableBook\\sources\\Book ${index}\\Output\\Book ${index} - Interior.pdf`, fileName: `Book ${index} - Interior.pdf`, verificationStatus: "Verified", generatedAt, pageCount: 40 + index, widthInches: 8.5, heightInches: 8.5, fileSizeBytes }]
+    outputSummaries: [{ artifactReference: `D:\\PrintableBook\\sources\\Book ${index}\\Output\\Book ${index} - Interior.pdf`, fileName: `Book ${index} - Interior.pdf`, artifactKind: "Interior", previewState: "Missing", verificationStatus: "Verified", generatedAt, pageCount: 40 + index, widthInches: 8.5, heightInches: 8.5, fileSizeBytes }]
   }
 });
 
@@ -1585,7 +1585,8 @@ test("PDF Library groups current Cover and Interior PDFs under one Book", () => 
 
   assert.match(alphaMarkup, /Book Alpha - Interior\.pdf/);
   assert.match(alphaMarkup, /Book Alpha - Cover\.pdf/);
-  assert.match(alphaMarkup, />Open</);
+  assert.match(alphaMarkup, />Preview</);
+  assert.match(alphaMarkup, />Original</);
   assert.match(alphaMarkup, />Reveal</);
   assert.match(alphaMarkup, />Copy</);
   assert.match(alphaMarkup, /8\.63 × 8\.75 in/);
@@ -1701,7 +1702,8 @@ test("PDF Library Grid uses compact Book cards and the documented desktop column
   assert.match(content.innerHTML, /pdf-library-grid/);
   assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 4);
   assert.equal(content.innerHTML.match(/pdf-library-book-preview/g)?.length ?? 0, 4);
-  assert.match(content.innerHTML, />Open</);
+  assert.match(content.innerHTML, />Preview</);
+  assert.match(content.innerHTML, />Original</);
   assert.match(content.innerHTML, />Reveal</);
   assert.match(content.innerHTML, />Copy</);
   assert.match(css, /\.pdf-library-grid \{ display:grid; grid-template-columns:repeat\(4,minmax\(0,1fr\)\); align-items:start; gap:16px; \}/);
@@ -1717,8 +1719,8 @@ test("PDF Library Grid uses compact Book cards and the documented desktop column
   assert.match(css, /\.pdf-library-results \{ display:grid; grid-template-rows:minmax\(0,1fr\) auto; width:100%; max-width:100%; min-height:0; margin-top:12px; padding:12px; overflow:hidden; container-type:inline-size;/);
   assert.match(css, /\.pdf-library-toolbar \{ display:grid; grid-template-columns:minmax\(0,1fr\) minmax\(144px,180px\) auto;/);
   assert.match(css, /\.pdf-library-file-title \{ display:grid; grid-template-columns:minmax\(0,1fr\) auto;/);
-  assert.match(css, /\.pdf-library-book-grid \.pdf-library-file-copy \{ grid-template-rows:20px 18px 32px;/);
-  assert.match(css, /\.pdf-library-book-grid \.output-actions \{ margin-top:0; flex-wrap:nowrap; min-height:32px; \}/);
+  assert.match(css, /\.pdf-library-book-grid \.pdf-library-file-copy \{ grid-template-rows:20px 18px auto;/);
+  assert.match(css, /\.pdf-library-book-grid \.output-actions \{ margin-top:0; flex-wrap:wrap; min-height:32px; \}/);
   assert.match(css, /@container \(max-width:820px\) \{ \.pdf-library-grid \{ grid-template-columns:repeat\(2,minmax\(0,1fr\)\); \} \}/);
 });
 
@@ -1730,7 +1732,8 @@ test("PDF Library List uses bounded thumbnails and verbose output actions", () =
   const css = readFileSync(join(process.cwd(), "src", "PrintableBook.Desktop", "Frontend", "css", "book-workspace.css"), "utf8");
 
   assert.match(content.innerHTML, /pdf-library-list/);
-  assert.match(content.innerHTML, /Open PDF/);
+  assert.match(content.innerHTML, /Preview/);
+  assert.match(content.innerHTML, /Open original/);
   assert.match(content.innerHTML, /Reveal in Explorer/);
   assert.match(content.innerHTML, /Copy path/);
   assert.match(css, /\.pdf-library-book-list \{ display:grid; grid-template-columns:112px/);
@@ -1821,6 +1824,15 @@ test("PDF Library Open PDF sends the exact Book artifact reference", () => {
   const open = { dataset: { action: "open-output", bookId: "Book Alpha", artifactReference }, closest: () => open };
   contentListeners.click({ target: open });
   assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.open", payload: { bookId: "Book Alpha", artifactReference } });
+});
+
+test("PDF Library Preview sends only the main artifact identity for server-side companion resolution", () => {
+  const { messageHandler, contentListeners, messages } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "output-1", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
+  const artifactReference = "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Interior.pdf";
+  const preview = { dataset: { action: "preview-output", bookId: "Book Alpha", artifactReference }, closest: () => preview };
+  contentListeners.click({ target: preview });
+  assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.preview", payload: { bookId: "Book Alpha", artifactReference } });
 });
 
 test("PDF Library Reveal in Explorer sends the exact Book artifact reference", () => {

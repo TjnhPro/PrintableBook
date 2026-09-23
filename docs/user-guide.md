@@ -153,13 +153,15 @@ Khi terminal, Overview hiển thị summary Completed/Failed và queue snapshot 
 
 ## 12. PDF Library
 
-**PDF Library** liệt kê Book đã có PDF. **Open** mở PDF, **Reveal** mở thư mục output và **Copy** sao chép path. Grid/List, Search và Sort chỉ thay đổi cách xem output hiện có.
+**PDF Library** liệt kê Book đã có PDF. **Preview** mở companion PDF nhẹ hơn khi có; Cover preview dùng raster `2726×1313`, còn Interior preview vẫn có đầy đủ trang đúng thứ tự nhưng mỗi trang dùng raster `600×609`. Nếu preview thiếu hoặc không hợp lệ, ứng dụng mở PDF chính và báo fallback. **Open original**, **Reveal** và **Copy** luôn thao tác với PDF chính. Grid/List, Search và Sort chỉ thay đổi cách xem output hiện có.
+
+Các file preview nằm cạnh PDF chính với hậu tố `_thumbnail.pdf`. Chúng được tạo lại ở lần build/process tiếp theo, không backfill tự động cho Book cũ và không phải file giao production.
 
 ![PDF Library](assets/screenshots/0.1/11-pdf-library.png)
 
 ## 13. Clear Cache
 
-Trong **Books**, nhấn **Clear Cache** để xóa raster trung gian của Book Completed có output hợp lệ. PDF final vẫn được giữ; workspace state, classification metadata và setting không bị xóa. Reprocess sẽ tạo lại raster cần thiết.
+Trong **Books**, nhấn **Clear Cache** để xóa raster trung gian của Book Completed có output hợp lệ. PDF final và các companion `_thumbnail.pdf` vẫn được giữ; workspace state, classification metadata và setting không bị xóa. Reprocess sẽ tạo lại raster cần thiết.
 
 ## 14. Settings
 

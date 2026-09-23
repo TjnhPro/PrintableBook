@@ -5,6 +5,7 @@ using PrintableBook.Core.Application.Scanning;
 using PrintableBook.Core.Application.Diagnostics;
 using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Application.Production;
+using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 
@@ -12,6 +13,74 @@ namespace PrintableBook.Core.Tests.Application;
 
 public sealed class ApplicationSnapshotServiceTests
 {
+    [Fact]
+    public async Task RefreshAsync_projects_only_the_current_smaller_preview_companion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"PrintableBook.SnapshotPreview.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var main = Path.Combine(root, "Book A - Interior.pdf");
+            var preview = Path.Combine(root, "Book A - Interior_thumbnail.pdf");
+            await File.WriteAllBytesAsync(main, new byte[2048]);
+            await File.WriteAllBytesAsync(preview, new byte[512]);
+            var state = BookProcessingState.NotStarted(new BookId("Book A"))
+                .RecordPublishedInterior(main, InteriorOutputKind.Base, DateTimeOffset.UtcNow, preview);
+
+            var snapshot = await new ApplicationSnapshotService(
+                new StubDiscovery(),
+                new StubSettingsStore(),
+                new StubScanner(),
+                new StubStateStore(explicitState: state),
+                new StubFileSystem(),
+                new StubPdfInspector()).RefreshAsync();
+
+            var output = Assert.Single(Assert.Single(snapshot.BookSummaries).OutputSummaries!);
+            Assert.Equal("Interior", output.ArtifactKind);
+            Assert.Equal("Ready", output.PreviewState);
+            Assert.Equal(preview, output.PreviewArtifactReference);
+            Assert.Equal(512, output.PreviewFileSizeBytes);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RefreshAsync_rejects_a_preview_reference_that_is_not_the_main_companion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"PrintableBook.SnapshotPreview.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var main = Path.Combine(root, "Book A - Cover.pdf");
+            var unrelated = Path.Combine(root, "other.pdf");
+            await File.WriteAllBytesAsync(main, new byte[2048]);
+            await File.WriteAllBytesAsync(unrelated, new byte[512]);
+            var state = BookProcessingState.NotStarted(new BookId("Book A"))
+                .RecordPublishedArtifact(PublishedArtifactKind.Cover, main, unrelated);
+
+            var snapshot = await new ApplicationSnapshotService(
+                new StubDiscovery(),
+                new StubSettingsStore(),
+                new StubScanner(),
+                new StubStateStore(explicitState: state),
+                new StubFileSystem(),
+                new StubPdfInspector()).RefreshAsync();
+
+            var output = Assert.Single(Assert.Single(snapshot.BookSummaries).OutputSummaries!);
+            Assert.Equal("Cover", output.ArtifactKind);
+            Assert.Equal("Stale", output.PreviewState);
+            Assert.Null(output.PreviewArtifactReference);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+    }
+
     [Fact]
     public async Task RefreshAsync_projects_metadata_and_valid_brand_assignment_from_one_brand_load()
     {
@@ -709,6 +778,12 @@ public sealed class ApplicationSnapshotServiceTests
 
         public ValueTask SaveAsync(BookWorkspace workspace, ProductionWorkspaceState state, CancellationToken cancellationToken = default) =>
             ValueTask.CompletedTask;
+    }
+
+    private sealed class StubPdfInspector : IPdfDocumentInspector
+    {
+        public ValueTask<PdfDocumentInspection> InspectAsync(FileReference pdf, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(new PdfDocumentInspection(3, new PhysicalPageSize(8.5, 8.5)));
     }
 
     private sealed class BrandValidation(BrandValidationState state) : IBrandValidationService

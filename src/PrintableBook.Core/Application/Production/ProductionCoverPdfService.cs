@@ -9,7 +9,8 @@ namespace PrintableBook.Core.Application.Production;
 public sealed record ProductionCoverPdfResult(
     FileReference CoverPdf,
     PhysicalPageSize PageSize,
-    DateTimeOffset CompletedAtUtc);
+    DateTimeOffset CompletedAtUtc,
+    FileReference? PreviewPdf = null);
 
 public interface IProductionCoverPdfService
 {
@@ -60,7 +61,10 @@ public sealed class ProductionCoverPdfService(
         var bookState = await bookStateStore.LoadAsync(workspace, cancellationToken) ?? BookProcessingState.NotStarted(workspace.BookId);
         await bookStateStore.SaveAsync(
             workspace,
-            bookState.RecordPublishedArtifact(PublishedArtifactKind.Cover, published.CoverPdf.Value),
+            bookState.RecordPublishedArtifact(
+                PublishedArtifactKind.Cover,
+                published.CoverPdf.Value,
+                published.PreviewPdf?.Value),
             cancellationToken);
         var productionState = await productionStateStore.LoadAsync(workspace, cancellationToken);
         await productionStateStore.SaveAsync(
@@ -68,9 +72,10 @@ public sealed class ProductionCoverPdfService(
             productionState.RecordCoverOutput(
                 Path.GetFileName(published.CoverPdf.Value),
                 CreateInputSignature(ProductionFileSignature.From(metadata)),
-                completedAt),
+                completedAt,
+                published.PreviewPdf is null ? null : Path.GetFileName(published.PreviewPdf.Value)),
             cancellationToken);
-        return new ProductionCoverPdfResult(published.CoverPdf, CoverPageSize, completedAt);
+        return new ProductionCoverPdfResult(published.CoverPdf, CoverPageSize, completedAt, published.PreviewPdf);
     }
 
     public static string CreateInputSignature(ProductionFileSignature sourceSignature)

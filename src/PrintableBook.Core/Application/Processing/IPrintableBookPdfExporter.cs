@@ -12,6 +12,13 @@ public readonly record struct PhysicalPageSize(double WidthInches, double Height
     public double HeightInPoints => HeightInches * 72d;
 }
 
+public static class PreviewPdfRasterSizes
+{
+    public static ImageSize Cover { get; } = new(2726, 1313);
+
+    public static ImageSize Interior { get; } = new(600, 609);
+}
+
 public sealed record PrintableBookPdfExportRequest(
     FileReference Cover,
     IReadOnlyList<FileReference> IntroPages,
@@ -26,14 +33,18 @@ public sealed record PrintableBookPdfExportRequest(
     public IReadOnlyList<FileReference> EffectiveProductionPrefixPages => ProductionPrefixPages ?? [];
 }
 
-public sealed record PrintableBookPdfExportResult(FileReference CoverPdf, FileReference InteriorPdf);
+public sealed record PrintableBookPdfExportResult(
+    FileReference CoverPdf,
+    FileReference InteriorPdf,
+    FileReference? CoverPreviewPdf = null,
+    FileReference? InteriorPreviewPdf = null);
 
 public sealed record CoverPdfExportRequest(
     FileReference Cover,
     DirectoryReference TemporaryOutputDirectory,
     PhysicalPageSize CoverPageSize);
 
-public sealed record CoverPdfExportResult(FileReference CoverPdf);
+public sealed record CoverPdfExportResult(FileReference CoverPdf, FileReference? PreviewPdf = null);
 
 public sealed record InteriorPdfExportRequest(
     IReadOnlyList<FileReference> IntroPages,
@@ -47,7 +58,7 @@ public sealed record InteriorPdfExportRequest(
     public IReadOnlyList<FileReference> EffectiveProductionPrefixPages => ProductionPrefixPages ?? [];
 }
 
-public sealed record InteriorPdfExportResult(FileReference InteriorPdf);
+public sealed record InteriorPdfExportResult(FileReference InteriorPdf, FileReference? PreviewPdf = null);
 
 public interface IPrintableBookPdfExporter
 {

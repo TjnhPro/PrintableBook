@@ -1217,12 +1217,12 @@
     const pageItems = library.slice(pageStart, pageStart + pdfLibraryPageSize);
     const start = library.length ? pageStart + 1 : 0;
     const end = Math.min(pageStart + pdfLibraryPageSize, library.length);
-    const actions = (summary, output, compact = false) => `<div class="output-actions"><button class="button-primary" data-action="open-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">${compact ? "Open" : "Open PDF"}</button><button class="button-secondary" data-action="reveal-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">${compact ? "Reveal" : "Reveal in Explorer"}</button><button class="button-secondary" data-action="copy-output-path" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">${compact ? "Copy" : "Copy path"}</button></div>`;
+    const actions = (summary, output, compact = false) => `<div class="output-actions"><button class="button-primary" data-action="preview-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}" title="${valueFor(output, "previewState", "Missing") === "Ready" ? "Open lightweight preview PDF" : "Preview unavailable; opens original PDF"}">Preview</button><button class="button-secondary" data-action="open-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">${compact ? "Original" : "Open original"}</button><button class="button-secondary" data-action="reveal-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">${compact ? "Reveal" : "Reveal in Explorer"}</button><button class="button-secondary" data-action="copy-output-path" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">${compact ? "Copy" : "Copy path"}</button></div>`;
     const outputRow = (summary, output) => {
       const pageCount = valueFor(output, "pageCount", "—");
       const dimensions = valueFor(output, "widthInches", null) ? `${inches(valueFor(output, "widthInches", 0))} × ${inches(valueFor(output, "heightInches", 0))} in` : "—";
       const fileName = valueFor(output, "fileName", "PDF output");
-      const isInterior = String(fileName).endsWith(" - Interior.pdf");
+      const isInterior = valueFor(output, "artifactKind", "Unknown") === "Interior";
       const provenance = isInterior ? valueFor(productionSummaryFor(summary), "interiorOutputKind", "Legacy") : "";
       const provenanceBadge = isInterior ? ` ${badge(provenance)}` : "";
       return `<li class="pdf-library-file"><div class="pdf-library-file-mark">PDF</div><div class="pdf-library-file-copy"><div class="pdf-library-file-title"><strong title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</strong><span class="pdf-library-file-status">${badge(valueFor(output, "verificationStatus", "Available"))}${provenanceBadge}</span></div><small>${escapeHtml(String(pageCount))} pages · ${escapeHtml(dimensions)} · ${fileSize(valueFor(output, "fileSizeBytes", 0))}</small>${actions(summary, output, state.pdfLibraryView === "grid")}</div></li>`;
@@ -1640,6 +1640,7 @@
       send("process.start", { bookIds: [...state.selectedBookIds], mode: "interior-only" });
     }
     if (action === "cancel-process") send("process.cancel");
+    if (action === "preview-output") send("book.output.preview", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
     if (action === "open-output") send("book.output.open", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
     if (action === "reveal-output") send("book.output.reveal", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
     if (action === "copy-output-path") send("book.output.copy-path", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
@@ -1872,7 +1873,9 @@
       state.productionRefreshAwaitingSnapshot = true;
       beginApplicationRefresh();
     } else if (ok && command === "book.output.action.completed") {
-      status.textContent = "Output action completed";
+      status.textContent = valueFor(valueFor(response, "payload", {}), "fallbackToOriginal", false)
+        ? "Preview unavailable; opened original PDF"
+        : "Output action completed";
     } else if (ok && command === "diagnostics.snapshot") {
       window.uiDiagnostics = valueFor(response, "payload", []);
       if (currentRoute() === "diagnostics") render("diagnostics", false);

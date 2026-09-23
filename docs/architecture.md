@@ -82,7 +82,7 @@ Với layout Main/Clone, scanner chỉ đọc direct child `Main book/Book cover
 
 Mỗi Book có workspace riêng dưới `.workspace/`, gồm state, log, cache, processed preview và output tạm. Production bổ sung `generator/`, `templates/`, `production/`, cache có stable page ID và `processed/production/`. `production.json` chỉ lưu metadata signature/state advisory; snapshot không decode Production PNG. Trạng thái Book lưu các lựa chọn ổn định theo key tương đối với outer Book root (ví dụ `Clone book/Book interior/page-001.png`), không theo index hiển thị, nên refresh hay đổi thứ tự file không làm mất lựa chọn. Việc chuyển state từ một Book phẳng cũ sang layout Clone không được thực hiện tự động.
 
-Các output đã publish thuộc `Output/` của Book. PDF Library đọc output đã publish; không đọc trực tiếp cache tạm.
+Các output đã publish thuộc `Output/` của Book. PDF Library đọc output đã publish; không đọc trực tiếp cache tạm. Cover và Interior có thể có optional `_thumbnail.pdf` companion để Preview nhanh. Companion giữ cùng physical page geometry và full page order nhưng dùng raster nhỏ hơn; nó được map typed từ state/snapshot và không nằm trong danh sách production deliverables.
 
 ## Luồng xử lý ảnh chuẩn hoá
 
