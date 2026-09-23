@@ -15,7 +15,8 @@ const expected = [
   "Diagnostics",
   "Interrupted",
   "Stopping processing…",
-  "Last Interior Processing session",
+  "Interior pages prepared. Existing PDF unchanged.",
+  "Saving previews",
   "Last session",
   "Start New Interior Processing"
   ,"Nothing processing"
@@ -33,7 +34,7 @@ const expected = [
   ,"remove-process-queue-book"
   ,"Run needs review"
   ,"Elapsed"
-  ,"Open PDF"
+  ,"Open original"
   ,"Reveal in Explorer"
   ,"book.output.open"
   ,"book.output.copy-path"

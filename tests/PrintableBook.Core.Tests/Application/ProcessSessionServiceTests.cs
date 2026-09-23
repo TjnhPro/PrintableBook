@@ -22,6 +22,7 @@ public sealed class ProcessSessionServiceTests
         Assert.True(started.IsActive);
         Assert.Equal("Queued", started.CurrentStep);
         Assert.Null(started.BrandName);
+        Assert.Equal(BookProcessingMode.InteriorOnly, started.Mode);
         Assert.Equal(started.CurrentBookId, duplicate.CurrentBookId);
         Assert.IsType<ProcessingSessionWorkerRequest>(manager.Request);
     }

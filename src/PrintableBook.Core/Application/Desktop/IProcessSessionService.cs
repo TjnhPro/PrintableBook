@@ -7,7 +7,7 @@ using PrintableBook.Core.Domain.Processing;
 namespace PrintableBook.Core.Application.Desktop;
 
 public sealed record ProcessQueueEntry(BookId BookId, BookProcessingStatus Status, string? Detail);
-public sealed record ProcessSessionSnapshot(bool IsActive, bool IsCancelling, string? BrandName, BookId? CurrentBookId, string? CurrentStep, IReadOnlyList<ProcessQueueEntry> Queue, int PagesCompleted = 0, int PagesTotal = 0, int WorkerLimit = 0, DateTimeOffset? StartedAt = null);
+public sealed record ProcessSessionSnapshot(bool IsActive, bool IsCancelling, string? BrandName, BookId? CurrentBookId, string? CurrentStep, IReadOnlyList<ProcessQueueEntry> Queue, int PagesCompleted = 0, int PagesTotal = 0, int WorkerLimit = 0, DateTimeOffset? StartedAt = null, BookProcessingMode? Mode = null);
 
 public interface IProcessSessionService
 {
@@ -41,7 +41,7 @@ public sealed class ProcessSessionService(IBackgroundTaskManager taskManager) : 
 
         var startedAt = DateTimeOffset.UtcNow;
         var ids = bookIds.ToArray();
-        var initial = new ProcessSessionSnapshot(true, false, null, new BookId(ids[0]), "Queued", ids.Select((id, index) => new ProcessQueueEntry(new BookId(id), index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Queued" : "Waiting")).ToArray(), 0, 0, 0, startedAt);
+        var initial = new ProcessSessionSnapshot(true, false, null, new BookId(ids[0]), "Queued", ids.Select((id, index) => new ProcessQueueEntry(new BookId(id), index == 0 ? BookProcessingStatus.Running : BookProcessingStatus.NotStarted, index == 0 ? "Queued" : "Waiting")).ToArray(), 0, 0, 0, startedAt, mode);
         var task = await taskManager.StartAsync(
             BackgroundTaskKind.ProcessingSession,
             "processing",

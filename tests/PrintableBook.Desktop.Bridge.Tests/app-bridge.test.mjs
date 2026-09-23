@@ -59,10 +59,17 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
       contentMarkup = contentMarkup.replace(/(<div class="book-drawer-body">)[\s\S]*(<\/div><\/section><\/div>)$/, `$1${markup}$2`);
     }
   };
+  const productionFinalButton = {
+    dataset: { productionReady: "true" },
+    disabled: false,
+    textContent: "Build Final Interior",
+    attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; }
+  };
   const productionWorkspace = {
     attributes: {},
     setAttribute(name, value) { this.attributes[name] = value; },
-    querySelector: () => null,
+    querySelector: (selector) => selector === '[data-action="build-final-interior"]' ? productionFinalButton : null,
     querySelectorAll: () => [],
     set outerHTML(_markup) { productionWorkspaceRenderCount += 1; }
   };
@@ -130,7 +137,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSettingsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, browserWindow, searchInput, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, brandSettingsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, browserWindow, searchInput, productionFinalButton, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -896,6 +903,40 @@ test("process controls disable cancellation while a stop is in progress", () => 
   assert.equal(messages.at(-1).command, "process.cancel");
 });
 
+test("Process Interior session shows preview-only stages and never promises PDF export", () => {
+  const { messageHandler, content } = loadBridge("process");
+
+  messageHandler({ data: { version: 1, id: "pages-only", ok: true, command: "process.snapshot", payload: {
+    isActive: true,
+    isCancelling: false,
+    mode: 1,
+    currentStep: "assembly",
+    queue: [{ bookId: { value: "Book 001" }, status: "Running", detail: "Validating" }]
+  } } });
+
+  assert.match(content.innerHTML, /Prepare Interior pages for preview\. This does not build or replace a PDF\./);
+  for (const stage of ["Preparing", "Intro pages", "Interior pages", "Validating pages", "Saving previews"]) assert.match(content.innerHTML, new RegExp(stage));
+  assert.doesNotMatch(content.innerHTML, />PDF export</);
+  assert.doesNotMatch(content.innerHTML, />Publishing</);
+});
+
+test("Build Final Interior session owns PDF export and publishing stages", () => {
+  const { messageHandler, content } = loadBridge("process");
+
+  messageHandler({ data: { version: 1, id: "final-build", ok: true, command: "process.snapshot", payload: {
+    isActive: true,
+    isCancelling: false,
+    mode: 2,
+    currentStep: "interior-pdf-export",
+    queue: [{ bookId: { value: "Book 001" }, status: "Running", detail: "Exporting" }]
+  } } });
+
+  assert.match(content.innerHTML, /<h1>Build Final Interior<\/h1>/);
+  assert.match(content.innerHTML, /Building and publishing the Final Interior PDF\./);
+  assert.match(content.innerHTML, />PDF export</);
+  assert.match(content.innerHTML, />Publishing</);
+});
+
 test("selected queue is paged in its tab and a pending Book can be removed", () => {
   const { messageHandler, content, contentListeners, status } = loadBridge("process");
   const books = Array.from({ length: 13 }, (_, index) => ({ id: { value: `Book ${index + 1}` }, name: `Book ${index + 1}` }));
@@ -933,13 +974,16 @@ for (const [status, serializedStatus, detail] of [["Completed", 4, null], ["Fail
     messageHandler({ data: { version: 1, id: `process-${status}`, ok: true, command: "process.snapshot", payload: {
       isActive: false,
       isCancelling: false,
+      mode: 1,
       currentStep: null,
       queue: [{ bookId: { value: "Book 001" }, status: serializedStatus, detail }]
     } } });
 
-    assert.match(content.innerHTML, /Last Interior Processing session/);
+    assert.match(content.innerHTML, /Last Process Interior session/);
     assert.match(content.innerHTML, /Summary/);
     assert.match(content.innerHTML, new RegExp(status));
+    if (status === "Completed") assert.match(content.innerHTML, /Interior pages prepared\. Existing PDF unchanged\./);
+    if (status === "Cancelled") assert.match(content.innerHTML, /Processed previews were cleared; existing PDF was kept\./);
     assert.match(content.innerHTML, /Selected queue/);
     assert.match(content.innerHTML, /Start New Interior Processing/);
     assert.equal(intervals.length, 1, "global polling exists but must stop after a terminal Process snapshot");
@@ -952,13 +996,13 @@ for (const [status, serializedStatus, detail] of [["Completed", 4, null], ["Fail
 test("a new active snapshot replaces the terminal process session display", () => {
   const { messageHandler, content } = loadBridge("process");
   messageHandler({ data: { version: 1, id: "process-completed", ok: true, command: "process.snapshot", payload: {
-    isActive: false, isCancelling: false, queue: [{ bookId: { value: "Book 001" }, status: "Completed", detail: null }]
+    isActive: false, isCancelling: false, mode: 1, queue: [{ bookId: { value: "Book 001" }, status: "Completed", detail: null }]
   } } });
   messageHandler({ data: { version: 1, id: "process-running", ok: true, command: "process.snapshot", payload: {
-    isActive: true, isCancelling: false, currentStep: "Processing", queue: [{ bookId: { value: "Book 002" }, status: "Running", detail: "Processing" }]
+    isActive: true, isCancelling: false, mode: 1, currentStep: "interior-pages", queue: [{ bookId: { value: "Book 002" }, status: "Running", detail: "Processing" }]
   } } });
 
-  assert.match(content.innerHTML, /Active Interior Processing session/);
+  assert.match(content.innerHTML, /Prepare Interior pages for preview\. This does not build or replace a PDF\./);
   assert.match(content.innerHTML, /Book 002/);
   assert.doesNotMatch(content.innerHTML, /Last session/);
 });
@@ -1103,15 +1147,43 @@ test("Final Interior progress preserves the open Production drawer", () => {
   contentListeners.click({ target: build });
   assert.equal(messages.at(-1).command, "process.start");
   assert.deepEqual(messages.at(-1).payload, { bookIds: ["Book 001"], mode: "production-interior" });
-  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "process.snapshot", payload: { startedAt: "2026-09-22T08:00:00Z", isActive: true, isCancelling: false, currentStep: "Building Final Interior" } } });
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "process.snapshot", payload: { startedAt: "2026-09-22T08:00:00Z", isActive: true, isCancelling: false, mode: 2, currentStep: "interior-pages" } } });
   assert.equal(getFullRenderCount(), fullRenders);
   assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
 
-  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "process.snapshot", payload: { startedAt: "2026-09-22T08:00:00Z", isActive: false, isCancelling: false } } });
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "process.snapshot", payload: { startedAt: "2026-09-22T08:00:00Z", isActive: false, isCancelling: false, mode: 2 } } });
   assert.equal(messages.at(-1).command, "app.refresh");
   assert.equal(getFullRenderCount(), fullRenders);
   assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
   assert.equal(getProductionWorkspaceRenderCount(), 0);
+});
+
+test("Process Interior disables Final Interior without relabeling it as the running action", () => {
+  const { messageHandler, contentListeners, productionFinalButton, productionWorkspace } = loadBridge("books");
+  openProductionTab(messageHandler, contentListeners);
+
+  messageHandler({ data: { version: 1, id: "pages-only", ok: true, command: "process.snapshot", payload: {
+    startedAt: "2026-09-22T09:00:00Z", isActive: true, isCancelling: false, mode: 1, currentStep: "interior-pages"
+  } } });
+
+  assert.equal(productionFinalButton.disabled, true);
+  assert.equal(productionFinalButton.textContent, "Build Final Interior");
+  assert.equal(productionFinalButton.attributes["aria-busy"], "false");
+  assert.equal(productionWorkspace.attributes["aria-busy"], "false");
+});
+
+test("Build Final Interior alone uses the Building busy label", () => {
+  const { messageHandler, contentListeners, productionFinalButton, productionWorkspace } = loadBridge("books");
+  openProductionTab(messageHandler, contentListeners);
+
+  messageHandler({ data: { version: 1, id: "final-build", ok: true, command: "process.snapshot", payload: {
+    startedAt: "2026-09-22T09:01:00Z", isActive: true, isCancelling: false, mode: 2, currentStep: "interior-pdf-export"
+  } } });
+
+  assert.equal(productionFinalButton.disabled, true);
+  assert.equal(productionFinalButton.textContent, "Building…");
+  assert.equal(productionFinalButton.attributes["aria-busy"], "true");
+  assert.equal(productionWorkspace.attributes["aria-busy"], "true");
 });
 
 test("Book detail changes tabs without redrawing its drawer shell", () => {
