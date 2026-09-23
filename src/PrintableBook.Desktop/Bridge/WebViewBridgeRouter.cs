@@ -442,7 +442,7 @@ internal sealed class WebViewBridgeRouter(
                 return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
             }
 
-            if (request.Command is "book.output.open" or "book.output.reveal" or "book.output.copy-path")
+            if (request.Command is "book.output.preview" or "book.output.open" or "book.output.reveal" or "book.output.copy-path")
             {
                 if (applicationLoadCoordinator is null || outputActionService is null || request.Payload is not { } outputPayload ||
                     !outputPayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()) ||
@@ -459,11 +459,29 @@ internal sealed class WebViewBridgeRouter(
                     return new BridgeResponse(Version, request.Id, false, null, "output_not_found");
                 }
 
-                var file = new PrintableBook.Core.Abstractions.FileReference(artifact);
-                if (request.Command == "book.output.open") await outputActionService.OpenAsync(file, cancellationToken);
+                var fallbackToOriginal = false;
+                var target = artifact;
+                if (request.Command == "book.output.preview")
+                {
+                    var output = book.OutputSummaries?.FirstOrDefault(item =>
+                        string.Equals(item.ArtifactReference, artifact, StringComparison.Ordinal));
+                    if (output?.PreviewState == "Ready" &&
+                        !string.IsNullOrWhiteSpace(output.PreviewArtifactReference) &&
+                        System.IO.File.Exists(output.PreviewArtifactReference))
+                    {
+                        target = output.PreviewArtifactReference;
+                    }
+                    else
+                    {
+                        fallbackToOriginal = true;
+                    }
+                }
+
+                var file = new PrintableBook.Core.Abstractions.FileReference(target);
+                if (request.Command is "book.output.preview" or "book.output.open") await outputActionService.OpenAsync(file, cancellationToken);
                 if (request.Command == "book.output.reveal") await outputActionService.RevealAsync(file, cancellationToken);
                 if (request.Command == "book.output.copy-path") await outputActionService.CopyPathAsync(file, cancellationToken);
-                return BridgeResponse.Succeeded(request.Id, "book.output.action.completed", new { });
+                return BridgeResponse.Succeeded(request.Id, "book.output.action.completed", new { fallbackToOriginal });
             }
 
             if (request.Command is "process.get" or "process.cancel" or "process.start")
@@ -676,7 +694,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

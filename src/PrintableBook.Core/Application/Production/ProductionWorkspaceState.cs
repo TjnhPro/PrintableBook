@@ -23,7 +23,8 @@ public sealed record ProductionProcessedPageState(
 public sealed record ProductionOutputState(
     string FileName,
     string InputSignature,
-    DateTimeOffset CompletedAtUtc);
+    DateTimeOffset CompletedAtUtc,
+    string? PreviewFileName = null);
 
 public sealed record ProductionWorkspaceState(
     int SchemaVersion,
@@ -79,27 +80,38 @@ public sealed record ProductionWorkspaceState(
         return this with { SchemaVersion = CurrentSchemaVersion, ProcessedPages = pages };
     }
 
-    public ProductionWorkspaceState RecordCoverOutput(string fileName, string inputSignature, DateTimeOffset completedAtUtc)
+    public ProductionWorkspaceState RecordCoverOutput(
+        string fileName,
+        string inputSignature,
+        DateTimeOffset completedAtUtc,
+        string? previewFileName = null)
     {
         if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentException("A Cover output filename is required.", nameof(fileName));
         if (string.IsNullOrWhiteSpace(inputSignature)) throw new ArgumentException("A Cover input signature is required.", nameof(inputSignature));
         return this with
         {
             SchemaVersion = CurrentSchemaVersion,
-            CoverOutput = new ProductionOutputState(fileName, inputSignature, completedAtUtc)
+            CoverOutput = new ProductionOutputState(fileName, inputSignature, completedAtUtc, NormalizePreviewFileName(previewFileName))
         };
     }
 
-    public ProductionWorkspaceState RecordInteriorOutput(string fileName, string inputSignature, DateTimeOffset completedAtUtc)
+    public ProductionWorkspaceState RecordInteriorOutput(
+        string fileName,
+        string inputSignature,
+        DateTimeOffset completedAtUtc,
+        string? previewFileName = null)
     {
         if (string.IsNullOrWhiteSpace(fileName)) throw new ArgumentException("An Interior output filename is required.", nameof(fileName));
         if (string.IsNullOrWhiteSpace(inputSignature)) throw new ArgumentException("An Interior input signature is required.", nameof(inputSignature));
         return this with
         {
             SchemaVersion = CurrentSchemaVersion,
-            InteriorOutput = new ProductionOutputState(fileName, inputSignature, completedAtUtc)
+            InteriorOutput = new ProductionOutputState(fileName, inputSignature, completedAtUtc, NormalizePreviewFileName(previewFileName))
         };
     }
+
+    private static string? NormalizePreviewFileName(string? previewFileName) =>
+        string.IsNullOrWhiteSpace(previewFileName) ? null : Path.GetFileName(previewFileName);
 }
 
 public interface IProductionWorkspaceStateStore

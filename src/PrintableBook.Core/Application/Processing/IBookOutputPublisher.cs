@@ -25,7 +25,9 @@ public sealed record BookOutputPublicationRequest(
 public sealed record PublishedBookOutputs(
     DirectoryReference PublishedDirectory,
     FileReference CoverPdf,
-    FileReference InteriorPdf);
+    FileReference InteriorPdf,
+    FileReference? CoverPreviewPdf = null,
+    FileReference? InteriorPreviewPdf = null);
 
 public sealed record InteriorOutputPublicationRequest(
     BookId BookId,
@@ -36,7 +38,8 @@ public sealed record InteriorOutputPublicationRequest(
 
 public sealed record PublishedInteriorOutput(
     DirectoryReference PublishedDirectory,
-    FileReference InteriorPdf);
+    FileReference InteriorPdf,
+    FileReference? PreviewPdf = null);
 
 public sealed record CoverOutputPublicationRequest(
     BookId BookId,
@@ -47,7 +50,8 @@ public sealed record CoverOutputPublicationRequest(
 
 public sealed record PublishedCoverOutput(
     DirectoryReference PublishedDirectory,
-    FileReference CoverPdf);
+    FileReference CoverPdf,
+    FileReference? PreviewPdf = null);
 
 public interface IBookOutputPublisher
 {

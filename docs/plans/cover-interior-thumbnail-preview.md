@@ -4,8 +4,8 @@
 
 ## Trạng thái
 
-- Chỉ lập kế hoạch và review; chưa triển khai code.
-- Branch hiện tại: `plan/book-brand-author-mvp`.
+- Đã triển khai trên branch `feat/lightweight-pdf-previews`.
+- Plan gốc được commit trước implementation tại `419f5eb`.
 - Premise cuối cùng đã được user xác nhận: thumbnail là **một PDF đầy đủ**, giống PDF chính về nội dung/bố cục/thứ tự trang, chỉ dùng raster nhỏ hơn để preview nhanh.
 
 ## Mục tiêu
@@ -393,11 +393,11 @@ dotnet test PrintableBook.sln
 
 ## Implementation Tasks
 
-- [ ] **T1 (P1, human: ~5h / CC: ~60m)** — PDF — Shared ordered sequence + bounded low-resolution preview exporter + parity tests.
-- [ ] **T2 (P1, human: ~3h / CC: ~35m)** — Cover — Cover-only/full-book companion publication and state provenance.
-- [ ] **T3 (P1, human: ~5h / CC: ~60m)** — Interior — All Interior modes, page-order parity, failure isolation and 100-page performance tests.
-- [ ] **T4 (P1, human: ~4h / CC: ~45m)** — Desktop — Typed snapshot mapping, secure preview command and PDF Library actions/fallback.
-- [ ] **T5 (P2, human: ~2h / CC: ~25m)** — QA/Docs — Cleanup regression, compatibility, docs and benchmark smoke.
+- [x] **T1 (P1, human: ~5h / CC: ~60m)** — PDF — Shared ordered sequence + bounded low-resolution preview exporter + parity tests.
+- [x] **T2 (P1, human: ~3h / CC: ~35m)** — Cover — Cover-only/full-book companion publication and state provenance.
+- [x] **T3 (P1, human: ~5h / CC: ~60m)** — Interior — All Interior modes, page-order parity, failure isolation and 40/100-page smoke tests.
+- [x] **T4 (P1, human: ~4h / CC: ~45m)** — Desktop — Typed snapshot mapping, secure preview command and PDF Library actions/fallback.
+- [x] **T5 (P2, human: ~2h / CC: ~25m)** — QA/Docs — Cleanup regression, compatibility, docs and smoke validation.
 
 Sequential implementation is preferred: T2/T3 share exporter/publication contracts; T4 depends on their state model; T5 closes the feature.
 

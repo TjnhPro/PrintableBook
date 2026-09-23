@@ -27,6 +27,15 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
         var pdfText = System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(result.CoverPdf.Value));
         Assert.Contains("/Width 5242", pdfText, StringComparison.Ordinal);
         Assert.Contains("/Height 2626", pdfText, StringComparison.Ordinal);
+
+        Assert.NotNull(result.PreviewPdf);
+        using var previewPdf = PdfReader.Open(result.PreviewPdf!.Value);
+        Assert.Single(previewPdf.Pages);
+        Assert.Equal(pdf.Pages[0].Width.Point, previewPdf.Pages[0].Width.Point, precision: 3);
+        Assert.Equal(pdf.Pages[0].Height.Point, previewPdf.Pages[0].Height.Point, precision: 3);
+        var previewText = System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(result.PreviewPdf.Value));
+        Assert.Contains("/Width 2726", previewText, StringComparison.Ordinal);
+        Assert.Contains("/Height 1313", previewText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -64,6 +73,21 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
         var interiorBytes = await File.ReadAllBytesAsync(result.InteriorPdf.Value);
         var interiorText = System.Text.Encoding.Latin1.GetString(interiorBytes);
         Assert.Contains("/Width 2588", interiorText, StringComparison.Ordinal);
+
+        Assert.NotNull(result.CoverPreviewPdf);
+        Assert.NotNull(result.InteriorPreviewPdf);
+        using var coverPreviewPdf = PdfReader.Open(result.CoverPreviewPdf!.Value);
+        using var interiorPreviewPdf = PdfReader.Open(result.InteriorPreviewPdf!.Value);
+        Assert.Single(coverPreviewPdf.Pages);
+        Assert.Equal(interiorPdf.Pages.Count, interiorPreviewPdf.Pages.Count);
+        Assert.Equal(coverPdf.Pages[0].Width.Point, coverPreviewPdf.Pages[0].Width.Point, precision: 3);
+        Assert.Equal(interiorPdf.Pages[0].Width.Point, interiorPreviewPdf.Pages[0].Width.Point, precision: 3);
+        var coverPreviewText = System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(result.CoverPreviewPdf.Value));
+        var interiorPreviewText = System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(result.InteriorPreviewPdf.Value));
+        Assert.Contains("/Width 2726", coverPreviewText, StringComparison.Ordinal);
+        Assert.Contains("/Height 1313", coverPreviewText, StringComparison.Ordinal);
+        Assert.Contains("/Width 600", interiorPreviewText, StringComparison.Ordinal);
+        Assert.Contains("/Height 609", interiorPreviewText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -86,6 +110,9 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
 
         using var interiorPdf = PdfReader.Open(result.InteriorPdf.Value);
         Assert.Equal(4, interiorPdf.Pages.Count);
+        Assert.NotNull(result.PreviewPdf);
+        using var previewPdf = PdfReader.Open(result.PreviewPdf!.Value);
+        Assert.Equal(interiorPdf.Pages.Count, previewPdf.Pages.Count);
     }
 
     [Fact]
@@ -167,6 +194,37 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
         });
         using var secondPdf = PdfReader.Open(second.InteriorPdf.Value);
         Assert.Equal(48, secondPdf.Pages.Count);
+    }
+
+    [Theory]
+    [InlineData(40)]
+    [InlineData(100)]
+    public async Task ExportInteriorAsync_creates_a_full_large_preview_with_bounded_page_rasters(int pageCount)
+    {
+        Directory.CreateDirectory(rootPath);
+        var page = await CreatePngAsync($"{pageCount}-page-source.png", 32, 32);
+        var pages = Enumerable.Repeat(page, pageCount).ToArray();
+
+        var result = await new PdfSharpPrintableBookPdfExporter().ExportInteriorAsync(
+            new InteriorPdfExportRequest(
+                IntroPages: [],
+                OrderedInteriorPages: pages,
+                BackgroundPage: null,
+                TemporaryOutputDirectory: new DirectoryReference(Path.Combine(rootPath, $"{pageCount}-page-output")),
+                InteriorPageSize: new PhysicalPageSize(8.5, 8.5),
+                MaximumPageConcurrency: 4));
+
+        Assert.NotNull(result.PreviewPdf);
+        using var mainPdf = PdfReader.Open(result.InteriorPdf.Value);
+        using var previewPdf = PdfReader.Open(result.PreviewPdf!.Value);
+        Assert.Equal(pageCount, mainPdf.Pages.Count);
+        Assert.Equal(mainPdf.Pages.Count, previewPdf.Pages.Count);
+        Assert.Equal(mainPdf.Pages[0].Width.Point, previewPdf.Pages[0].Width.Point, precision: 3);
+        Assert.Equal(mainPdf.Pages[^1].Height.Point, previewPdf.Pages[^1].Height.Point, precision: 3);
+
+        var previewText = System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(result.PreviewPdf.Value));
+        Assert.Contains("/Width 600", previewText, StringComparison.Ordinal);
+        Assert.Contains("/Height 609", previewText, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -42,7 +42,9 @@ public sealed record BookProcessingState(
     IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null,
     IReadOnlyList<PublishedInteriorPreview>? PublishedInteriorPreviews = null,
     InteriorOutputKind? PublishedInteriorKind = null,
-    DateTimeOffset? PublishedInteriorAtUtc = null)
+    DateTimeOffset? PublishedInteriorAtUtc = null,
+    string? PublishedCoverPreviewReference = null,
+    string? PublishedInteriorPreviewReference = null)
 {
     public static BookProcessingState NotStarted(BookId bookId) => new(
         bookId,
@@ -146,7 +148,10 @@ public sealed record BookProcessingState(
         return this with { PublishedArtifactReferences = artifactReferences.ToArray() };
     }
 
-    public BookProcessingState RecordPublishedArtifact(PublishedArtifactKind kind, string artifactReference)
+    public BookProcessingState RecordPublishedArtifact(
+        PublishedArtifactKind kind,
+        string artifactReference,
+        string? previewArtifactReference = null)
     {
         if (!Enum.IsDefined(kind)) throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported published artifact kind.");
         if (string.IsNullOrWhiteSpace(artifactReference)) throw new ArgumentException("A published artifact reference is required.", nameof(artifactReference));
@@ -155,14 +160,25 @@ public sealed record BookProcessingState(
             .Where(existing => !Path.GetFileName(existing).EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
             .ToList();
         artifacts.Add(artifactReference);
-        return this with { PublishedArtifactReferences = artifacts };
+        return kind == PublishedArtifactKind.Cover
+            ? this with
+            {
+                PublishedArtifactReferences = artifacts,
+                PublishedCoverPreviewReference = NormalizePreviewReference(previewArtifactReference)
+            }
+            : this with
+            {
+                PublishedArtifactReferences = artifacts,
+                PublishedInteriorPreviewReference = NormalizePreviewReference(previewArtifactReference)
+            };
     }
 
     public BookProcessingState RecordPublishedInterior(
         string artifactReference,
         InteriorOutputKind kind,
-        DateTimeOffset publishedAtUtc) =>
-        RecordPublishedArtifact(PublishedArtifactKind.Interior, artifactReference) with
+        DateTimeOffset publishedAtUtc,
+        string? previewArtifactReference = null) =>
+        RecordPublishedArtifact(PublishedArtifactKind.Interior, artifactReference, previewArtifactReference) with
         {
             PublishedInteriorKind = kind,
             PublishedInteriorAtUtc = publishedAtUtc
@@ -253,4 +269,7 @@ public sealed record BookProcessingState(
     {
         if (string.IsNullOrWhiteSpace(sourceKey)) throw new ArgumentException("An interior source key is required.", nameof(sourceKey));
     }
+
+    private static string? NormalizePreviewReference(string? previewArtifactReference) =>
+        string.IsNullOrWhiteSpace(previewArtifactReference) ? null : previewArtifactReference;
 }

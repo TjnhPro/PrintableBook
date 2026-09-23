@@ -241,14 +241,15 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     command.InteriorPdfPageSize), cancellationToken);
                 state = state.CompleteStep("interior-publish", DateTimeOffset.UtcNow);
                 await PersistStateAsync(state, "step.completed", "interior-publish", CancellationToken.None);
-                var publishedAt = DateTimeOffset.UtcNow;
+                var interiorPublishedAt = DateTimeOffset.UtcNow;
                 state = state
                     .RecordPublishedInterior(
                         publishedInterior.InteriorPdf.Value,
                         command.Mode == BookProcessingMode.ProductionInterior ? InteriorOutputKind.Production : InteriorOutputKind.Base,
-                        publishedAt)
+                        interiorPublishedAt,
+                        publishedInterior.PreviewPdf?.Value)
                     .RecordPublishedInteriorPreviews(pageResults.Select(page => new PublishedInteriorPreview(page.PageId, page.FinalPage.Value)))
-                    .Complete(publishedAt);
+                    .Complete(interiorPublishedAt);
                 if (command.Mode == BookProcessingMode.ProductionInterior)
                 {
                     await RecordProductionInteriorStateAsync(
@@ -259,7 +260,8 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                         activeInteriorSources,
                         shuffleMap!,
                         publishedInterior.InteriorPdf,
-                        publishedAt,
+                        publishedInterior.PreviewPdf,
+                        interiorPublishedAt,
                         cancellationToken);
                 }
                 await PersistStateAsync(state, "book.completed", command.BookId.Value, CancellationToken.None);
@@ -291,11 +293,12 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             state = state
                 .CompleteStep("publish", DateTimeOffset.UtcNow);
             await PersistStateAsync(state, "step.completed", "publish", CancellationToken.None);
+            var publishedAt = DateTimeOffset.UtcNow;
             state = state
-                .RecordPublishedArtifact(PublishedArtifactKind.Cover, published.CoverPdf.Value)
-                .RecordPublishedInterior(published.InteriorPdf.Value, InteriorOutputKind.Base, DateTimeOffset.UtcNow)
+                .RecordPublishedArtifact(PublishedArtifactKind.Cover, published.CoverPdf.Value, published.CoverPreviewPdf?.Value)
+                .RecordPublishedInterior(published.InteriorPdf.Value, InteriorOutputKind.Base, publishedAt, published.InteriorPreviewPdf?.Value)
                 .RecordPublishedInteriorPreviews(pageResults.Select(page => new PublishedInteriorPreview(page.PageId, page.FinalPage.Value)))
-                .Complete(DateTimeOffset.UtcNow);
+                .Complete(publishedAt);
             await PersistStateAsync(state, "book.completed", command.BookId.Value, CancellationToken.None);
             return BookProcessingQueueBookResult.Completed(command.BookId, published);
         }
@@ -392,6 +395,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         IReadOnlyList<InteriorSource> activeInteriorSources,
         InteriorShuffleMap shuffleMap,
         FileReference publishedInterior,
+        FileReference? publishedPreview,
         DateTimeOffset publishedAt,
         CancellationToken cancellationToken)
     {
@@ -429,7 +433,11 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             inputFiles,
             shuffleMap,
             cancellationToken);
-        state = state.RecordInteriorOutput(Path.GetFileName(publishedInterior.Value), inputSignature, publishedAt);
+        state = state.RecordInteriorOutput(
+            Path.GetFileName(publishedInterior.Value),
+            inputSignature,
+            publishedAt,
+            publishedPreview is null ? null : Path.GetFileName(publishedPreview.Value));
         await productionStateStore.SaveAsync(workspace, state, cancellationToken);
     }
 

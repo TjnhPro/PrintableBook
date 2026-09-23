@@ -32,6 +32,20 @@ public sealed class BookProcessingStateTests
     }
 
     [Fact]
+    public void Publishing_a_new_main_output_clears_an_old_preview_when_no_new_companion_exists()
+    {
+        var timestamp = DateTimeOffset.Parse("2026-09-21T12:30:00Z");
+        var state = BookProcessingState.NotStarted(new BookId("book"))
+            .RecordPublishedArtifact(PublishedArtifactKind.Cover, "C:\\output\\book - Cover.pdf", "C:\\output\\book - Cover_thumbnail.pdf")
+            .RecordPublishedInterior("C:\\output\\book - Interior.pdf", InteriorOutputKind.Base, timestamp, "C:\\output\\book - Interior_thumbnail.pdf")
+            .RecordPublishedArtifact(PublishedArtifactKind.Cover, "C:\\output\\book - Cover.pdf")
+            .RecordPublishedInterior("C:\\output\\book - Interior.pdf", InteriorOutputKind.Base, timestamp.AddMinutes(1));
+
+        Assert.Null(state.PublishedCoverPreviewReference);
+        Assert.Null(state.PublishedInteriorPreviewReference);
+    }
+
+    [Fact]
     public void New_book_defaults_to_brand_background_and_all_interior_active()
     {
         var state = BookProcessingState.NotStarted(new BookId("book"));

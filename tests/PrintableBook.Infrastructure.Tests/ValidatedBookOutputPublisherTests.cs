@@ -29,9 +29,15 @@ public sealed class ValidatedBookOutputPublisherTests : IAsyncLifetime
 
         Assert.Equal(Path.Combine(output.Value, "Book One - Cover.pdf"), published.CoverPdf.Value);
         Assert.Equal(Path.Combine(output.Value, "Book One - Interior.pdf"), published.InteriorPdf.Value);
+        Assert.Equal(Path.Combine(output.Value, "Book One - Cover_thumbnail.pdf"), published.CoverPreviewPdf?.Value);
+        Assert.Equal(Path.Combine(output.Value, "Book One - Interior_thumbnail.pdf"), published.InteriorPreviewPdf?.Value);
         Assert.Equal(output, published.PublishedDirectory);
         Assert.True(File.Exists(published.CoverPdf.Value));
         Assert.True(File.Exists(published.InteriorPdf.Value));
+        Assert.True(File.Exists(published.CoverPreviewPdf!.Value));
+        Assert.True(File.Exists(published.InteriorPreviewPdf!.Value));
+        Assert.True(new FileInfo(published.CoverPreviewPdf.Value).Length < new FileInfo(published.CoverPdf.Value).Length);
+        Assert.True(new FileInfo(published.InteriorPreviewPdf.Value).Length < new FileInfo(published.InteriorPdf.Value).Length);
         Assert.False(Directory.Exists(temporaryOutput.Value));
         Assert.DoesNotContain(Directory.EnumerateDirectories(output.Value), path => Path.GetFileName(path).StartsWith("run-", StringComparison.OrdinalIgnoreCase));
     }
@@ -95,8 +101,10 @@ public sealed class ValidatedBookOutputPublisherTests : IAsyncLifetime
 
         Assert.Equal("old-cover", await File.ReadAllTextAsync(cover));
         Assert.Equal(Path.Combine(output.Value, "Book One - Interior.pdf"), published.InteriorPdf.Value);
+        Assert.Equal(Path.Combine(output.Value, "Book One - Interior_thumbnail.pdf"), published.PreviewPdf?.Value);
         Assert.Equal(output, published.PublishedDirectory);
         Assert.StartsWith("%PDF", await File.ReadAllTextAsync(published.InteriorPdf.Value), StringComparison.Ordinal);
+        Assert.True(new FileInfo(published.PreviewPdf!.Value).Length < new FileInfo(published.InteriorPdf.Value).Length);
     }
 
     [Fact]
@@ -119,8 +127,32 @@ public sealed class ValidatedBookOutputPublisherTests : IAsyncLifetime
 
         Assert.Equal("old-interior", await File.ReadAllTextAsync(interior));
         Assert.Equal(Path.Combine(output.Value, "Book One - Cover.pdf"), published.CoverPdf.Value);
+        Assert.Equal(Path.Combine(output.Value, "Book One - Cover_thumbnail.pdf"), published.PreviewPdf?.Value);
         Assert.StartsWith("%PDF", await File.ReadAllTextAsync(published.CoverPdf.Value), StringComparison.Ordinal);
+        Assert.True(new FileInfo(published.PreviewPdf!.Value).Length < new FileInfo(published.CoverPdf.Value).Length);
         Assert.False(Directory.Exists(temporaryOutput.Value));
+    }
+
+    [Fact]
+    public async Task PublishCoverAsync_keeps_main_successful_when_preview_is_not_smaller()
+    {
+        Directory.CreateDirectory(rootPath);
+        var image = await CreatePngAsync();
+        var output = new DirectoryReference(Path.Combine(rootPath, "Book One", "Output"));
+        Directory.CreateDirectory(output.Value);
+        var previousPreview = Path.Combine(output.Value, "Book One - Cover_thumbnail.pdf");
+        await File.WriteAllTextAsync(previousPreview, "stale-preview");
+        var temporaryOutput = new DirectoryReference(Path.Combine(rootPath, "Book One", ".workspace", "output-temp", "production-cover"));
+        var exported = await new PdfSharpPrintableBookPdfExporter().ExportCoverAsync(
+            new CoverPdfExportRequest(image, temporaryOutput, new PhysicalPageSize(17.47, 8.75)));
+        File.Copy(exported.CoverPdf.Value, exported.PreviewPdf!.Value, overwrite: true);
+
+        var published = await new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()).PublishCoverAsync(
+            new CoverOutputPublicationRequest(new BookId("Book One"), exported, output, 1, new PhysicalPageSize(17.47, 8.75)));
+
+        Assert.True(File.Exists(published.CoverPdf.Value));
+        Assert.Null(published.PreviewPdf);
+        Assert.Equal("stale-preview", await File.ReadAllTextAsync(previousPreview));
     }
 
     private static ValueTask<PrintableBookPdfExportResult> ExportFullAsync(FileReference image, DirectoryReference temporaryOutput) =>

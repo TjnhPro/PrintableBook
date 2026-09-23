@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.IO.Compression;
+using ImageMagick;
 using PdfSharp.Drawing;
 using PdfSharp.Pdf;
 using PdfSharp.Pdf.IO;
@@ -19,18 +20,31 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
 
         var coverPdf = new FileReference(Path.Combine(request.TemporaryOutputDirectory.Value, "cover.pdf"));
         var interiorPdf = new FileReference(Path.Combine(request.TemporaryOutputDirectory.Value, "interior.pdf"));
-        WriteSingleRasterPdf(coverPdf, request.Cover, request.CoverPageSize, cancellationToken);
-        await WriteInteriorPdfAsync(
-            interiorPdf,
+        var interiorPagePlan = BuildInteriorPagePlan(
             request.EffectiveProductionPrefixPages,
             request.IntroPages,
             request.OrderedInteriorPages,
-            request.BackgroundPage,
+            request.BackgroundPage);
+        WriteSingleRasterPdf(coverPdf, request.Cover, request.CoverPageSize, cancellationToken);
+        await WriteInteriorPdfAsync(
+            interiorPdf,
+            interiorPagePlan,
             request.InteriorPageSize,
             request.MaximumPageConcurrency,
             cancellationToken);
 
-        return new PrintableBookPdfExportResult(coverPdf, interiorPdf);
+        var coverPreviewPdf = TryWriteSingleRasterPreviewPdf(
+            request.TemporaryOutputDirectory,
+            request.Cover,
+            request.CoverPageSize,
+            cancellationToken);
+        var interiorPreviewPdf = TryWriteInteriorPreviewPdf(
+            request.TemporaryOutputDirectory,
+            interiorPagePlan,
+            request.InteriorPageSize,
+            cancellationToken);
+
+        return new PrintableBookPdfExportResult(coverPdf, interiorPdf, coverPreviewPdf, interiorPreviewPdf);
     }
 
     public async ValueTask<InteriorPdfExportResult> ExportInteriorAsync(
@@ -41,17 +55,25 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         Directory.CreateDirectory(request.TemporaryOutputDirectory.Value);
 
         var interiorPdf = new FileReference(Path.Combine(request.TemporaryOutputDirectory.Value, "interior.pdf"));
-        await WriteInteriorPdfAsync(
-            interiorPdf,
+        var interiorPagePlan = BuildInteriorPagePlan(
             request.EffectiveProductionPrefixPages,
             request.IntroPages,
             request.OrderedInteriorPages,
-            request.BackgroundPage,
+            request.BackgroundPage);
+        await WriteInteriorPdfAsync(
+            interiorPdf,
+            interiorPagePlan,
             request.InteriorPageSize,
             request.MaximumPageConcurrency,
             cancellationToken);
 
-        return new InteriorPdfExportResult(interiorPdf);
+        var previewPdf = TryWriteInteriorPreviewPdf(
+            request.TemporaryOutputDirectory,
+            interiorPagePlan,
+            request.InteriorPageSize,
+            cancellationToken);
+
+        return new InteriorPdfExportResult(interiorPdf, previewPdf);
     }
 
     public ValueTask<CoverPdfExportResult> ExportCoverAsync(
@@ -64,7 +86,12 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         Directory.CreateDirectory(request.TemporaryOutputDirectory.Value);
         var coverPdf = new FileReference(Path.Combine(request.TemporaryOutputDirectory.Value, "cover.pdf"));
         WriteSingleRasterPdf(coverPdf, request.Cover, request.CoverPageSize, cancellationToken);
-        return ValueTask.FromResult(new CoverPdfExportResult(coverPdf));
+        var previewPdf = TryWriteSingleRasterPreviewPdf(
+            request.TemporaryOutputDirectory,
+            request.Cover,
+            request.CoverPageSize,
+            cancellationToken);
+        return ValueTask.FromResult(new CoverPdfExportResult(coverPdf, previewPdf));
     }
 
     private static void Validate(PrintableBookPdfExportRequest request, CancellationToken cancellationToken)
@@ -125,17 +152,65 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         CancellationToken cancellationToken)
     {
         using var document = new PdfDocument();
-        AddRasterPage(document, source, pageSize, cancellationToken);
+        AddRasterPage(document, source, pageSize, null, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         document.Save(target.Value);
     }
 
+    private static FileReference? TryWriteSingleRasterPreviewPdf(
+        DirectoryReference outputDirectory,
+        FileReference source,
+        PhysicalPageSize pageSize,
+        CancellationToken cancellationToken)
+    {
+        var target = new FileReference(Path.Combine(outputDirectory.Value, "cover_thumbnail.pdf"));
+        try
+        {
+            using var document = new PdfDocument();
+            AddRasterPage(document, source, pageSize, PreviewPdfRasterSizes.Cover, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            document.Save(target.Value);
+            return target;
+        }
+        catch (OperationCanceledException)
+        {
+            DeletePreviewCandidate(target);
+            throw;
+        }
+        catch (Exception exception) when (IsExpectedPreviewFailure(exception))
+        {
+            DeletePreviewCandidate(target);
+            return null;
+        }
+    }
+
+    private static FileReference? TryWriteInteriorPreviewPdf(
+        DirectoryReference outputDirectory,
+        InteriorPagePlan pagePlan,
+        PhysicalPageSize pageSize,
+        CancellationToken cancellationToken)
+    {
+        var target = new FileReference(Path.Combine(outputDirectory.Value, "interior_thumbnail.pdf"));
+        try
+        {
+            WriteInteriorPreviewPdf(target, pagePlan, pageSize, cancellationToken);
+            return target;
+        }
+        catch (OperationCanceledException)
+        {
+            DeletePreviewCandidate(target);
+            throw;
+        }
+        catch (Exception exception) when (IsExpectedPreviewFailure(exception))
+        {
+            DeletePreviewCandidate(target);
+            return null;
+        }
+    }
+
     private static async ValueTask WriteInteriorPdfAsync(
         FileReference target,
-        IReadOnlyList<FileReference> productionPrefixPages,
-        IReadOnlyList<FileReference> introPages,
-        IReadOnlyList<FileReference> orderedInteriorPages,
-        FileReference? backgroundPage,
+        InteriorPagePlan pagePlan,
         PhysicalPageSize pageSize,
         int maximumPageConcurrency,
         CancellationToken cancellationToken)
@@ -148,22 +223,21 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
 
         try
         {
-            if (productionPrefixPages.Count > 0 || introPages.Count > 0)
+            if (pagePlan.LeadingPages.Count > 0)
             {
-                var leadingPages = productionPrefixPages.Concat(introPages).ToArray();
                 introImport = CreateImportDocument(
-                    BuildLeadingRasterPages(leadingPages, backgroundPage),
+                    pagePlan.LeadingPages,
                     pageSize,
+                    null,
                     cancellationToken);
             }
 
-            importTasks = orderedInteriorPages
-                .Select((artwork, index) =>
+            importTasks = pagePlan.InteriorPageUnits
+                .Select((pages, index) =>
                     Task.Run(
                         () => ImportInteriorAsync(
                             index,
-                            artwork,
-                            backgroundPage,
+                            pages,
                             pageSize,
                             importedInteriors,
                             semaphore,
@@ -237,26 +311,52 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         }
     }
 
-    private static IReadOnlyList<FileReference> BuildLeadingRasterPages(
-        IReadOnlyList<FileReference> leadingPages,
+    private static InteriorPagePlan BuildInteriorPagePlan(
+        IReadOnlyList<FileReference> productionPrefixPages,
+        IReadOnlyList<FileReference> introPages,
+        IReadOnlyList<FileReference> orderedInteriorPages,
         FileReference? backgroundPage)
     {
-        var result = new List<FileReference>(leadingPages.Count * (backgroundPage is null ? 1 : 2));
+        var leadingPages = productionPrefixPages.Concat(introPages).ToArray();
+        var expandedLeadingPages = new List<FileReference>(leadingPages.Length * (backgroundPage is null ? 1 : 2));
         foreach (var page in leadingPages)
         {
-            result.Add(page);
+            expandedLeadingPages.Add(page);
             if (backgroundPage is not null)
             {
-                result.Add(backgroundPage);
+                expandedLeadingPages.Add(backgroundPage);
             }
         }
 
-        return result;
+        var interiorPageUnits = orderedInteriorPages
+            .Select(page => (IReadOnlyList<FileReference>)(backgroundPage is null
+                ? [page]
+                : [page, backgroundPage]))
+            .ToArray();
+
+        return new InteriorPagePlan(expandedLeadingPages, interiorPageUnits);
+    }
+
+    private static void WriteInteriorPreviewPdf(
+        FileReference target,
+        InteriorPagePlan pagePlan,
+        PhysicalPageSize pageSize,
+        CancellationToken cancellationToken)
+    {
+        using var document = new PdfDocument();
+        foreach (var source in pagePlan.EnumeratePages())
+        {
+            AddRasterPage(document, source, pageSize, PreviewPdfRasterSizes.Interior, cancellationToken);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        document.Save(target.Value);
     }
 
     private static PdfDocument CreateImportDocument(
         IReadOnlyList<FileReference> rasterPages,
         PhysicalPageSize pageSize,
+        ImageSize? rasterSize,
         CancellationToken cancellationToken)
     {
         using var buffer = new MemoryStream();
@@ -264,7 +364,7 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         {
             foreach (var source in rasterPages)
             {
-                AddRasterPage(staging, source, pageSize, cancellationToken);
+                AddRasterPage(staging, source, pageSize, rasterSize, cancellationToken);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -278,8 +378,7 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
 
     private static async Task ImportInteriorAsync(
         int index,
-        FileReference artwork,
-        FileReference? backgroundPage,
+        IReadOnlyList<FileReference> pages,
         PhysicalPageSize pageSize,
         ConcurrentDictionary<int, PdfDocument> importedInteriors,
         SemaphoreSlim semaphore,
@@ -292,8 +391,7 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         {
             await semaphore.WaitAsync(remainingWorkCancellation.Token);
             enteredSemaphore = true;
-            var pages = backgroundPage is null ? [artwork] : new[] { artwork, backgroundPage };
-            imported = CreateImportDocument(pages, pageSize, remainingWorkCancellation.Token);
+            imported = CreateImportDocument(pages, pageSize, null, remainingWorkCancellation.Token);
             if (!importedInteriors.TryAdd(index, imported))
             {
                 throw new InvalidOperationException($"Interior import index {index} already exists.");
@@ -336,6 +434,7 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         PdfDocument document,
         FileReference source,
         PhysicalPageSize pageSize,
+        ImageSize? rasterSize,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -343,15 +442,52 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         page.Width = XUnit.FromPoint(pageSize.WidthInPoints);
         page.Height = XUnit.FromPoint(pageSize.HeightInPoints);
 
-        var raster = File.ReadAllBytes(source.Value);
+        var raster = rasterSize is { } targetSize
+            ? CreatePreviewRaster(source, targetSize)
+            : File.ReadAllBytes(source.Value);
 
         try
         {
             DrawRasterPage(page, raster, pageSize);
         }
-        catch (InvalidOperationException) when (TryExpandMonochromePng(raster, out var compatiblePng))
+        catch (InvalidOperationException) when (rasterSize is null && TryExpandMonochromePng(raster, out var compatiblePng))
         {
             DrawRasterPage(page, compatiblePng, pageSize);
+        }
+    }
+
+    private static byte[] CreatePreviewRaster(FileReference source, ImageSize targetSize)
+    {
+        using var image = new MagickImage(source.Value);
+        image.AutoOrient();
+        image.BackgroundColor = MagickColors.White;
+        image.Alpha(AlphaOption.Remove);
+        image.Resize(new MagickGeometry((uint)targetSize.Width, (uint)targetSize.Height)
+        {
+            IgnoreAspectRatio = true
+        });
+        image.Strip();
+        image.ColorType = ColorType.TrueColor;
+        image.Format = MagickFormat.Png24;
+        return image.ToByteArray();
+    }
+
+    private static bool IsExpectedPreviewFailure(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException or InvalidDataException or MagickException;
+
+    private static void DeletePreviewCandidate(FileReference target)
+    {
+        try
+        {
+            if (File.Exists(target.Value)) File.Delete(target.Value);
+        }
+        catch (IOException)
+        {
+            // Best-effort cleanup; the unpublished candidate is never returned.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Best-effort cleanup; the unpublished candidate is never returned.
         }
     }
 
@@ -581,6 +717,20 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
             }
 
             read += bytesRead;
+        }
+    }
+
+    private sealed record InteriorPagePlan(
+        IReadOnlyList<FileReference> LeadingPages,
+        IReadOnlyList<IReadOnlyList<FileReference>> InteriorPageUnits)
+    {
+        public IEnumerable<FileReference> EnumeratePages()
+        {
+            foreach (var page in LeadingPages) yield return page;
+            foreach (var unit in InteriorPageUnits)
+            {
+                foreach (var page in unit) yield return page;
+            }
         }
     }
 }

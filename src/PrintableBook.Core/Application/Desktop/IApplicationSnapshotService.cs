@@ -15,7 +15,20 @@ public sealed record InteriorPageSummary(string PageId, string Status, string Fi
 public sealed record InteriorSourcePageSummary(string SourceReference, FrameMode FrameMode, bool IsActive = true, string? SourceKey = null);
 public sealed record BookFolderSummary(string Name, string Status, int FileCount, int ImageCount);
 public sealed record BookAssetSummary(string SourceReference, string RelativePath, string FileName, string Folder, string Kind, int? Width, int? Height, FrameMode FrameMode, string LocalImageUrl, bool IsActive = true);
-public sealed record BookOutputSummary(string ArtifactReference, string FileName, long FileSizeBytes, int? PageCount, double? WidthInches, double? HeightInches, string VerificationStatus, DateTimeOffset? GeneratedAt);
+public sealed record BookOutputSummary(
+    string ArtifactReference,
+    string FileName,
+    long FileSizeBytes,
+    int? PageCount,
+    double? WidthInches,
+    double? HeightInches,
+    string VerificationStatus,
+    DateTimeOffset? GeneratedAt,
+    string ArtifactKind = "Unknown",
+    string? PreviewArtifactReference = null,
+    long? PreviewFileSizeBytes = null,
+    string PreviewState = "Missing",
+    DateTimeOffset? PreviewGeneratedAt = null);
 public sealed record ProductionAssetDesktopSummary(
     string AssetKind,
     string DisplayName,
@@ -268,7 +281,7 @@ public sealed class ApplicationSnapshotService(
             sourcePages,
             assetSummaries,
             fullBookChecks,
-            await DescribeOutputsAsync(book.Id, state.PublishedArtifactReferences ?? [], cancellationToken),
+            await DescribeOutputsAsync(book.Id, state.PublishedArtifactReferences ?? [], state, cancellationToken),
             representativeCoverReference,
             HasBackground: state.HasBackground,
             ActiveInteriorSourcePageCount: activeInteriorSourcePageCount,
@@ -456,16 +469,30 @@ public sealed class ApplicationSnapshotService(
     private static string ToVersionedLocalImageUrl(string sourceReference, FileMetadata metadata) =>
         $"{ToLocalImageUrl(sourceReference)}?v={metadata.LengthBytes}-{metadata.LastWriteTimeUtc.UtcTicks}";
 
-    private async ValueTask<IReadOnlyList<BookOutputSummary>> DescribeOutputsAsync(BookId bookId, IReadOnlyList<string> artifacts, CancellationToken cancellationToken)
+    private async ValueTask<IReadOnlyList<BookOutputSummary>> DescribeOutputsAsync(
+        BookId bookId,
+        IReadOnlyList<string> artifacts,
+        BookProcessingState state,
+        CancellationToken cancellationToken)
     {
         var outputs = new List<BookOutputSummary>(artifacts.Count);
         foreach (var artifact in artifacts)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var info = new FileInfo(artifact);
+            var artifactKind = GetArtifactKind(info.Name);
             if (!info.Exists)
             {
-                outputs.Add(new BookOutputSummary(artifact, Path.GetFileName(artifact), 0, null, null, null, "Missing", null));
+                outputs.Add(new BookOutputSummary(
+                    artifact,
+                    Path.GetFileName(artifact),
+                    0,
+                    null,
+                    null,
+                    null,
+                    "Missing",
+                    null,
+                    artifactKind));
                 continue;
             }
 
@@ -477,14 +504,135 @@ public sealed class ApplicationSnapshotService(
                     using var inspectionOperation = diagnostics.Begin("pdf.inspect", $"{bookId.Value}/{Path.GetFileName(artifact)}");
                     inspection = await pdfDocumentInspector.InspectAsync(new FileReference(artifact), cancellationToken);
                 }
-                outputs.Add(new BookOutputSummary(artifact, info.Name, info.Length, inspection?.PageCount, inspection?.FirstPageSize.WidthInches, inspection?.FirstPageSize.HeightInches, inspection is null ? "Available" : "Verified", new DateTimeOffset(info.LastWriteTimeUtc)));
+                var previewReference = artifactKind switch
+                {
+                    "Cover" => state.PublishedCoverPreviewReference,
+                    "Interior" => state.PublishedInteriorPreviewReference,
+                    _ => null
+                };
+                var preview = await DescribePreviewAsync(
+                    artifact,
+                    info,
+                    inspection,
+                    previewReference,
+                    cancellationToken);
+                outputs.Add(new BookOutputSummary(
+                    artifact,
+                    info.Name,
+                    info.Length,
+                    inspection?.PageCount,
+                    inspection?.FirstPageSize.WidthInches,
+                    inspection?.FirstPageSize.HeightInches,
+                    inspection is null ? "Available" : "Verified",
+                    new DateTimeOffset(info.LastWriteTimeUtc),
+                    artifactKind,
+                    preview.Reference,
+                    preview.FileSizeBytes,
+                    preview.State,
+                    preview.GeneratedAt));
             }
             catch (Exception)
             {
-                outputs.Add(new BookOutputSummary(artifact, info.Name, info.Length, null, null, null, "Invalid", new DateTimeOffset(info.LastWriteTimeUtc)));
+                outputs.Add(new BookOutputSummary(
+                    artifact,
+                    info.Name,
+                    info.Length,
+                    null,
+                    null,
+                    null,
+                    "Invalid",
+                    new DateTimeOffset(info.LastWriteTimeUtc),
+                    artifactKind,
+                    PreviewState: "Invalid"));
             }
         }
         return outputs;
+    }
+
+    private async ValueTask<OutputPreviewDescription> DescribePreviewAsync(
+        string artifact,
+        FileInfo mainInfo,
+        PdfDocumentInspection? mainInspection,
+        string? previewReference,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(previewReference)) return OutputPreviewDescription.Missing;
+
+        if (!IsExpectedPreviewReference(artifact, previewReference))
+        {
+            return new OutputPreviewDescription(null, null, "Stale", null);
+        }
+
+        var previewInfo = new FileInfo(previewReference);
+        if (!previewInfo.Exists) return OutputPreviewDescription.Missing;
+        if (previewInfo.Length >= mainInfo.Length)
+        {
+            return new OutputPreviewDescription(null, previewInfo.Length, "Invalid", new DateTimeOffset(previewInfo.LastWriteTimeUtc));
+        }
+
+        try
+        {
+            if (pdfDocumentInspector is not null)
+            {
+                using var inspectionOperation = diagnostics.Begin("pdf.inspect", $"preview/{previewInfo.Name}");
+                var previewInspection = await pdfDocumentInspector.InspectAsync(new FileReference(previewReference), cancellationToken);
+                if (mainInspection is not null &&
+                    (previewInspection.PageCount != mainInspection.PageCount ||
+                     Math.Abs(previewInspection.FirstPageSize.WidthInches - mainInspection.FirstPageSize.WidthInches) > 0.001 ||
+                     Math.Abs(previewInspection.FirstPageSize.HeightInches - mainInspection.FirstPageSize.HeightInches) > 0.001))
+                {
+                    return new OutputPreviewDescription(null, previewInfo.Length, "Invalid", new DateTimeOffset(previewInfo.LastWriteTimeUtc));
+                }
+            }
+
+            return new OutputPreviewDescription(
+                previewReference,
+                previewInfo.Length,
+                "Ready",
+                new DateTimeOffset(previewInfo.LastWriteTimeUtc));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return new OutputPreviewDescription(null, previewInfo.Length, "Invalid", new DateTimeOffset(previewInfo.LastWriteTimeUtc));
+        }
+    }
+
+    private static string GetArtifactKind(string fileName) =>
+        fileName.EndsWith(" - Cover.pdf", StringComparison.OrdinalIgnoreCase)
+            ? "Cover"
+            : fileName.EndsWith(" - Interior.pdf", StringComparison.OrdinalIgnoreCase)
+                ? "Interior"
+                : "Unknown";
+
+    private static bool IsExpectedPreviewReference(string artifact, string previewReference)
+    {
+        try
+        {
+            var expectedReference = Path.Combine(
+                Path.GetDirectoryName(artifact) ?? string.Empty,
+                $"{Path.GetFileNameWithoutExtension(artifact)}_thumbnail.pdf");
+            return string.Equals(
+                Path.GetFullPath(previewReference),
+                Path.GetFullPath(expectedReference),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    private sealed record OutputPreviewDescription(
+        string? Reference,
+        long? FileSizeBytes,
+        string State,
+        DateTimeOffset? GeneratedAt)
+    {
+        public static OutputPreviewDescription Missing { get; } = new(null, null, "Missing", null);
     }
 
     private async ValueTask<IReadOnlyList<BookFolderSummary>> DiscoverSourceFoldersAsync(DirectoryReference bookDirectory, CancellationToken cancellationToken)

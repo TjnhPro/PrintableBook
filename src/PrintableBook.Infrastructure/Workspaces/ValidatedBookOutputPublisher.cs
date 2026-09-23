@@ -21,14 +21,34 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         var publishedDirectory = request.FinalOutputRoot;
         var coverPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Cover.pdf"));
         var interiorPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Interior.pdf"));
+        var coverPreviewPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Cover_thumbnail.pdf"));
+        var interiorPreviewPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Interior_thumbnail.pdf"));
+        var validatedCoverPreview = await TryValidatePreviewAsync(
+            request.TemporaryOutput.CoverPreviewPdf,
+            request.TemporaryOutput.CoverPdf,
+            request.Validation.ExpectedCoverPageCount,
+            request.Validation.ExpectedCoverPageSize,
+            cancellationToken);
+        var validatedInteriorPreview = await TryValidatePreviewAsync(
+            request.TemporaryOutput.InteriorPreviewPdf,
+            request.TemporaryOutput.InteriorPdf,
+            request.Validation.ExpectedInteriorPageCount,
+            request.Validation.ExpectedInteriorPageSize,
+            cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
         ReplaceFile(request.TemporaryOutput.CoverPdf, coverPdf);
         ReplaceFile(request.TemporaryOutput.InteriorPdf, interiorPdf);
+        var publishedCoverPreview = TryPublishValidatedPreview(validatedCoverPreview, coverPreviewPdf);
+        var publishedInteriorPreview = TryPublishValidatedPreview(validatedInteriorPreview, interiorPreviewPdf);
         DeleteTemporaryDirectory(request.TemporaryOutput.CoverPdf);
 
         return new PublishedBookOutputs(
             publishedDirectory,
             coverPdf,
-            interiorPdf);
+            interiorPdf,
+            publishedCoverPreview,
+            publishedInteriorPreview);
     }
 
     public async ValueTask<PublishedInteriorOutput> PublishInteriorAsync(
@@ -42,12 +62,23 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         Directory.CreateDirectory(request.FinalOutputRoot.Value);
         var publishedDirectory = request.FinalOutputRoot;
         var interiorPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Interior.pdf"));
+        var previewPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Interior_thumbnail.pdf"));
+        var validatedPreview = await TryValidatePreviewAsync(
+            request.TemporaryOutput.PreviewPdf,
+            request.TemporaryOutput.InteriorPdf,
+            request.ExpectedInteriorPageCount,
+            request.ExpectedInteriorPageSize,
+            cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
         ReplaceFile(request.TemporaryOutput.InteriorPdf, interiorPdf);
+        var publishedPreview = TryPublishValidatedPreview(validatedPreview, previewPdf);
         DeleteTemporaryDirectory(request.TemporaryOutput.InteriorPdf);
 
         return new PublishedInteriorOutput(
             publishedDirectory,
-            interiorPdf);
+            interiorPdf,
+            publishedPreview);
     }
 
     public async ValueTask<PublishedCoverOutput> PublishCoverAsync(
@@ -60,9 +91,63 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(request.FinalOutputRoot.Value);
         var coverPdf = new FileReference(Path.Combine(request.FinalOutputRoot.Value, $"{request.BookId.Value} - Cover.pdf"));
+        var previewPdf = new FileReference(Path.Combine(request.FinalOutputRoot.Value, $"{request.BookId.Value} - Cover_thumbnail.pdf"));
+        var validatedPreview = await TryValidatePreviewAsync(
+            request.TemporaryOutput.PreviewPdf,
+            request.TemporaryOutput.CoverPdf,
+            request.ExpectedCoverPageCount,
+            request.ExpectedCoverPageSize,
+            cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
         ReplaceFile(request.TemporaryOutput.CoverPdf, coverPdf);
+        var publishedPreview = TryPublishValidatedPreview(validatedPreview, previewPdf);
         DeleteTemporaryDirectory(request.TemporaryOutput.CoverPdf);
-        return new PublishedCoverOutput(request.FinalOutputRoot, coverPdf);
+        return new PublishedCoverOutput(request.FinalOutputRoot, coverPdf, publishedPreview);
+    }
+
+    private async ValueTask<FileReference?> TryValidatePreviewAsync(
+        FileReference? temporaryPreview,
+        FileReference temporaryMain,
+        int expectedPageCount,
+        PhysicalPageSize expectedPageSize,
+        CancellationToken cancellationToken)
+    {
+        if (temporaryPreview is null || !File.Exists(temporaryPreview.Value)) return null;
+
+        try
+        {
+            await ValidateAsync(temporaryPreview, expectedPageCount, expectedPageSize, cancellationToken);
+            if (new FileInfo(temporaryPreview.Value).Length >= new FileInfo(temporaryMain.Value).Length)
+            {
+                return null;
+            }
+
+            return temporaryPreview;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static FileReference? TryPublishValidatedPreview(FileReference? temporaryPreview, FileReference finalPreview)
+    {
+        if (temporaryPreview is null) return null;
+
+        try
+        {
+            ReplaceFile(temporaryPreview, finalPreview);
+            return finalPreview;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private static void ReplaceFile(FileReference temporaryFile, FileReference finalFile)
