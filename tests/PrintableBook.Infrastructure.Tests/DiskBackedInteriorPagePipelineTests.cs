@@ -41,7 +41,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
             new ImageSize(200, 200),
             new ImageDensity(300, 300),
             null,
-            FrameMode.Auto));
+            FrameMode.Disabled));
 
         Assert.Equal("page-01", result.PageId);
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "classification.json")));
@@ -51,7 +51,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         var stamp = await File.ReadAllTextAsync(Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "input-stamp.json"));
         Assert.Contains(ArtworkPreparationAlgorithmVersion.Current, stamp, StringComparison.Ordinal);
         Assert.Contains(ClassificationAlgorithmVersion.Current, stamp, StringComparison.Ordinal);
-        Assert.Contains("\"FrameMode\":\"auto\"", stamp, StringComparison.Ordinal);
+        Assert.Contains("\"FrameMode\":\"disabled\"", stamp, StringComparison.Ordinal);
         Assert.StartsWith(Path.Combine(workspace.WorkingDirectory.Value, "processed", "interior"), result.FinalPage.Value, StringComparison.OrdinalIgnoreCase);
         var finalInfo = await new MagickImageInspector().GetInfoAsync(result.FinalPage);
         Assert.Equal(new ImageSize(200, 200), finalInfo.Size);
@@ -286,7 +286,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
             new ImageSize(200, 200),
             new ImageDensity(300, 300),
             null,
-            FrameMode.Auto);
+            FrameMode.Disabled);
 
         await pipeline.ProcessAsync(request);
         var prepared = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "prepared.png");
@@ -482,7 +482,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ProcessAsync_migrates_v3_auto_metadata_without_rebuilding_prepared_artwork()
+    public async Task ProcessAsync_rebuilds_v3_auto_metadata_as_forced_no_frame()
     {
         Directory.CreateDirectory(rootPath);
         var source = await CreateArtworkSourceAsync("legacy-auto.png");
@@ -499,10 +499,10 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
 
         await pipeline.ProcessAsync(request);
 
-        Assert.Equal(retainedTime, File.GetLastWriteTimeUtc(prepared));
+        Assert.NotEqual(retainedTime, File.GetLastWriteTimeUtc(prepared));
         using var classification = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(cache, "classification.json")));
-        Assert.Equal("detected", classification.RootElement.GetProperty("Origin").GetString());
-        Assert.Equal("interior-page-cache-v4", JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(cache, "input-stamp.json"))).RootElement.GetProperty("SchemaVersion").GetString());
+        Assert.Equal("forced-no-frame", classification.RootElement.GetProperty("Origin").GetString());
+        Assert.Equal("interior-page-cache-v5", JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(cache, "input-stamp.json"))).RootElement.GetProperty("SchemaVersion").GetString());
     }
 
     [Fact]
@@ -537,7 +537,12 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
             new BookId("stamp-book"), new DirectoryReference(Path.Combine(rootPath, "StampBook")));
         var pipeline = CreatePipeline();
-        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200));
+        var frame = await CreateRedFrameAsync("stamp-frame.png", new ImageSize(200, 200));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200)) with
+        {
+            Frame = new FileReference(frame),
+            FrameMode = FrameMode.Enabled
+        };
         await pipeline.ProcessAsync(request);
 
         var prepared = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "prepared.png");
@@ -596,12 +601,105 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         Assert.Equal(new ImageSize(200, 200), (await new MagickImageInspector().GetInfoAsync(new FileReference(working))).Size);
     }
 
+    [Fact]
+    public async Task ProcessAsync_enabled_frame_fails_before_cache_hit_when_frame_disappears()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("required-frame-source.png");
+        var frame = await CreateRedFrameAsync("required-frame.png", new ImageSize(200, 200));
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("required-frame"), new DirectoryReference(Path.Combine(rootPath, "RequiredFrameBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200)) with
+        {
+            Frame = new FileReference(frame),
+            FrameMode = FrameMode.Enabled
+        };
+        var pipeline = CreatePipeline();
+        await pipeline.ProcessAsync(request);
+        File.Delete(frame);
+
+        var exception = await Assert.ThrowsAsync<InteriorPageProcessingException>(() => pipeline.ProcessAsync(request).AsTask());
+
+        Assert.Equal("INTERIOR_FRAME_REQUIRED", exception.FailureCode);
+        Assert.Equal("frame-validation", exception.Step);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_enabled_frame_reports_wrong_geometry_as_invalid()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("wrong-frame-source.png");
+        var frame = await CreateRedFrameAsync("wrong-frame.png", new ImageSize(100, 100));
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("wrong-frame"), new DirectoryReference(Path.Combine(rootPath, "WrongFrameBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200)) with
+        {
+            Frame = new FileReference(frame),
+            FrameMode = FrameMode.Enabled
+        };
+
+        var exception = await Assert.ThrowsAsync<InteriorPageProcessingException>(() => CreatePipeline().ProcessAsync(request).AsTask());
+
+        Assert.Equal("INTERIOR_FRAME_INVALID", exception.FailureCode);
+        Assert.Contains("requires a 200x200 Brand frame", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_enabled_frame_reports_unreadable_input_as_invalid()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("unreadable-frame-source.png");
+        var frame = Path.Combine(rootPath, "unreadable-frame.png");
+        await File.WriteAllTextAsync(frame, "not an image");
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("unreadable-frame"), new DirectoryReference(Path.Combine(rootPath, "UnreadableFrameBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200)) with
+        {
+            Frame = new FileReference(frame),
+            FrameMode = FrameMode.Enabled
+        };
+
+        var exception = await Assert.ThrowsAsync<InteriorPageProcessingException>(() => CreatePipeline().ProcessAsync(request).AsTask());
+
+        Assert.Equal("INTERIOR_FRAME_INVALID", exception.FailureCode);
+        Assert.Contains("unreadable", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_enabled_frame_uses_content_digest_when_metadata_is_unchanged()
+    {
+        Directory.CreateDirectory(rootPath);
+        var source = await CreateArtworkSourceAsync("digest-frame-source.png");
+        var frame = await CreateRedFrameAsync("digest-frame.png", new ImageSize(200, 200));
+        var originalInfo = new FileInfo(frame);
+        var originalLength = originalInfo.Length;
+        var originalWriteTime = originalInfo.LastWriteTimeUtc;
+        var workspace = await new PhysicalBookWorkspaceFactory(new PhysicalFileSystem()).CreateAsync(
+            new BookId("digest-frame"), new DirectoryReference(Path.Combine(rootPath, "DigestFrameBook")));
+        var request = CreateRequest(workspace, source, "page-01", new ImageSize(200, 200)) with
+        {
+            Frame = new FileReference(frame),
+            FrameMode = FrameMode.Enabled
+        };
+        var pipeline = CreatePipeline();
+        var result = await pipeline.ProcessAsync(request);
+        var staleTime = DateTime.UtcNow.AddHours(-1);
+        File.SetLastWriteTimeUtc(result.FinalPage.Value, staleTime);
+
+        using (var replacement = new MagickImage(MagickColors.Blue, 200, 200)) replacement.Write(frame);
+        Assert.Equal(originalLength, new FileInfo(frame).Length);
+        File.SetLastWriteTimeUtc(frame, originalWriteTime);
+
+        await pipeline.ProcessAsync(request);
+
+        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(result.FinalPage.Value));
+        using var stamp = JsonDocument.Parse(await File.ReadAllTextAsync(
+            Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-01", "input-stamp.json")));
+        Assert.Equal(64, stamp.RootElement.GetProperty("FrameContentSha256").GetString()!.Length);
+    }
+
     [Theory]
-    [InlineData(FrameMode.Auto, FrameMode.Enabled, true)]
-    [InlineData(FrameMode.Enabled, FrameMode.Auto, true)]
-    [InlineData(FrameMode.Auto, FrameMode.Disabled, false)]
     [InlineData(FrameMode.Enabled, FrameMode.Disabled, false)]
-    [InlineData(FrameMode.Disabled, FrameMode.Auto, false)]
     [InlineData(FrameMode.Disabled, FrameMode.Enabled, false)]
     public async Task ProcessAsync_invalidates_the_expected_stage_for_each_frame_mode_transition(
         FrameMode initialMode,
@@ -652,7 +750,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ProcessAsync_rebuilds_from_classification_when_detection_threshold_changes()
+    public async Task ProcessAsync_no_frame_reuses_classification_but_rebuilds_preparation_when_trim_threshold_changes()
     {
         Directory.CreateDirectory(rootPath);
         var source = await CreateArtworkSourceAsync("classification-invalidation.png");
@@ -675,7 +773,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
 
         await pipeline.ProcessAsync(request with { ArtworkDetectionThreshold = new ArtworkDetectionThreshold(21) });
 
-        Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(classification));
+        Assert.Equal(staleTime, File.GetLastWriteTimeUtc(classification));
         Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(prepared));
         Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(framed));
         Assert.NotEqual(staleTime, File.GetLastWriteTimeUtc(working));
@@ -848,12 +946,12 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         else if (string.Equals(invalidStamp, "incompatible-schema", StringComparison.Ordinal))
         {
             var contents = await File.ReadAllTextAsync(stamp);
-            await File.WriteAllTextAsync(stamp, contents.Replace("interior-page-cache-v4", "incompatible-schema", StringComparison.Ordinal));
+            await File.WriteAllTextAsync(stamp, contents.Replace("interior-page-cache-v5", "incompatible-schema", StringComparison.Ordinal));
         }
         else if (string.Equals(invalidStamp, "numeric-frame-mode", StringComparison.Ordinal))
         {
             var contents = await File.ReadAllTextAsync(stamp);
-            await File.WriteAllTextAsync(stamp, contents.Replace("\"FrameMode\":\"auto\"", "\"FrameMode\":0", StringComparison.Ordinal));
+            await File.WriteAllTextAsync(stamp, contents.Replace("\"FrameMode\":\"disabled\"", "\"FrameMode\":0", StringComparison.Ordinal));
         }
         else
         {
@@ -961,7 +1059,7 @@ public sealed class DiskBackedInteriorPagePipelineTests : IAsyncLifetime
         targetSize,
         new ImageDensity(300, 300),
         null,
-        FrameMode.Auto);
+        FrameMode.Disabled);
 
     private async Task<string> CreateArtworkSourceAsync(string filename)
     {

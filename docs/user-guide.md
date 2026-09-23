@@ -86,17 +86,16 @@ Tab **Interior artwork** là nơi chọn nhanh các trang mà Book sẽ xử lý
 
 Trang **Active** được đưa vào normal Interior. Trang **Inactive** được giữ trong Book nhưng loại khỏi process/shuffle. Trang CUSTOM Intro không chịu Active filter trong khi đang được chọn Intro.
 
-### 7.2 Frame Auto / Frame / No Frame
+### 7.2 Frame / No Frame
 
-- **Auto**: tự detect `BorderArt` / `FullArt` / `CropArt`, rồi dùng recommendation của classification để quyết định Brand frame.
-- **Frame**: vẫn tự detect cách chuẩn bị artwork, sau đó bắt buộc dùng frame tương thích của Brand nếu có.
-- **No frame**: ép artwork qua `CropArt` — trim vùng trắng bên ngoài, pad trắng thành hình vuông và resize chuẩn — đồng thời không dùng Brand frame. Detector BorderLine/BorderPixel không chạy ở mode này. Viền tối vốn được vẽ trong source vẫn được xem là artwork và có thể được giữ lại.
+- **Frame**: detect cách chuẩn bị artwork, sau đó bắt buộc dùng `frame.png` đúng kích thước của Brand. Nếu frame thiếu, unreadable hoặc sai kích thước, processing dừng và yêu cầu validate/sửa Brand; ứng dụng không tự xuất No Frame.
+- **No Frame**: mode mặc định. Artwork đi qua `CropArt` — trim vùng trắng bên ngoài, pad trắng thành hình vuông và resize chuẩn — đồng thời không dùng Brand frame. Detector BorderLine/BorderPixel không chạy ở mode này. Viền tối vốn được vẽ trong source vẫn được xem là artwork và có thể được giữ lại.
 
-Từ phiên bản này, Book đã lưu **No frame** cũng nhận semantics CropArt mới ở lần process tiếp theo; PDF đã publish không tự thay đổi cho tới khi Book được process/publish lại.
+Book cũ dùng **Auto** hoặc chưa lưu override được chuyển sang **No Frame** khi load. Book Detail hiển thị cảnh báo và số page bị ảnh hưởng để user review trước khi reprocess. PDF đã publish không tự thay đổi cho tới khi Book được process/publish lại. Workspace state sau khi save dùng contract v2 và không hỗ trợ mở/reprocess an toàn bằng phiên bản app cũ hơn.
 
 ### 7.3 Bulk actions
 
-Filter artwork, chọn card/ảnh hoặc **Select all shown**, chọn Status và Frame mode rồi nhấn **Apply**. Nhấn **Save changes** để ghi toàn bộ thay đổi.
+Filter mặc định **All**; có thể lọc **Frame** hoặc **No Frame**. Chọn card/ảnh hoặc **Select all shown**, chọn Status và Frame mode rồi nhấn **Apply**. Bulk Frame mode chỉ có **No change**, **Frame**, **No Frame**. Nhấn **Save changes** để ghi toàn bộ thay đổi.
 
 ![Bulk artwork action](assets/screenshots/0.1/06-book-interior-artwork-bulk.png)
 

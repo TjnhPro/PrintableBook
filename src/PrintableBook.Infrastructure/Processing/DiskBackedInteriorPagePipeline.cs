@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Processing;
@@ -16,7 +17,7 @@ public sealed class DiskBackedInteriorPagePipeline(
     IFinalInteriorPageProcessor finalPageProcessor,
     IImageInspector imageInspector) : IInteriorPagePipeline
 {
-    private const string CacheStampSchemaVersion = "interior-page-cache-v4";
+    private const string CacheStampSchemaVersion = "interior-page-cache-v5";
     private const string LegacyCacheStampSchemaVersion = "interior-page-cache-v3";
     private const string ClassificationCacheSchemaVersion = "artwork-classification-cache-v2";
     private const string DetectedPolicy = "detected-v1";
@@ -75,6 +76,39 @@ public sealed class DiskBackedInteriorPagePipeline(
 
         try
         {
+            if (request.ProcessingKind == InteriorPageProcessingKind.Interior && request.FrameMode == FrameMode.Enabled)
+            {
+                currentStep = "frame-validation";
+                if (request.Frame is null || !File.Exists(request.Frame.Value))
+                {
+                    throw new InteriorFrameException(
+                        "INTERIOR_FRAME_REQUIRED",
+                        $"Interior page '{request.PageId}' uses Frame, but the assigned Brand frame is missing. Validate the Brand frame and retry.");
+                }
+                ImageSize actualFrameSize;
+                try
+                {
+                    actualFrameSize = (await imageInspector.GetInfoAsync(request.Frame, cancellationToken)).Size;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    throw new InteriorFrameException(
+                        "INTERIOR_FRAME_INVALID",
+                        $"Interior page '{request.PageId}' uses Frame, but the assigned Brand frame is unreadable. Validate the Brand frame and retry.",
+                        exception);
+                }
+                if (actualFrameSize != request.PreparedArtworkSize)
+                {
+                    throw new InteriorFrameException(
+                        "INTERIOR_FRAME_INVALID",
+                        $"Interior page '{request.PageId}' requires a {request.PreparedArtworkSize.Width}x{request.PreparedArtworkSize.Height} Brand frame, but the current frame is {actualFrameSize.Width}x{actualFrameSize.Height}. Validate the Brand frame and retry.");
+                }
+            }
+
             if (request.ProcessingKind == InteriorPageProcessingKind.BrandIntroTemplate &&
                 (await imageInspector.GetInfoAsync(request.Source, cancellationToken)).Size == request.FinalPageSize)
             {
@@ -169,10 +203,7 @@ public sealed class DiskBackedInteriorPagePipeline(
             }
 
             var frame = isIntroTemplate ? null : request.Frame;
-            var shouldApplyFrame = !isIntroTemplate && ShouldApplyFrame(
-                frame is not null && File.Exists(frame.Value),
-                request.FrameMode,
-                preparedArtwork.AutoFrameRecommended);
+            var shouldApplyFrame = !isIntroTemplate && ShouldApplyFrame(request.FrameMode);
             if (!await IsReadableAsync(framed, request.PreparedArtworkSize, cancellationToken) ||
                 (!shouldApplyFrame && !FilesMatch(prepared, framed)))
             {
@@ -367,9 +398,7 @@ public sealed class DiskBackedInteriorPagePipeline(
             return true;
         }
 
-        return string.Equals(previous.FramePath, current.FramePath, StringComparison.OrdinalIgnoreCase) &&
-               previous.FrameLength == current.FrameLength &&
-               previous.FrameLastWriteUtcTicks == current.FrameLastWriteUtcTicks &&
+        return string.Equals(previous.FrameContentSha256, current.FrameContentSha256, StringComparison.Ordinal) &&
                previous.FrameMode == current.FrameMode;
     }
 
@@ -497,14 +526,13 @@ public sealed class DiskBackedInteriorPagePipeline(
         }
     }
 
-    private static bool ShouldApplyFrame(bool frameAvailable, FrameMode mode, bool autoFrameRecommended) =>
-        frameAvailable && (mode switch
+    private static bool ShouldApplyFrame(FrameMode mode) =>
+        mode switch
         {
-            FrameMode.Auto => autoFrameRecommended,
             FrameMode.Enabled => true,
             FrameMode.Disabled => false,
             _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported frame mode.")
-        });
+        };
 
     private static bool FilesMatch(FileReference first, FileReference second)
     {
@@ -583,6 +611,7 @@ public sealed class DiskBackedInteriorPagePipeline(
         string? FramePath,
         long FrameLength,
         long FrameLastWriteUtcTicks,
+        string? FrameContentSha256,
         string FrameMode,
         int NormalizedSourceSize,
         string NormalizationAlgorithmVersion,
@@ -611,6 +640,7 @@ public sealed class DiskBackedInteriorPagePipeline(
             nameof(FramePath),
             nameof(FrameLength),
             nameof(FrameLastWriteUtcTicks),
+            nameof(FrameContentSha256),
             nameof(FrameMode),
             nameof(NormalizedSourceSize),
             nameof(NormalizationAlgorithmVersion),
@@ -650,6 +680,9 @@ public sealed class DiskBackedInteriorPagePipeline(
                 request.Frame?.Value,
                 frame?.Exists == true ? frame.Length : 0,
                 frame?.Exists == true ? frame.LastWriteTimeUtc.Ticks : 0,
+                request.FrameMode == global::PrintableBook.Core.Application.Processing.FrameMode.Enabled
+                    ? request.FrameContentSha256 ?? ComputeSha256(request.Frame)
+                    : null,
                 ToCanonicalFrameMode(request.FrameMode),
                 request.ArtworkSourceNormalization.NormalizedSourceSize,
                 ArtworkSourceNormalizationAlgorithmVersion.Current,
@@ -667,9 +700,31 @@ public sealed class DiskBackedInteriorPagePipeline(
                 CacheStampSchemaVersion);
         }
 
+        private static string ComputeSha256(FileReference? frame)
+        {
+            if (frame is null || !File.Exists(frame.Value))
+            {
+                throw new InteriorFrameException(
+                    "INTERIOR_FRAME_REQUIRED",
+                    "The selected Frame mode requires a readable Brand frame. Validate the Brand frame and retry.");
+            }
+
+            try
+            {
+                using var stream = new FileStream(frame.Value, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.SequentialScan);
+                return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                throw new InteriorFrameException(
+                    "INTERIOR_FRAME_INVALID",
+                    "The assigned Brand frame could not be read. Validate the Brand frame and retry.",
+                    exception);
+            }
+        }
+
         private static string ToCanonicalFrameMode(FrameMode mode) => mode switch
         {
-            global::PrintableBook.Core.Application.Processing.FrameMode.Auto => "auto",
             global::PrintableBook.Core.Application.Processing.FrameMode.Enabled => "enabled",
             global::PrintableBook.Core.Application.Processing.FrameMode.Disabled => "disabled",
             _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported frame mode.")

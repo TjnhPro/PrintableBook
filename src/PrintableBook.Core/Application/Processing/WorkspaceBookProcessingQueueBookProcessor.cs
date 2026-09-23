@@ -31,8 +31,23 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         CancellationToken cancellationToken = default)
     {
         var workspace = await workspaceFactory.CreateAsync(command.BookId, command.BookDirectory, cancellationToken);
-        var priorState = await stateStore.LoadAsync(workspace, cancellationToken);
+        BookProcessingState? priorState;
+        try
+        {
+            priorState = await stateStore.LoadAsync(workspace, cancellationToken);
+        }
+        catch (InvalidDataException exception)
+        {
+            return new BookProcessingQueueBookResult(
+                command.BookId,
+                BookProcessingStatus.Failed,
+                new ProcessingFailure(
+                    "WORKSPACE_STATE_CORRUPT",
+                    $"Book '{command.BookId.Value}' cannot be processed because its workspace state is invalid. The state file was left unchanged. Restore or repair it, then retry. {exception.Message}"),
+                null);
+        }
         var state = (priorState ?? BookProcessingState.NotStarted(command.BookId)).Start(DateTimeOffset.UtcNow, CreateConfigurationFingerprint(command));
+        DirectoryReference? stagedFrameDirectory = null;
         await PersistStateAsync(state, "book.started", command.BookId.Value, cancellationToken);
 
         try
@@ -107,6 +122,24 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     "Activate at least one Interior page before processing."));
             }
 
+            StagedFrameAsset? stagedFrame = null;
+            var framePage = activeInteriorSources.FirstOrDefault(item =>
+                (priorState?.GetInteriorFrameMode(item.SourceKey) ?? FrameMode.Disabled) == FrameMode.Enabled);
+            if (framePage is not null)
+            {
+                if (command.Frame is null)
+                {
+                    throw new BookProcessingFailureException(
+                        "interior-pages",
+                        new ProcessingFailure(
+                            "INTERIOR_FRAME_REQUIRED",
+                            $"Book '{command.BookId.Value}' page '{framePage.PageId}' uses Frame, but its assigned Brand frame is missing. Validate the Brand frame and retry."));
+                }
+
+                stagedFrame = await StageFrameAsync(workspace, command.Frame, cancellationToken);
+                stagedFrameDirectory = stagedFrame.Directory;
+            }
+
             var introRequests = command.EffectiveIntroTemplatePages
                 .Select((sourceFile, index) => new InteriorPagePipelineRequest(
                     workspace,
@@ -126,19 +159,24 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                         : InteriorPageProcessingKind.BrandIntroTemplate))
                 .ToArray();
             var interiorRequests = activeInteriorSources
-                .Select(item => new InteriorPagePipelineRequest(
-                    workspace,
-                    item.Source,
-                    item.PageId,
-                    command.ArtworkDetectionThreshold,
-                    command.PreparedArtworkSize,
-                    command.WorkingPageSize,
-                    command.FinalPageSize,
-                    command.TargetInteriorDensity,
-                    command.Frame,
-                    priorState?.GetInteriorFrameMode(item.SourceKey) ?? FrameMode.Auto,
-                    command.ArtworkSourceNormalization,
-                    command.BorderLineDetection))
+                .Select(item =>
+                {
+                    var frameMode = priorState?.GetInteriorFrameMode(item.SourceKey) ?? FrameMode.Disabled;
+                    return new InteriorPagePipelineRequest(
+                        workspace,
+                        item.Source,
+                        item.PageId,
+                        command.ArtworkDetectionThreshold,
+                        command.PreparedArtworkSize,
+                        command.WorkingPageSize,
+                        command.FinalPageSize,
+                        command.TargetInteriorDensity,
+                        frameMode == FrameMode.Enabled ? stagedFrame?.File : null,
+                        frameMode,
+                        command.ArtworkSourceNormalization,
+                        command.BorderLineDetection,
+                        frameContentSha256: frameMode == FrameMode.Enabled ? stagedFrame?.Sha256 : null);
+                })
                 .ToArray();
             var productionPrefixSources = ValidateProductionPrefixSources(command);
             var productionRequests = productionPrefixSources
@@ -319,7 +357,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         {
             var isIntro = failure.ProcessingKind is InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate;
             var isProduction = failure.ProcessingKind == InteriorPageProcessingKind.ProductionInterior;
-            var failureCode = isIntro ? "intro.page_failed" : isProduction ? "production.page_failed" : "interior.page_failed";
+            var failureCode = failure.FailureCode ?? (isIntro ? "intro.page_failed" : isProduction ? "production.page_failed" : "interior.page_failed");
             var failureStep = isIntro ? "intro-pages" : isProduction ? "production-prefix-pages" : "interior-pages";
             var processingFailure = new ProcessingFailure(failureCode, failure.Message);
             state = state.Fail(failureStep, processingFailure, DateTimeOffset.UtcNow);
@@ -334,6 +372,20 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             await stateStore.SaveErrorAsync(workspace, processingFailure, CancellationToken.None);
             await PersistStateAsync(state, "book.failed", processingFailure.Message, CancellationToken.None);
             return new BookProcessingQueueBookResult(command.BookId, BookProcessingStatus.Failed, processingFailure, null);
+        }
+        finally
+        {
+            if (stagedFrameDirectory is not null)
+            {
+                try
+                {
+                    Directory.Delete(stagedFrameDirectory.Value, recursive: true);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    // Best effort: cache cleanup can remove abandoned run inputs later.
+                }
+            }
         }
 
         async ValueTask<BookProcessingState> CompleteStepAsync(BookProcessingState currentState, string step, CancellationToken token)
@@ -362,6 +414,59 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
         shuffleMap is not null &&
         shuffleMap.Entries.Select(entry => entry.Page.Value).OrderBy(page => page, StringComparer.OrdinalIgnoreCase)
             .SequenceEqual(pageResults.Select(page => page.Source.Value).OrderBy(page => page, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
+
+    private static async ValueTask<StagedFrameAsset> StageFrameAsync(
+        BookWorkspace workspace,
+        FileReference source,
+        CancellationToken cancellationToken)
+    {
+        var runDirectory = new DirectoryReference(Path.Combine(
+            workspace.WorkingDirectory.Value,
+            "cache",
+            "_frame-input",
+            Guid.NewGuid().ToString("N")));
+        var staged = new FileReference(Path.Combine(runDirectory.Value, "frame.png"));
+        try
+        {
+            Directory.CreateDirectory(runDirectory.Value);
+            await using (var input = new FileStream(source.Value, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            await using (var output = new FileStream(staged.Value, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                await input.CopyToAsync(output, cancellationToken);
+                await output.FlushAsync(cancellationToken);
+            }
+
+            await using var stagedInput = new FileStream(staged.Value, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var digest = Convert.ToHexString(await SHA256.HashDataAsync(stagedInput, cancellationToken)).ToLowerInvariant();
+            return new StagedFrameAsset(runDirectory, staged, digest);
+        }
+        catch (OperationCanceledException)
+        {
+            TryDeleteStagedFrameDirectory(runDirectory);
+            throw;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            TryDeleteStagedFrameDirectory(runDirectory);
+            throw new BookProcessingFailureException(
+                "interior-pages",
+                new ProcessingFailure(
+                    "INTERIOR_FRAME_INVALID",
+                    $"The assigned Brand frame for Book '{workspace.BookId.Value}' could not be staged for processing. Validate the Brand frame and retry. {exception.Message}"));
+        }
+    }
+
+    private static void TryDeleteStagedFrameDirectory(DirectoryReference directory)
+    {
+        try
+        {
+            if (Directory.Exists(directory.Value)) Directory.Delete(directory.Value, recursive: true);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Best effort cleanup.
+        }
+    }
 
     private static IReadOnlyList<ProductionPrefixSource> ValidateProductionPrefixSources(PrintableBookProcessingCommand command)
     {
@@ -490,6 +595,8 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
     }
 
     private sealed record InteriorSource(FileReference Source, string SourceKey, string PageId);
+
+    private sealed record StagedFrameAsset(DirectoryReference Directory, FileReference File, string Sha256);
 
     private sealed class BookProcessingFailureException(string step, ProcessingFailure failure) : Exception(failure.Message)
     {

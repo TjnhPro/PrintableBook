@@ -829,13 +829,12 @@ internal sealed class WebViewBridgeRouter(
         mode = value.ValueKind is JsonValueKind.String
             ? value.GetString() switch
             {
-                "auto" => FrameMode.Auto,
                 "enabled" => FrameMode.Enabled,
                 "disabled" => FrameMode.Disabled,
                 _ => default
             }
             : default;
-        return value.ValueKind is JsonValueKind.String && value.GetString() is "auto" or "enabled" or "disabled";
+        return value.ValueKind is JsonValueKind.String && value.GetString() is "enabled" or "disabled";
     }
 
     private static bool TryParseProductionAssetKind(JsonElement value, out ProductionAssetKind kind)

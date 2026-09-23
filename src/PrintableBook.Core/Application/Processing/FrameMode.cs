@@ -5,7 +5,6 @@ namespace PrintableBook.Core.Application.Processing;
 /// </summary>
 public enum FrameMode
 {
-    Auto,
-    Enabled,
-    Disabled
+    Disabled = 0,
+    Enabled = 1
 }

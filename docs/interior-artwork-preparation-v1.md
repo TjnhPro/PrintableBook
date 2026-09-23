@@ -22,7 +22,7 @@ Every successful path produces an opaque-white, square PNG at the `PreparedArtwo
 
 Center crop and padding use `floor(delta / 2)` for the left/top offset. Any odd extra pixel belongs to the right or bottom.
 
-All paths normalize to a square before resizing and flatten transparency onto white before returning. Brand frame compositing is a later pipeline stage and is not baked into prepared artwork. `AutoFrameRecommended` is only the automatic recommendation: `FrameMode.Enabled` may apply a compatible Brand frame to any detected artwork type. `FrameMode.Disabled` bypasses classification detectors, forces the CropArt preparation path, and suppresses framing. Forced decisions contain no fabricated BorderLine/BorderPixel evidence.
+All paths normalize to a square before resizing and flatten transparency onto white before returning. Brand frame compositing is a later pipeline stage and is not baked into prepared artwork. `AutoFrameRecommended` remains detector metadata, not a user-selectable mode. `FrameMode.Enabled` requires a compatible Brand frame and may apply it to any detected artwork type. `FrameMode.Disabled` is the default, bypasses classification detectors, forces the CropArt preparation path, and suppresses framing. Forced decisions contain no fabricated BorderLine/BorderPixel evidence.
 
 ## Certification
 

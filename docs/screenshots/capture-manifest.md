@@ -15,7 +15,7 @@
 | `02-book-overview.png` | Garden Animals Demo → Overview | status/preflight/page count |
 | `03-book-interior-settings-auto-intro.png` | Garden Animals Demo → Interior settings; `HasIntro=false`, Background enabled | AUTO Brand IntroTemplate |
 | `04-book-interior-settings-custom-intro.png` | Garden Animals Demo → Interior settings; `HasIntro=true`, 2 Book Interior pages selected | CUSTOM Intro order/candidates |
-| `05-book-interior-artwork.png` | Garden Animals Demo → Interior artwork; mix Active/Inactive + Auto/Frame/No frame | Tile controls |
+| `05-book-interior-artwork.png` | Garden Animals Demo → Interior artwork; mix Active/Inactive + Frame/No Frame | Tile controls |
 | `06-book-interior-artwork-bulk.png` | Interior artwork; multiple selected; Status + Frame bulk controls | Bulk change |
 | `07-book-processed-pages.png` | Garden Animals Demo → Interior pages after completed run | final page preview |
 | `08-process-selected-queue.png` | Process → Selected queue; 3 Demo Books selected | editable/paged queue |

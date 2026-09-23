@@ -19,12 +19,11 @@ public sealed class InteriorSharedPipelineCertificationTests : IAsyncLifetime
     private readonly string rootPath = Path.Combine(Path.GetTempPath(), $"PrintableBook.SharedPipelineCertification.{Guid.NewGuid():N}");
 
     [Theory]
-    [InlineData(ArtworkType.BorderArt, FrameMode.Auto, true, true)]
+    [InlineData(ArtworkType.BorderArt, FrameMode.Enabled, true, true)]
     [InlineData(ArtworkType.BorderArt, FrameMode.Disabled, true, false)]
-    [InlineData(ArtworkType.FullArt, FrameMode.Auto, true, true)]
-    [InlineData(ArtworkType.CropArt, FrameMode.Auto, true, false)]
+    [InlineData(ArtworkType.FullArt, FrameMode.Enabled, true, true)]
+    [InlineData(ArtworkType.CropArt, FrameMode.Disabled, true, false)]
     [InlineData(ArtworkType.CropArt, FrameMode.Enabled, true, true)]
-    [InlineData(ArtworkType.CropArt, FrameMode.Enabled, false, false)]
     public async Task ProcessAsync_certifies_the_real_classified_shared_workflow(ArtworkType expectedType, FrameMode frameMode, bool frameAvailable, bool frameApplied)
     {
         Directory.CreateDirectory(rootPath);

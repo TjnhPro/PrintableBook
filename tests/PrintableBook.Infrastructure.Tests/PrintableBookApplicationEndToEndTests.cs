@@ -23,6 +23,68 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
     private readonly string rootPath = Path.Combine(Path.GetTempPath(), $"PrintableBook.EndToEndTests.{Guid.NewGuid():N}");
 
     [Fact]
+    public async Task ProcessBookAsync_rejects_corrupt_workspace_state_without_rewriting_it()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "CorruptStateBook"));
+        await CreateInteriorOnlyBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var workspace = await workspaceFactory.CreateAsync(new BookId("corrupt-state-book"), bookDirectory);
+        var stateFile = Path.Combine(workspace.WorkingDirectory.Value, "state", "book-state.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(stateFile)!);
+        const string corruptState = "{\"bookId\":{\"value\":\"corrupt-state-book\"},\"interiorFrameOverrides\":{\"Book interior/page-0001.png\":\"mystery\"}}";
+        await File.WriteAllTextAsync(stateFile, corruptState);
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem),
+            workspaceFactory,
+            new JsonBookWorkspaceStateStore(fileSystem),
+            new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem),
+            CreatePagePipeline(),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new PdfSharpPrintableBookPdfExporter(),
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+
+        var result = await processor.ProcessBookAsync(
+            CreateCommand("corrupt-state-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly });
+
+        Assert.Equal(BookProcessingStatus.Failed, result.Status);
+        Assert.Equal("WORKSPACE_STATE_CORRUPT", result.Failure!.Code);
+        Assert.Contains("left unchanged", result.Failure.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(corruptState, await File.ReadAllTextAsync(stateFile));
+    }
+
+    [Fact]
+    public async Task ProcessBookAsync_reports_required_frame_when_saved_frame_page_has_no_brand_frame()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "RequiredFrameBook"));
+        await CreateInteriorOnlyBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var workspace = await workspaceFactory.CreateAsync(new BookId("required-frame-book"), bookDirectory);
+        var sourceKey = InteriorSourceKey.FromBookRoot(
+            bookDirectory,
+            new FileReference(Path.Combine(bookDirectory.Value, "Book interior", "page-01.png")));
+        await stateStore.SaveAsync(workspace, BookProcessingState.NotStarted(workspace.BookId).SetInteriorFrameMode(sourceKey, FrameMode.Enabled));
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem), CreatePagePipeline(),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new PdfSharpPrintableBookPdfExporter(),
+            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+
+        var result = await processor.ProcessBookAsync(
+            CreateCommand("required-frame-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly });
+
+        Assert.Equal(BookProcessingStatus.Failed, result.Status);
+        Assert.Equal("INTERIOR_FRAME_REQUIRED", result.Failure!.Code);
+        Assert.Contains("page-0001", result.Failure.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "_frame-input")) &&
+                     Directory.EnumerateFileSystemEntries(Path.Combine(workspace.WorkingDirectory.Value, "cache", "_frame-input")).Any());
+    }
+
+    [Fact]
     public async Task ProcessBooksAsync_processes_a_real_book_folder_and_publishes_validated_outputs()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "SampleBook"));

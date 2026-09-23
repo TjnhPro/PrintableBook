@@ -185,13 +185,13 @@ public sealed class BookProcessingStateTests
         var original = BookProcessingState.NotStarted(new BookId("book"));
         var enabled = original.SetInteriorFrameMode("interior/page-001.png", FrameMode.Enabled);
         var disabled = enabled.SetInteriorFrameMode("interior/page-002.png", FrameMode.Disabled);
-        var automatic = disabled.SetInteriorFrameMode("interior/page-001.png", FrameMode.Auto);
+        var noFrame = disabled.SetInteriorFrameMode("interior/page-001.png", FrameMode.Disabled);
 
-        Assert.Equal(FrameMode.Auto, original.GetInteriorFrameMode("interior/page-001.png"));
+        Assert.Equal(FrameMode.Disabled, original.GetInteriorFrameMode("interior/page-001.png"));
         Assert.Equal(FrameMode.Enabled, enabled.GetInteriorFrameMode("interior/page-001.png"));
         Assert.Equal(FrameMode.Disabled, disabled.GetInteriorFrameMode("INTERIOR/PAGE-002.PNG"));
-        Assert.Equal(FrameMode.Auto, automatic.GetInteriorFrameMode("interior/page-001.png"));
-        Assert.DoesNotContain("interior/page-001.png", automatic.InteriorFrameOverrides!);
+        Assert.Equal(FrameMode.Disabled, noFrame.GetInteriorFrameMode("interior/page-001.png"));
+        Assert.Null(noFrame.InteriorFrameOverrides);
     }
 
     [Fact]
@@ -199,7 +199,7 @@ public sealed class BookProcessingStateTests
     {
         var state = BookProcessingState.NotStarted(new BookId("book"));
         Assert.Throws<ArgumentException>(() => state.GetInteriorFrameMode(" "));
-        Assert.Throws<ArgumentException>(() => state.SetInteriorFrameMode("", FrameMode.Auto));
+        Assert.Throws<ArgumentException>(() => state.SetInteriorFrameMode("", FrameMode.Disabled));
         Assert.Throws<ArgumentOutOfRangeException>(() => state.SetInteriorFrameMode("interior/page.png", (FrameMode)99));
     }
     [Fact]

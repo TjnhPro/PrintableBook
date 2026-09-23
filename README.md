@@ -49,6 +49,8 @@ Brand + Book folders
 
 Mỗi trang Interior được chuẩn hoá thành `normalized-source.png`, sau đó classification dùng BorderLine V3 và BorderPixel V1 fallback, preparation, frame (nếu có), assembly và export PDF. Chi tiết kỹ thuật nằm trong [architecture](docs/architecture.md).
 
+Interior bình thường chỉ có hai mode: **Frame** và **No Frame**. Book/page mới mặc định **No Frame**. **Frame** bắt buộc dùng `frame.png` hợp lệ của Brand và sẽ fail rõ ràng nếu asset bị thiếu hoặc sai; **No Frame** dùng CropArt và không overlay frame. State cũ dùng Auto được đọc thành No Frame và có cảnh báo review theo Book; PDF đã publish không tự thay đổi cho đến khi user process/publish lại.
+
 ## Intro AUTO và CUSTOM
 
 - **AUTO** (`HasIntro=false`): dùng toàn bộ ảnh hợp lệ trong `Brand/IntroTemplate/`, theo tên file tăng dần. Ảnh Brand đúng kích thước Final Interior Page (mặc định `2588x2625`) được đưa thẳng vào PDF; `1024x1024` và `2048x2048` vẫn dùng luồng CropArt.

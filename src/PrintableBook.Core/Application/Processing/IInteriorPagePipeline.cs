@@ -26,7 +26,8 @@ public sealed record InteriorPagePipelineRequest
         ArtworkSourceNormalizationSettings? artworkSourceNormalization = null,
         BorderLineDetectionSettings? borderLineDetection = null,
         InteriorPageProcessingKind processingKind = InteriorPageProcessingKind.Interior,
-        string? outputFileName = null)
+        string? outputFileName = null,
+        string? frameContentSha256 = null)
     {
         Workspace = workspace;
         Source = source;
@@ -42,6 +43,7 @@ public sealed record InteriorPagePipelineRequest
         BorderLineDetection = borderLineDetection;
         ProcessingKind = processingKind;
         OutputFileName = outputFileName;
+        FrameContentSha256 = frameContentSha256;
         if (!Enum.IsDefined(processingKind)) throw new ArgumentOutOfRangeException(nameof(processingKind), processingKind, "Unsupported page processing kind.");
         if (outputFileName is not null &&
             (string.IsNullOrWhiteSpace(outputFileName) ||
@@ -68,9 +70,18 @@ public sealed record InteriorPagePipelineRequest
     public BorderLineDetectionSettings? BorderLineDetection { get; init; }
     public InteriorPageProcessingKind ProcessingKind { get; init; }
     public string? OutputFileName { get; init; }
+    public string? FrameContentSha256 { get; init; }
 
     public void ValidateProcessingPolicy()
     {
+        if (!Enum.IsDefined(FrameMode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(FrameMode), FrameMode, "Unsupported frame mode.");
+        }
+        if (ProcessingKind == InteriorPageProcessingKind.Interior && FrameMode == FrameMode.Enabled && Frame is null)
+        {
+            throw new ArgumentException("Frame Interior pages require a Brand frame.", nameof(Frame));
+        }
         if (ProcessingKind is (InteriorPageProcessingKind.IntroTemplate or InteriorPageProcessingKind.BrandIntroTemplate) &&
             (Frame is not null || FrameMode != FrameMode.Disabled))
         {
@@ -103,13 +114,23 @@ public sealed class InteriorPageProcessingException(
     string pageId,
     string step,
     Exception innerException,
-    InteriorPageProcessingKind processingKind = InteriorPageProcessingKind.Interior) : Exception($"Interior page '{pageId}' failed during {step}.", innerException)
+    InteriorPageProcessingKind processingKind = InteriorPageProcessingKind.Interior) : Exception($"Interior page '{pageId}' failed during {step}: {innerException.Message}", innerException)
 {
     public string PageId { get; } = pageId;
 
     public string Step { get; } = step;
 
     public InteriorPageProcessingKind ProcessingKind { get; } = processingKind;
+
+    public string? FailureCode { get; } = innerException is InteriorFrameException frameFailure
+        ? frameFailure.Code
+        : null;
+}
+
+public sealed class InteriorFrameException(string code, string message, Exception? innerException = null)
+    : Exception(message, innerException)
+{
+    public string Code { get; } = code;
 }
 
 /// <summary>

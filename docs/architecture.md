@@ -119,13 +119,12 @@ Interior PDF
 
 Raw source chỉ được dùng để xác định/fingerprint và chuẩn hoá. Sau khi `normalized-source.png` đã có, detector, classifier, preparation, frame và page production đều đọc artifact này; không có stage sau đó mở lại raw source. Normalization tạo PNG vuông opaque-white trong cùng toạ độ chuẩn (mặc định `2048×2048`).
 
-`BorderLine V3` là detector hiện hành: pass 1 tìm viền nông (`200`), pass 2 sâu hơn (`320`) chỉ chạy khi pass 1 không có outer frame bốn cạnh coherent. Hai pass dùng cùng quality gates; `BorderPixel V1` chỉ là fallback khi BorderLine âm. Detector chỉ chạy cho Interior `Auto` và `Enabled`; `Disabled` resolve trực tiếp sang policy `forced-no-frame-v1` và effective `CropArt`.
+`BorderLine V3` là detector hiện hành: pass 1 tìm viền nông (`200`), pass 2 sâu hơn (`320`) chỉ chạy khi pass 1 không có outer frame bốn cạnh coherent. Hai pass dùng cùng quality gates; `BorderPixel V1` chỉ là fallback khi BorderLine âm. Detector chỉ chạy cho Interior `Frame` (`Enabled`); `No Frame` (`Disabled`) resolve trực tiếp sang policy `forced-no-frame-v1` và effective `CropArt`.
 
-Preparation kết thúc tại raster `PreparedArtwork`. Từ đó các stage downstream không cần biết loại artwork. Detector result và effective decision là hai contract riêng: detected decision giữ evidence thật, forced decision có `DetectionStatus=not-run` và không có evidence. `FrameMode.Auto` dùng recommendation từ detected classification, `Enabled` vẫn detect rồi buộc frame nếu Brand có frame tương thích, còn `Disabled` ép `CropArt` và không dùng frame:
+Preparation kết thúc tại raster `PreparedArtwork`. Từ đó các stage downstream không cần biết loại artwork. Detector result và effective decision là hai contract riêng: detected decision giữ evidence thật, forced decision có `DetectionStatus=not-run` và không có evidence. Normal Interior chỉ có hai mode: `Enabled` detect rồi bắt buộc overlay frame Brand hợp lệ, còn `Disabled` ép `CropArt` và không dùng frame:
 
 ```text
-ShouldApplyFrame = FrameAvailable &&
-  (Auto => AutoFrameRecommended, Enabled => true, Disabled => false)
+ShouldApplyFrame = (Enabled => true, Disabled => false)
 ```
 
 `CropArt` trim white exterior, pad opaque-white theo cạnh lớn hơn rồi resize. Nó không phải thuật toán xoá viền tối đã vẽ trong source.
@@ -195,9 +194,9 @@ Snapshot session/worker vẫn observable qua bridge để WebView hiển thị P
 
 ## Cache, output và Clear Cache
 
-Page pipeline có cache stage-aware. `classification.json`, canonical source và raster stage có input stamp/version/fingerprint; thay đổi ở stage nào thì chỉ invalid stage đó và downstream. `Auto ↔ Enabled` tái sử dụng detected classification/prepared rồi rebuild từ Frame. Bất kỳ transition nào giữa `Disabled` và `Auto|Enabled` đổi classification policy nên rebuild từ Classification. Với forced policy, BorderLine settings/version và frame identity là dependency không áp dụng; threshold trim vẫn invalidate từ Preparation.
+Page pipeline có cache stage-aware. `classification.json`, canonical source và raster stage có input stamp/version/fingerprint; thay đổi ở stage nào thì chỉ invalid stage đó và downstream. Transition `Disabled ↔ Enabled` đổi classification policy nên rebuild từ Classification. Với forced No Frame policy, BorderLine detector settings và frame identity không phải dependency; threshold vẫn là dependency của bước trim CropArt nên invalidate từ Preparation.
 
-Cache stamp v4 và classification cache v2 lưu policy/origin/detection status riêng. Reader nhận diện cache v3: Interior Auto/Enabled hợp lệ được nâng metadata mà giữ raster tương thích; mọi Interior Disabled legacy rebuild thành `forced-no-frame`; Intro legacy được nâng thành `forced-intro`. Metadata được ghi qua temp file và stamp v4 được commit sau cùng để retry sau cancellation luôn fail closed.
+Cache stamp v5 và classification cache v2 lưu policy/origin/detection status riêng. Với Frame, stamp dùng SHA-256 của bản `frame.png` bất biến được stage theo Book run, không dựa riêng vào path/length/timestamp. Frame được validate trước cache fast return; thiếu/unreadable/sai geometry luôn fail closed. Cache schema cũ bị rebuild theo policy mới. Metadata được ghi qua temp file và stamp v5 được commit sau cùng để retry sau cancellation luôn fail closed.
 
 Clear Cache xóa raster nặng (canonical/processed cache) nhưng giữ Book state và metadata classification theo hành vi production hiện tại. PDF đã publish không thuộc cache nên vẫn tồn tại; lần process sau dựng lại cache cần thiết.
 

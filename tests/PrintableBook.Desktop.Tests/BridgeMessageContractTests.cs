@@ -20,6 +20,23 @@ namespace PrintableBook.Desktop.Tests;
 public sealed class BridgeMessageContractTests
 {
     [Fact]
+    public void Main_window_serializes_frame_modes_as_stable_strings()
+    {
+        var response = BridgeResponse.Succeeded("frame", "frame.snapshot", new
+        {
+            disabled = FrameMode.Disabled,
+            enabled = FrameMode.Enabled
+        });
+
+        var json = MainWindow.SerializeBridgeResponse(response);
+
+        Assert.Contains("\"disabled\":\"disabled\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"enabled\":\"enabled\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"disabled\":0", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("auto", json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Background_task_bridge_snapshot_keeps_kind_and_state_as_stable_strings()
     {
         var dto = BackgroundTaskBridgeSnapshot.From(new BackgroundTaskSnapshot(
@@ -505,7 +522,7 @@ public sealed class BridgeMessageContractTests
         var emptyRouter = new WebViewBridgeRouter(new ApplicationLoadCoordinator(emptyManager), coverSelectionService: cover, interiorFrameModeService: frame);
 
         var missingCover = await emptyRouter.HandleAsync("""{"version":1,"id":"cover","command":"book.cover.select","payload":{"bookId":"Book One","coverReference":"cover-a.png"}}""");
-        var missingFrame = await emptyRouter.HandleAsync("""{"version":1,"id":"frame","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png","mode":"auto"}}""");
+        var missingFrame = await emptyRouter.HandleAsync("""{"version":1,"id":"frame","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png","mode":"enabled"}}""");
         Assert.All([missingCover, missingFrame], response => Assert.Equal("snapshot_unavailable", response.Error));
         Assert.Equal(0, emptyManager.Starts);
         Assert.Null(cover.LastSelection);
@@ -513,7 +530,7 @@ public sealed class BridgeMessageContractTests
         var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
         var retainedRouter = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), coverSelectionService: cover, interiorFrameModeService: frame);
         var invalidCover = await retainedRouter.HandleAsync("""{"version":1,"id":"invalid-cover","command":"book.cover.select","payload":{"bookId":"Book One","coverReference":"outside.png"}}""");
-        var invalidFrame = await retainedRouter.HandleAsync("""{"version":1,"id":"invalid-frame","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","sourceReference":"outside.png","mode":"auto"}}""");
+        var invalidFrame = await retainedRouter.HandleAsync("""{"version":1,"id":"invalid-frame","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","sourceReference":"outside.png","mode":"enabled"}}""");
         Assert.Equal("invalid_cover_selection", invalidCover.Error);
         Assert.Equal("invalid_interior_frame_mode", invalidFrame.Error);
         Assert.Equal(0, manager.Starts);
@@ -617,7 +634,6 @@ public sealed class BridgeMessageContractTests
     }
 
     [Theory]
-    [InlineData("auto", FrameMode.Auto)]
     [InlineData("enabled", FrameMode.Enabled)]
     [InlineData("disabled", FrameMode.Disabled)]
     public async Task InteriorFrameModeSelectionUsesTheCSharpOwner(string mode, FrameMode expectedMode)
@@ -651,7 +667,7 @@ public sealed class BridgeMessageContractTests
     public async Task InteriorFrameModeSelectionRejectsMissingSourceReference()
     {
         var response = await new WebViewBridgeRouter(CreateCoordinator(new StubSnapshotService(CreateSnapshot())), interiorFrameModeService: new StubInteriorFrameModeService())
-            .HandleAsync("""{"version":1,"id":"request-missing-source","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","mode":"auto"}}""");
+            .HandleAsync("""{"version":1,"id":"request-missing-source","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","mode":"enabled"}}""");
 
         Assert.False(response.Ok);
         Assert.Equal("invalid_interior_frame_mode", response.Error);
@@ -664,7 +680,7 @@ public sealed class BridgeMessageContractTests
             CreateCoordinator(new StubSnapshotService(CreateSnapshot())),
             interiorFrameModeService: new ThrowingInteriorFrameModeService());
 
-        var response = await router.HandleAsync("""{"version":1,"id":"request-frame-failure","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png","mode":"auto"}}""");
+        var response = await router.HandleAsync("""{"version":1,"id":"request-frame-failure","command":"book.interior.frame-mode.set","payload":{"bookId":"Book One","sourceReference":"Book interior/page-001.png","mode":"enabled"}}""");
 
         Assert.False(response.Ok);
         Assert.Equal("book_interior_frame-mode_set_failed: The workspace state is unavailable.", response.Error);
@@ -1366,8 +1382,8 @@ public sealed class BridgeMessageContractTests
             GlobalSettings.Default,
             [new BookDesktopSummary(id, "Ready", [], BookProcessingStatus.NotStarted, null, null, [], [], [], 2, CoverCandidates: ["cover-a.png"], InteriorSourcePages:
             [
-                new InteriorSourcePageSummary("Book interior/page-001.png", FrameMode.Auto, SourceKey: "Book interior/page-001.png"),
-                new InteriorSourcePageSummary("Book interior/page-002.png", FrameMode.Auto, SourceKey: "Book interior/page-002.png")
+                new InteriorSourcePageSummary("Book interior/page-001.png", FrameMode.Disabled, SourceKey: "Book interior/page-001.png"),
+                new InteriorSourcePageSummary("Book interior/page-002.png", FrameMode.Disabled, SourceKey: "Book interior/page-002.png")
             ], AssignedBrand: "Brand One", AssignmentStatus: BookBrandAssignmentStatus.Valid)],
             DateTimeOffset.UnixEpoch);
     }

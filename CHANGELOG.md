@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Normal Interior chỉ còn **Frame** và **No Frame**; Book/page mới mặc định No Frame. State legacy Auto hoặc missing override được đọc thành No Frame và hiển thị cảnh báo review theo Book.
+- Frame processing nay fail closed khi Brand frame thiếu, unreadable hoặc sai kích thước. Frame được stage theo Book run và cache stamp v5 dùng content SHA-256 để phát hiện cả thay đổi giữ nguyên length/timestamp.
+- Workspace frame-mode state dùng contract v2, canonical writer chỉ lưu explicit Frame override; state hỏng được cô lập theo Book và không bị tự ghi đè.
+
+### Compatibility
+
+- PDF đã publish không tự đổi; output chỉ thay đổi khi user process/publish lại. Workspace đã được save bằng frame-mode contract v2 không hỗ trợ downgrade về binary cũ hiểu missing mode là Auto.
+
 ## 0.1.1
 
 ### Added
