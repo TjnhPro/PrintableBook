@@ -52,6 +52,7 @@ public sealed record ProductionDesktopSummary(
 public interface ILocalOutputActionService
 {
     ValueTask OpenAsync(FileReference file, CancellationToken cancellationToken = default);
+    ValueTask OpenFolderAsync(DirectoryReference directory, CancellationToken cancellationToken = default);
     ValueTask RevealAsync(FileReference file, CancellationToken cancellationToken = default);
     ValueTask CopyPathAsync(FileReference file, CancellationToken cancellationToken = default);
 }

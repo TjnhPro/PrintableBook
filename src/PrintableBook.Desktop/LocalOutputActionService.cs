@@ -10,14 +10,30 @@ internal sealed class LocalOutputActionService : ILocalOutputActionService
     public ValueTask OpenAsync(FileReference file, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        Process.Start(new ProcessStartInfo(file.Value) { UseShellExecute = true });
+        if (Process.Start(new ProcessStartInfo(file.Value) { UseShellExecute = true }) is null)
+        {
+            throw new InvalidOperationException($"Windows could not open '{file.Value}'.");
+        }
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask OpenFolderAsync(DirectoryReference directory, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (Process.Start(new ProcessStartInfo(directory.Value) { UseShellExecute = true }) is null)
+        {
+            throw new InvalidOperationException($"Windows could not open '{directory.Value}'.");
+        }
         return ValueTask.CompletedTask;
     }
 
     public ValueTask RevealAsync(FileReference file, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{file.Value}\"") { UseShellExecute = true });
+        if (Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{file.Value}\"") { UseShellExecute = true }) is null)
+        {
+            throw new InvalidOperationException($"Windows could not reveal '{file.Value}'.");
+        }
         return ValueTask.CompletedTask;
     }
 
