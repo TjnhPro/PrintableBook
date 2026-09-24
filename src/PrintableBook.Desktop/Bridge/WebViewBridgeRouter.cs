@@ -1,4 +1,7 @@
 using System.Text.Json;
+using System.ComponentModel;
+using System.IO;
+using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
@@ -528,6 +531,58 @@ internal sealed class WebViewBridgeRouter(
                 return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
             }
 
+            if (request.Command == "book.output.open-folder")
+            {
+                if (applicationLoadCoordinator is null || outputActionService is null || request.Payload is not { } folderPayload ||
+                    !folderPayload.TryGetProperty("bookId", out var folderBookIdElement) || string.IsNullOrWhiteSpace(folderBookIdElement.GetString()))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_output_action");
+                }
+
+                var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                var bookId = folderBookIdElement.GetString()!;
+                var discoveredBook = snapshot?.Discovery.Books.FirstOrDefault(item => item.Id.Value == bookId);
+                var summary = snapshot?.BookSummaries.FirstOrDefault(item => item.BookId.Value == bookId);
+                if (discoveredBook is null || summary is null)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "output_folder_not_found");
+                }
+
+                var outputDirectoryPath = Path.GetFullPath(Path.Combine(discoveredBook.Directory.Value, "Output"));
+                var currentOutputs = summary.OutputSummaries?
+                    .Where(item => item.ArtifactKind is "Cover" or "Interior")
+                    .GroupBy(item => item.ArtifactKind, StringComparer.Ordinal)
+                    .Select(group => group
+                        .OrderByDescending(item => item.GeneratedAt ?? DateTimeOffset.MinValue)
+                        .ThenByDescending(item => item.ArtifactReference, StringComparer.Ordinal)
+                        .First())
+                    .ToArray() ?? [];
+                var existingOutputs = currentOutputs
+                    .Where(item => File.Exists(item.ArtifactReference))
+                    .ToArray();
+                if (existingOutputs.Any(item => !string.Equals(
+                        Path.GetDirectoryName(Path.GetFullPath(item.ArtifactReference)),
+                        outputDirectoryPath,
+                        StringComparison.OrdinalIgnoreCase)))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "output_folder_inconsistent");
+                }
+                if (!Directory.Exists(outputDirectoryPath) || existingOutputs.Length == 0)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "output_folder_not_found");
+                }
+
+                try
+                {
+                    await outputActionService.OpenFolderAsync(new DirectoryReference(outputDirectoryPath), cancellationToken);
+                }
+                catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or UnauthorizedAccessException or IOException)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "output_launch_failed");
+                }
+                return BridgeResponse.Succeeded(request.Id, "book.output.action.completed", new { bookId });
+            }
+
             if (request.Command is "book.output.preview" or "book.output.open" or "book.output.reveal" or "book.output.copy-path")
             {
                 if (applicationLoadCoordinator is null || outputActionService is null || request.Payload is not { } outputPayload ||
@@ -540,7 +595,7 @@ internal sealed class WebViewBridgeRouter(
                 var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
                 var book = snapshot?.BookSummaries.FirstOrDefault(item => item.BookId.Value == bookIdElement.GetString());
                 var artifact = artifactElement.GetString()!;
-                if (book is null || !book.PublishedArtifacts.Contains(artifact, StringComparer.Ordinal) || !System.IO.File.Exists(artifact))
+                if (book is null || !book.PublishedArtifacts.Contains(artifact, StringComparer.Ordinal) || !File.Exists(artifact))
                 {
                     return new BridgeResponse(Version, request.Id, false, null, "output_not_found");
                 }
@@ -551,11 +606,15 @@ internal sealed class WebViewBridgeRouter(
                 {
                     var output = book.OutputSummaries?.FirstOrDefault(item =>
                         string.Equals(item.ArtifactReference, artifact, StringComparison.Ordinal));
-                    if (output?.PreviewState == "Ready" &&
-                        !string.IsNullOrWhiteSpace(output.PreviewArtifactReference) &&
-                        System.IO.File.Exists(output.PreviewArtifactReference))
+                    if (output is null || output.VerificationStatus is "Missing" or "Invalid")
                     {
-                        target = output.PreviewArtifactReference;
+                        return new BridgeResponse(Version, request.Id, false, null, "output_not_previewable");
+                    }
+                    if (output.PreviewState == "Ready" &&
+                        output.PreviewArtifactReference is { Length: > 0 } previewArtifact &&
+                        File.Exists(previewArtifact))
+                    {
+                        target = previewArtifact;
                     }
                     else
                     {
@@ -564,9 +623,16 @@ internal sealed class WebViewBridgeRouter(
                 }
 
                 var file = new PrintableBook.Core.Abstractions.FileReference(target);
-                if (request.Command is "book.output.preview" or "book.output.open") await outputActionService.OpenAsync(file, cancellationToken);
-                if (request.Command == "book.output.reveal") await outputActionService.RevealAsync(file, cancellationToken);
-                if (request.Command == "book.output.copy-path") await outputActionService.CopyPathAsync(file, cancellationToken);
+                try
+                {
+                    if (request.Command is "book.output.preview" or "book.output.open") await outputActionService.OpenAsync(file, cancellationToken);
+                    if (request.Command == "book.output.reveal") await outputActionService.RevealAsync(file, cancellationToken);
+                    if (request.Command == "book.output.copy-path") await outputActionService.CopyPathAsync(file, cancellationToken);
+                }
+                catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or UnauthorizedAccessException or IOException)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "output_launch_failed");
+                }
                 return BridgeResponse.Succeeded(request.Id, "book.output.action.completed", new { fallbackToOriginal });
             }
 
@@ -784,7 +850,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

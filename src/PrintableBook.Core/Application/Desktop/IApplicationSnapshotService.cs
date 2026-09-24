@@ -28,7 +28,8 @@ public sealed record BookOutputSummary(
     string? PreviewArtifactReference = null,
     long? PreviewFileSizeBytes = null,
     string PreviewState = "Missing",
-    DateTimeOffset? PreviewGeneratedAt = null);
+    DateTimeOffset? PreviewGeneratedAt = null,
+    string? ThumbnailImageUrl = null);
 public sealed record ProductionAssetDesktopSummary(
     string AssetKind,
     string DisplayName,
@@ -52,6 +53,7 @@ public sealed record ProductionDesktopSummary(
 public interface ILocalOutputActionService
 {
     ValueTask OpenAsync(FileReference file, CancellationToken cancellationToken = default);
+    ValueTask OpenFolderAsync(DirectoryReference directory, CancellationToken cancellationToken = default);
     ValueTask RevealAsync(FileReference file, CancellationToken cancellationToken = default);
     ValueTask CopyPathAsync(FileReference file, CancellationToken cancellationToken = default);
 }
@@ -728,6 +730,11 @@ public sealed class ApplicationSnapshotService(
                     inspection,
                     previewReference,
                     cancellationToken);
+                var thumbnailImageUrl = await DescribeCoverThumbnailImageUrlAsync(
+                    artifact,
+                    info,
+                    artifactKind,
+                    cancellationToken);
                 outputs.Add(new BookOutputSummary(
                     artifact,
                     info.Name,
@@ -741,7 +748,8 @@ public sealed class ApplicationSnapshotService(
                     preview.Reference,
                     preview.FileSizeBytes,
                     preview.State,
-                    preview.GeneratedAt));
+                    preview.GeneratedAt,
+                    thumbnailImageUrl));
             }
             catch (Exception)
             {
@@ -811,6 +819,22 @@ public sealed class ApplicationSnapshotService(
         {
             return new OutputPreviewDescription(null, previewInfo.Length, "Invalid", new DateTimeOffset(previewInfo.LastWriteTimeUtc));
         }
+    }
+
+    private async ValueTask<string?> DescribeCoverThumbnailImageUrlAsync(
+        string artifact,
+        FileInfo mainInfo,
+        string artifactKind,
+        CancellationToken cancellationToken)
+    {
+        if (artifactKind != "Cover") return null;
+
+        var thumbnail = new FileReference(Path.Combine(
+            Path.GetDirectoryName(artifact) ?? string.Empty,
+            $"{Path.GetFileNameWithoutExtension(artifact)}_thumbnail.png"));
+        var metadata = await fileSystem.GetFileMetadataAsync(thumbnail, cancellationToken);
+        if (metadata is null || metadata.Value.LastWriteTimeUtc < new DateTimeOffset(mainInfo.LastWriteTimeUtc)) return null;
+        return ToVersionedLocalImageUrl(thumbnail.Value, metadata.Value);
     }
 
     private static string GetArtifactKind(string fileName) =>

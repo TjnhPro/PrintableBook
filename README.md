@@ -84,7 +84,7 @@ Cover PNG phải đúng `5242 × 2626 px`; PDF Cover dùng trang `17.47 × 8.75 
 
 ## PDF Library
 
-**PDF Library** hiển thị mọi Cover/Interior PDF đã publish, kể cả output thành công gần nhất còn được giữ lại sau một lần chạy lỗi. Từ card bạn có thể **Open**, **Reveal** trong Explorer hoặc **Copy** path. Clear Cache xóa raster trung gian của Book Completed có output hợp lệ hoặc processed previews; không xóa PDF đã publish.
+**PDF Library** hiển thị mọi Cover/Interior PDF đã publish, kể cả output thành công gần nhất còn được giữ lại sau một lần chạy lỗi. Mỗi card dùng cover 2:1 để xem nhanh; chọn trực tiếp hàng **Cover** hoặc **Interior** để Preview, hoặc dùng một nút **Open Folder** để mở thư mục `Output` của Book. Clear Cache xóa raster trung gian của Book Completed có output hợp lệ hoặc processed previews; không xóa PDF đã publish.
 
 ![PDF Library](docs/assets/screenshots/0.1/11-pdf-library.png)
 

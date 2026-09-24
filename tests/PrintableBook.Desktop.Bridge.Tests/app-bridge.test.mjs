@@ -31,12 +31,19 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   let artworkWorkspaceRenderCount = 0;
   const introPaginationFocus = { action: "", focus() { this.action = "focused"; } };
   const artworkGrid = { scrollTop: 0 };
+  const pdfLibraryFeedback = {
+    hidden: true,
+    textContent: "",
+    attributes: {},
+    classList: { toggle: () => { } },
+    setAttribute(name, value) { this.attributes[name] = value; }
+  };
   const content = {
     get innerHTML() { return contentMarkup; },
     set innerHTML(markup) { fullRenderCount += 1; contentMarkup = markup; },
     addEventListener: (eventName, handler) => { contentListeners[eventName] = handler; },
     insertAdjacentHTML: (_position, markup) => { contentMarkup += markup; },
-    querySelector: (selector) => selector === '[data-action="pdf-library-search"]' ? searchInput : selector === "[data-brand-list]" ? brandList : null
+    querySelector: (selector) => selector === '[data-action="pdf-library-search"]' ? searchInput : selector === "[data-brand-list]" ? brandList : selector === "[data-pdf-library-feedback]" ? pdfLibraryFeedback : null
   };
   const introWorkspace = {
     set outerHTML(markup) {
@@ -137,7 +144,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSettingsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, browserWindow, searchInput, productionFinalButton, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, brandSettingsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -1701,14 +1708,52 @@ test("PDF Library groups current Cover and Interior PDFs under one Book", () => 
   const deltaStart = content.innerHTML.indexOf("Book Delta");
   const alphaMarkup = content.innerHTML.slice(alphaStart, deltaStart > alphaStart ? deltaStart : undefined);
 
-  assert.match(alphaMarkup, /Book Alpha - Interior\.pdf/);
-  assert.match(alphaMarkup, /Book Alpha - Cover\.pdf/);
-  assert.match(alphaMarkup, />Preview</);
-  assert.match(alphaMarkup, />Original</);
-  assert.match(alphaMarkup, />Reveal</);
-  assert.match(alphaMarkup, />Copy</);
+  assert.match(alphaMarkup, /<strong>Cover<\/strong>/);
+  assert.match(alphaMarkup, /<strong>Interior<\/strong>/);
+  assert.match(alphaMarkup, /Preview ›/);
+  assert.match(alphaMarkup, /Open Folder/);
+  assert.doesNotMatch(alphaMarkup, />Original</);
+  assert.doesNotMatch(alphaMarkup, />Reveal</);
+  assert.doesNotMatch(alphaMarkup, />Copy</);
+  assert.match(alphaMarkup, /1 page · 17\.00 × 11\.00 in · 12\.0 MB/);
+  assert.match(alphaMarkup, /80 pages · 8\.63 × 8\.75 in · 80\.0 MB/);
   assert.match(alphaMarkup, /8\.63 × 8\.75 in/);
   assert.doesNotMatch(alphaMarkup, /8\.626666666666667/);
+});
+
+test("PDF Library ignores unknown output kinds and keeps only the newest Cover and Interior", () => {
+  const { messageHandler, content } = loadBridge("outputs");
+  const snapshot = pdfLibrarySnapshot();
+  snapshot.bookSummaries[0].outputSummaries.push(
+    { artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\old-cover.pdf", fileName: "old-cover.pdf", artifactKind: "Cover", verificationStatus: "Verified", generatedAt: "2026-08-20T10:00:00Z", pageCount: 1, widthInches: 12, heightInches: 6, fileSizeBytes: 1 },
+    { artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\notes.txt", fileName: "notes.txt", artifactKind: "Unknown", verificationStatus: "Verified", generatedAt: "2026-08-27T10:00:00Z", pageCount: 99, widthInches: 1, heightInches: 1, fileSizeBytes: 1 }
+  );
+
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+
+  const alphaStart = content.innerHTML.indexOf('data-pdf-book-id="Book Alpha"');
+  const alphaEnd = content.innerHTML.indexOf("</article>", alphaStart);
+  const alphaMarkup = content.innerHTML.slice(alphaStart, alphaEnd);
+  assert.equal(alphaMarkup.match(/<strong>Cover<\/strong>/g)?.length ?? 0, 1);
+  assert.equal(alphaMarkup.match(/<strong>Interior<\/strong>/g)?.length ?? 0, 1);
+  assert.ok(alphaMarkup.indexOf("<strong>Cover</strong>") < alphaMarkup.indexOf("<strong>Interior</strong>"));
+  assert.doesNotMatch(alphaMarkup, /old-cover\.pdf/);
+  assert.doesNotMatch(alphaMarkup, /notes\.txt/);
+});
+
+test("PDF Library disables Preview for an invalid main PDF while keeping Open Folder available", () => {
+  const { messageHandler, content } = loadBridge("outputs");
+  const snapshot = pdfLibrarySnapshot();
+  snapshot.bookSummaries[1].outputSummaries[0].verificationStatus = "Invalid";
+
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+
+  const betaStart = content.innerHTML.indexOf('data-pdf-book-id="Book Beta"');
+  const betaEnd = content.innerHTML.indexOf("</article>", betaStart);
+  const betaMarkup = content.innerHTML.slice(betaStart, betaEnd);
+  assert.match(betaMarkup, /pdf-library-file-button is-unavailable[^>]*disabled/);
+  assert.match(betaMarkup, /pdf-library-file-status">Invalid/);
+  assert.match(betaMarkup, /data-action="open-output-folder"[^>]*aria-busy="false" >/);
 });
 
 test("PDF Library uses Book-centric copy and removes run history language", () => {
@@ -1716,7 +1761,7 @@ test("PDF Library uses Book-centric copy and removes run history language", () =
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
 
   assert.match(content.innerHTML, /PDF Library/);
-  assert.match(content.innerHTML, /Books with local PDF output/);
+  assert.match(content.innerHTML, /Select Cover or Interior to open it in your default PDF app/);
   assert.doesNotMatch(content.innerHTML, /Latest outputs/i);
   assert.doesNotMatch(content.innerHTML, /Previous runs/i);
   assert.doesNotMatch(content.innerHTML, /before publishing/i);
@@ -1808,7 +1853,7 @@ test("PDF Library switches between Grid and List without changing page size", ()
   assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 12);
 });
 
-test("PDF Library Grid uses compact Book cards and the documented desktop columns", () => {
+test("PDF Library Grid uses 2:1 representative covers and one action hierarchy", () => {
   const { messageHandler, content } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: manyPdfLibrarySnapshot(4) } });
   const css = readFileSync(join(process.cwd(), "src", "PrintableBook.Desktop", "Frontend", "css", "book-workspace.css"), "utf8");
@@ -1816,33 +1861,31 @@ test("PDF Library Grid uses compact Book cards and the documented desktop column
   assert.match(content.innerHTML, /pdf-library-page/);
   assert.match(content.innerHTML, /pdf-library-grid-scroll/);
   assert.doesNotMatch(content.innerHTML, /pdf-library-result-count/);
-  assert.match(content.innerHTML, /pdf-library-file-status/);
   assert.match(content.innerHTML, /pdf-library-grid/);
   assert.equal(content.innerHTML.match(/data-pdf-book-id=/g)?.length ?? 0, 4);
   assert.equal(content.innerHTML.match(/pdf-library-book-preview/g)?.length ?? 0, 4);
-  assert.match(content.innerHTML, />Preview</);
-  assert.match(content.innerHTML, />Original</);
-  assert.match(content.innerHTML, />Reveal</);
-  assert.match(content.innerHTML, />Copy</);
+  assert.match(content.innerHTML, /Preview ›/);
+  assert.match(content.innerHTML, /Open Folder/);
+  assert.doesNotMatch(content.innerHTML, />Original</);
+  assert.doesNotMatch(content.innerHTML, />Reveal</);
+  assert.doesNotMatch(content.innerHTML, />Copy</);
   assert.match(css, /\.pdf-library-grid \{ display:grid; grid-template-columns:repeat\(4,minmax\(0,1fr\)\); align-items:start; gap:16px; \}/);
-  assert.match(css, /\.pdf-library-page \{ display:grid; grid-template-rows:auto auto minmax\(0,1fr\); width:100%; max-width:100%; height:100%; min-height:0; overflow:hidden;/);
+  assert.match(css, /\.pdf-library-page \{ display:grid; grid-template-rows:auto auto auto minmax\(0,1fr\); width:100%; max-width:100%; height:100%; min-height:0; overflow:hidden;/);
   assert.match(css, /\.pb-content:has\(\.pdf-library-page\) \{ display:grid; grid-template-rows:minmax\(0,1fr\); overflow:hidden; \}/);
   assert.match(css, /@container \(max-width:1120px\) \{ \.pdf-library-grid \{ grid-template-columns:repeat\(3,minmax\(0,1fr\)\); \} \}/);
-  assert.match(css, /\.pdf-library-book-grid \{ display:grid; grid-template-rows:auto auto auto; min-width:0; \}/);
-  assert.match(css, /\.pdf-library-book-grid \.pdf-library-book-preview \{ aspect-ratio:16 \/ 9; \}/);
-  assert.match(css, /\.pdf-library-book-grid \.pdf-library-book-header > div \{ width:100%; min-width:0;/);
-  assert.match(css, /\.pdf-library-book-grid \.pdf-library-title-row \{ display:grid; grid-template-columns:minmax\(0,1fr\) auto; min-width:0;/);
-  assert.match(css, /\.pdf-library-book-grid \.pdf-library-title-row h2 \{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;/);
+  assert.match(css, /\.pdf-library-book-grid \{ display:grid; grid-template-rows:auto auto auto auto; min-width:0; \}/);
+  assert.match(css, /\.pdf-library-book-grid \.pdf-library-book-preview \{ aspect-ratio:2 \/ 1; \}/);
+  assert.match(css, /\.pdf-library-book-preview img \{ width:100%; height:100%; object-fit:contain;/);
   assert.match(css, /\.pdf-library-grid-scroll \{ min-height:0; overflow-x:hidden; overflow-y:auto;/);
   assert.match(css, /\.pdf-library-results \{ display:grid; grid-template-rows:minmax\(0,1fr\) auto; width:100%; max-width:100%; min-height:0; margin-top:12px; padding:12px; overflow:hidden; container-type:inline-size;/);
   assert.match(css, /\.pdf-library-toolbar \{ display:grid; grid-template-columns:minmax\(0,1fr\) minmax\(144px,180px\) auto;/);
   assert.match(css, /\.pdf-library-file-title \{ display:grid; grid-template-columns:minmax\(0,1fr\) auto;/);
-  assert.match(css, /\.pdf-library-book-grid \.pdf-library-file-copy \{ grid-template-rows:20px 18px auto;/);
-  assert.match(css, /\.pdf-library-book-grid \.output-actions \{ margin-top:0; flex-wrap:wrap; min-height:32px; \}/);
+  assert.match(css, /\.pdf-library-file-button \{ display:grid; grid-template-columns:minmax\(0,1fr\) auto;/);
+  assert.match(css, /\.pdf-library-open-folder \{ width:100%; \}/);
   assert.match(css, /@container \(max-width:820px\) \{ \.pdf-library-grid \{ grid-template-columns:repeat\(2,minmax\(0,1fr\)\); \} \}/);
 });
 
-test("PDF Library List uses bounded thumbnails and verbose output actions", () => {
+test("PDF Library List keeps the same preview and Open Folder actions", () => {
   const { messageHandler, content, contentListeners } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: manyPdfLibrarySnapshot(2) } });
   const list = { dataset: { action: "pdf-library-view", pdfLibraryView: "list" }, closest: () => list };
@@ -1850,17 +1893,18 @@ test("PDF Library List uses bounded thumbnails and verbose output actions", () =
   const css = readFileSync(join(process.cwd(), "src", "PrintableBook.Desktop", "Frontend", "css", "book-workspace.css"), "utf8");
 
   assert.match(content.innerHTML, /pdf-library-list/);
-  assert.match(content.innerHTML, /Preview/);
-  assert.match(content.innerHTML, /Open original/);
-  assert.match(content.innerHTML, /Reveal in Explorer/);
-  assert.match(content.innerHTML, /Copy path/);
-  assert.match(css, /\.pdf-library-book-list \{ display:grid; grid-template-columns:112px/);
-  assert.match(css, /\.pdf-library-book-list \.pdf-library-book-preview \{ width:112px; height:112px; min-height:112px;/);
-  assert.match(css, /\.pdf-library-book-list \.pdf-library-book-preview img \{ object-fit:cover; object-position:center center;/);
+  assert.match(content.innerHTML, /Preview ›/);
+  assert.match(content.innerHTML, /Open Folder/);
+  assert.doesNotMatch(content.innerHTML, /Open original/);
+  assert.doesNotMatch(content.innerHTML, /Reveal in Explorer/);
+  assert.doesNotMatch(content.innerHTML, /Copy path/);
+  assert.match(css, /\.pdf-library-book-list \{ display:grid; grid-template-columns:160px/);
+  assert.match(css, /\.pdf-library-book-list \.pdf-library-book-preview \{ width:160px; aspect-ratio:2 \/ 1;/);
+  assert.match(css, /\.pdf-library-book-list \.pdf-library-book-preview img \{ object-fit:contain; object-position:center center;/);
   assert.match(css, /\.pdf-library-pagination \{ position:static; justify-content:space-between; width:100%; max-width:100%; margin:0; padding:12px 0 0; box-sizing:border-box; border-top:1px solid var\(--pb-border\);/);
 });
 
-test("PDF Library keeps paging local, preserves it across view changes, and opens an artifact from page two", () => {
+test("PDF Library keeps paging local, preserves it across view changes, and previews an artifact from page two", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: manyPdfLibrarySnapshot(25) } });
   const messageCount = messages.length;
@@ -1876,8 +1920,8 @@ test("PDF Library keeps paging local, preserves it across view changes, and open
   assert.equal(messages.length, messageCount);
 
   const artifactReference = "D:\\PrintableBook\\sources\\Book 13\\Output\\Book 13 - Interior.pdf";
-  click("open-output", { bookId: "Book 13", artifactReference });
-  assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.open", payload: { bookId: "Book 13", artifactReference } });
+  click("preview-output", { bookId: "Book 13", artifactReference });
+  assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.preview", payload: { bookId: "Book 13", artifactReference } });
 });
 
 test("PDF Library resets and clamps pagination when sorting, filtering, or refreshing changes its result set", () => {
@@ -1933,15 +1977,16 @@ test("PDF Library sorts by newest name and current PDF size", () => {
   assert.equal(firstBook(), "Book Alpha");
 });
 
-test("PDF Library Open PDF sends the exact Book artifact reference", () => {
+test("PDF Library has one shared Open Folder action that sends only the Book identity", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("outputs");
   messageHandler({ data: { version: 1, id: "output-1", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
-  assert.match(content.innerHTML, /Book Alpha - Interior\.pdf/);
-  assert.match(content.innerHTML, />Reveal</);
-  const artifactReference = "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Interior.pdf";
-  const open = { dataset: { action: "open-output", bookId: "Book Alpha", artifactReference }, closest: () => open };
+  assert.equal(content.innerHTML.match(/data-action="open-output-folder"/g)?.length ?? 0, 3);
+  assert.doesNotMatch(content.innerHTML, /data-action="open-output"/);
+  assert.doesNotMatch(content.innerHTML, /data-action="reveal-output"/);
+  assert.doesNotMatch(content.innerHTML, /data-action="copy-output-path"/);
+  const open = { dataset: { action: "open-output-folder", bookId: "Book Alpha" }, closest: () => open };
   contentListeners.click({ target: open });
-  assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.open", payload: { bookId: "Book Alpha", artifactReference } });
+  assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.open-folder", payload: { bookId: "Book Alpha" } });
 });
 
 test("PDF Library Preview sends only the main artifact identity for server-side companion resolution", () => {
@@ -1951,6 +1996,70 @@ test("PDF Library Preview sends only the main artifact identity for server-side 
   const preview = { dataset: { action: "preview-output", bookId: "Book Alpha", artifactReference }, closest: () => preview };
   contentListeners.click({ target: preview });
   assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.output.preview", payload: { bookId: "Book Alpha", artifactReference } });
+});
+
+test("PDF Library suppresses duplicate preview clicks and restores the row without redrawing", () => {
+  const { messageHandler, contentListeners, messages, pdfLibraryFeedback, getFullRenderCount } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "output-1", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
+  const messageCount = messages.length;
+  const renderCount = getFullRenderCount();
+  const label = { textContent: "Preview ›" };
+  const target = {
+    dataset: {
+      action: "preview-output",
+      bookId: "Book Alpha",
+      artifactReference: "D:\\PrintableBook\\sources\\Book Alpha\\Output\\Book Alpha - Interior.pdf",
+      outputActionKey: "preview:Book Alpha:interior",
+      outputIdleLabel: "Preview ›",
+      outputBusyLabel: "Opening…"
+    },
+    disabled: false,
+    attributes: {},
+    closest: () => target,
+    querySelector: (selector) => selector === "[data-output-action-label]" ? label : null,
+    setAttribute(name, value) { this.attributes[name] = value; }
+  };
+
+  contentListeners.click({ target });
+  contentListeners.click({ target });
+
+  assert.equal(messages.length, messageCount + 1);
+  assert.equal(target.disabled, true);
+  assert.equal(target.attributes["aria-busy"], "true");
+  assert.equal(label.textContent, "Opening…");
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "book.output.action.completed", payload: { fallbackToOriginal: false } } });
+
+  assert.equal(target.disabled, false);
+  assert.equal(target.attributes["aria-busy"], "false");
+  assert.equal(label.textContent, "Preview ›");
+  assert.equal(pdfLibraryFeedback.textContent, "Opened the PDF preview.");
+  assert.equal(pdfLibraryFeedback.attributes.role, "status");
+  assert.equal(getFullRenderCount(), renderCount);
+});
+
+test("PDF Library reports output failures locally and clears the pending target", () => {
+  const { messageHandler, contentListeners, pdfLibraryFeedback } = loadBridge("outputs");
+  messageHandler({ data: { version: 1, id: "output-1", ok: true, command: "app.snapshot", payload: pdfLibrarySnapshot() } });
+  const target = {
+    dataset: {
+      action: "open-output-folder",
+      bookId: "Book Alpha",
+      outputIdleLabel: "Open Folder",
+      outputBusyLabel: "Opening…"
+    },
+    disabled: false,
+    closest: () => target,
+    setAttribute() { }
+  };
+
+  contentListeners.click({ target });
+  messageHandler({ data: { version: 1, id: "request-1", ok: false, error: "output_folder_not_found" } });
+
+  assert.equal(target.disabled, false);
+  assert.equal(pdfLibraryFeedback.hidden, false);
+  assert.match(pdfLibraryFeedback.textContent, /output folder is unavailable/);
+  assert.equal(pdfLibraryFeedback.attributes.role, "alert");
 });
 
 test("PDF Library Reveal in Explorer sends the exact Book artifact reference", () => {

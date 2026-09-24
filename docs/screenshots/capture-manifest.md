@@ -21,7 +21,7 @@
 | `08-process-selected-queue.png` | Process → Selected queue; 3 Demo Books selected | editable/paged queue |
 | `09-process-running.png` | Process → Overview; real active session with non-zero progress | current Book/stage/workers |
 | `10-process-completed.png` | Process → Overview; terminal completed session | final summary |
-| `11-pdf-library.png` | PDF Library; at least two completed Demo Books | PDF rows/actions |
+| `11-pdf-library.png` | PDF Library; at least two completed Demo Books | 2:1 covers, Cover/Interior preview rows, Open Folder |
 | `12-brands-templates.png` | Brands & templates; Demo Brand | IntroTemplate/frame/background present |
 | `13-settings-basic.png` | Settings; Application/Interior/PDF fields visible | basic settings |
 | `14-settings-advanced-detection.png` | Settings; advanced detection | normalized size, two passes and tolerance |

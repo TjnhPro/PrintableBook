@@ -14,6 +14,7 @@ using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Application.Production;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
+using System.Text.Json;
 
 namespace PrintableBook.Desktop.Tests;
 
@@ -388,6 +389,130 @@ public sealed class BridgeMessageContractTests
             Assert.True(response.Ok);
             Assert.Equal(main, actions.Opened?.Value);
             Assert.Contains("\"fallbackToOriginal\":true", System.Text.Json.JsonSerializer.Serialize(response.Payload));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Output_preview_rejects_an_invalid_retained_output_even_when_the_file_still_exists()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"PrintableBook.OutputInvalid.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var main = Path.Combine(root, "Book One - Cover.pdf");
+            await File.WriteAllBytesAsync(main, [1]);
+            var current = CreateSnapshot();
+            var book = current.BookSummaries[0] with
+            {
+                PublishedArtifacts = [main],
+                OutputSummaries = [new BookOutputSummary(main, Path.GetFileName(main), 100, 1, 17.47, 8.75, "Invalid", DateTimeOffset.UtcNow, "Cover")]
+            };
+            var actions = new RecordingOutputActionService();
+            var router = new WebViewBridgeRouter(
+                new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(current with { BookSummaries = [book] })),
+                outputActionService: actions);
+
+            var response = await router.HandleAsync(JsonSerializer.Serialize(new
+            {
+                version = 1,
+                id = "preview-invalid",
+                command = "book.output.preview",
+                payload = new { bookId = "Book One", artifactReference = main }
+            }));
+
+            Assert.False(response.Ok);
+            Assert.Equal("output_not_previewable", response.Error);
+            Assert.Null(actions.Opened);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Output_open_folder_derives_the_canonical_Book_output_directory_and_accepts_an_invalid_existing_output()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"PrintableBook.OutputFolder.{Guid.NewGuid():N}");
+        var bookDirectory = Path.Combine(root, "Book One");
+        var outputDirectory = Path.Combine(bookDirectory, "Output");
+        Directory.CreateDirectory(outputDirectory);
+        try
+        {
+            var main = Path.Combine(outputDirectory, "Book One - Cover.pdf");
+            await File.WriteAllBytesAsync(main, [1]);
+            var current = CreateSnapshot();
+            var discoveredBook = current.Discovery.Books[0] with { Directory = new DirectoryReference(bookDirectory) };
+            var summary = current.BookSummaries[0] with
+            {
+                OutputSummaries = [new BookOutputSummary(main, Path.GetFileName(main), 100, 1, 17.47, 8.75, "Invalid", DateTimeOffset.UtcNow, "Cover")]
+            };
+            var snapshot = current with
+            {
+                Discovery = current.Discovery with { Books = [discoveredBook] },
+                BookSummaries = [summary]
+            };
+            var actions = new RecordingOutputActionService();
+            var router = new WebViewBridgeRouter(
+                new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
+                outputActionService: actions);
+
+            var response = await router.HandleAsync(JsonSerializer.Serialize(new
+            {
+                version = 1,
+                id = "open-folder",
+                command = "book.output.open-folder",
+                payload = new { bookId = "Book One", folderPath = Path.Combine(root, "untrusted") }
+            }));
+
+            Assert.True(response.Ok);
+            Assert.Equal("book.output.action.completed", response.Command);
+            Assert.Equal(new DirectoryReference(Path.GetFullPath(outputDirectory)), actions.OpenedFolder);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Output_open_folder_rejects_an_existing_output_outside_the_canonical_Book_directory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"PrintableBook.OutputFolderMismatch.{Guid.NewGuid():N}");
+        var bookDirectory = Path.Combine(root, "Book One");
+        var outputDirectory = Path.Combine(bookDirectory, "Output");
+        var otherDirectory = Path.Combine(root, "Other");
+        Directory.CreateDirectory(outputDirectory);
+        Directory.CreateDirectory(otherDirectory);
+        try
+        {
+            var main = Path.Combine(otherDirectory, "Book One - Interior.pdf");
+            await File.WriteAllBytesAsync(main, [1]);
+            var current = CreateSnapshot();
+            var discoveredBook = current.Discovery.Books[0] with { Directory = new DirectoryReference(bookDirectory) };
+            var summary = current.BookSummaries[0] with
+            {
+                OutputSummaries = [new BookOutputSummary(main, Path.GetFileName(main), 100, 10, 8.5, 8.5, "Verified", DateTimeOffset.UtcNow, "Interior")]
+            };
+            var snapshot = current with
+            {
+                Discovery = current.Discovery with { Books = [discoveredBook] },
+                BookSummaries = [summary]
+            };
+            var actions = new RecordingOutputActionService();
+            var router = new WebViewBridgeRouter(
+                new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
+                outputActionService: actions);
+
+            var response = await router.HandleAsync("""{"version":1,"id":"open-folder","command":"book.output.open-folder","payload":{"bookId":"Book One"}}""");
+
+            Assert.False(response.Ok);
+            Assert.Equal("output_folder_inconsistent", response.Error);
+            Assert.Null(actions.OpenedFolder);
         }
         finally
         {
@@ -1203,10 +1328,17 @@ public sealed class BridgeMessageContractTests
     private sealed class RecordingOutputActionService : ILocalOutputActionService
     {
         public FileReference? Opened { get; private set; }
+        public DirectoryReference? OpenedFolder { get; private set; }
 
         public ValueTask OpenAsync(FileReference file, CancellationToken cancellationToken = default)
         {
             Opened = file;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask OpenFolderAsync(DirectoryReference directory, CancellationToken cancellationToken = default)
+        {
+            OpenedFolder = directory;
             return ValueTask.CompletedTask;
         }
 

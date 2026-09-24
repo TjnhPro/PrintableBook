@@ -1,3 +1,10 @@
+using ImageMagick;
+using PrintableBook.Core.Abstractions;
+using PrintableBook.Core.Application.Processing;
+using PrintableBook.Core.Domain.Books;
+using PrintableBook.Infrastructure.Pdf;
+using PrintableBook.Infrastructure.Workspaces;
+
 namespace PrintableBook.Desktop.Tests;
 
 public sealed class BookWorkspaceLayoutContractTests
@@ -77,7 +84,99 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains(".book-drawer-preview { display:grid; width:64px; height:64px", layout, StringComparison.Ordinal);
         Assert.Contains(".book-drawer-preview { width:48px; height:48px; }", layout, StringComparison.Ordinal);
         Assert.Contains("--pb-book-card-preview: 4 / 3", layout, StringComparison.Ordinal);
-        Assert.Contains(".pdf-library-book-grid .pdf-library-book-preview { aspect-ratio:16 / 9; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".pdf-library-book-grid .pdf-library-book-preview { aspect-ratio:2 / 1; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".pdf-library-book-preview img { width:100%; height:100%; object-fit:contain;", layout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PdfLibraryCoverThumbnailIsPublishedFromTheFinalCoverRasterAndSelectedByTheCard()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"PrintableBook.PdfLibraryCover.{Guid.NewGuid():N}");
+        var temporaryOutput = new DirectoryReference(Path.Combine(root, ".workspace", "cover-output"));
+        var finalOutput = new DirectoryReference(Path.Combine(root, "Output"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var sourcePath = Path.Combine(root, "final-cover.png");
+            using (var image = new MagickImage(MagickColors.CornflowerBlue, 5242, 2626))
+            {
+                image.Write(sourcePath);
+            }
+
+            var exported = await new PdfSharpPrintableBookPdfExporter().ExportCoverAsync(
+                new CoverPdfExportRequest(
+                    new FileReference(sourcePath),
+                    temporaryOutput,
+                    new PhysicalPageSize(17.47, 8.75)));
+            await new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()).PublishCoverAsync(
+                new CoverOutputPublicationRequest(
+                    new BookId("Book One"),
+                    exported,
+                    finalOutput,
+                    1,
+                    new PhysicalPageSize(17.47, 8.75)));
+
+            var thumbnailPath = Path.Combine(finalOutput.Value, "Book One - Cover_thumbnail.png");
+            Assert.True(File.Exists(thumbnailPath));
+            using var thumbnail = new MagickImage(thumbnailPath);
+            Assert.Equal(2726u, thumbnail.Width);
+            Assert.Equal(1313u, thumbnail.Height);
+
+            var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
+            Assert.Contains("thumbnailImageUrl", script, StringComparison.Ordinal);
+            Assert.Contains("pdfLibraryCoverThumbnailMarkup", script, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task FullBookBuildAlsoPublishesThePdfLibraryCoverThumbnail()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"PrintableBook.FullBuildCover.{Guid.NewGuid():N}");
+        var temporaryOutput = new DirectoryReference(Path.Combine(root, ".workspace", "full-output"));
+        var finalOutput = new DirectoryReference(Path.Combine(root, "Output"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var coverPath = Path.Combine(root, "final-cover.png");
+            var interiorPath = Path.Combine(root, "interior.png");
+            using (var cover = new MagickImage(MagickColors.CornflowerBlue, 5242, 2626)) cover.Write(coverPath);
+            using (var interior = new MagickImage(MagickColors.White, 600, 609)) interior.Write(interiorPath);
+
+            var exported = await new PdfSharpPrintableBookPdfExporter().ExportAsync(
+                new PrintableBookPdfExportRequest(
+                    new FileReference(coverPath),
+                    [],
+                    [new FileReference(interiorPath)],
+                    null,
+                    temporaryOutput,
+                    new PhysicalPageSize(17.47, 8.75),
+                    new PhysicalPageSize(8.5, 8.5),
+                    1));
+            await new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()).PublishAsync(
+                new BookOutputPublicationRequest(
+                    new BookId("Book One"),
+                    exported,
+                    finalOutput,
+                    new PrintableBookPdfValidation(
+                        1,
+                        1,
+                        new PhysicalPageSize(17.47, 8.75),
+                        new PhysicalPageSize(8.5, 8.5))));
+
+            var thumbnailPath = Path.Combine(finalOutput.Value, "Book One - Cover_thumbnail.png");
+            Assert.True(File.Exists(thumbnailPath));
+            using var thumbnail = new MagickImage(thumbnailPath);
+            Assert.Equal(2726u, thumbnail.Width);
+            Assert.Equal(1313u, thumbnail.Height);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]

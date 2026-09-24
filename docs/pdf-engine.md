@@ -46,6 +46,6 @@ Mỗi lần Cover hoặc Final Interior publish thành công, exporter cố gắ
 <BookId> - Interior_thumbnail.pdf   # đủ trang/thứ tự, raster mỗi trang 600×609
 ```
 
-Preview giữ nguyên MediaBox, page count, thứ tự Production prefix → Intro → Interior và cách xen Background. Interior preview downsample tuần tự từng raster để không giữ toàn bộ ảnh resize trong RAM. Preview chỉ được publish khi hợp lệ và nhỏ hơn PDF chính; lỗi preview không làm main PDF thất bại. Các file `_thumbnail.pdf` là companion cho thao tác Preview, không phải production deliverable và không thay thế main PDF trong Open original, Reveal hoặc Copy path.
+Preview giữ nguyên MediaBox, page count, thứ tự Production prefix → Intro → Interior và cách xen Background. Interior preview downsample tuần tự từng raster để không giữ toàn bộ ảnh resize trong RAM. Preview chỉ được publish khi hợp lệ và nhỏ hơn PDF chính; lỗi preview không làm main PDF thất bại. Các file `_thumbnail.pdf` là companion cho thao tác Preview, không phải production deliverable. PDF Library mở companion khi chọn hàng Cover/Interior và dùng một action Open Folder ở cấp Book để truy cập các file chính.
 
 References: <https://github.com/dlemstra/Magick.NET>, <https://github.com/empira/PDFsharp/blob/master/LICENSE>, and <https://github.com/empira/PDFsharp>.
