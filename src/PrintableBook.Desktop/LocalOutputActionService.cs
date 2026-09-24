@@ -7,33 +7,35 @@ namespace PrintableBook.Desktop;
 
 internal sealed class LocalOutputActionService : ILocalOutputActionService
 {
+    private readonly Func<ProcessStartInfo, Process?> startProcess;
+
+    public LocalOutputActionService() : this(Process.Start)
+    {
+    }
+
+    internal LocalOutputActionService(Func<ProcessStartInfo, Process?> startProcess)
+    {
+        this.startProcess = startProcess ?? throw new ArgumentNullException(nameof(startProcess));
+    }
+
     public ValueTask OpenAsync(FileReference file, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (Process.Start(new ProcessStartInfo(file.Value) { UseShellExecute = true }) is null)
-        {
-            throw new InvalidOperationException($"Windows could not open '{file.Value}'.");
-        }
+        startProcess(new ProcessStartInfo(file.Value) { UseShellExecute = true });
         return ValueTask.CompletedTask;
     }
 
     public ValueTask OpenFolderAsync(DirectoryReference directory, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (Process.Start(new ProcessStartInfo(directory.Value) { UseShellExecute = true }) is null)
-        {
-            throw new InvalidOperationException($"Windows could not open '{directory.Value}'.");
-        }
+        startProcess(new ProcessStartInfo(directory.Value) { UseShellExecute = true });
         return ValueTask.CompletedTask;
     }
 
     public ValueTask RevealAsync(FileReference file, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{file.Value}\"") { UseShellExecute = true }) is null)
-        {
-            throw new InvalidOperationException($"Windows could not reveal '{file.Value}'.");
-        }
+        startProcess(new ProcessStartInfo("explorer.exe", $"/select,\"{file.Value}\"") { UseShellExecute = true });
         return ValueTask.CompletedTask;
     }
 
