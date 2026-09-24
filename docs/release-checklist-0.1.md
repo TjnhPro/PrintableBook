@@ -22,7 +22,7 @@
 - [x] ZIP has one versioned top-level folder and required Frontend/Assets files.
 - [x] Clean writable folder launch PASS.
 - [x] Path-with-spaces launch/Refresh PASS.
-- [ ] CUSTOM Intro, Active/Frame, process, cancel, PDF Library, Open/Reveal/Copy, Clear Cache and restart PASS.
+- [ ] CUSTOM Intro, Active/Frame, process, cancel, PDF Library row Preview/Open Folder, Clear Cache and restart PASS.
 
 ## Publish
 

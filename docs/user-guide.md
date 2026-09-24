@@ -152,7 +152,9 @@ Khi terminal, Overview hiển thị summary Completed/Failed và queue snapshot 
 
 ## 12. PDF Library
 
-**PDF Library** liệt kê Book đã có PDF. **Preview** mở companion PDF nhẹ hơn khi có; Cover preview dùng raster `2726×1313`, còn Interior preview vẫn có đầy đủ trang đúng thứ tự nhưng mỗi trang dùng raster `600×609`. Nếu preview thiếu hoặc không hợp lệ, ứng dụng mở PDF chính và báo fallback. **Open original**, **Reveal** và **Copy** luôn thao tác với PDF chính. Grid/List, Search và Sort chỉ thay đổi cách xem output hiện có.
+**PDF Library** liệt kê Book đã có PDF. Mỗi card hiển thị cover đầy đủ theo tỉ lệ 2:1, tên Book, rồi tối đa hai hàng **Cover** và **Interior** với số trang, kích thước trang và dung lượng file. Chọn trực tiếp một hàng để Preview: ứng dụng mở companion PDF nhẹ hơn khi có; Cover preview dùng raster `2726×1313`, còn Interior preview vẫn có đầy đủ trang đúng thứ tự nhưng mỗi trang dùng raster `600×609`. Nếu companion thiếu hoặc không hợp lệ, ứng dụng mở PDF chính và báo fallback. PDF chính bị đánh dấu Missing/Invalid không được Preview.
+
+Mỗi Book chỉ có một nút **Open Folder**. Nút này mở thư mục `<Book>/Output` do ứng dụng xác định; giao diện không gửi đường dẫn folder tùy ý. Grid/List, Search và Sort chỉ thay đổi cách xem output hiện có.
 
 Các file preview nằm cạnh PDF chính với hậu tố `_thumbnail.pdf`. Chúng được tạo lại ở lần **Build Cover PDF** hoặc **Build Final Interior** tiếp theo, không backfill tự động cho Book cũ và không phải file giao production. **Process Interior** không tạo companion PDF.
 
