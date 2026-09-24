@@ -22,6 +22,7 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         var coverPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Cover.pdf"));
         var interiorPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Interior.pdf"));
         var coverPreviewPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Cover_thumbnail.pdf"));
+        var coverThumbnailImage = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Cover_thumbnail.png"));
         var interiorPreviewPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Interior_thumbnail.pdf"));
         var validatedCoverPreview = await TryValidatePreviewAsync(
             request.TemporaryOutput.CoverPreviewPdf,
@@ -40,6 +41,7 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         ReplaceFile(request.TemporaryOutput.CoverPdf, coverPdf);
         ReplaceFile(request.TemporaryOutput.InteriorPdf, interiorPdf);
         var publishedCoverPreview = TryPublishValidatedPreview(validatedCoverPreview, coverPreviewPdf);
+        TryPublishCoverThumbnailImage(request.TemporaryOutput.CoverPdf, coverThumbnailImage);
         var publishedInteriorPreview = TryPublishValidatedPreview(validatedInteriorPreview, interiorPreviewPdf);
         DeleteTemporaryDirectory(request.TemporaryOutput.CoverPdf);
 
@@ -92,6 +94,7 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         Directory.CreateDirectory(request.FinalOutputRoot.Value);
         var coverPdf = new FileReference(Path.Combine(request.FinalOutputRoot.Value, $"{request.BookId.Value} - Cover.pdf"));
         var previewPdf = new FileReference(Path.Combine(request.FinalOutputRoot.Value, $"{request.BookId.Value} - Cover_thumbnail.pdf"));
+        var thumbnailImage = new FileReference(Path.Combine(request.FinalOutputRoot.Value, $"{request.BookId.Value} - Cover_thumbnail.png"));
         var validatedPreview = await TryValidatePreviewAsync(
             request.TemporaryOutput.PreviewPdf,
             request.TemporaryOutput.CoverPdf,
@@ -102,6 +105,7 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         cancellationToken.ThrowIfCancellationRequested();
         ReplaceFile(request.TemporaryOutput.CoverPdf, coverPdf);
         var publishedPreview = TryPublishValidatedPreview(validatedPreview, previewPdf);
+        TryPublishCoverThumbnailImage(request.TemporaryOutput.CoverPdf, thumbnailImage);
         DeleteTemporaryDirectory(request.TemporaryOutput.CoverPdf);
         return new PublishedCoverOutput(request.FinalOutputRoot, coverPdf, publishedPreview);
     }
@@ -147,6 +151,40 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             return null;
+        }
+    }
+
+    private static void TryPublishCoverThumbnailImage(FileReference temporaryCoverPdf, FileReference finalThumbnail)
+    {
+        var temporaryDirectory = Path.GetDirectoryName(temporaryCoverPdf.Value);
+        var temporaryThumbnail = temporaryDirectory is null
+            ? null
+            : new FileReference(Path.Combine(temporaryDirectory, "cover_thumbnail.png"));
+        try
+        {
+            if (temporaryThumbnail is null || !File.Exists(temporaryThumbnail.Value))
+            {
+                DeleteStaleThumbnail(finalThumbnail);
+                return;
+            }
+
+            ReplaceFile(temporaryThumbnail, finalThumbnail);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            DeleteStaleThumbnail(finalThumbnail);
+        }
+    }
+
+    private static void DeleteStaleThumbnail(FileReference thumbnail)
+    {
+        try
+        {
+            if (File.Exists(thumbnail.Value)) File.Delete(thumbnail.Value);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The snapshot freshness check prevents an older image from representing a newer Cover PDF.
         }
     }
 

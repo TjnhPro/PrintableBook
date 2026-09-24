@@ -659,6 +659,13 @@
     const cover = assetForReference(summary, valueFor(summary, "representativeCoverReference", ""));
     return localImageMarkup(cover, `Cover for ${valueFor(book, "name", bookId(book))}`, fallback);
   };
+  const pdfLibraryCoverThumbnailMarkup = (book, summary, fallback = "Cover unavailable") => {
+    const coverOutput = pdfLibraryOutputs(summary).find((output) => valueFor(output, "artifactKind", "") === "Cover");
+    const url = valueFor(coverOutput, "thumbnailImageUrl", "");
+    return url
+      ? `<img src="${escapeHtml(url)}" alt="Final Cover PDF for ${escapeHtml(valueFor(book, "name", bookId(book)))}" width="2726" height="1313" loading="lazy" decoding="async" data-local-image data-image-fallback="${escapeHtml(fallback)}">`
+      : bookThumbnailMarkup(book, summary, fallback);
+  };
   const assetDimensions = (asset) => {
     const width = valueFor(asset, "width", null);
     const height = valueFor(asset, "height", null);
@@ -1390,7 +1397,7 @@
     };
     const bookCard = ({ book, summary }) => {
       const name = pdfLibraryBookName(book, summary);
-      const thumbnail = bookThumbnailMarkup(book, summary, "Cover unavailable");
+      const thumbnail = pdfLibraryCoverThumbnailMarkup(book, summary, "Cover unavailable");
       const outputs = pdfLibraryOutputs(summary);
       const id = valueFor(valueFor(summary, "bookId", {}), "value", "");
       const actionKey = `folder:${id}`;

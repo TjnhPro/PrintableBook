@@ -164,10 +164,13 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         CancellationToken cancellationToken)
     {
         var target = new FileReference(Path.Combine(outputDirectory.Value, "cover_thumbnail.pdf"));
+        var thumbnailImage = new FileReference(Path.Combine(outputDirectory.Value, "cover_thumbnail.png"));
         try
         {
+            var raster = CreatePreviewRaster(source, PreviewPdfRasterSizes.Cover);
+            File.WriteAllBytes(thumbnailImage.Value, raster);
             using var document = new PdfDocument();
-            AddRasterPage(document, source, pageSize, PreviewPdfRasterSizes.Cover, cancellationToken);
+            AddRasterPage(document, raster, pageSize, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             document.Save(target.Value);
             return target;
@@ -175,11 +178,13 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         catch (OperationCanceledException)
         {
             DeletePreviewCandidate(target);
+            DeletePreviewCandidate(thumbnailImage);
             throw;
         }
         catch (Exception exception) when (IsExpectedPreviewFailure(exception))
         {
             DeletePreviewCandidate(target);
+            DeletePreviewCandidate(thumbnailImage);
             return null;
         }
     }
@@ -454,6 +459,19 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         {
             DrawRasterPage(page, compatiblePng, pageSize);
         }
+    }
+
+    private static void AddRasterPage(
+        PdfDocument document,
+        byte[] raster,
+        PhysicalPageSize pageSize,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var page = document.AddPage();
+        page.Width = XUnit.FromPoint(pageSize.WidthInPoints);
+        page.Height = XUnit.FromPoint(pageSize.HeightInPoints);
+        DrawRasterPage(page, raster, pageSize);
     }
 
     private static byte[] CreatePreviewRaster(FileReference source, ImageSize targetSize)
