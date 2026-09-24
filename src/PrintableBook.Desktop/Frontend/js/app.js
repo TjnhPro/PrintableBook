@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
   const bookStatuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
-  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookListRefreshPending: false, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), subcoverTouchedBooks: new Set(), brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookListRefreshPending: false, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), subcoverTouchedBooks: new Set(), brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -16,14 +16,28 @@
   const pdfLibraryBookName = (book, summary) => bookId(book) || valueFor(valueFor(summary, "bookId", {}), "value", "");
   const pdfLibraryPageSize = 12;
   const processQueuePageSize = 12;
-  const pdfLibraryOutputSize = (summary) => valueFor(summary, "outputSummaries", []).reduce((total, output) => total + (Number(valueFor(output, "fileSizeBytes", 0)) || 0), 0);
+  const pdfLibraryOutputs = (summary) => {
+    const newestByKind = new Map();
+    for (const output of valueFor(summary, "outputSummaries", [])) {
+      const kind = String(valueFor(output, "artifactKind", "Unknown"));
+      if (kind !== "Cover" && kind !== "Interior") continue;
+      const existing = newestByKind.get(kind);
+      const generatedAt = new Date(valueFor(output, "generatedAt", 0)).getTime() || 0;
+      const existingGeneratedAt = existing ? new Date(valueFor(existing, "generatedAt", 0)).getTime() || 0 : -1;
+      const artifact = String(valueFor(output, "artifactReference", ""));
+      const existingArtifact = String(valueFor(existing, "artifactReference", ""));
+      if (!existing || generatedAt > existingGeneratedAt || (generatedAt === existingGeneratedAt && artifact.localeCompare(existingArtifact) > 0)) newestByKind.set(kind, output);
+    }
+    return ["Cover", "Interior"].map((kind) => newestByKind.get(kind)).filter(Boolean);
+  };
+  const pdfLibraryOutputSize = (summary) => pdfLibraryOutputs(summary).reduce((total, output) => total + (Number(valueFor(output, "fileSizeBytes", 0)) || 0), 0);
   const pdfLibraryGeneratedAt = (summary) => {
-    const outputTimes = valueFor(summary, "outputSummaries", []).map((output) => new Date(valueFor(output, "generatedAt", 0)).getTime()).filter((value) => Number.isFinite(value) && value > 0);
+    const outputTimes = pdfLibraryOutputs(summary).map((output) => new Date(valueFor(output, "generatedAt", 0)).getTime()).filter((value) => Number.isFinite(value) && value > 0);
     if (outputTimes.length) return Math.max(...outputTimes);
     const lastRun = new Date(valueFor(summary, "lastRunAt", 0)).getTime();
     return Number.isFinite(lastRun) ? lastRun : 0;
   };
-  const eligiblePdfLibraryBooks = () => books().map((book) => ({ book, summary: summaryFor(book) })).filter(({ summary }) => summary && valueFor(summary, "outputSummaries", []).length > 0);
+  const eligiblePdfLibraryBooks = () => books().map((book) => ({ book, summary: summaryFor(book) })).filter(({ summary }) => summary && pdfLibraryOutputs(summary).length > 0);
   const pdfLibraryBooks = () => {
     const items = eligiblePdfLibraryBooks();
     const search = state.pdfLibrarySearch.trim().toLocaleLowerCase();
@@ -122,6 +136,59 @@
     window.chrome.webview.postMessage(JSON.stringify({ version: 1, id, command, ...(payload ? { payload } : {}) }));
     return id;
   };
+  const setPdfLibraryFeedback = (message, isError = false) => {
+    state.pdfLibraryFeedback = message;
+    state.pdfLibraryFeedbackError = isError;
+    const feedback = content.querySelector?.("[data-pdf-library-feedback]");
+    if (!feedback) return;
+    feedback.hidden = !message;
+    feedback.textContent = message;
+    feedback.classList?.toggle("is-error", isError);
+    feedback.setAttribute?.("role", isError ? "alert" : "status");
+  };
+  const setPdfLibraryActionBusy = (target, busy) => {
+    if (!target) return;
+    target.disabled = busy;
+    target.setAttribute?.("aria-busy", String(busy));
+    const label = target.querySelector?.("[data-output-action-label]");
+    if (label) label.textContent = busy ? valueFor(target.dataset, "outputBusyLabel", "Opening…") : valueFor(target.dataset, "outputIdleLabel", "Open");
+  };
+  const beginPdfLibraryAction = (command, payload, key, target) => {
+    if (state.pdfLibraryPendingActions.has(key)) return;
+    state.pdfLibraryPendingActions.add(key);
+    const restoreFocus = document.activeElement === target;
+    setPdfLibraryActionBusy(target, true);
+    setPdfLibraryFeedback("Opening…");
+    try {
+      const requestId = send(command, payload);
+      state.pdfLibraryRequestActions.set(requestId, { key, target, restoreFocus });
+    } catch {
+      state.pdfLibraryPendingActions.delete(key);
+      setPdfLibraryActionBusy(target, false);
+      setPdfLibraryFeedback("The output action could not be sent. Try again.", true);
+    }
+  };
+  const finishPdfLibraryAction = (responseId) => {
+    const action = state.pdfLibraryRequestActions.get(responseId);
+    if (!action) return null;
+    state.pdfLibraryRequestActions.delete(responseId);
+    state.pdfLibraryPendingActions.delete(action.key);
+    const selector = `[data-output-action-key="${CSS.escape(action.key)}"]`;
+    const currentTarget = content.querySelector?.(selector);
+    setPdfLibraryActionBusy(action.target, false);
+    if (currentTarget && currentTarget !== action.target) setPdfLibraryActionBusy(currentTarget, false);
+    const focusTarget = currentTarget ?? action.target;
+    if (action.restoreFocus && focusTarget?.focus && (!document.activeElement || document.activeElement === document.body)) focusTarget.focus();
+    return action;
+  };
+  const pdfLibraryActionError = (code) => ({
+    invalid_output_action: "The output action was invalid. Refresh PDF Library and try again.",
+    output_not_found: "This PDF was moved or deleted. Refresh PDF Library or rebuild the output.",
+    output_not_previewable: "This PDF is invalid and cannot be previewed. Open its folder to inspect or rebuild it.",
+    output_folder_not_found: "The Book output folder is unavailable. Refresh PDF Library or rebuild an output.",
+    output_folder_inconsistent: "Cover and Interior are not in the expected Book output folder. Rebuild the outputs before opening the folder.",
+    output_launch_failed: "Windows could not open this output. Check the file association or folder permissions and try again."
+  })[code] ?? "The output action failed. Refresh PDF Library and try again.";
   const updatePhase = () => valueFor(state.updateSnapshot, "phase", "Idle");
   const updateIsBusy = () => ["Checking", "Downloading", "Verifying", "Installing"].includes(updatePhase());
   const stopUpdatePolling = () => { if (state.updatePollTimer !== null && window.clearInterval) window.clearInterval(state.updatePollTimer); state.updatePollTimer = null; };
@@ -1306,30 +1373,37 @@
     const pageItems = library.slice(pageStart, pageStart + pdfLibraryPageSize);
     const start = library.length ? pageStart + 1 : 0;
     const end = Math.min(pageStart + pdfLibraryPageSize, library.length);
-    const actions = (summary, output, compact = false) => `<div class="output-actions"><button class="button-primary" data-action="preview-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}" title="${valueFor(output, "previewState", "Missing") === "Ready" ? "Open lightweight preview PDF" : "Preview unavailable; opens original PDF"}">Preview</button><button class="button-secondary" data-action="open-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">${compact ? "Original" : "Open original"}</button><button class="button-secondary" data-action="reveal-output" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">${compact ? "Reveal" : "Reveal in Explorer"}</button><button class="button-secondary" data-action="copy-output-path" data-book-id="${escapeHtml(valueFor(valueFor(summary, "bookId", {}), "value", ""))}" data-artifact-reference="${escapeHtml(valueFor(output, "artifactReference", ""))}">${compact ? "Copy" : "Copy path"}</button></div>`;
     const outputRow = (summary, output) => {
       const pageCount = valueFor(output, "pageCount", "—");
       const dimensions = valueFor(output, "widthInches", null) ? `${inches(valueFor(output, "widthInches", 0))} × ${inches(valueFor(output, "heightInches", 0))} in` : "—";
       const fileName = valueFor(output, "fileName", "PDF output");
-      const isInterior = valueFor(output, "artifactKind", "Unknown") === "Interior";
-      const provenance = isInterior ? valueFor(productionSummaryFor(summary), "interiorOutputKind", "Legacy") : "";
-      const provenanceBadge = isInterior ? ` ${badge(provenance)}` : "";
-      return `<li class="pdf-library-file"><div class="pdf-library-file-mark">PDF</div><div class="pdf-library-file-copy"><div class="pdf-library-file-title"><strong title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</strong><span class="pdf-library-file-status">${badge(valueFor(output, "verificationStatus", "Available"))}${provenanceBadge}</span></div><small>${escapeHtml(String(pageCount))} pages · ${escapeHtml(dimensions)} · ${fileSize(valueFor(output, "fileSizeBytes", 0))}</small>${actions(summary, output, state.pdfLibraryView === "grid")}</div></li>`;
+      const kind = valueFor(output, "artifactKind", "Unknown");
+      const verification = valueFor(output, "verificationStatus", "Available");
+      const previewable = ["Verified", "Available"].includes(verification);
+      const id = valueFor(valueFor(summary, "bookId", {}), "value", "");
+      const artifactReference = valueFor(output, "artifactReference", "");
+      const actionKey = `preview:${id}:${artifactReference}`;
+      const pending = state.pdfLibraryPendingActions.has(actionKey);
+      const statusMarkup = previewable ? "" : `<span class="pdf-library-file-status">${escapeHtml(displayStatus(verification))}</span>`;
+      const pageLabel = pageCount === 1 ? "page" : "pages";
+      return `<li class="pdf-library-file"><button type="button" class="pdf-library-file-button${previewable ? "" : " is-unavailable"}" data-action="preview-output" data-book-id="${escapeHtml(id)}" data-artifact-reference="${escapeHtml(artifactReference)}" data-output-action-key="${escapeHtml(actionKey)}" data-output-idle-label="Preview ›" data-output-busy-label="Opening…" title="${escapeHtml(fileName)}" aria-busy="${pending}" ${previewable && !pending ? "" : "disabled"}><span class="pb-visually-hidden">Preview </span><span class="pdf-library-file-copy"><span class="pdf-library-file-title"><strong>${escapeHtml(kind)}</strong>${statusMarkup}</span><span class="pdf-library-file-meta">${escapeHtml(String(pageCount))} ${pageLabel} · ${escapeHtml(dimensions)} · ${fileSize(valueFor(output, "fileSizeBytes", 0))}</span></span><span class="pdf-library-file-action" data-output-action-label>${pending ? "Opening…" : "Preview ›"}</span></button></li>`;
     };
     const bookCard = ({ book, summary }) => {
       const name = pdfLibraryBookName(book, summary);
       const thumbnail = bookThumbnailMarkup(book, summary, "Cover unavailable");
-      const outputs = valueFor(summary, "outputSummaries", []);
-      const totalBytes = pdfLibraryOutputSize(summary);
-      const generatedAt = pdfLibraryGeneratedAt(summary);
-      return `<article class="pdf-library-book pdf-library-book-${state.pdfLibraryView}" data-pdf-book-id="${escapeHtml(name)}"><span class="pdf-library-book-preview">${thumbnail}</span><header class="pdf-library-book-header"><div><div class="pdf-library-title-row"><h2>${escapeHtml(name)}</h2><span class="status-badge status-good">PDF ready</span></div><p>${outputs.length} ${outputs.length === 1 ? "PDF" : "PDFs"} · ${fileSize(totalBytes)} · ${dateTime(generatedAt ? new Date(generatedAt).toISOString() : null)}</p></div></header><ul class="pdf-library-files">${outputs.map((output) => outputRow(summary, output)).join("")}</ul></article>`;
+      const outputs = pdfLibraryOutputs(summary);
+      const id = valueFor(valueFor(summary, "bookId", {}), "value", "");
+      const actionKey = `folder:${id}`;
+      const pending = state.pdfLibraryPendingActions.has(actionKey);
+      const folderAvailable = outputs.some((output) => valueFor(output, "verificationStatus", "Missing") !== "Missing");
+      return `<article class="pdf-library-book pdf-library-book-${state.pdfLibraryView}" data-pdf-book-id="${escapeHtml(name)}"><span class="pdf-library-book-preview">${thumbnail}</span><header class="pdf-library-book-header"><h2 title="${escapeHtml(name)}">${escapeHtml(name)}</h2></header><ul class="pdf-library-files">${outputs.map((output) => outputRow(summary, output)).join("")}</ul><footer class="pdf-library-book-footer"><button type="button" class="button-secondary pdf-library-open-folder" data-action="open-output-folder" data-book-id="${escapeHtml(id)}" data-output-action-key="${escapeHtml(actionKey)}" data-output-idle-label="Open Folder" data-output-busy-label="Opening…" aria-busy="${pending}" ${folderAvailable && !pending ? "" : "disabled"}><span data-output-action-label>${pending ? "Opening…" : "Open Folder"}</span></button></footer></article>`;
     };
     const empty = eligibleTotal === 0
       ? `<section class="pdf-library-empty"><strong>No completed PDFs yet.</strong><p>Build a Cover PDF or Final Interior PDF to make it appear here.</p></section>`
       : `<section class="pdf-library-empty"><strong>No PDF Books match your search.</strong><p>Try a different Book name.</p></section>`;
     const pagination = library.length ? `<footer class="book-pagination pdf-library-pagination" data-pdf-library-total-pages="${totalPages}"><span>${start}–${end} of ${library.length}</span><div><button class="button-secondary" data-action="pdf-library-page" data-pdf-library-page="first" ${state.pdfLibraryPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="pdf-library-page" data-pdf-library-page="previous" ${state.pdfLibraryPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.pdfLibraryPage} of ${totalPages}</span><button class="button-secondary" data-action="pdf-library-page" data-pdf-library-page="next" ${state.pdfLibraryPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="pdf-library-page" data-pdf-library-page="last" ${state.pdfLibraryPage === totalPages ? "disabled" : ""}>Last</button></div></footer>` : "";
     const results = library.length ? `<section class="${state.pdfLibraryView === "grid" ? "pdf-library-grid" : "pdf-library-list"}">${pageItems.map(bookCard).join("")}</section>` : empty;
-    content.innerHTML = `<section class="pdf-library-page"><div class="page-header"><div><h1>PDF Library</h1><p>Books with local PDF output.</p></div></div><div class="pdf-library-toolbar"><label class="field"><span>Search Books</span><input class="control" type="search" value="${escapeHtml(state.pdfLibrarySearch)}" placeholder="Search Books..." data-action="pdf-library-search"></label><label class="field pdf-library-sort"><span>Sort</span><select class="control" data-action="pdf-library-sort"><option value="newest" ${state.pdfLibrarySort === "newest" ? "selected" : ""}>Newest</option><option value="name" ${state.pdfLibrarySort === "name" ? "selected" : ""}>Name</option><option value="size" ${state.pdfLibrarySort === "size" ? "selected" : ""}>Size</option></select></label><div class="asset-view-toggle" aria-label="PDF Library view"><button class="${state.pdfLibraryView === "grid" ? "active" : ""}" data-action="pdf-library-view" data-pdf-library-view="grid" aria-pressed="${state.pdfLibraryView === "grid"}">Grid</button><button class="${state.pdfLibraryView === "list" ? "active" : ""}" data-action="pdf-library-view" data-pdf-library-view="list" aria-pressed="${state.pdfLibraryView === "list"}">List</button></div></div><section class="pdf-library-results"><div class="pdf-library-grid-scroll">${results}</div>${pagination}</section></section>`;
+    content.innerHTML = `<section class="pdf-library-page"><div class="page-header"><div><h1>PDF Library</h1><p>Select Cover or Interior to open it in your default PDF app.</p></div></div><div class="pdf-library-toolbar"><label class="field"><span>Search Books</span><input class="control" type="search" value="${escapeHtml(state.pdfLibrarySearch)}" placeholder="Search Books..." data-action="pdf-library-search"></label><label class="field pdf-library-sort"><span>Sort</span><select class="control" data-action="pdf-library-sort"><option value="newest" ${state.pdfLibrarySort === "newest" ? "selected" : ""}>Newest</option><option value="name" ${state.pdfLibrarySort === "name" ? "selected" : ""}>Name</option><option value="size" ${state.pdfLibrarySort === "size" ? "selected" : ""}>Size</option></select></label><div class="asset-view-toggle" aria-label="PDF Library view"><button class="${state.pdfLibraryView === "grid" ? "active" : ""}" data-action="pdf-library-view" data-pdf-library-view="grid" aria-pressed="${state.pdfLibraryView === "grid"}">Grid</button><button class="${state.pdfLibraryView === "list" ? "active" : ""}" data-action="pdf-library-view" data-pdf-library-view="list" aria-pressed="${state.pdfLibraryView === "list"}">List</button></div></div><p class="pdf-library-feedback ${state.pdfLibraryFeedbackError ? "is-error" : ""}" data-pdf-library-feedback role="${state.pdfLibraryFeedbackError ? "alert" : "status"}" ${state.pdfLibraryFeedback ? "" : "hidden"}>${escapeHtml(state.pdfLibraryFeedback)}</p><section class="pdf-library-results"><div class="pdf-library-grid-scroll">${results}</div>${pagination}</section></section>`;
     if (state.pdfLibrarySearchFocused) {
       const input = content.querySelector('[data-action="pdf-library-search"]');
       if (input) {
@@ -1732,7 +1806,8 @@
       send("process.start", { bookIds: [...state.selectedBookIds], mode: "interior-only" });
     }
     if (action === "cancel-process") send("process.cancel");
-    if (action === "preview-output") send("book.output.preview", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
+    if (action === "preview-output") beginPdfLibraryAction("book.output.preview", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference }, `preview:${target.dataset.bookId}:${target.dataset.artifactReference}`, target);
+    if (action === "open-output-folder") beginPdfLibraryAction("book.output.open-folder", { bookId: target.dataset.bookId }, `folder:${target.dataset.bookId}`, target);
     if (action === "open-output") send("book.output.open", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
     if (action === "reveal-output") send("book.output.reveal", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
     if (action === "copy-output-path") send("book.output.copy-path", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
@@ -1825,6 +1900,7 @@
     const responseId = valueFor(response, "id", "");
     const requestCommand = state.pendingCommands.get(responseId) ?? "";
     const validationRequestBrand = state.brandValidationRequestBrands.get(responseId) ?? "";
+    const pdfLibraryAction = finishPdfLibraryAction(responseId);
     state.pendingCommands.delete(responseId);
     state.brandValidationRequestBrands.delete(responseId);
     const ok = valueFor(response, "ok", false);
@@ -1969,9 +2045,14 @@
       state.productionRefreshAwaitingSnapshot = true;
       beginApplicationRefresh();
     } else if (ok && command === "book.output.action.completed") {
-      status.textContent = valueFor(valueFor(response, "payload", {}), "fallbackToOriginal", false)
-        ? "Preview unavailable; opened original PDF"
-        : "Output action completed";
+      const fallback = valueFor(valueFor(response, "payload", {}), "fallbackToOriginal", false);
+      const message = fallback
+        ? "Lightweight preview unavailable; opened the original PDF."
+        : requestCommand === "book.output.open-folder"
+          ? "Opened the Book output folder."
+          : "Opened the PDF preview.";
+      setPdfLibraryFeedback(message);
+      status.textContent = message;
     } else if (ok && command === "diagnostics.snapshot") {
       window.uiDiagnostics = valueFor(response, "payload", []);
       if (currentRoute() === "diagnostics") render("diagnostics", false);
@@ -1986,6 +2067,12 @@
         stopUpdatePolling();
       }
       const error = valueFor(response, "error", "unexpected response");
+      if (pdfLibraryAction) {
+        const message = pdfLibraryActionError(String(error).split(":", 1)[0]);
+        setPdfLibraryFeedback(message, true);
+        status.textContent = message;
+        return;
+      }
       if (requestCommand === "book.brand.templates.copy") {
         state.brandTemplateCopyPending = false;
         if (state.bookDrawerOpen && currentRoute() === "books") refreshBookDrawerBody();

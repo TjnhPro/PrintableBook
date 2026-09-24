@@ -77,7 +77,8 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains(".book-drawer-preview { display:grid; width:64px; height:64px", layout, StringComparison.Ordinal);
         Assert.Contains(".book-drawer-preview { width:48px; height:48px; }", layout, StringComparison.Ordinal);
         Assert.Contains("--pb-book-card-preview: 4 / 3", layout, StringComparison.Ordinal);
-        Assert.Contains(".pdf-library-book-grid .pdf-library-book-preview { aspect-ratio:16 / 9; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".pdf-library-book-grid .pdf-library-book-preview { aspect-ratio:2 / 1; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".pdf-library-book-preview img { width:100%; height:100%; object-fit:contain;", layout, StringComparison.Ordinal);
     }
 
     [Fact]
