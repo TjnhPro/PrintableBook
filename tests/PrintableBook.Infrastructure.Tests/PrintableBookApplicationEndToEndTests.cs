@@ -42,8 +42,8 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new JsonInteriorShuffleStore(fileSystem),
             CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
-            new PdfSharpPrintableBookPdfExporter(),
-            new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
+            new RejectingPdfExporter(),
+            new RejectingOutputPublisher());
 
         var result = await processor.ProcessBookAsync(
             CreateCommand("corrupt-state-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly });
@@ -196,7 +196,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ProcessBooksAsync_processes_book_interior_without_a_cover_and_publishes_only_the_interior_pdf()
+    public async Task ProcessBooksAsync_prepares_book_interior_without_a_cover_or_publishing_a_pdf()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "InteriorOnlyBook"));
         await CreateInteriorOnlyBookFixtureAsync(bookDirectory);
@@ -223,14 +223,91 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var bookResult = Assert.Single(result.Books);
         Assert.Equal(BookProcessingStatus.Completed, bookResult.Status);
         Assert.Null(bookResult.PublishedOutputs);
-        Assert.NotNull(bookResult.PublishedInteriorOutput);
-        Assert.True(File.Exists(bookResult.PublishedInteriorOutput!.InteriorPdf.Value));
-        using var interiorPdf = PdfReader.Open(bookResult.PublishedInteriorOutput.InteriorPdf.Value);
-        Assert.Equal(2, interiorPdf.Pages.Count);
+        Assert.Null(bookResult.PublishedInteriorOutput);
         var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
         var state = await stateStore.LoadAsync(workspace);
-        Assert.Equal([bookResult.PublishedInteriorOutput.InteriorPdf.Value], state!.PublishedArtifactReferences);
+        Assert.Empty(state!.PublishedArtifactReferences!);
+        Assert.Equal(2, state.PublishedInteriorPreviews!.Count);
+        Assert.False(File.Exists(Path.Combine(command.FinalOutputRoot.Value, $"{command.BookId.Value} - Interior.pdf")));
+        Assert.False(File.Exists(Path.Combine(command.FinalOutputRoot.Value, $"{command.BookId.Value} - Interior_thumbnail.pdf")));
         Assert.Contains(await stateStore.LoadLogsAsync(workspace), entry => entry.Event == "cover-validation.skipped");
+    }
+
+    [Fact]
+    public async Task ProcessBookAsync_clears_processed_previews_after_a_pages_only_batch_failure_but_preserves_pdf_provenance()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "FailedPreparationBook"));
+        await CreateInteriorOnlyBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var command = CreateCommand("failed-preparation-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        var publishedAt = DateTimeOffset.Parse("2026-09-22T10:00:00Z");
+        await stateStore.SaveAsync(workspace, BookProcessingState.NotStarted(command.BookId)
+            .RecordPublishedInterior("existing - Interior.pdf", InteriorOutputKind.Production, publishedAt, "existing - Interior_thumbnail.pdf")
+            .RecordProcessedInteriorPreviews([new PublishedInteriorPreview("page-0001", "old-preview.png")]));
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem),
+            workspaceFactory,
+            stateStore,
+            new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem),
+            new RejectingInteriorPagePipeline(),
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new RejectingPdfExporter(),
+            new RejectingOutputPublisher());
+
+        var result = await processor.ProcessBookAsync(command);
+
+        Assert.Equal(BookProcessingStatus.Failed, result.Status);
+        var state = (await stateStore.LoadAsync(workspace))!;
+        Assert.Empty(state.PublishedInteriorPreviews!);
+        Assert.Equal(InteriorOutputKind.Production, state.PublishedInteriorKind);
+        Assert.Equal(publishedAt, state.PublishedInteriorAtUtc);
+        Assert.Equal("existing - Interior_thumbnail.pdf", state.PublishedInteriorPreviewReference);
+        Assert.Contains("existing - Interior.pdf", state.PublishedArtifactReferences!);
+    }
+
+    [Fact]
+    public async Task ProcessBookAsync_clears_processed_previews_after_pages_only_cancellation_but_preserves_pdf_provenance()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "CancelledPreparationBook"));
+        await CreateInteriorOnlyBookFixtureAsync(bookDirectory);
+        var fileSystem = new PhysicalFileSystem();
+        var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var command = CreateCommand("cancelled-preparation-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        var publishedAt = DateTimeOffset.Parse("2026-09-22T10:30:00Z");
+        await stateStore.SaveAsync(workspace, BookProcessingState.NotStarted(command.BookId)
+            .RecordPublishedInterior("existing - Interior.pdf", InteriorOutputKind.Production, publishedAt, "existing - Interior_thumbnail.pdf")
+            .RecordProcessedInteriorPreviews([new PublishedInteriorPreview("page-0001", "old-preview.png")]));
+        var blockingPipeline = new BlockingInteriorPagePipeline(CreatePagePipeline());
+        var processor = new WorkspaceBookProcessingQueueBookProcessor(
+            new BookSourceScanner(fileSystem),
+            workspaceFactory,
+            stateStore,
+            new MagickCoverValidator(),
+            new JsonInteriorShuffleStore(fileSystem),
+            blockingPipeline,
+            new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new RejectingPdfExporter(),
+            new RejectingOutputPublisher());
+        using var cancellation = new CancellationTokenSource();
+
+        var processing = processor.ProcessBookAsync(command, cancellationToken: cancellation.Token).AsTask();
+        await blockingPipeline.WaitUntilStartedAsync();
+        cancellation.Cancel();
+        var result = await processing;
+
+        Assert.Equal(BookProcessingStatus.Cancelled, result.Status);
+        var state = (await stateStore.LoadAsync(workspace))!;
+        Assert.Empty(state.PublishedInteriorPreviews!);
+        Assert.Equal(InteriorOutputKind.Production, state.PublishedInteriorKind);
+        Assert.Equal(publishedAt, state.PublishedInteriorAtUtc);
+        Assert.Equal("existing - Interior_thumbnail.pdf", state.PublishedInteriorPreviewReference);
+        Assert.Contains("existing - Interior.pdf", state.PublishedArtifactReferences!);
     }
 
     [Fact]
@@ -324,9 +401,9 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var result = await processor.ProcessBookAsync(command);
 
         Assert.Equal(BookProcessingStatus.Completed, result.Status);
-        using var interiorPdf = PdfReader.Open(result.PublishedInteriorOutput!.InteriorPdf.Value);
-        Assert.Equal(2, interiorPdf.Pages.Count);
+        Assert.Null(result.PublishedInteriorOutput);
         var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        Assert.Equal(2, (await stateStore.LoadAsync(workspace))!.PublishedInteriorPreviews!.Count);
         var shuffle = await shuffleStore.LoadAsync(workspace);
         Assert.All(shuffle!.Entries, entry => Assert.Contains(Path.Combine("Clone book", "Book interior"), entry.Page.Value, StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(shuffle.Entries, entry => entry.Page.Value.Contains(Path.Combine("Main book", "Book interior"), StringComparison.OrdinalIgnoreCase));
@@ -612,10 +689,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var result = await processor.ProcessBookAsync(command);
 
         Assert.Equal(BookProcessingStatus.Completed, result.Status);
-        using (var interiorPdf = PdfReader.Open(result.PublishedInteriorOutput!.InteriorPdf.Value))
-        {
-            Assert.Equal(8, interiorPdf.Pages.Count);
-        }
+        Assert.Null(result.PublishedInteriorOutput);
         var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
         Assert.True(File.Exists(Path.Combine(workspace.ProcessedDirectory.Value, "intro", "intro-0001.png")));
         Assert.True(File.Exists(Path.Combine(workspace.ProcessedDirectory.Value, "intro", "intro-0002.png")));
@@ -691,19 +765,30 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         Assert.Equal(2, productionState.ProcessedPages!.Count);
         var publishedState = await stateStore.LoadAsync(workspace);
         Assert.Equal(InteriorOutputKind.Production, publishedState!.PublishedInteriorKind);
+        var publishedPdf = productionResult.PublishedInteriorOutput.InteriorPdf.Value;
+        var publishedPdfBytes = await File.ReadAllBytesAsync(publishedPdf);
+        var publishedPdfTimestamp = File.GetLastWriteTimeUtc(publishedPdf);
+        var publishedAt = publishedState.PublishedInteriorAtUtc;
+        var publishedPreview = publishedState.PublishedInteriorPreviewReference;
+        var productionOutput = productionState.InteriorOutput;
 
-        var baseResult = await processor.ProcessBookAsync(command with
+        var preparationResult = await processor.ProcessBookAsync(command with
         {
             Mode = BookProcessingMode.InteriorOnly,
             BackgroundPage = null,
             ProductionPrefixSources = null
         });
 
-        Assert.Equal(BookProcessingStatus.Completed, baseResult.Status);
-        Assert.Equal(productionResult.PublishedInteriorOutput.InteriorPdf, baseResult.PublishedInteriorOutput!.InteriorPdf);
-        Assert.Equal(InteriorOutputKind.Base, (await stateStore.LoadAsync(workspace))!.PublishedInteriorKind);
-        using var basePdf = PdfReader.Open(baseResult.PublishedInteriorOutput.InteriorPdf.Value);
-        Assert.Equal(2, basePdf.Pages.Count);
+        Assert.Equal(BookProcessingStatus.Completed, preparationResult.Status);
+        Assert.Null(preparationResult.PublishedInteriorOutput);
+        var stateAfterPreparation = (await stateStore.LoadAsync(workspace))!;
+        Assert.Equal(InteriorOutputKind.Production, stateAfterPreparation.PublishedInteriorKind);
+        Assert.Equal(publishedAt, stateAfterPreparation.PublishedInteriorAtUtc);
+        Assert.Equal(publishedPreview, stateAfterPreparation.PublishedInteriorPreviewReference);
+        Assert.Contains(publishedPdf, stateAfterPreparation.PublishedArtifactReferences!);
+        Assert.Equal(publishedPdfBytes, await File.ReadAllBytesAsync(publishedPdf));
+        Assert.Equal(publishedPdfTimestamp, File.GetLastWriteTimeUtc(publishedPdf));
+        Assert.Equal(productionOutput, (await productionStateStore.LoadAsync(workspace)).InteriorOutput);
     }
 
     [Fact]
@@ -733,12 +818,10 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var result = await processor.ProcessBookAsync(command);
 
         Assert.Equal(BookProcessingStatus.Completed, result.Status);
+        Assert.Null(result.PublishedInteriorOutput);
         var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
         Assert.False(Directory.Exists(Path.Combine(workspace.WorkingDirectory.Value, "cache", "intro-0001")));
-        using var interiorPdf = PdfReader.Open(result.PublishedInteriorOutput!.InteriorPdf.Value);
-        Assert.Equal(3, interiorPdf.Pages.Count);
-        Assert.Equal(2588d / 300d * 72d, interiorPdf.Pages[0].Width.Point, precision: 3);
-        Assert.Equal(2625d / 300d * 72d, interiorPdf.Pages[0].Height.Point, precision: 3);
+        Assert.Equal(2, (await new JsonBookWorkspaceStateStore(fileSystem).LoadAsync(workspace))!.PublishedInteriorPreviews!.Count);
     }
 
     [Fact]
@@ -938,6 +1021,33 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         public Task WaitUntilStartedAsync() => started.Task;
 
         public void Release() => release.TrySetResult();
+    }
+
+    private sealed class RejectingInteriorPagePipeline : IInteriorPagePipeline
+    {
+        public ValueTask<InteriorPageProcessingResult> ProcessAsync(
+            InteriorPagePipelineRequest request,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromException<InteriorPageProcessingResult>(
+                new InteriorPageProcessingException(request.PageId, "test", new InvalidOperationException("Expected page failure."), request.ProcessingKind));
+    }
+
+    private sealed class RejectingPdfExporter : IPrintableBookPdfExporter
+    {
+        public ValueTask<PrintableBookPdfExportResult> ExportAsync(PrintableBookPdfExportRequest request, CancellationToken cancellationToken = default) =>
+            ValueTask.FromException<PrintableBookPdfExportResult>(new InvalidOperationException("PDF export must not run."));
+
+        public ValueTask<InteriorPdfExportResult> ExportInteriorAsync(InteriorPdfExportRequest request, CancellationToken cancellationToken = default) =>
+            ValueTask.FromException<InteriorPdfExportResult>(new InvalidOperationException("Interior PDF export must not run."));
+    }
+
+    private sealed class RejectingOutputPublisher : IBookOutputPublisher
+    {
+        public ValueTask<PublishedBookOutputs> PublishAsync(BookOutputPublicationRequest request, CancellationToken cancellationToken = default) =>
+            ValueTask.FromException<PublishedBookOutputs>(new InvalidOperationException("Output publication must not run."));
+
+        public ValueTask<PublishedInteriorOutput> PublishInteriorAsync(InteriorOutputPublicationRequest request, CancellationToken cancellationToken = default) =>
+            ValueTask.FromException<PublishedInteriorOutput>(new InvalidOperationException("Interior output publication must not run."));
     }
 
     private sealed class CancellingAfterPublishOutputPublisher(

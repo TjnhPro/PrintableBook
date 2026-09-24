@@ -35,11 +35,11 @@ Intro pages
 randomized Interior pages
 ```
 
-The same exporter interleaves one background after every artwork when `HasBackground=true`. Both Base and Production publish atomically to `Output/<BookId> - Interior.pdf`; persisted provenance identifies which workflow last replaced that file.
+The same exporter interleaves one background after every artwork when `HasBackground=true`. New Interior PDFs are published only by `ProductionInterior` / **Build Final Interior**, atomically to `Output/<BookId> - Interior.pdf`. `InteriorOnly` / **Process Interior** stops after logical assembly and records processed-page previews without invoking this exporter. Existing `Base` and `Legacy` provenance remains readable for backward compatibility, but pages-only processing never rewrites it.
 
 ## Lightweight preview companions
 
-Mỗi lần publish thành công, exporter cố gắng tạo thêm một PDF preview từ chính page plan/raster inputs của PDF chính:
+Mỗi lần Cover hoặc Final Interior publish thành công, exporter cố gắng tạo thêm một PDF preview từ chính page plan/raster inputs của PDF chính:
 
 ```text
 <BookId> - Cover_thumbnail.pdf      # 1 trang, raster 2726×1313

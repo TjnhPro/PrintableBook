@@ -55,6 +55,9 @@ public sealed record BookProcessingQueueBookResult(
 
     public static BookProcessingQueueBookResult CompletedInterior(BookId bookId, PublishedInteriorOutput output) =>
         new(bookId, BookProcessingStatus.Completed, null, null, output);
+
+    public static BookProcessingQueueBookResult CompletedPreparation(BookId bookId) =>
+        new(bookId, BookProcessingStatus.Completed, null, null, null);
 }
 
 public sealed record BookProcessingQueueResult(bool IsAlreadyRunning, IReadOnlyList<BookProcessingQueueBookResult> Books)

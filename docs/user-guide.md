@@ -101,13 +101,13 @@ Filter mặc định **All**; có thể lọc **Frame** hoặc **No Frame**. Ch�
 
 ## 8. Interior pages preview
 
-Sau một lần **Process Interior** hoàn thành, tab **Interior pages** là preview chỉ đọc của các page final đã publish. Nếu chưa process, tab hiển thị trạng thái không có page.
+Sau một lần **Process Interior** hoàn thành, tab **Interior pages** là preview chỉ đọc của các normal Interior page đã chuẩn bị. Action này không tạo hoặc thay thế PDF. Nếu chưa process, tab hiển thị trạng thái không có page.
 
 ![Processed pages](assets/screenshots/0.1/07-book-processed-pages.png)
 
 ## 8A. Production Assets
 
-Tab **Production** là workflow bổ sung; **Process Interior** cũ vẫn giữ nguyên.
+Tab **Production** sở hữu workflow publish PDF. **Process Interior** chỉ chuẩn bị Intro/Interior pages để kiểm tra nhanh; **Build Final Interior** là action duy nhất tạo mới hoặc thay thế Interior PDF.
 
 1. Upload **Final Cover**. File phải là PNG `5242 × 2626 px`.
 2. Upload **Interior Cover** và **Book Owner**. Hai file này không bắt buộc kích thước input cố định.
@@ -124,7 +124,7 @@ Interior Cover
 → randomized Interior
 ```
 
-Khi `HasBackground=true`, background được chèn sau từng trang artwork ở cả bốn nhóm. Build thành công thay atomically file `<BookId> - Interior.pdf`; build lỗi giữ PDF trước đó. Chạy **Process Interior** sau đó sẽ chủ động ghi đè cùng filename bằng bản `Base`. PDF Library hiển thị provenance `Production`, `Base`, hoặc `Legacy`.
+Khi `HasBackground=true`, background được chèn sau từng trang artwork ở cả bốn nhóm. Build thành công thay atomically file `<BookId> - Interior.pdf`; build lỗi giữ PDF trước đó. Chạy **Process Interior** sau đó chỉ refresh processed-page previews và giữ nguyên PDF, companion thumbnail, build time và provenance. PDF Library vẫn có thể hiển thị `Base` hoặc `Legacy` cho output cũ; Interior PDF được build mới có provenance `Production`.
 
 ## 9. Chọn Books để Process
 
@@ -142,7 +142,7 @@ Tab **Selected queue** cho biết Book đang chờ. Có paging cho queue dài v�
 
 ## 11. Theo dõi Processing
 
-Tab **Overview** hiển thị current Book, current stage, worker count và page progress. Bạn có thể chuyển sang Books/PDF Library; session vẫn chạy nền. **Cancel session** gửi cancellation cooperative.
+Tab **Overview** hiển thị current Book, current stage, worker count và page progress. Với **Process Interior**, stage là Preparing → Intro pages → Interior pages → Validating pages → Saving previews, không có PDF export. Bạn có thể chuyển sang Books/PDF Library; session vẫn chạy nền. **Cancel session** gửi cancellation cooperative. Nếu cancel/fail sau khi page work bắt đầu, preview dở dang bị xóa còn PDF hiện có được giữ nguyên.
 
 ![Processing](assets/screenshots/0.1/09-process-running.png)
 
@@ -154,13 +154,13 @@ Khi terminal, Overview hiển thị summary Completed/Failed và queue snapshot 
 
 **PDF Library** liệt kê Book đã có PDF. **Preview** mở companion PDF nhẹ hơn khi có; Cover preview dùng raster `2726×1313`, còn Interior preview vẫn có đầy đủ trang đúng thứ tự nhưng mỗi trang dùng raster `600×609`. Nếu preview thiếu hoặc không hợp lệ, ứng dụng mở PDF chính và báo fallback. **Open original**, **Reveal** và **Copy** luôn thao tác với PDF chính. Grid/List, Search và Sort chỉ thay đổi cách xem output hiện có.
 
-Các file preview nằm cạnh PDF chính với hậu tố `_thumbnail.pdf`. Chúng được tạo lại ở lần build/process tiếp theo, không backfill tự động cho Book cũ và không phải file giao production.
+Các file preview nằm cạnh PDF chính với hậu tố `_thumbnail.pdf`. Chúng được tạo lại ở lần **Build Cover PDF** hoặc **Build Final Interior** tiếp theo, không backfill tự động cho Book cũ và không phải file giao production. **Process Interior** không tạo companion PDF.
 
 ![PDF Library](assets/screenshots/0.1/11-pdf-library.png)
 
 ## 13. Clear Cache
 
-Trong **Books**, nhấn **Clear Cache** để xóa raster trung gian của Book Completed có output hợp lệ. PDF final và các companion `_thumbnail.pdf` vẫn được giữ; workspace state, classification metadata và setting không bị xóa. Reprocess sẽ tạo lại raster cần thiết.
+Trong **Books**, nhấn **Clear Cache** để xóa raster trung gian của Book `Completed` có output hợp lệ hoặc processed previews. Nếu state ghi nhận output nhưng file đã mất, Book được skip để tránh che lỗi output. PDF final, companion `_thumbnail.pdf`, provenance, workspace state, classification metadata và setting vẫn được giữ; processed-preview manifest được xóa. Process/build tiếp theo sẽ tạo lại raster cần thiết.
 
 ## 14. Settings
 

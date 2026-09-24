@@ -111,8 +111,8 @@ Working 2550×2550
 Final 2588×2625
         ↓
 shuffle / assembly
-        ↓
-Interior PDF
+        ├─ InteriorOnly → processed-page preview manifest (không PDF)
+        └─ ProductionInterior → PDF export + atomic publish
 ```
 
 `Working 2550×2550` is the **Working Area**: a square intermediate canvas for centering the artwork. `Final 2588×2625` is the **Final Interior Page**: the printable raster embedded in the Interior PDF. They are different contracts. The Interior PDF MediaBox is derived only from `Final Interior Page ÷ DPI`; at the default 300 DPI it is `621.12×630 pt` (`8.6266667×8.75 in`). The Working Area must never define PDF geometry.
@@ -166,7 +166,7 @@ interior-shuffled-2
 background
 ```
 
-Production Interior dùng cùng assembler/exporter nhưng thêm hai leading page có type riêng. Hai source luôn được process fresh bằng policy `forced-no-frame-v1`/CropArt; stable page identity và canonical output filename là hai contract tách biệt. Thứ tự là `interior_cover`, `interior_book_owner`, Intro, rồi Interior shuffle. Background, nếu bật, được xen sau mọi artwork kể cả hai leading page. Mode cũ `InteriorOnly` không nhận leading page và không đổi behavior.
+Production Interior dùng cùng page pipeline/assembler nhưng thêm hai leading page có type riêng rồi mới đi qua exporter/publisher. Hai source luôn được process fresh bằng policy `forced-no-frame-v1`/CropArt; stable page identity và canonical output filename là hai contract tách biệt. Thứ tự là `interior_cover`, `interior_book_owner`, Intro, rồi Interior shuffle. Background, nếu bật, được xen sau mọi artwork kể cả hai leading page. `InteriorOnly` không nhận leading page và dừng sau validated assembly: nó commit normal-Interior preview manifest nhưng không gọi exporter/publisher và không thay đổi PDF/provenance hiện có.
 
 ## Brand validation contract
 
@@ -190,7 +190,7 @@ The manual **Copy Brand Templates** use case is separate from processing. For a 
 - ProductionAction chạy tuần tự và xung đột đối xứng với ProcessingSession/CacheCleanup; exact duplicate key có thể join, action hoặc Book khác bị reject.
 - Cancellation là cooperative: command cancel chuyển task sang `Cancelling`, worker quan sát `CancellationToken` và trạng thái terminal được publish khi unwind hoàn tất.
 
-Snapshot session/worker vẫn observable qua bridge để WebView hiển thị Process và taskbar status. Khi đóng ứng dụng, Desktop dùng graceful-stop có thời hạn; startup recovery chỉ chuyển workspace stale `Running` thành `Interrupted`, không thay đổi Completed/Failed/Cancelled.
+Snapshot session/worker mang theo `BookProcessingMode` và vẫn observable qua bridge để WebView hiển thị đúng stage/copy của Process Interior hoặc Build Final Interior cùng taskbar status. Khi đóng ứng dụng, Desktop dùng graceful-stop có thời hạn; startup recovery chỉ chuyển workspace stale `Running` thành `Interrupted`, không thay đổi Completed/Failed/Cancelled.
 
 ## Cache, output và Clear Cache
 
@@ -198,7 +198,7 @@ Page pipeline có cache stage-aware. `classification.json`, canonical source và
 
 Cache stamp v5 và classification cache v2 lưu policy/origin/detection status riêng. Với Frame, stamp dùng SHA-256 của bản `frame.png` bất biến được stage theo Book run, không dựa riêng vào path/length/timestamp. Frame được validate trước cache fast return; thiếu/unreadable/sai geometry luôn fail closed. Cache schema cũ bị rebuild theo policy mới. Metadata được ghi qua temp file và stamp v5 được commit sau cùng để retry sau cancellation luôn fail closed.
 
-Clear Cache xóa raster nặng (canonical/processed cache) nhưng giữ Book state và metadata classification theo hành vi production hiện tại. PDF đã publish không thuộc cache nên vẫn tồn tại; lần process sau dựng lại cache cần thiết.
+Clear Cache xóa raster nặng (canonical/processed cache) nhưng giữ Book state và metadata classification. Book `Completed` đủ điều kiện khi có processed previews hoặc published output hợp lệ; nếu state ghi nhận output nhưng file bị mất, cleanup vẫn fail closed. Sau cleanup, preview manifest được xóa còn PDF, companion thumbnail và provenance được giữ nguyên; lần process/build sau dựng lại cache cần thiết.
 
 ## Kiểm thử
 

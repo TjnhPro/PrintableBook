@@ -17,6 +17,17 @@ public sealed class BookProcessingQueueProcessorTests
     }
 
     [Fact]
+    public void CompletedPreparation_represents_success_without_a_published_artifact()
+    {
+        var result = BookProcessingQueueBookResult.CompletedPreparation(new BookId("book-one"));
+
+        Assert.Equal(BookProcessingStatus.Completed, result.Status);
+        Assert.Null(result.Failure);
+        Assert.Null(result.PublishedOutputs);
+        Assert.Null(result.PublishedInteriorOutput);
+    }
+
+    [Fact]
     public async Task ProcessAsync_rejects_a_second_queue_while_the_first_queue_owns_the_session_gate()
     {
         var gate = new ProcessingSessionGate();

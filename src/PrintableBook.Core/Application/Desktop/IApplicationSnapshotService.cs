@@ -79,7 +79,8 @@ public sealed class ApplicationSnapshotService(
     IOperationDiagnostics? diagnostics = null,
     IBrandValidationService? brandValidationService = null,
     IProductionWorkspaceStateStore? productionStateStore = null,
-    IBrandMetadataStore? brandMetadataStore = null) : IApplicationSnapshotService
+    IBrandMetadataStore? brandMetadataStore = null,
+    IInteriorShuffleStore? interiorShuffleStore = null) : IApplicationSnapshotService
 {
     private const int MaximumBookSummaryConcurrency = 4;
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
@@ -126,6 +127,7 @@ public sealed class ApplicationSnapshotService(
             brandSummaries.Add(new BrandDesktopSummary(brand.Name, state.Status, state.ValidatedAtUtc, state.Fingerprint, metadata?.Author, metadataStatus, metadataError));
             composedBrands.Add(ApplyValidatedBrandFacts(brand, state));
         }
+        var brandsByName = composedBrands.ToDictionary(brand => brand.Name, StringComparer.Ordinal);
         var summaries = new BookDesktopSummary?[discoverySnapshot.Books.Count];
         await Parallel.ForEachAsync(
             Enumerable.Range(0, discoverySnapshot.Books.Count),
@@ -134,7 +136,7 @@ public sealed class ApplicationSnapshotService(
                 MaxDegreeOfParallelism = MaximumBookSummaryConcurrency,
                 CancellationToken = cancellationToken
             },
-            async (index, token) => summaries[index] = await BuildBookSummaryAsync(discoverySnapshot.Books[index], settings, assignmentTargets, token));
+            async (index, token) => summaries[index] = await BuildBookSummaryAsync(discoverySnapshot.Books[index], settings, assignmentTargets, brandsByName, token));
 
         var completedSummaries = summaries
             .Select(summary => summary ?? throw new InvalidOperationException("Book summary was not produced."))
@@ -176,6 +178,7 @@ public sealed class ApplicationSnapshotService(
         DiscoveredBook book,
         GlobalSettings settings,
         IReadOnlyDictionary<string, BrandAssignmentTarget> assignmentTargets,
+        IReadOnlyDictionary<string, DiscoveredBrand> brandsByName,
         CancellationToken cancellationToken)
     {
         BookSourceScanResult scan;
@@ -203,6 +206,7 @@ public sealed class ApplicationSnapshotService(
         }
         var state = stateLoad.State ?? BookProcessingState.NotStarted(book.Id);
         assignmentTargets.TryGetValue(state.AssignedBrand ?? string.Empty, out var assignmentTarget);
+        brandsByName.TryGetValue(state.AssignedBrand ?? string.Empty, out var assignedBrand);
         var assignment = BookBrandAssignmentEvaluator.Evaluate(state.AssignedBrand, state.Metadata?.Author, assignmentTarget);
         var coverCandidates = source?.GetAssets(BookAssetKind.Cover).Select(asset => asset.Reference).ToArray() ?? [];
         var hasSelectedCover = coverCandidates.Length == 1 || coverCandidates.Any(candidate => string.Equals(candidate, state.SelectedCoverReference, StringComparison.OrdinalIgnoreCase));
@@ -340,7 +344,7 @@ public sealed class ApplicationSnapshotService(
             ActiveInteriorSourcePageCount: activeInteriorSourcePageCount,
             HasIntro: state.HasIntro,
             SelectedIntroInteriorSourceKeys: state.SelectedIntroInteriorSourceKeys,
-            Production: await DescribeProductionAsync(book.Workspace, state, settings, cancellationToken),
+            Production: await DescribeProductionAsync(book, state, settings, source, assignedBrand, cancellationToken),
             Metadata: state.Metadata,
             AssignedBrand: state.AssignedBrand,
             AssignmentStatus: assignment.Status,
@@ -351,11 +355,14 @@ public sealed class ApplicationSnapshotService(
     }
 
     private async ValueTask<ProductionDesktopSummary> DescribeProductionAsync(
-        BookWorkspace workspace,
+        DiscoveredBook book,
         BookProcessingState bookState,
         GlobalSettings settings,
+        BookSource? bookSource,
+        DiscoveredBrand? assignedBrand,
         CancellationToken cancellationToken)
     {
+        var workspace = book.Workspace;
         var productionState = productionStateStore is null
             ? ProductionWorkspaceState.Empty
             : await productionStateStore.LoadAsync(workspace, cancellationToken);
@@ -428,12 +435,30 @@ public sealed class ApplicationSnapshotService(
             _ => "Legacy"
         };
         var productionInteriorAssets = assets.Where(asset => asset.AssetKind is "interior-cover" or "book-owner").ToArray();
+        var currentInteriorSignature = productionState.InteriorOutput is null
+            ? null
+            : await TryCreateCurrentProductionInteriorSignatureAsync(
+                book,
+                bookState,
+                settings,
+                bookSource,
+                assignedBrand,
+                cancellationToken);
+        var publishedInteriorReference = (bookState.PublishedArtifactReferences ?? [])
+            .FirstOrDefault(reference => Path.GetFileName(reference).EndsWith(" - Interior.pdf", StringComparison.OrdinalIgnoreCase));
+        var publishedInteriorExists = publishedInteriorReference is not null &&
+            await fileSystem.FileExistsAsync(new FileReference(publishedInteriorReference), cancellationToken);
         var interiorOutputStatus = productionInteriorAssets.Any(asset => asset.SourceStatus == "Missing")
             ? "Missing"
             : productionState.InteriorOutput is null
                 ? "Ready to process"
             : assets.Where(asset => asset.AssetKind is "interior-cover" or "book-owner")
                 .Any(asset => asset.ProcessedStatus != "Processed")
+                ? "Stale"
+            : !ProductionInteriorSignature.IsCurrent(productionState.InteriorOutput.InputSignature) ||
+              currentInteriorSignature is null ||
+              !string.Equals(currentInteriorSignature, productionState.InteriorOutput.InputSignature, StringComparison.Ordinal) ||
+              !publishedInteriorExists
                 ? "Stale"
                 : "Processed";
         return new ProductionDesktopSummary(
@@ -443,6 +468,133 @@ public sealed class ApplicationSnapshotService(
             interiorOutputStatus,
             interiorKind,
             bookState.PublishedInteriorAtUtc);
+    }
+
+    private async ValueTask<string?> TryCreateCurrentProductionInteriorSignatureAsync(
+        DiscoveredBook book,
+        BookProcessingState state,
+        GlobalSettings settings,
+        BookSource? source,
+        DiscoveredBrand? assignedBrand,
+        CancellationToken cancellationToken)
+    {
+        if (interiorShuffleStore is null || source is null || assignedBrand is null)
+        {
+            return null;
+        }
+
+        var prefixFacts = new List<ProductionInteriorFileFact>(2);
+        foreach (var kind in new[] { ProductionAssetKind.InteriorCover, ProductionAssetKind.BookOwner })
+        {
+            var fact = await TryCreateProductionInteriorFileFactAsync(
+                kind.ToString(),
+                ProductionWorkspacePaths.SourceFile(book.Workspace, kind),
+                cancellationToken);
+            if (fact is null) return null;
+            prefixFacts.Add(fact);
+        }
+
+        var allInteriorSources = source.GetAssets(BookAssetKind.Interior)
+            .Select(asset =>
+            {
+                var file = new FileReference(asset.Reference);
+                return new
+                {
+                    File = file,
+                    SourceKey = InteriorSourceKey.FromBookRoot(book.Directory, file)
+                };
+            })
+            .ToArray();
+        var selectedIntroKeys = state.HasIntro
+            ? new HashSet<string>(state.SelectedIntroInteriorSourceKeys ?? [], StringComparer.OrdinalIgnoreCase)
+            : [];
+        IReadOnlyList<FileReference> introFiles;
+        if (state.HasIntro)
+        {
+            var byKey = allInteriorSources.ToDictionary(item => item.SourceKey, item => item.File, StringComparer.OrdinalIgnoreCase);
+            var selected = new List<FileReference>(selectedIntroKeys.Count);
+            foreach (var key in state.SelectedIntroInteriorSourceKeys ?? [])
+            {
+                if (!byKey.TryGetValue(key, out var file)) return null;
+                selected.Add(file);
+            }
+            introFiles = selected;
+        }
+        else
+        {
+            var selection = IntroTemplateSelectionResolver.Resolve(assignedBrand.IntroTemplateAssets);
+            if (!selection.IsSuccess) return null;
+            introFiles = selection.Assets.Select(asset => new FileReference(asset.SourceReference)).ToArray();
+        }
+
+        var introFacts = new List<ProductionInteriorFileFact>(introFiles.Count);
+        foreach (var file in introFiles)
+        {
+            var fact = await TryCreateProductionInteriorFileFactAsync("intro", file, cancellationToken);
+            if (fact is null) return null;
+            introFacts.Add(fact);
+        }
+
+        var activeInteriorSources = allInteriorSources
+            .Where(item => !selectedIntroKeys.Contains(item.SourceKey) && state.IsInteriorActive(item.SourceKey))
+            .ToArray();
+        if (activeInteriorSources.Length == 0) return null;
+        var interiorFacts = new List<ProductionInteriorPageFact>(activeInteriorSources.Length);
+        foreach (var item in activeInteriorSources)
+        {
+            var fact = await TryCreateProductionInteriorFileFactAsync("interior", item.File, cancellationToken);
+            if (fact is null) return null;
+            interiorFacts.Add(new ProductionInteriorPageFact(item.SourceKey, fact, state.GetInteriorFrameMode(item.SourceKey)));
+        }
+
+        var shuffleMap = await interiorShuffleStore.LoadAsync(book.Workspace, cancellationToken);
+        if (shuffleMap is null ||
+            !shuffleMap.Entries.Select(entry => entry.Page.Value).OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .SequenceEqual(activeInteriorSources.Select(item => item.File.Value).OrderBy(value => value, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        ProductionInteriorFileFact? frameFact = null;
+        if (interiorFacts.Any(page => page.FrameMode == FrameMode.Enabled))
+        {
+            frameFact = await TryCreateProductionInteriorFileFactAsync(
+                "frame",
+                new FileReference(Path.Combine(assignedBrand.Directory.Value, "frame.png")),
+                cancellationToken);
+            if (frameFact is null) return null;
+        }
+
+        ProductionInteriorFileFact? backgroundFact = null;
+        if (state.HasBackground)
+        {
+            backgroundFact = await TryCreateProductionInteriorFileFactAsync(
+                "background",
+                new FileReference(Path.Combine(assignedBrand.Directory.Value, "background.png")),
+                cancellationToken);
+            if (backgroundFact is null) return null;
+        }
+
+        return ProductionInteriorSignature.Create(new ProductionInteriorSignatureRecipe(
+            ProductionInteriorSignature.CreateRenderingSignature(settings),
+            prefixFacts,
+            introFacts,
+            interiorFacts,
+            shuffleMap,
+            frameFact,
+            state.HasBackground,
+            backgroundFact));
+    }
+
+    private async ValueTask<ProductionInteriorFileFact?> TryCreateProductionInteriorFileFactAsync(
+        string role,
+        FileReference file,
+        CancellationToken cancellationToken)
+    {
+        var metadata = await fileSystem.GetFileMetadataAsync(file, cancellationToken);
+        return metadata is null
+            ? null
+            : new ProductionInteriorFileFact(role, file.Value, ProductionFileSignature.From(metadata.Value));
     }
 
     private static string CreateCurrentCoverSignature(ProductionAssetDesktopSummary cover)

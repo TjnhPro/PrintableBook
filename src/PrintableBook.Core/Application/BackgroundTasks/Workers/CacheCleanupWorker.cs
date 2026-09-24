@@ -47,11 +47,12 @@ public sealed class CacheCleanupWorker(
                 }
 
                 var artifacts = state.PublishedArtifactReferences ?? [];
-                if (artifacts.Count == 0)
+                var previews = state.PublishedInteriorPreviews ?? [];
+                if (artifacts.Count == 0 && previews.Count == 0)
                 {
                     skipped++;
-                    results.Add(new CacheCleanupBookResult(book.Id, "Skipped", 0, "No published output is recorded."));
-                    context.Report("Cleaning", index + 1, total, "Skipped: no published output", book.Id.Value);
+                    results.Add(new CacheCleanupBookResult(book.Id, "Skipped", 0, "No published output or processed previews are recorded."));
+                    context.Report("Cleaning", index + 1, total, "Skipped: no published output or previews", book.Id.Value);
                     continue;
                 }
 
@@ -75,7 +76,7 @@ public sealed class CacheCleanupWorker(
                 }
 
                 var released = await storageMaintenance.ClearHeavyProcessingCacheAsync(book.Workspace, cancellationToken);
-                await stateStore.SaveAsync(book.Workspace, state.ClearPublishedInteriorPreviews(), cancellationToken);
+                await stateStore.SaveAsync(book.Workspace, state.ClearProcessedInteriorPreviews(), cancellationToken);
                 cleaned++;
                 freedBytes += released;
                 results.Add(new CacheCleanupBookResult(book.Id, "Cleaned", released, null));

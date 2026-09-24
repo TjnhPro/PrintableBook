@@ -42,7 +42,7 @@ public sealed class ProcessingSessionWorker(
             ProcessSessionSnapshot view;
             lock (progressSync)
             {
-                view = new ProcessSessionSnapshot(active, cancelling, brand.Name, currentBook, currentStep, queue, pagesCompleted, pagesTotal, settings.MaximumPageConcurrency, request.StartedAt);
+                view = new ProcessSessionSnapshot(active, cancelling, brand.Name, currentBook, currentStep, queue, pagesCompleted, pagesTotal, settings.MaximumPageConcurrency, request.StartedAt, request.Mode);
             }
             context.SetView(view);
         }
@@ -291,7 +291,7 @@ public sealed class ProcessingSessionWorker(
     private static void Fail(ProcessingSessionWorkerRequest request, IBackgroundTaskContext context, string code, string message, BookId? bookId = null)
     {
         var queue = request.BookIds.Select(id => new ProcessQueueEntry(new BookId(id), string.Equals(id, bookId?.Value, StringComparison.Ordinal) ? BookProcessingStatus.Failed : BookProcessingStatus.NotStarted, string.Equals(id, bookId?.Value, StringComparison.Ordinal) ? message : "Waiting")).ToArray();
-        context.SetView(new ProcessSessionSnapshot(false, false, null, bookId, "Failed", queue, StartedAt: request.StartedAt));
+        context.SetView(new ProcessSessionSnapshot(false, false, null, bookId, "Failed", queue, StartedAt: request.StartedAt, Mode: request.Mode));
         throw new BackgroundTaskFailureException(code, message);
     }
 }

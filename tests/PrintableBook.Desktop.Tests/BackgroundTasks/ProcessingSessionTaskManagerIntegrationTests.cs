@@ -34,6 +34,7 @@ public sealed class ProcessingSessionTaskManagerIntegrationTests
         Assert.Equal(BackgroundTaskState.Cancelled, (await manager.GetAsync(task.TaskId))!.State);
         Assert.True(manager.TryGetView(task.TaskId, out ProcessSessionSnapshot? view));
         Assert.Equal("Cancelled", view!.CurrentStep);
+        Assert.Equal(BookProcessingMode.InteriorOnly, view.Mode);
         Assert.Collection(view.Queue,
             first => Assert.Equal(BookProcessingStatus.Completed, first.Status),
             second => Assert.Equal(BookProcessingStatus.Cancelled, second.Status));

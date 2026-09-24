@@ -45,6 +45,48 @@ public sealed class CacheCleanupWorkerTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_cleans_completed_preview_only_book_without_requiring_a_pdf()
+    {
+        var book = CreateBook("preview-only");
+        var state = BookProcessingState.NotStarted(book.Id)
+            .RecordProcessedInteriorPreviews([new PublishedInteriorPreview("page-0001", "processed/interior/page-0001.png")])
+            .Complete(DateTimeOffset.UtcNow);
+        var stateStore = new StubStateStore([state]);
+        var storage = new StubStorage { BytesByBook = { [book.Id.Value] = 24 } };
+        var worker = new CacheCleanupWorker(
+            new StubDiscovery([book]), stateStore, new StubFileSystem([]), storage);
+
+        var result = Assert.IsType<CacheCleanupResult>(await ((IBackgroundTaskWorker)worker).ExecuteAsync(new CacheCleanupRequest(), new StubContext(), CancellationToken.None));
+
+        Assert.Equal((1, 0, 24L), (result.CleanedBooks, result.SkippedBooks, result.FreedBytes));
+        Assert.Empty((await stateStore.LoadAsync(book.Workspace))!.PublishedInteriorPreviews!);
+        Assert.Equal([book.Id.Value], storage.Calls);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_preserves_final_interior_provenance_while_clearing_previews()
+    {
+        var book = CreateBook("production");
+        var publishedAt = DateTimeOffset.Parse("2026-09-22T12:30:00Z");
+        var state = BookProcessingState.NotStarted(book.Id)
+            .RecordPublishedInterior("output.pdf", InteriorOutputKind.Production, publishedAt, "output_thumbnail.pdf")
+            .RecordProcessedInteriorPreviews([new PublishedInteriorPreview("page-0001", "processed/interior/page-0001.png")])
+            .Complete(DateTimeOffset.UtcNow);
+        var stateStore = new StubStateStore([state]);
+        var worker = new CacheCleanupWorker(
+            new StubDiscovery([book]), stateStore, new StubFileSystem(["output.pdf"]), new StubStorage());
+
+        await ((IBackgroundTaskWorker)worker).ExecuteAsync(new CacheCleanupRequest(), new StubContext(), CancellationToken.None);
+
+        var restored = (await stateStore.LoadAsync(book.Workspace))!;
+        Assert.Empty(restored.PublishedInteriorPreviews!);
+        Assert.Equal(["output.pdf"], restored.PublishedArtifactReferences);
+        Assert.Equal(InteriorOutputKind.Production, restored.PublishedInteriorKind);
+        Assert.Equal(publishedAt, restored.PublishedInteriorAtUtc);
+        Assert.Equal("output_thumbnail.pdf", restored.PublishedInteriorPreviewReference);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_skips_completed_book_when_output_is_missing()
     {
         var book = CreateBook("missing");
@@ -54,6 +96,24 @@ public sealed class CacheCleanupWorkerTests
         var outcome = Assert.Single(result.Books);
         Assert.Equal("Skipped", outcome.Status);
         Assert.Equal("Published output is missing.", outcome.Reason);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_does_not_bypass_missing_published_output_validation_for_preview_book()
+    {
+        var book = CreateBook("missing-with-previews");
+        var state = Completed(book, "missing.pdf")
+            .RecordProcessedInteriorPreviews([new PublishedInteriorPreview("page-0001", "processed/interior/page-0001.png")]);
+        var stateStore = new StubStateStore([state]);
+        var storage = new StubStorage();
+        var worker = new CacheCleanupWorker(
+            new StubDiscovery([book]), stateStore, new StubFileSystem([]), storage);
+
+        var result = Assert.IsType<CacheCleanupResult>(await ((IBackgroundTaskWorker)worker).ExecuteAsync(new CacheCleanupRequest(), new StubContext(), CancellationToken.None));
+
+        Assert.Equal("Published output is missing.", Assert.Single(result.Books).Reason);
+        Assert.Empty(storage.Calls);
+        Assert.Single((await stateStore.LoadAsync(book.Workspace))!.PublishedInteriorPreviews!);
     }
 
     [Theory]
@@ -81,7 +141,7 @@ public sealed class CacheCleanupWorkerTests
 
         var result = await ExecuteAsync([book], [state], [], new StubStorage());
 
-        Assert.Equal("No published output is recorded.", Assert.Single(result.Books).Reason);
+        Assert.Equal("No published output or processed previews are recorded.", Assert.Single(result.Books).Reason);
     }
 
     [Fact]

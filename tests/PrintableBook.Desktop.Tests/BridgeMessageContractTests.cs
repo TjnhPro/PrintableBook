@@ -37,6 +37,23 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public void Main_window_serializes_processing_mode_in_session_snapshots()
+    {
+        var snapshot = new ProcessSessionSnapshot(
+            true,
+            false,
+            "Brand One",
+            new BookId("Book One"),
+            "interior-pdf-export",
+            [],
+            Mode: BookProcessingMode.ProductionInterior);
+
+        var json = MainWindow.SerializeBridgeResponse(BridgeResponse.Succeeded("process", "process.snapshot", snapshot));
+
+        Assert.Contains("\"mode\":2", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Background_task_bridge_snapshot_keeps_kind_and_state_as_stable_strings()
     {
         var dto = BackgroundTaskBridgeSnapshot.From(new BackgroundTaskSnapshot(

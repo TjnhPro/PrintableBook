@@ -19,9 +19,16 @@ Manager áp dụng duplicate/conflict policy và lane limit. Chỉ một Process
 
 `LibraryRefresh` có thể đồng thời chạy với Processing theo policy hiện hành. `CacheCleanup` conflict với cả hai để không xoá workspace trong lúc đọc/ghi.
 
+Một `ProcessingSession` luôn mang theo `BookProcessingMode` trong request và snapshot:
+
+- `InteriorOnly` (**Process Interior**) xử lý Intro + active Interior, validate assembly và lưu processed-page previews; không export/publish PDF.
+- `ProductionInterior` (**Build Final Interior**) tự xử lý hai Production prefix cùng current Intro/Interior rồi export và publish Final Interior PDF.
+
+Vì mode nằm trong snapshot, refresh hoặc chuyển route giữa phiên vẫn khôi phục đúng stage, busy label và terminal message. Một phiên pages-only không được hiển thị `PDF export` hay làm nút **Build Final Interior** thành `Building…`; nút chỉ disabled kèm lý do conflict.
+
 ## Snapshot và shutdown
 
-Worker cập nhật queue, Book hiện tại, step, page progress và worker count vào task view. Những snapshot đó được bridge trả về cho Process page, taskbar status và Diagnostics; frontend không suy luận trạng thái processing từ polling riêng.
+Worker cập nhật mode, queue, Book hiện tại, step, page progress và worker count vào task view. Những snapshot đó được bridge trả về cho Process page, taskbar status và Diagnostics; frontend không suy luận trạng thái processing từ polling riêng. Nếu `InteriorOnly` fail/cancel sau khi page work bắt đầu, worker xóa preview manifest có thể đã thay đổi nhưng giữ nguyên PDF/provenance hiện có.
 
 Khi đóng cửa sổ, `ProcessWindowShutdownCoordinator` dùng graceful-stop bounded timeout. Hết thời hạn, user mới được chọn tiếp tục chờ hoặc force exit; dispatcher không bị block. Windows session ending dùng cùng best-effort stop không hiện UI. Sau restart, interrupted recovery chỉ chuyển workspace stale `Running` thành terminal `Interrupted`, giữ nguyên Completed/Failed/Cancelled và metadata có thể retry.
 

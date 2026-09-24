@@ -1,8 +1,10 @@
 # Production Assets and Final PDF Plan
 
-Status: Reviewed and implementation-ready
+Status: Historical implementation plan — partially superseded
 Date: 2026-09-21
 Base branch: `main`
+
+> Superseded on 2026-09-23 by [Process Interior — Pages-Only Preparation Plan](process-interior-pages-only.md). This file is retained as the decision history for the original Production rollout. Any statement below that `Process Interior`/`InteriorOnly` creates a Base PDF, replaces the Interior PDF, or provides a PDF fallback is no longer the current contract. Today, only **Build Final Interior** creates/replaces the Interior PDF; **Process Interior** refreshes processed-page previews and preserves existing PDF/provenance.
 
 ## Product contract
 
