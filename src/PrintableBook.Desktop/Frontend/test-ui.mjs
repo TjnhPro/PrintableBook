@@ -51,6 +51,7 @@ const expected = [
   ,"book.production.asset.import"
   ,"book.production.action.start"
   ,"production-interior"
+  ,'role="${state.catalogFeedbackError ? "alert" : "status"}">'
   ,'role="tablist"'
   ,'role="tabpanel"'
   ,'aria-controls="book-panel-'
