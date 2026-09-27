@@ -76,7 +76,7 @@ public sealed class BookCatalogMetadataServiceTests
 
         var exception = await Assert.ThrowsAsync<BookCatalogMetadataException>(() => service.SaveBookMetadataAsync(
             Book(),
-            new BookProductionMetadata("friend friends friend extra", "and and", "only four terms here", null, "Jane Doe")).AsTask());
+            new BookProductionMetadata("friend friends friend extra", "and and", "only three terms", null, "Jane Doe")).AsTask());
 
         Assert.Equal("invalid_book_metadata", exception.Code);
         Assert.Collection(
@@ -93,7 +93,9 @@ public sealed class BookCatalogMetadataServiceTests
     }
 
     [Theory]
+    [InlineData("Peaceful Days", null, "Soft Calm Coloring Pages")]
     [InlineData("Peaceful Days", null, "Soft Calm Coloring Pages Inside")]
+    [InlineData("Peaceful Days", null, "Soft Calm Coloring Pages Inside Today")]
     [InlineData(null, null, null)]
     [InlineData("  ", "\t", " ")]
     public async Task SaveBookMetadata_accepts_valid_or_empty_optional_fields(string? title, string? subtitle, string? subcover)
@@ -105,6 +107,17 @@ public sealed class BookCatalogMetadataServiceTests
 
         Assert.Equal(1, stateStore.Loads);
         Assert.Equal(1, stateStore.Saves);
+    }
+
+    [Theory]
+    [InlineData("only three terms", 3)]
+    [InlineData("one two three four five six seven", 7)]
+    public void ValidateForSave_rejects_subcover_outside_four_to_six_terms(string subcover, int count)
+    {
+        var error = Assert.Single(new BookProductionMetadata(null, null, subcover, null, null).ValidateForSave());
+
+        AssertError(error, "subcover", "term_count");
+        Assert.Equal($"Subcover must contain 4 to 6 terms (currently {count}).", error.Message);
     }
 
     [Fact]

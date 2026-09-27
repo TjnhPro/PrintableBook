@@ -155,7 +155,7 @@
     if (include("subcover")) {
       singleLine("subcover", "Subcover");
       const terms = metadataTerms(draft?.subcover);
-      if (terms.length && terms.length !== 5) errors.push({ field: "subcover", code: "term_count", message: `Subcover must contain exactly 5 terms (currently ${terms.length}).` });
+      if (terms.length && (terms.length < 4 || terms.length > 6)) errors.push({ field: "subcover", code: "term_count", message: `Subcover must contain 4 to 6 terms (currently ${terms.length}).` });
       characterLimit("subcover", "Subcover", 100);
     }
     if (include("author")) singleLine("author", "Author");

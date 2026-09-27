@@ -29,7 +29,7 @@ This phase treats the rules as an approved internal production convention. A suc
 |---|---|---|
 | `Title` | Valid | 2–3 terms, fewer than 120 characters, no duplicate terms |
 | `Subtitle` | Valid | Fewer than 120 characters, no duplicate terms; no term-count restriction |
-| `Subcover` | Valid | Exactly 5 terms and fewer than 100 characters |
+| `Subcover` | Valid | 4 to 6 terms and fewer than 100 characters |
 | `Description` | Valid | Keep current multiline trim/blank-to-null normalization |
 | `Author` | Valid | Keep current single-line trim/blank-to-null normalization |
 
@@ -102,7 +102,7 @@ Title must be under 120 characters (currently 126).
 Title contains duplicate terms: "friend" and "friends".
 Subtitle contains duplicate terms: "and" and "and".
 Subtitle must be under 120 characters (currently 124).
-Subcover must contain exactly 5 terms (currently 4).
+Subcover must contain 4 to 6 terms (currently 3).
 Subcover must be under 100 characters (currently 100).
 Author must be a single line.
 ```
@@ -322,7 +322,7 @@ Exit: docs match executable contract; all tests/build pass.
 - All properties null/empty/whitespace save.
 - Title 2/3 terms pass; 1/4 fail.
 - Subtitle has no term-count constraint.
-- Subcover 5 terms passes; 4/6 fail.
+- Subcover 4, 5, or 6 terms passes; 3/7 fail.
 - Title/Subtitle 119 graphemes pass, 120 fail; Subcover 99 passes, 100 fails.
 - Combining marks and emoji-ZWJ count as graphemes.
 - Declared whitespace set, repeats, CR/LF, NBSP, narrow NBSP, and ideographic space behave canonically.

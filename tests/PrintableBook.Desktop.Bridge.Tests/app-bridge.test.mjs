@@ -1473,6 +1473,45 @@ test("Book Information validation blocks invalid save without redrawing and subm
   assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
 });
 
+test("Book Information accepts Subcover with four to six terms only", () => {
+  const cases = [
+    ["only three terms", false],
+    ["soft calm coloring pages", true],
+    ["soft calm coloring pages inside", true],
+    ["soft calm coloring pages inside today", true],
+    ["one two three four five six seven", false]
+  ];
+
+  for (const [subcover, valid] of cases) {
+    const { messageHandler, contentListeners, messages } = loadBridge("books");
+    messageHandler({ data: {
+      version: 1,
+      id: `subcover-${subcover}`,
+      ok: true,
+      command: "app.snapshot",
+      payload: {
+        discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+        globalSettings: {},
+        bookSummaries: [{
+          bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+          metadata: { title: "", subtitle: "", subcover: "", description: "", author: "" },
+          interiorSourcePageCount: 0, activeInteriorSourcePageCount: 0, assets: []
+        }]
+      }
+    } });
+    const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+    contentListeners.click({ target: openBook });
+    contentListeners.input({ target: { dataset: { action: "book-metadata-input", metadataField: "subcover", bookId: "Book 001" }, value: subcover } });
+    const save = { dataset: { action: "save-book-metadata", bookId: "Book 001" }, closest: () => save };
+    const messageCount = messages.length;
+
+    contentListeners.click({ target: save });
+
+    assert.equal(messages.length, messageCount + (valid ? 1 : 0), `${subcover} should be ${valid ? "accepted" : "rejected"}`);
+    if (valid) assert.equal(messages.at(-1).command, "book.metadata.save");
+  }
+});
+
 test("Book Information structured backend rejection retains the drawer without redraw", () => {
   const { messageHandler, contentListeners, messages, getFullRenderCount, getBookDrawerBodyRenderCount } = loadBridge("books");
   const snapshot = {

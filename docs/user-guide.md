@@ -22,7 +22,7 @@ Trong tab **Overview** của Book detail, card **Book Information** lưu riêng:
 
 - Title, Subtitle, Subcover, Description và Primary Author đều là tùy chọn; field trống hiển thị `Unknown`.
 - Khi nhấn **Save Book Information**, Title nếu có phải gồm 2–3 cụm từ và dưới 120 ký tự; Subtitle nếu có phải dưới 120 ký tự. Title và Subtitle không được lặp cụm từ trong cùng field, không phân biệt hoa/thường; dạng số nhiều thêm một ký tự `s` cũng được xem là trùng, ví dụ `friend`/`friends`.
-- Subcover nếu có phải gồm đúng 5 cụm từ và dưới 100 ký tự. Cụm từ được tách bằng khoảng trắng; dấu câu vẫn là một phần của cụm từ, nên `friend` và `friend,` khác nhau.
+- Subcover nếu có phải gồm từ 4 đến 6 cụm từ và dưới 100 ký tự. Cụm từ được tách bằng khoảng trắng; dấu câu vẫn là một phần của cụm từ, nên `friend` và `friend,` khác nhau.
 - Nếu Save không hợp lệ, ứng dụng hiển thị tất cả lỗi dưới field tương ứng và giữ nguyên metadata cùng Brand assignment đã lưu. Metadata cũ vẫn load bình thường, nhưng phải được sửa hoặc xóa field không hợp lệ ở lần Save Book Information tiếp theo.
 - Title đã lưu là tên hiển thị; tên folder vẫn được giữ làm thông tin phụ và không bị rename.
 

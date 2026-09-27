@@ -23,7 +23,7 @@ public sealed record BookProductionMetadata(
         ValidateDuplicates("subtitle", "Subtitle", Subtitle, errors);
 
         ValidateSingleLine("subcover", "Subcover", Subcover, errors);
-        ValidateTerms("subcover", "Subcover", Subcover, 5, 5, errors);
+        ValidateTerms("subcover", "Subcover", Subcover, 4, 6, errors);
         ValidateCharacters("subcover", "Subcover", Subcover, 100, errors);
 
         ValidateSingleLine("author", "Author", Author, errors);
@@ -95,7 +95,11 @@ public sealed record BookProductionMetadata(
         var count = SplitTerms(effective).Count;
         if (count < minimum || count > maximum)
         {
-            var expected = minimum == maximum ? $"exactly {minimum}" : $"{minimum} or {maximum}";
+            var expected = minimum == maximum
+                ? $"exactly {minimum}"
+                : maximum == minimum + 1
+                    ? $"{minimum} or {maximum}"
+                    : $"{minimum} to {maximum}";
             errors.Add(new(field, "term_count", $"{label} must contain {expected} terms (currently {count})."));
         }
     }
