@@ -255,7 +255,7 @@ internal sealed class WebViewBridgeRouter(
                                 }
                                 await bookCatalogMetadataService.SaveBookMetadataAsync(
                                     book,
-                                    BookProductionMetadata.Create(title, subtitle, subcover, description, bookAuthor),
+                                    new BookProductionMetadata(title, subtitle, subcover, description, bookAuthor),
                                     cancellationToken);
                             }
                             else if (request.Command == "book.brand.assign")
@@ -276,7 +276,24 @@ internal sealed class WebViewBridgeRouter(
                     }
                     catch (BookCatalogMetadataException exception)
                     {
-                        return new BridgeResponse(Version, request.Id, false, null, exception.Code);
+                        var errorPayload = exception.ValidationErrors is { Count: > 0 } validationErrors
+                            ? new
+                            {
+                                policyVersion = 1,
+                                validationErrors = validationErrors.Select(error =>
+                                {
+                                    var item = new Dictionary<string, object?>
+                                    {
+                                        ["field"] = error.Field,
+                                        ["code"] = error.Code,
+                                        ["message"] = error.Message
+                                    };
+                                    if (error.Tokens is { Count: > 0 }) item["tokens"] = error.Tokens;
+                                    return item;
+                                }).ToArray()
+                            }
+                            : null;
+                        return new BridgeResponse(Version, request.Id, false, null, exception.Code, errorPayload);
                     }
                     catch (ArgumentException)
                     {

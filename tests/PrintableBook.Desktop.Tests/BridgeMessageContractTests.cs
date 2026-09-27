@@ -702,14 +702,14 @@ public sealed class BridgeMessageContractTests
         var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
         var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), bookCatalogMetadataService: service);
 
-        var save = await router.HandleAsync("""{"version":1,"id":"metadata","command":"book.metadata.save","payload":{"bookId":"Book One","title":"Title","subtitle":"Subtitle","subcover":"ABCD","description":"Description","author":"Jane Doe"}}""");
+        var save = await router.HandleAsync("""{"version":1,"id":"metadata","command":"book.metadata.save","payload":{"bookId":"Book One","title":"Peaceful Days","subtitle":"Gentle Coloring","subcover":"Cute Friends Coloring Book Pages","description":"Description","author":"Jane Doe"}}""");
         var assign = await router.HandleAsync("""{"version":1,"id":"assign","command":"book.brand.assign","payload":{"bookId":"Book One","brandName":"Brand One"}}""");
         var unassign = await router.HandleAsync("""{"version":1,"id":"unassign","command":"book.brand.unassign","payload":{"bookId":"Book One"}}""");
         var brand = await router.HandleAsync("""{"version":1,"id":"brand","command":"brand.author.save","payload":{"brandName":"Brand One","author":"Jane Doe"}}""");
 
         Assert.All([save, assign, unassign, brand], response => Assert.True(response.Ok));
-        Assert.Equal("Title", service.Metadata!.Title);
-        Assert.Equal("ABCD", service.Metadata.Subcover);
+        Assert.Equal("Peaceful Days", service.Metadata!.Title);
+        Assert.Equal("Cute Friends Coloring Book Pages", service.Metadata.Subcover);
         Assert.Equal("Brand One", service.AssignedBrand);
         Assert.True(service.Unassigned);
         Assert.Equal("Jane Doe", service.BrandAuthor);
@@ -721,14 +721,24 @@ public sealed class BridgeMessageContractTests
     {
         var subcover = new string('a', 100);
         var service = new StubBookCatalogMetadataService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
         var router = new WebViewBridgeRouter(
-            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            new ApplicationLoadCoordinator(manager),
             bookCatalogMetadataService: service);
 
         var response = await router.HandleAsync($"{{\"version\":1,\"id\":\"metadata\",\"command\":\"book.metadata.save\",\"payload\":{{\"bookId\":\"Book One\",\"subcover\":\"{subcover}\"}}}}");
 
         Assert.Equal("invalid_book_metadata", response.Error);
         Assert.Null(service.Metadata);
+        Assert.Equal(0, manager.Starts);
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            response.Payload,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.Contains("\"policyVersion\":1", json, StringComparison.Ordinal);
+        Assert.Contains("\"field\":\"subcover\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"code\":\"term_count\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"code\":\"character_limit\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"tokens\"", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1449,6 +1459,15 @@ public sealed class BridgeMessageContractTests
 
         public ValueTask SaveBookMetadataAsync(DiscoveredBook book, BookProductionMetadata metadata, CancellationToken cancellationToken = default)
         {
+            var validationErrors = metadata.ValidateForSave();
+            if (validationErrors.Count > 0)
+            {
+                throw new BookCatalogMetadataException(
+                    "invalid_book_metadata",
+                    "Book Information contains invalid values.",
+                    validationErrors);
+            }
+
             Metadata = metadata;
             return ValueTask.CompletedTask;
         }
