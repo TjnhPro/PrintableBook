@@ -20,8 +20,10 @@ Kích thước hợp lệ: `frame.png` phải là `Artwork maximum side × Artwo
 
 Trong tab **Overview** của Book detail, card **Book Information** lưu riêng:
 
-- Title, Subtitle, Description và Primary Author; có thể Save thiếu một phần, field trống hiển thị `Unknown`.
-- Subcover là mô tả ngắn tùy chọn, thường gồm 4–5 từ. Ứng dụng không bắt buộc số từ; sau khi trim chỉ yêu cầu text dưới 100 ký tự.
+- Title, Subtitle, Subcover, Description và Primary Author đều là tùy chọn; field trống hiển thị `Unknown`.
+- Khi nhấn **Save Book Information**, Title nếu có phải gồm 2–3 cụm từ và dưới 120 ký tự; Subtitle nếu có phải dưới 120 ký tự. Title và Subtitle không được lặp cụm từ trong cùng field, không phân biệt hoa/thường; dạng số nhiều thêm một ký tự `s` cũng được xem là trùng, ví dụ `friend`/`friends`.
+- Subcover nếu có phải gồm đúng 5 cụm từ và dưới 100 ký tự. Cụm từ được tách bằng khoảng trắng; dấu câu vẫn là một phần của cụm từ, nên `friend` và `friend,` khác nhau.
+- Nếu Save không hợp lệ, ứng dụng hiển thị tất cả lỗi dưới field tương ứng và giữ nguyên metadata cùng Brand assignment đã lưu. Metadata cũ vẫn load bình thường, nhưng phải được sửa hoặc xóa field không hợp lệ ở lần Save Book Information tiếp theo.
 - Title đã lưu là tên hiển thị; tên folder vẫn được giữ làm thông tin phụ và không bị rename.
 
 Sau khi Save Author, dùng card **Brand Assignment** để chọn một Brand có Author match rồi nhấn **Assign Brand**. Ứng dụng không auto-assign. Khi reassign hoặc unassign, template, cache và output cũ được giữ nguyên; chúng không tự chuyển sang Brand mới.
