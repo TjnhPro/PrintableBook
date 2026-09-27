@@ -56,6 +56,28 @@ public sealed class JsonBookWorkspaceStateStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Legacy_metadata_that_fails_new_save_rules_still_loads_and_survives_unrelated_state_save()
+    {
+        var workspace = await CreateWorkspaceAsync();
+        var store = new JsonBookWorkspaceStateStore(new PhysicalFileSystem());
+        var state = BookProcessingState.NotStarted(new BookId("book")) with
+        {
+            Metadata = BookProductionMetadata.Create("Legacy", "and and", "only four terms here", null, "Jane Doe"),
+            AssignedBrand = "Brand A"
+        };
+
+        await store.SaveAsync(workspace, state);
+        var restored = await store.LoadAsync(workspace);
+        await store.SaveAsync(workspace, restored! with { AssignedBrand = null });
+        var savedAgain = await store.LoadAsync(workspace);
+
+        Assert.Equal("Legacy", savedAgain!.Metadata!.Title);
+        Assert.Equal("and and", savedAgain.Metadata.Subtitle);
+        Assert.Equal("only four terms here", savedAgain.Metadata.Subcover);
+        Assert.Null(savedAgain.AssignedBrand);
+    }
+
+    [Fact]
     public async Task LoadWithMetadataAsync_maps_an_unversioned_missing_override_to_no_frame()
     {
         var workspace = await CreateWorkspaceAsync();
