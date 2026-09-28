@@ -208,7 +208,7 @@ internal sealed class WebViewBridgeRouter(
                 return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
             }
 
-            if (request.Command is "book.metadata.save" or "book.brand.assign" or "book.brand.unassign" or "brand.author.save")
+            if (request.Command is "book.metadata.save" or "book.keywords.save" or "book.brand.assign" or "book.brand.unassign" or "brand.author.save")
             {
                 if (applicationLoadCoordinator is null || bookCatalogMetadataService is null || request.Payload is not { } metadataPayload)
                 {
@@ -218,6 +218,10 @@ internal sealed class WebViewBridgeRouter(
                 await using (await processingMutationGate.EnterAsync(cancellationToken))
                 {
                     if (await IsProcessingActiveAsync(cancellationToken)) return new BridgeResponse(Version, request.Id, false, null, "processing_active");
+                    if (request.Command == "book.keywords.save" && await GetActiveStateWriterErrorAsync(cancellationToken) is { } activityError)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, activityError);
+                    }
                     var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
                     if (snapshot is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
 
@@ -262,6 +266,59 @@ internal sealed class WebViewBridgeRouter(
                                     },
                                     cancellationToken);
                             }
+                            else if (request.Command == "book.keywords.save")
+                            {
+                                if (!TryGetStringArray(metadataPayload, "keywords", out var keywords) ||
+                                    !TryGetOptionalString(metadataPayload, "adsAsin", out var adsAsin))
+                                {
+                                    return new BridgeResponse(Version, request.Id, false, null, "invalid_keyword_builder");
+                                }
+
+                                BookKeywordBuilderState saved;
+                                try
+                                {
+                                    saved = await bookCatalogMetadataService.SaveKeywordBuilderAsync(book, keywords, adsAsin, cancellationToken);
+                                }
+                                catch (BookKeywordBuilderValidationException exception)
+                                {
+                                    var error = exception.Error;
+                                    var details = new Dictionary<string, object?>();
+                                    if (error.OffendingWord is not null) details[error.Code == "keyword_word_too_long" ? "offendingWord" : "firstUnplacedWord"] = error.OffendingWord;
+                                    if (error.GraphemeCount is not null) details["graphemeCount"] = error.GraphemeCount;
+                                    if (error.MaximumCharacters is not null) details["maximumCharacters"] = error.MaximumCharacters;
+                                    if (error.UniqueWordCount is not null) details["uniqueWordCount"] = error.UniqueWordCount;
+                                    if (error.RequiredSlotCount is not null) details["requiredSlotCount"] = error.RequiredSlotCount;
+                                    if (error.MaximumSlotCount is not null) details["maximumSlotCount"] = error.MaximumSlotCount;
+                                    if (error.PackingRule is not null) details["packingRule"] = error.PackingRule;
+                                    return new BridgeResponse(Version, request.Id, false, null, error.Code, new
+                                    {
+                                        policyVersion = 1,
+                                        field = "keywords",
+                                        code = error.Code,
+                                        message = error.Message,
+                                        details
+                                    });
+                                }
+
+                                object? refreshTask = null;
+                                string? refreshWarning = null;
+                                try
+                                {
+                                    refreshTask = BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(CancellationToken.None));
+                                }
+                                catch (Exception)
+                                {
+                                    refreshWarning = "Library refresh could not start.";
+                                }
+
+                                return BridgeResponse.Succeeded(request.Id, "book.keywords.saved", new
+                                {
+                                    bookId,
+                                    keywordBuilder = saved,
+                                    refreshTask,
+                                    refreshWarning
+                                });
+                            }
                             else if (request.Command == "book.brand.assign")
                             {
                                 if (!TryGetRequiredString(metadataPayload, "brandName", out var brandName))
@@ -302,7 +359,12 @@ internal sealed class WebViewBridgeRouter(
                     catch (ArgumentException)
                     {
                         return new BridgeResponse(Version, request.Id, false, null,
-                            request.Command == "brand.author.save" ? "invalid_brand_author" : "invalid_book_metadata");
+                            request.Command switch
+                            {
+                                "brand.author.save" => "invalid_brand_author",
+                                "book.keywords.save" => "invalid_keyword_builder",
+                                _ => "invalid_book_metadata"
+                            });
                     }
                     catch (JsonException)
                     {
@@ -868,10 +930,20 @@ internal sealed class WebViewBridgeRouter(
         return process.IsActive || process.IsCancelling;
     }
 
+    private async ValueTask<string?> GetActiveStateWriterErrorAsync(CancellationToken cancellationToken)
+    {
+        if (backgroundTaskManager is null) return null;
+        var tasks = await backgroundTaskManager.ListAsync(cancellationToken: cancellationToken);
+        var active = tasks.Where(task => task.State is BackgroundTaskState.Queued or BackgroundTaskState.Running or BackgroundTaskState.Cancelling).ToArray();
+        if (active.Any(task => task.Kind == BackgroundTaskKind.ProductionAction)) return "production_action_active";
+        if (active.Any(task => task.Kind == BackgroundTaskKind.CacheCleanup)) return "cache_cleanup_active";
+        return null;
+    }
+
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.keywords.save" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 
@@ -889,6 +961,20 @@ internal sealed class WebViewBridgeRouter(
         if (!payload.TryGetProperty(propertyName, out var element) || element.ValueKind == JsonValueKind.Null) return true;
         if (element.ValueKind != JsonValueKind.String) return false;
         value = element.GetString();
+        return true;
+    }
+
+    private static bool TryGetStringArray(JsonElement payload, string propertyName, out IReadOnlyList<string> values)
+    {
+        values = [];
+        if (!payload.TryGetProperty(propertyName, out var element) || element.ValueKind != JsonValueKind.Array) return false;
+        var parsed = new List<string>();
+        foreach (var item in element.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String) return false;
+            parsed.Add(item.GetString() ?? string.Empty);
+        }
+        values = parsed;
         return true;
     }
 

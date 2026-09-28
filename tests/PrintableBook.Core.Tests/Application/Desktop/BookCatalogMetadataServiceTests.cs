@@ -109,6 +109,44 @@ public sealed class BookCatalogMetadataServiceTests
         Assert.Equal(1, stateStore.Saves);
     }
 
+    [Fact]
+    public async Task SaveKeywordBuilder_preserves_existing_metadata_and_returns_the_persisted_result()
+    {
+        var original = BookProcessingState.NotStarted(new BookId("book")) with
+        {
+            Metadata = BookProductionMetadata.Create("Peaceful Days", null, null, null, "Jane Doe")
+        };
+        var stateStore = new StateStore(original);
+        var service = new BookCatalogMetadataService(
+            stateStore,
+            new BrandStore(),
+            new BookKeywordBuilder(new NoOpKeywordShuffler()));
+
+        var result = await service.SaveKeywordBuilderAsync(Book(), ["coloring books", "coloring book"], " targets ");
+
+        Assert.Same(result, stateStore.State!.KeywordBuilder);
+        Assert.Equal("Peaceful Days", stateStore.State.Metadata!.Title);
+        Assert.Equal("coloring books book", result.Keyword1);
+        Assert.Equal("coloring books, coloring book", result.AdsKeyword);
+        Assert.Equal("targets", result.AdsAsin);
+        Assert.Equal(1, stateStore.Loads);
+        Assert.Equal(1, stateStore.Saves);
+    }
+
+    [Fact]
+    public async Task SaveKeywordBuilder_validation_failure_does_not_load_or_save_state()
+    {
+        var stateStore = new StateStore(BookProcessingState.NotStarted(new BookId("book")));
+        var service = new BookCatalogMetadataService(stateStore, new BrandStore());
+
+        var exception = await Assert.ThrowsAsync<BookKeywordBuilderValidationException>(() =>
+            service.SaveKeywordBuilderAsync(Book(), [new string('a', 51)], null).AsTask());
+
+        Assert.Equal("keyword_word_too_long", exception.Error.Code);
+        Assert.Equal(0, stateStore.Loads);
+        Assert.Equal(0, stateStore.Saves);
+    }
+
     [Theory]
     [InlineData("only three terms", 3)]
     [InlineData("one two three four five six seven", 7)]
@@ -222,5 +260,10 @@ public sealed class BookCatalogMetadataServiceTests
             values[brandDirectory.Value] = metadata;
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class NoOpKeywordShuffler : IKeywordWordShuffler
+    {
+        public void Shuffle(IList<string> words) { }
     }
 }
