@@ -1,5 +1,6 @@
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
+using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Production;
 
 namespace PrintableBook.Core.Application.BackgroundTasks.Workers;
@@ -19,7 +20,8 @@ public sealed record ProductionActionResult(
     string BookId,
     ProductionActionKind Action,
     string OutputReference,
-    DateTimeOffset CompletedAtUtc);
+    DateTimeOffset CompletedAtUtc,
+    string? NoticeCode = null);
 
 public sealed class ProductionActionWorker(
     IApplicationSnapshotProvider snapshotProvider,
@@ -86,8 +88,26 @@ public sealed class ProductionActionWorker(
             book.Workspace,
             new(Path.Combine(book.Directory.Value, "Output")),
             cancellationToken);
+        if (result.PanelPreviews?.Status == CoverPanelPreviewStatus.Unavailable)
+        {
+            context.Report(
+                "Cover PDF built; panel previews need attention",
+                detail: CoverPanelPreviewContract.UnavailableWarningCode,
+                subject: book.Id.Value);
+            return new ProductionActionResult(
+                book.Id.Value,
+                request.Action,
+                result.CoverPdf.Value,
+                result.CompletedAtUtc,
+                CoverPanelPreviewContract.UnavailableWarningCode);
+        }
+
         context.Report("Publishing", detail: Path.GetFileName(result.CoverPdf.Value), subject: book.Id.Value);
-        return new ProductionActionResult(book.Id.Value, request.Action, result.CoverPdf.Value, result.CompletedAtUtc);
+        return new ProductionActionResult(
+            book.Id.Value,
+            request.Action,
+            result.CoverPdf.Value,
+            result.CompletedAtUtc);
     }
 
     private async ValueTask<ProductionActionResult> ProcessPageAsync(

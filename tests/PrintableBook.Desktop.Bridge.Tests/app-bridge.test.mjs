@@ -73,10 +73,18 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     attributes: {},
     setAttribute(name, value) { this.attributes[name] = value; }
   };
+  const productionFeedback = {
+    hidden: true,
+    textContent: "",
+    attributes: {},
+    classes: new Set(),
+    classList: { toggle(name, enabled) { enabled ? productionFeedback.classes.add(name) : productionFeedback.classes.delete(name); } },
+    setAttribute(name, value) { this.attributes[name] = value; }
+  };
   const productionWorkspace = {
     attributes: {},
     setAttribute(name, value) { this.attributes[name] = value; },
-    querySelector: (selector) => selector === '[data-action="build-final-interior"]' ? productionFinalButton : null,
+    querySelector: (selector) => selector === '[data-action="build-final-interior"]' ? productionFinalButton : selector === "[data-production-feedback]" ? productionFeedback : null,
     querySelectorAll: () => [],
     set outerHTML(_markup) { productionWorkspaceRenderCount += 1; }
   };
@@ -144,7 +152,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSettingsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, brandSettingsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -1143,6 +1151,29 @@ test("Production task polling updates controls without redrawing the drawer", ()
   assert.equal(messages.at(-1).command, "app.refresh");
   assert.equal(getFullRenderCount(), fullRenders);
   assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+});
+
+test("Cover panel preview failure is shown as a non-fatal Production warning", () => {
+  const { messageHandler, contentListeners, productionFeedback, messages } = loadBridge("books");
+  openProductionTab(messageHandler, contentListeners);
+
+  const action = { dataset: { action: "start-production-action", productionAction: "build-cover-pdf", bookId: "Book 001" }, closest: () => action };
+  contentListeners.click({ target: action });
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: {
+    taskId: "cover-action",
+    kind: "ProductionAction",
+    state: "Completed",
+    step: "Cover PDF built; panel previews need attention",
+    detail: "cover_panel_previews_unavailable"
+  } } });
+
+  assert.match(productionFeedback.textContent, /Cover PDF built/);
+  assert.match(productionFeedback.textContent, /back_cover\.jpg and front_cover\.jpg are unavailable/);
+  assert.equal(productionFeedback.classes.has("is-warning"), true);
+  assert.equal(productionFeedback.classes.has("is-error"), false);
+  assert.equal(productionFeedback.attributes.role, "alert");
+  assert.equal(productionFeedback.attributes["aria-atomic"], "true");
+  assert.equal(messages.at(-1).command, "app.refresh");
 });
 
 test("Final Interior progress preserves the open Production drawer", () => {

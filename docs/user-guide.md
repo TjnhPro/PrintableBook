@@ -114,7 +114,7 @@ Tab **Production** sở hữu workflow publish PDF. **Process Interior** chỉ c
 1. Upload **Final Cover**. File phải là PNG `5242 × 2626 px`.
 2. Upload **Interior Cover** và **Book Owner**. Hai file này không bắt buộc kích thước input cố định.
 3. Có thể chạy **Process Interior Cover** và **Process Book Owner** để kiểm tra preview. Đây là bước tùy chọn.
-4. Nhấn **Build Cover PDF** để tạo `Output/<BookId> - Cover.pdf` với page size `17.47 × 8.75 inch`.
+4. Nhấn **Build Cover PDF** để tạo `Output/<BookId> - Cover.pdf` với page size `17.47 × 8.75 inch`. Cùng lần build, app tạo `Output/back_cover.jpg` và `Output/front_cover.jpg` ở `1198 × 1200 px` để preview nhanh; hai JPEG này không dùng để in.
 5. Lưu mọi thay đổi Interior/Intro/Background còn pending, sau đó nhấn **Build Final Interior**.
 
 Hai trang prefix luôn dùng No Frame/CropArt. Final Interior được build mới từ source hiện tại theo thứ tự:
@@ -204,5 +204,6 @@ Phần advanced chứa normalized source size và BorderLine V3 pass 1/pass 2. �
 | CUSTOM Intro không chạy | Chọn ít nhất một Book Interior image và **Save changes**. |
 | Background lỗi | Kiểm tra Brand có `background.png` đúng Final Page size. |
 | Không thấy preview sau process | Kiểm tra session Completed và mở lại Book detail/Interior pages. |
+| Cover PDF đã build nhưng báo panel preview unavailable | Đóng ứng dụng đang mở `back_cover.jpg`/`front_cover.jpg`, kiểm tra quyền ghi thư mục `Output`, rồi chạy **Build Cover PDF** lại. PDF chính vẫn hợp lệ. |
 | Cần tiết kiệm dung lượng | Dùng **Clear Cache** sau khi xác nhận PDF trong **PDF Library**. |
 | Cần log chi tiết | Mở **Diagnostics** và cung cấp log/task state khi báo lỗi. |

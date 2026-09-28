@@ -10,7 +10,8 @@ public sealed record ProductionCoverPdfResult(
     FileReference CoverPdf,
     PhysicalPageSize PageSize,
     DateTimeOffset CompletedAtUtc,
-    FileReference? PreviewPdf = null);
+    FileReference? PreviewPdf = null,
+    CoverPanelPreviewOutcome? PanelPreviews = null);
 
 public interface IProductionCoverPdfService
 {
@@ -41,41 +42,74 @@ public sealed class ProductionCoverPdfService(
         var metadata = await fileSystem.GetFileMetadataAsync(source, cancellationToken)
             ?? throw new FileNotFoundException("The Production final Cover is missing.", source.Value);
         var expected = ProductionAssets.Get(ProductionAssetKind.FinalCover).RequiredSize!.Value;
-        var actual = await imageInspector.GetSizeAsync(source, cancellationToken);
-        if (actual != expected)
+        var temporaryDirectory = new DirectoryReference(Path.Combine(
+            workspace.TemporaryOutputDirectory.Value,
+            $"production-cover-{Guid.NewGuid():N}"));
+        var sourceSnapshot = new FileReference(Path.Combine(temporaryDirectory.Value, "final_cover.png"));
+
+        try
         {
-            throw new InvalidDataException($"Production final Cover is {actual.Width} x {actual.Height} px; required size is {expected.Width} x {expected.Height} px.");
-        }
+            await fileSystem.CreateDirectoryAsync(temporaryDirectory, cancellationToken);
+            await fileSystem.CopyFileAsync(source, sourceSnapshot, overwrite: true, cancellationToken);
+            var actual = await imageInspector.GetSizeAsync(sourceSnapshot, cancellationToken);
+            if (actual != expected)
+            {
+                throw new InvalidDataException($"Production final Cover is {actual.Width} x {actual.Height} px; required size is {expected.Width} x {expected.Height} px.");
+            }
 
-        var temporaryDirectory = new DirectoryReference(Path.Combine(workspace.TemporaryOutputDirectory.Value, "production-cover"));
-        await fileSystem.DeleteDirectoryAsync(temporaryDirectory, recursive: true, cancellationToken);
-        var exported = await pdfExporter.ExportCoverAsync(new CoverPdfExportRequest(source, temporaryDirectory, CoverPageSize), cancellationToken);
-        var published = await outputPublisher.PublishCoverAsync(new CoverOutputPublicationRequest(
-            workspace.BookId,
-            exported,
-            finalOutputRoot,
-            ExpectedCoverPageCount: 1,
-            CoverPageSize), cancellationToken);
+            var exported = await pdfExporter.ExportCoverAsync(
+                new CoverPdfExportRequest(sourceSnapshot, temporaryDirectory, CoverPageSize),
+                cancellationToken);
+            var published = await outputPublisher.PublishCoverAsync(new CoverOutputPublicationRequest(
+                workspace.BookId,
+                exported,
+                finalOutputRoot,
+                ExpectedCoverPageCount: 1,
+                CoverPageSize), cancellationToken);
 
-        var completedAt = DateTimeOffset.UtcNow;
-        var bookState = await bookStateStore.LoadAsync(workspace, cancellationToken) ?? BookProcessingState.NotStarted(workspace.BookId);
-        await bookStateStore.SaveAsync(
-            workspace,
-            bookState.RecordPublishedArtifact(
-                PublishedArtifactKind.Cover,
-                published.CoverPdf.Value,
-                published.PreviewPdf?.Value),
-            cancellationToken);
-        var productionState = await productionStateStore.LoadAsync(workspace, cancellationToken);
-        await productionStateStore.SaveAsync(
-            workspace,
-            productionState.RecordCoverOutput(
-                Path.GetFileName(published.CoverPdf.Value),
-                CreateInputSignature(ProductionFileSignature.From(metadata)),
+            // Publication is the commit point. Finish state recording even if cancellation arrives afterward.
+            var finalizationToken = CancellationToken.None;
+            var completedAt = DateTimeOffset.UtcNow;
+            var bookState = await bookStateStore.LoadAsync(workspace, finalizationToken) ?? BookProcessingState.NotStarted(workspace.BookId);
+            await bookStateStore.SaveAsync(
+                workspace,
+                bookState.RecordPublishedArtifact(
+                    PublishedArtifactKind.Cover,
+                    published.CoverPdf.Value,
+                    published.PreviewPdf?.Value),
+                finalizationToken);
+            var productionState = await productionStateStore.LoadAsync(workspace, finalizationToken);
+            await productionStateStore.SaveAsync(
+                workspace,
+                productionState.RecordCoverOutput(
+                    Path.GetFileName(published.CoverPdf.Value),
+                    CreateInputSignature(ProductionFileSignature.From(metadata)),
+                    completedAt,
+                    published.PreviewPdf is null ? null : Path.GetFileName(published.PreviewPdf.Value)),
+                finalizationToken);
+            return new ProductionCoverPdfResult(
+                published.CoverPdf,
+                CoverPageSize,
                 completedAt,
-                published.PreviewPdf is null ? null : Path.GetFileName(published.PreviewPdf.Value)),
-            cancellationToken);
-        return new ProductionCoverPdfResult(published.CoverPdf, CoverPageSize, completedAt, published.PreviewPdf);
+                published.PreviewPdf,
+                published.PanelPreviews);
+        }
+        finally
+        {
+            await TryDeleteTemporaryDirectoryAsync(temporaryDirectory);
+        }
+    }
+
+    private async ValueTask TryDeleteTemporaryDirectoryAsync(DirectoryReference temporaryDirectory)
+    {
+        try
+        {
+            await fileSystem.DeleteDirectoryAsync(temporaryDirectory, recursive: true, CancellationToken.None);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Preview cleanup is best effort and cannot invalidate a committed Cover PDF.
+        }
     }
 
     public static string CreateInputSignature(ProductionFileSignature sourceSignature)

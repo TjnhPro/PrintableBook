@@ -111,7 +111,10 @@ public sealed class ValidatedBookOutputPublisherTests : IAsyncLifetime
     public async Task PublishCoverAsync_replaces_only_the_cover_pdf_after_validation()
     {
         Directory.CreateDirectory(rootPath);
-        var image = await CreatePngAsync();
+        var image = await CreatePngAsync(
+            "cover.png",
+            CoverPanelPreviewContract.SourceWidth,
+            CoverPanelPreviewContract.SourceHeight);
         var output = new DirectoryReference(Path.Combine(rootPath, "Book One", "Output"));
         Directory.CreateDirectory(output.Value);
         var cover = Path.Combine(output.Value, "Book One - Cover.pdf");
@@ -130,7 +133,41 @@ public sealed class ValidatedBookOutputPublisherTests : IAsyncLifetime
         Assert.Equal(Path.Combine(output.Value, "Book One - Cover_thumbnail.pdf"), published.PreviewPdf?.Value);
         Assert.StartsWith("%PDF", await File.ReadAllTextAsync(published.CoverPdf.Value), StringComparison.Ordinal);
         Assert.True(new FileInfo(published.PreviewPdf!.Value).Length < new FileInfo(published.CoverPdf.Value).Length);
+        Assert.Equal(CoverPanelPreviewStatus.Ready, published.PanelPreviews?.Status);
+        Assert.Equal(Path.Combine(output.Value, CoverPanelPreviewContract.BackFileName), published.PanelPreviews?.Pair?.BackCover.Value);
+        Assert.Equal(Path.Combine(output.Value, CoverPanelPreviewContract.FrontFileName), published.PanelPreviews?.Pair?.FrontCover.Value);
+        Assert.True(File.Exists(published.PanelPreviews!.Pair!.BackCover.Value));
+        Assert.True(File.Exists(published.PanelPreviews.Pair.FrontCover.Value));
         Assert.False(Directory.Exists(temporaryOutput.Value));
+    }
+
+    [Fact]
+    public async Task PublishCoverAsync_keeps_the_pdf_and_removes_the_pair_when_a_panel_candidate_is_invalid()
+    {
+        Directory.CreateDirectory(rootPath);
+        var image = await CreatePngAsync(
+            "invalid-panel-cover.png",
+            CoverPanelPreviewContract.SourceWidth,
+            CoverPanelPreviewContract.SourceHeight);
+        var output = new DirectoryReference(Path.Combine(rootPath, "Book One", "Output"));
+        Directory.CreateDirectory(output.Value);
+        var staleBack = Path.Combine(output.Value, CoverPanelPreviewContract.BackFileName);
+        var staleFront = Path.Combine(output.Value, CoverPanelPreviewContract.FrontFileName);
+        await File.WriteAllTextAsync(staleBack, "stale-back");
+        await File.WriteAllTextAsync(staleFront, "stale-front");
+        var temporaryOutput = new DirectoryReference(Path.Combine(rootPath, "Book One", ".workspace", "invalid-panel-output"));
+        var exported = await new PdfSharpPrintableBookPdfExporter().ExportCoverAsync(
+            new CoverPdfExportRequest(image, temporaryOutput, new PhysicalPageSize(17.47, 8.75)));
+        await File.WriteAllTextAsync(exported.PanelPreviews!.Pair!.FrontCover.Value, "not-a-jpeg");
+
+        var published = await new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()).PublishCoverAsync(
+            new CoverOutputPublicationRequest(new BookId("Book One"), exported, output, 1, new PhysicalPageSize(17.47, 8.75)));
+
+        Assert.True(File.Exists(published.CoverPdf.Value));
+        Assert.Equal(CoverPanelPreviewStatus.Unavailable, published.PanelPreviews?.Status);
+        Assert.Equal(CoverPanelPreviewContract.UnavailableWarningCode, published.PanelPreviews?.WarningCode);
+        Assert.False(File.Exists(staleBack));
+        Assert.False(File.Exists(staleFront));
     }
 
     [Fact]
@@ -159,10 +196,13 @@ public sealed class ValidatedBookOutputPublisherTests : IAsyncLifetime
         new PdfSharpPrintableBookPdfExporter().ExportAsync(new PrintableBookPdfExportRequest(
             image, [], [image], null, temporaryOutput, new PhysicalPageSize(2, 1), new PhysicalPageSize(8.5, 8.5), 1));
 
-    private async Task<FileReference> CreatePngAsync()
+    private async Task<FileReference> CreatePngAsync(
+        string filename = "page.png",
+        int width = 2550,
+        int height = 2550)
     {
-        var path = Path.Combine(rootPath, "page.png");
-        using (var image = new MagickImage(MagickColors.White, 2550, 2550))
+        var path = Path.Combine(rootPath, filename);
+        using (var image = new MagickImage(MagickColors.White, (uint)width, (uint)height))
         {
             image.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
             image.Write(path);

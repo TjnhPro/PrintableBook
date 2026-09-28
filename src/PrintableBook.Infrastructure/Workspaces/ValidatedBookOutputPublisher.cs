@@ -1,3 +1,4 @@
+using ImageMagick;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Processing;
 
@@ -101,13 +102,100 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
             request.ExpectedCoverPageCount,
             request.ExpectedCoverPageSize,
             cancellationToken);
+        var validatedPanelPreviews = TryValidateCoverPanelPreviews(
+            request.TemporaryOutput.PanelPreviews,
+            cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
         ReplaceFile(request.TemporaryOutput.CoverPdf, coverPdf);
         var publishedPreview = TryPublishValidatedPreview(validatedPreview, previewPdf);
         TryPublishCoverThumbnailImage(request.TemporaryOutput.CoverPdf, thumbnailImage);
-        DeleteTemporaryDirectory(request.TemporaryOutput.CoverPdf);
-        return new PublishedCoverOutput(request.FinalOutputRoot, coverPdf, publishedPreview);
+        var publishedPanelPreviews = TryPublishCoverPanelPreviews(
+            validatedPanelPreviews,
+            request.FinalOutputRoot);
+        TryDeleteTemporaryDirectory(request.TemporaryOutput.CoverPdf);
+        return new PublishedCoverOutput(
+            request.FinalOutputRoot,
+            coverPdf,
+            publishedPreview,
+            publishedPanelPreviews);
+    }
+
+    private static CoverPanelPreviewPair? TryValidateCoverPanelPreviews(
+        CoverPanelPreviewOutcome? outcome,
+        CancellationToken cancellationToken)
+    {
+        if (outcome?.Status != CoverPanelPreviewStatus.Ready || outcome.Pair is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ValidateCoverPanelPreview(outcome.Pair.BackCover);
+            cancellationToken.ThrowIfCancellationRequested();
+            ValidateCoverPanelPreview(outcome.Pair.FrontCover);
+            return outcome.Pair;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException or MagickException)
+        {
+            TryDeleteFile(outcome.Pair.BackCover.Value);
+            TryDeleteFile(outcome.Pair.FrontCover.Value);
+            return null;
+        }
+    }
+
+    private static void ValidateCoverPanelPreview(FileReference preview)
+    {
+        using var image = new MagickImage(preview.Value);
+        if (image.Format != MagickFormat.Jpeg ||
+            image.Width != CoverPanelPreviewContract.PreviewSize.Width ||
+            image.Height != CoverPanelPreviewContract.PreviewSize.Height ||
+            image.HasAlpha)
+        {
+            throw new InvalidDataException($"Cover panel preview '{preview.Value}' did not pass publication validation.");
+        }
+    }
+
+    private static CoverPanelPreviewOutcome TryPublishCoverPanelPreviews(
+        CoverPanelPreviewPair? temporaryPair,
+        DirectoryReference finalOutputRoot)
+    {
+        var back = new FileReference(Path.Combine(finalOutputRoot.Value, CoverPanelPreviewContract.BackFileName));
+        var front = new FileReference(Path.Combine(finalOutputRoot.Value, CoverPanelPreviewContract.FrontFileName));
+        if (temporaryPair is null)
+        {
+            TryDeleteFile(back.Value);
+            TryDeleteFile(front.Value);
+            return CoverPanelPreviewOutcome.Unavailable();
+        }
+
+        var backPending = $"{back.Value}.pending";
+        var frontPending = $"{front.Value}.pending";
+        try
+        {
+            File.Move(temporaryPair.BackCover.Value, backPending, overwrite: true);
+            File.Move(temporaryPair.FrontCover.Value, frontPending, overwrite: true);
+            File.Move(backPending, back.Value, overwrite: true);
+            File.Move(frontPending, front.Value, overwrite: true);
+            return CoverPanelPreviewOutcome.Ready(new CoverPanelPreviewPair(back, front));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            TryDeleteFile(back.Value);
+            TryDeleteFile(front.Value);
+            return CoverPanelPreviewOutcome.Unavailable();
+        }
+        finally
+        {
+            TryDeleteFile(backPending);
+            TryDeleteFile(frontPending);
+        }
     }
 
     private async ValueTask<FileReference?> TryValidatePreviewAsync(
@@ -212,6 +300,30 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         if (Directory.Exists(temporaryDirectory))
         {
             Directory.Delete(temporaryDirectory, recursive: true);
+        }
+    }
+
+    private static void TryDeleteTemporaryDirectory(FileReference temporaryFile)
+    {
+        try
+        {
+            DeleteTemporaryDirectory(temporaryFile);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The main Cover PDF is already published; temporary preview cleanup is best effort.
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A locked preview must not turn an already-published Cover PDF into a failed build.
         }
     }
 

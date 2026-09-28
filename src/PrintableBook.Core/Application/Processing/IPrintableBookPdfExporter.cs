@@ -19,6 +19,47 @@ public static class PreviewPdfRasterSizes
     public static ImageSize Interior { get; } = new(600, 609);
 }
 
+public static class CoverPanelPreviewContract
+{
+    public const int SplitX = 2621;
+
+    public const int SourceWidth = 5242;
+
+    public const int SourceHeight = 2626;
+
+    public const int JpegQuality = 90;
+
+    public const string BackFileName = "back_cover.jpg";
+
+    public const string FrontFileName = "front_cover.jpg";
+
+    public const string UnavailableWarningCode = "cover_panel_previews_unavailable";
+
+    public static ImageSize PreviewSize { get; } = new(1198, 1200);
+}
+
+public enum CoverPanelPreviewStatus
+{
+    Ready = 0,
+    Unavailable = 1
+}
+
+public sealed record CoverPanelPreviewPair(
+    FileReference BackCover,
+    FileReference FrontCover);
+
+public sealed record CoverPanelPreviewOutcome(
+    CoverPanelPreviewStatus Status,
+    CoverPanelPreviewPair? Pair = null,
+    string? WarningCode = null)
+{
+    public static CoverPanelPreviewOutcome Ready(CoverPanelPreviewPair pair) =>
+        new(CoverPanelPreviewStatus.Ready, pair);
+
+    public static CoverPanelPreviewOutcome Unavailable(string warningCode = CoverPanelPreviewContract.UnavailableWarningCode) =>
+        new(CoverPanelPreviewStatus.Unavailable, WarningCode: warningCode);
+}
+
 public sealed record PrintableBookPdfExportRequest(
     FileReference Cover,
     IReadOnlyList<FileReference> IntroPages,
@@ -44,7 +85,10 @@ public sealed record CoverPdfExportRequest(
     DirectoryReference TemporaryOutputDirectory,
     PhysicalPageSize CoverPageSize);
 
-public sealed record CoverPdfExportResult(FileReference CoverPdf, FileReference? PreviewPdf = null);
+public sealed record CoverPdfExportResult(
+    FileReference CoverPdf,
+    FileReference? PreviewPdf = null,
+    CoverPanelPreviewOutcome? PanelPreviews = null);
 
 public sealed record InteriorPdfExportRequest(
     IReadOnlyList<FileReference> IntroPages,

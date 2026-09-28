@@ -36,6 +36,47 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
         var previewText = System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(result.PreviewPdf.Value));
         Assert.Contains("/Width 2726", previewText, StringComparison.Ordinal);
         Assert.Contains("/Height 1313", previewText, StringComparison.Ordinal);
+
+        Assert.Equal(CoverPanelPreviewStatus.Ready, result.PanelPreviews?.Status);
+        Assert.NotNull(result.PanelPreviews?.Pair);
+        Assert.Equal(CoverPanelPreviewContract.BackFileName, Path.GetFileName(result.PanelPreviews!.Pair!.BackCover.Value));
+        Assert.Equal(CoverPanelPreviewContract.FrontFileName, Path.GetFileName(result.PanelPreviews.Pair.FrontCover.Value));
+        AssertPanelPreview(result.PanelPreviews.Pair.BackCover);
+        AssertPanelPreview(result.PanelPreviews.Pair.FrontCover);
+    }
+
+    [Fact]
+    public async Task ExportCoverAsync_splits_the_unoriented_source_pixels_into_back_and_front_previews()
+    {
+        Directory.CreateDirectory(rootPath);
+        var coverPath = Path.Combine(rootPath, "split-source.png");
+        using (var cover = new MagickImage(
+                   MagickColors.Red,
+                   (uint)CoverPanelPreviewContract.SourceWidth,
+                   (uint)CoverPanelPreviewContract.SourceHeight))
+        using (var front = new MagickImage(
+                   MagickColors.Blue,
+                   (uint)(CoverPanelPreviewContract.SourceWidth - CoverPanelPreviewContract.SplitX),
+                   (uint)CoverPanelPreviewContract.SourceHeight))
+        {
+            cover.Composite(front, CoverPanelPreviewContract.SplitX, 0, CompositeOperator.Over);
+            cover.Orientation = OrientationType.RightTop;
+            cover.Format = MagickFormat.Png24;
+            cover.Write(coverPath);
+        }
+
+        var result = await new PdfSharpPrintableBookPdfExporter().ExportCoverAsync(new CoverPdfExportRequest(
+            new FileReference(coverPath),
+            new DirectoryReference(Path.Combine(rootPath, "split-output")),
+            new PhysicalPageSize(17.47, 8.75)));
+
+        var pair = Assert.IsType<CoverPanelPreviewPair>(result.PanelPreviews?.Pair);
+        using var back = new MagickImage(pair.BackCover.Value);
+        using var frontPreview = new MagickImage(pair.FrontCover.Value);
+        AssertDominantColor(back, red: true);
+        AssertDominantColor(frontPreview, red: false);
+        Assert.False(back.HasAlpha);
+        Assert.False(frontPreview.HasAlpha);
     }
 
     [Fact]
@@ -341,6 +382,29 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
 
         await Task.CompletedTask;
         return new FileReference(path);
+    }
+
+    private static void AssertPanelPreview(FileReference preview)
+    {
+        using var image = new MagickImage(preview.Value);
+        Assert.Equal(MagickFormat.Jpeg, image.Format);
+        Assert.Equal((uint)CoverPanelPreviewContract.PreviewSize.Width, image.Width);
+        Assert.Equal((uint)CoverPanelPreviewContract.PreviewSize.Height, image.Height);
+        Assert.False(image.HasAlpha);
+    }
+
+    private static void AssertDominantColor(MagickImage image, bool red)
+    {
+        var color = image.GetPixels().GetPixel((int)image.Width / 2, (int)image.Height / 2).ToColor();
+        Assert.NotNull(color);
+        if (red)
+        {
+            Assert.True(color!.R > color.B * 2, $"Expected a red preview, but sampled {color}.");
+        }
+        else
+        {
+            Assert.True(color!.B > color.R * 2, $"Expected a blue preview, but sampled {color}.");
+        }
     }
 
     public Task InitializeAsync() => Task.CompletedTask;
