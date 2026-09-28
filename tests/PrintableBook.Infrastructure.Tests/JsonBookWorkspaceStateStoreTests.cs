@@ -78,6 +78,45 @@ public sealed class JsonBookWorkspaceStateStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SaveAsync_round_trips_keyword_builder_with_explicit_underscore_property_names()
+    {
+        var workspace = await CreateWorkspaceAsync();
+        var store = new JsonBookWorkspaceStateStore(new PhysicalFileSystem());
+        var builder = new BookKeywordBuilderState(
+            ["coloring books", "coloring book"],
+            "books coloring book", null, null, null, null, null, null,
+            "coloring books, coloring book",
+            "B0123\nB0456",
+            "build-1",
+            DateTimeOffset.UnixEpoch,
+            1);
+
+        await store.SaveAsync(workspace, BookProcessingState.NotStarted(new BookId("book")) with { KeywordBuilder = builder });
+        var json = await File.ReadAllTextAsync(StatePath(workspace));
+        var restored = await store.LoadAsync(workspace);
+
+        Assert.Contains("\"keyword_1\": \"books coloring book\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"keyword_7\": null", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"keyword1\"", json, StringComparison.Ordinal);
+        Assert.Equal(builder.SourceKeywords, restored!.KeywordBuilder!.SourceKeywords);
+        Assert.Equal(builder.Keywords, restored.KeywordBuilder.Keywords);
+        Assert.Equal(builder.AdsKeyword, restored.KeywordBuilder.AdsKeyword);
+        Assert.Equal(builder.AdsAsin, restored.KeywordBuilder.AdsAsin);
+        Assert.Equal(builder.BuildId, restored.KeywordBuilder.BuildId);
+    }
+
+    [Fact]
+    public async Task Legacy_state_without_keyword_builder_loads_with_null_builder()
+    {
+        var workspace = await CreateWorkspaceAsync();
+        await WriteStateAsync(workspace, """{"bookId":{"value":"book"},"status":"notStarted","updatedAt":"0001-01-01T00:00:00+00:00","mayResume":false,"frameModeContractVersion":2}""");
+
+        var restored = await new JsonBookWorkspaceStateStore(new PhysicalFileSystem()).LoadAsync(workspace);
+
+        Assert.Null(restored!.KeywordBuilder);
+    }
+
+    [Fact]
     public async Task LoadWithMetadataAsync_maps_an_unversioned_missing_override_to_no_frame()
     {
         var workspace = await CreateWorkspaceAsync();

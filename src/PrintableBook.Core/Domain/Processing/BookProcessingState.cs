@@ -47,7 +47,8 @@ public sealed record BookProcessingState(
     string? PublishedInteriorPreviewReference = null,
     BookProductionMetadata? Metadata = null,
     string? AssignedBrand = null,
-    int FrameModeContractVersion = 2)
+    int FrameModeContractVersion = 2,
+    BookKeywordBuilderState? KeywordBuilder = null)
 {
     public const int CurrentFrameModeContractVersion = 2;
 

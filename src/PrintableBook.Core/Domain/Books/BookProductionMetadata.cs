@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace PrintableBook.Core.Domain.Books;
 
 public sealed record BookProductionMetadata(
@@ -46,7 +44,7 @@ public sealed record BookProductionMetadata(
         var normalizedSubcover = NormalizeSingleLine(subcover);
         if (normalizedSubcover is not null)
         {
-            var length = StringInfo.ParseCombiningCharacters(normalizedSubcover).Length;
+            var length = BookTextPolicy.GraphemeCount(normalizedSubcover);
             if (length >= 100)
             {
                 throw new ArgumentException("Subcover must contain fewer than 100 characters.", nameof(subcover));
@@ -101,7 +99,7 @@ public sealed record BookProductionMetadata(
         var effective = EffectiveValue(value);
         if (effective is null) return;
 
-        var count = SplitTerms(effective).Count;
+        var count = BookTextPolicy.SplitWords(effective).Count;
         if (count < minimum || count > maximum)
         {
             var expected = minimum == maximum
@@ -123,7 +121,7 @@ public sealed record BookProductionMetadata(
         var effective = EffectiveValue(value);
         if (effective is null) return;
 
-        var count = StringInfo.ParseCombiningCharacters(effective).Length;
+        var count = BookTextPolicy.GraphemeCount(effective);
         if (count >= maximumExclusive)
         {
             errors.Add(new(field, "character_limit", $"{label} must be under {maximumExclusive} characters (currently {count})."));
@@ -140,7 +138,7 @@ public sealed record BookProductionMetadata(
         var effective = EffectiveValue(value);
         if (effective is null) return;
 
-        var count = StringInfo.ParseCombiningCharacters(effective).Length;
+        var count = BookTextPolicy.GraphemeCount(effective);
         if (count > maximumInclusive)
         {
             errors.Add(new(field, "character_limit", $"{label} must contain at most {maximumInclusive} characters (currently {count})."));
@@ -152,7 +150,7 @@ public sealed record BookProductionMetadata(
         var effective = EffectiveValue(value);
         if (effective is null) return;
 
-        var terms = SplitTerms(effective);
+        var terms = BookTextPolicy.SplitWords(effective);
         var emitted = new List<(string Left, string Right)>();
         for (var leftIndex = 0; leftIndex < terms.Count; leftIndex++)
         {
@@ -177,36 +175,6 @@ public sealed record BookProductionMetadata(
         var trimmed = value?.Trim();
         return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
     }
-
-    private static IReadOnlyList<string> SplitTerms(string value)
-    {
-        var terms = new List<string>();
-        var start = -1;
-        for (var index = 0; index < value.Length; index++)
-        {
-            if (IsTermSeparator(value[index]))
-            {
-                if (start >= 0)
-                {
-                    terms.Add(value[start..index]);
-                    start = -1;
-                }
-            }
-            else if (start < 0)
-            {
-                start = index;
-            }
-        }
-
-        if (start >= 0) terms.Add(value[start..]);
-        return terms;
-    }
-
-    private static bool IsTermSeparator(char value) =>
-        value is >= '\u0009' and <= '\u000D' or
-        '\u0020' or '\u0085' or '\u00A0' or '\u1680' or
-        >= '\u2000' and <= '\u200A' or
-        '\u2028' or '\u2029' or '\u202F' or '\u205F' or '\u3000';
 
     private static bool AreDuplicateTerms(string left, string right)
     {
