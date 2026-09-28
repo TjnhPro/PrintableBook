@@ -301,6 +301,23 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
+    public void KeywordBuilderUsesFixedKeywordInputsAndTabSeparatedClipboardContract()
+    {
+        var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
+        var script = File.ReadAllText(Path.Combine(frontend, "js", "app.js"));
+        var layout = File.ReadAllText(Path.Combine(frontend, "css", "book-workspace.css"));
+
+        Assert.Contains("Generic Keywords", script, StringComparison.Ordinal);
+        Assert.Contains("Book Keywords", script, StringComparison.Ordinal);
+        Assert.Contains("rows=\"5\" data-generic-keywords", script, StringComparison.Ordinal);
+        Assert.Contains("rows=\"5\" data-action=\"book-keyword-source\"", script, StringComparison.Ordinal);
+        Assert.Contains("type=\"text\" data-action=\"book-keyword-ads-asin\"", script, StringComparison.Ordinal);
+        Assert.Contains("Copy to Clipboard", script, StringComparison.Ordinal);
+        Assert.Contains("fields.join(\"\\t\")", script, StringComparison.Ordinal);
+        Assert.Contains(".keyword-list-input { resize:none; overflow-y:auto; }", layout, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BoundedBookWorkspaceKeepsPreviewLoadingAndMotionAccessibilityContracts()
     {
         var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");

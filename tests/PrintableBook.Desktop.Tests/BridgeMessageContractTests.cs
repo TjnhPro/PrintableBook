@@ -291,11 +291,12 @@ public sealed class BridgeMessageContractTests
         var settingsStore = new StubSettingsStore();
         var router = new WebViewBridgeRouter(settingsStore: settingsStore);
 
-        var response = await router.HandleAsync("""{"version":1,"id":"request-5","command":"settings.save","payload":{"maximumPageConcurrency":6,"artworkDetectionThreshold":20,"artworkMaximumSide":2270,"workingPageWidth":2550,"workingPageHeight":2550,"finalPageWidth":2588,"finalPageHeight":2625,"dpi":300}}""");
+        var response = await router.HandleAsync("""{"version":1,"id":"request-5","command":"settings.save","payload":{"maximumPageConcurrency":6,"artworkDetectionThreshold":20,"artworkMaximumSide":2270,"workingPageWidth":2550,"workingPageHeight":2550,"finalPageWidth":2588,"finalPageHeight":2625,"dpi":300,"genericKeywords":[" coloring\tbooks ","COLORING BOOKS","books for adults"]}}""");
 
         Assert.True(response.Ok);
         Assert.Equal("settings.saved", response.Command);
         Assert.Equal(6, settingsStore.Saved!.MaximumPageConcurrency);
+        Assert.Equal(["coloring books", "books for adults"], settingsStore.Saved.GenericKeywords);
     }
 
     [Fact]

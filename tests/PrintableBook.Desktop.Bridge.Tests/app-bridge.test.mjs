@@ -89,6 +89,12 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     set outerHTML(_markup) { productionWorkspaceRenderCount += 1; }
   };
   const brandSettingsEditor = { dataset: { brandSettings: "" }, value: "{}" };
+  const genericKeywordsEditor = { dataset: { genericKeywords: "" }, value: "" };
+  const settingsInputs = [
+    ["maximumPageConcurrency", "4"], ["artworkDetectionThreshold", "20"], ["artworkMaximumSide", "2270"],
+    ["workingPageWidth", "2550"], ["workingPageHeight", "2550"], ["finalPageWidth", "2588"],
+    ["finalPageHeight", "2625"], ["dpi", "300"]
+  ].map(([setting, value]) => ({ dataset: { setting }, value }));
   const refreshButton = {
     disabled: false,
     textContent: "Refresh",
@@ -135,9 +141,10 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     document: {
       getElementById: (id) => ({ "bridge-status": status, "app-content": content, "refresh-button": refreshButton, "update-dialog-root": updateDialog }[id]),
       createElement: (tagName) => ({ tagName, className: "", textContent: "", attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } }),
-      querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : [],
+      querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : selector === "[data-setting]" ? settingsInputs : [],
       querySelector: (selector) => {
         if (selector === "[data-brand-settings]") return brandSettingsEditor;
+        if (selector === "[data-generic-keywords]") return genericKeywordsEditor;
         if (selector === ".intro-template-workspace" && contentMarkup.includes('class="intro-template-workspace"')) return introWorkspace;
         if (selector === ".interior-artwork-workspace" && contentMarkup.includes('class="interior-artwork-workspace"')) return artworkWorkspace;
         if (selector === ".book-drawer-body" && contentMarkup.includes('class="book-drawer-body"')) return bookDrawerBody;
@@ -154,7 +161,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSettingsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, brandSettingsEditor, genericKeywordsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -279,6 +286,24 @@ test("webview shell exposes every top-level desktop route", () => {
   }
   assert.match(page, /css\/tailwind\.css/);
   assert.match(page, /id="app-content"/);
+});
+
+test("Configuration saves reusable Generic Keywords from a fixed five-line input", () => {
+  const { messageHandler, content, contentListeners, genericKeywordsEditor, messages } = loadBridge("configuration");
+  messageHandler({ data: { version: 1, id: "settings-snapshot", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [] },
+    globalSettings: { maximumPageConcurrency: 4, artworkDetectionThreshold: 20, artworkMaximumSide: 2270, workingPageWidth: 2550, workingPageHeight: 2550, finalPageWidth: 2588, finalPageHeight: 2625, dpi: 300, genericKeywords: ["coloring books"] },
+    bookSummaries: []
+  } } });
+
+  assert.match(content.innerHTML, /Generic Keywords/);
+  assert.match(content.innerHTML, /class="control keyword-list-input" rows="5" data-generic-keywords/);
+  genericKeywordsEditor.value = " coloring\tbooks \n\n books for adults ";
+  const save = { dataset: { action: "save-settings" }, closest: () => save };
+  contentListeners.click({ target: save });
+
+  assert.equal(messages.at(-1).command, "settings.save");
+  assert.deepEqual(messages.at(-1).payload.genericKeywords, ["coloring books", "books for adults"]);
 });
 
 test("desktop shell ships the Printable Book logo for its sidebar and window icon", () => {
@@ -1621,7 +1646,7 @@ test("Keyword Builder submits normalized phrases without redrawing Book detail",
   const { messageHandler, content, contentListeners, messages, getFullRenderCount, getBookDrawerBodyRenderCount } = loadBridge("books");
   const snapshot = {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
-    globalSettings: {},
+    globalSettings: { genericKeywords: ["generic coloring", "books for adults"] },
     bookSummaries: [{
       bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
       metadata: {}, interiorSourcePageCount: 0, activeInteriorSourcePageCount: 0, assets: []
@@ -1631,18 +1656,22 @@ test("Keyword Builder submits normalized phrases without redrawing Book detail",
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
   assert.match(content.innerHTML, /Keyword Builder/);
+  assert.match(content.innerHTML, /Book Keywords/);
+  assert.match(content.innerHTML, /rows="5" data-action="book-keyword-source"/);
   assert.match(content.innerHTML, /Ads ASIN \(product targets\)/);
+  assert.match(content.innerHTML, /type="text" data-action="book-keyword-ads-asin"/);
+  assert.match(content.innerHTML, /Using 2 saved Generic Keywords/);
   const fullRenders = getFullRenderCount();
   const drawerRenders = getBookDrawerBodyRenderCount();
 
   contentListeners.input({ target: { dataset: { action: "book-keyword-source", bookId: "Book 001" }, value: " coloring\tbooks for adults \n\nadult coloring book" } });
-  contentListeners.input({ target: { dataset: { action: "book-keyword-ads-asin", bookId: "Book 001" }, value: " B0123\nB0456 " } });
+  contentListeners.input({ target: { dataset: { action: "book-keyword-ads-asin", bookId: "Book 001" }, value: " B0123, B0456 " } });
   const build = { dataset: { action: "build-book-keywords", bookId: "Book 001" }, closest: () => build };
   contentListeners.click({ target: build });
 
   assert.equal(messages.at(-1).command, "book.keywords.save");
   assert.deepEqual(messages.at(-1).payload.keywords, ["coloring books for adults", "adult coloring book"]);
-  assert.equal(messages.at(-1).payload.adsAsin, "B0123\nB0456");
+  assert.equal(messages.at(-1).payload.adsAsin, "B0123, B0456");
   assert.equal(getFullRenderCount(), fullRenders);
   assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
 });
@@ -1701,9 +1730,9 @@ test("Keyword Builder structured validation keeps the draft and does not request
   assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
 });
 
-test("Keyword Builder Copy all transfers only saved fields in stable order", async () => {
-  const { messageHandler, contentListeners, clipboardWrites } = loadBridge("books");
-  const builder = { sourceKeywords: ["coloring books"], keyword_1: "books coloring", keyword_2: null, keyword_3: null, keyword_4: null, keyword_5: null, keyword_6: null, keyword_7: null, adsKeyword: "coloring books", adsAsin: "B0123", buildId: "build-1", builtAtUtc: "2026-09-28T10:00:00Z", algorithmVersion: 1 };
+test("Keyword Builder Copy to Clipboard transfers nine saved tab-separated fields", async () => {
+  const { messageHandler, content, contentListeners, clipboardWrites } = loadBridge("books");
+  const builder = { sourceKeywords: ["coloring books"], keyword_1: "books coloring", keyword_2: null, keyword_3: null, keyword_4: null, keyword_5: null, keyword_6: null, keyword_7: null, adsKeyword: "coloring books", adsAsin: "B0123", buildId: "build-1", builtAtUtc: "2026-09-28T10:00:00Z", algorithmVersion: 2, omittedWordCount: 2 };
   const snapshot = {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
@@ -1712,13 +1741,16 @@ test("Keyword Builder Copy all transfers only saved fields in stable order", asy
   messageHandler({ data: { version: 1, id: "keyword-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
+  assert.match(content.innerHTML, /Copy to Clipboard/);
+  assert.match(content.innerHTML, /7 keyword fields are full\. 2 remaining words were not included\./);
   const copy = { dataset: { action: "copy-book-keywords", bookId: "Book 001" }, closest: () => copy };
 
   contentListeners.click({ target: copy });
   await Promise.resolve();
 
   assert.equal(clipboardWrites.length, 1);
-  assert.equal(clipboardWrites[0], "keyword_1: books coloring\nkeyword_2: \nkeyword_3: \nkeyword_4: \nkeyword_5: \nkeyword_6: \nkeyword_7: \nadsKeyword: coloring books\nadsAsin: B0123");
+  assert.equal(clipboardWrites[0], "books coloring\t\t\t\t\t\t\tcoloring books\tB0123");
+  assert.equal(clipboardWrites[0].split("\t").length, 9);
 });
 
 test("Saving Book Interior settings accepts the refreshed snapshot without redrawing the open drawer", () => {

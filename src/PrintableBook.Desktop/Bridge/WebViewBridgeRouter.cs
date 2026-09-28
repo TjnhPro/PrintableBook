@@ -901,6 +901,10 @@ internal sealed class WebViewBridgeRouter(
             {
                 var settings = payload.Deserialize<GlobalSettings>(JsonOptions);
                 if (settings is null) return new BridgeResponse(Version, request.Id, false, null, "invalid_settings");
+                settings = settings with
+                {
+                    GenericKeywords = BookTextPolicy.NormalizePhrases(settings.EffectiveGenericKeywords, distinct: true)
+                };
                 await settingsStore.SaveAsync(settings, cancellationToken);
                 return BridgeResponse.Succeeded(request.Id, "settings.saved", settings);
             }
