@@ -30,15 +30,18 @@ Trong tab **Overview** của Book detail, card **Book Information** lưu riêng:
 
 Card **Keyword Builder** nằm sau Brand Assignment trong tab Overview:
 
-1. Paste danh sách nghiên cứu vào **Source Keywords**, mỗi dòng một phrase.
-2. Có thể nhập **Ads ASIN (product targets)** dạng multiline. Field này dành cho advertising targets và hoàn toàn tách biệt với ASIN trong Book Information.
-3. Nhấn **Build & Save**. App normalize khoảng trắng, giữ phrase order cho `adsKeyword`, rồi loại word trùng nhau không phân biệt hoa/thường trước khi tạo `keyword_1` đến `keyword_7`.
+1. Mở **Settings → Keyword Builder**, nhập **Generic Keywords** dùng chung, mỗi dòng một phrase, rồi Save settings.
+2. Trong Book detail, nhập **Book Keywords** riêng của Book, mỗi dòng một phrase.
+3. Có thể nhập **Ads ASIN (product targets)** trên một dòng. Field này dành cho advertising targets và hoàn toàn tách biệt với ASIN trong Book Information.
+4. Nhấn **Build & Save**. App normalize khoảng trắng, loại Book phrase trùng Generic phrase không phân biệt hoa/thường, rồi xử lý Generic trước Book theo thứ tự từ trên xuống.
 
-Mỗi `keyword_*` tối đa 50 ký tự và không bao giờ cắt giữa word. App cộng word theo đúng thứ tự input; khi word kế tiếp không vừa field hiện tại, app chuyển sang field kế tiếp. Đây là sequential packing, không tự reorder để tối ưu dung lượng. Nếu một word dài hơn 50 ký tự hoặc cần field thứ tám, Save bị chặn và lỗi chỉ rõ word gây vấn đề. Singular/plural không bị gộp; punctuation vẫn thuộc về word.
+Mỗi `keyword_*` tối đa 50 ký tự và không bao giờ cắt giữa word. App cộng word theo đúng thứ tự input; khi word kế tiếp không vừa field hiện tại, app chuyển sang field kế tiếp. Đây là sequential packing, không tự reorder để tối ưu dung lượng. Nếu một word dài hơn 50 ký tự, Save bị chặn và lỗi chỉ rõ word gây vấn đề. Khi bảy field đã đầy, app vẫn Save phần đã build, bỏ các word còn dư và hiển thị warning. Singular/plural không bị gộp; punctuation vẫn thuộc về word.
 
 Sau khi packing hợp lệ, app shuffle word trong từng field đúng một lần rồi lưu kết quả. Refresh, redraw, mở lại Book hoặc restart app không shuffle lại. Có thể bấm **Build & Save** lần nữa dù input không đổi để chủ động tạo thứ tự mới.
 
-Generated keywords và Ads Keyword là read-only. **Copy all in field order** copy dữ liệu đã Save, không copy draft chưa lưu. Nếu xóa toàn bộ Source Keywords, action đổi thành **Clear & Save** và cảnh báo rằng generated fields sẽ bị xóa; Ads ASIN vẫn có thể được giữ.
+Ads Keyword giữ tối đa 30 phrase: ưu tiên tối đa 20 Generic và 10 Book; nếu một bên thiếu thì bên còn lại bù phần trống. Generic luôn đứng trước Book và Ads Keyword không bị shuffle.
+
+Generated keywords và Ads Keyword là read-only. **Copy to Clipboard** copy chín giá trị đã Save (`keyword_1…keyword_7`, Ads Keyword, Ads ASIN) trên một dòng, phân cách bằng tab và không kèm label; field rỗng vẫn giữ cột. Nút không copy draft chưa lưu. Nếu cả Generic Keywords và Book Keywords đều trống, action đổi thành **Clear & Save** và cảnh báo rằng generated fields sẽ bị xóa; Ads ASIN vẫn có thể được giữ.
 
 Nếu Save đã hoàn thành nhưng library refresh lỗi, card hiển thị **Saved · Refresh needed**. Dùng **Retry refresh** để đồng bộ snapshot; nút này không build, shuffle hoặc Save lần nữa. Khi quay lại binary cũ, state vẫn load được, nhưng một lần Save workspace bằng binary cũ có thể làm mất Keyword Builder data vì phiên bản cũ không biết property này.
 
@@ -218,7 +221,7 @@ Phần advanced chứa normalized source size và BorderLine V3 pass 1/pass 2. �
 | Process/Copy Templates bị chặn do Brand | Assign Brand cho Book; nếu assignment invalid thì sửa Author và reassign. Nếu Brand chưa được chứng nhận, mở **Brands & templates** và Validate Brand. |
 | Book không xuất hiện dưới Book Brand | Chỉ Book đã explicit assign mới xuất hiện; cùng Author là chưa đủ. |
 | Keyword Builder báo word quá dài | Shorten hoặc tách token được nêu trong lỗi; một token không được vượt 50 ký tự. |
-| Keyword Builder báo cần field thứ tám | Xóa, rút gọn hoặc reorder Source Keywords; MVP pack tuần tự theo input order. |
+| Keyword Builder báo bảy field đã đầy | Build đã được Save; các word còn dư bị bỏ theo thứ tự từ trên xuống. Rút gọn hoặc reorder Generic/Book Keywords nếu cần đưa chúng vào output. |
 | Keyword Builder đã Save nhưng cần refresh | Nhấn **Retry refresh**. Không nhấn Build & Save nếu chỉ cần đồng bộ snapshot, vì Build & Save sẽ shuffle và lưu một build mới. |
 | CUSTOM Intro không chạy | Chọn ít nhất một Book Interior image và **Save changes**. |
 | Background lỗi | Kiểm tra Brand có `background.png` đúng Final Page size. |
