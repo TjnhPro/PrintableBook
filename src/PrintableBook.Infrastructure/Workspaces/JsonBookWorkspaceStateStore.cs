@@ -60,6 +60,7 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
                     .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
                     .ToArray() is { Length: > 0 } inactive ? inactive : null,
                 Metadata = state.Metadata?.Normalize(),
+                KeywordBuilder = state.KeywordBuilder?.NormalizeStored(),
                 AssignedBrand = string.IsNullOrWhiteSpace(state.AssignedBrand) ? null : state.AssignedBrand.Trim()
             };
             return new(normalized, sourceVersion, legacy, explicitAutoKeys, explicitFrameKeys);
@@ -84,6 +85,7 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
             FrameModeContractVersion = BookProcessingState.CurrentFrameModeContractVersion,
             InteriorFrameOverrides = NormalizeFrameOverrides(state.InteriorFrameOverrides),
             Metadata = state.Metadata?.Normalize(),
+            KeywordBuilder = state.KeywordBuilder?.NormalizeStored(),
             AssignedBrand = string.IsNullOrWhiteSpace(state.AssignedBrand) ? null : state.AssignedBrand.Trim()
         };
         return fileSystem.WriteTextAtomicallyAsync(StateFile(workspace), JsonSerializer.Serialize(normalized, JsonOptions), cancellationToken);

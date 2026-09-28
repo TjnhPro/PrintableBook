@@ -18,6 +18,7 @@ public sealed class BookCatalogMetadataException(
 public interface IBookCatalogMetadataService
 {
     ValueTask SaveBookMetadataAsync(DiscoveredBook book, BookProductionMetadata metadata, CancellationToken cancellationToken = default);
+    ValueTask<BookKeywordBuilderState> SaveKeywordBuilderAsync(DiscoveredBook book, IReadOnlyList<string> keywords, string? adsAsin, CancellationToken cancellationToken = default);
     ValueTask AssignBrandAsync(DiscoveredBook book, DiscoveredBrand brand, CancellationToken cancellationToken = default);
     ValueTask UnassignBrandAsync(DiscoveredBook book, CancellationToken cancellationToken = default);
     ValueTask SaveBrandAuthorAsync(DiscoveredBrand brand, string? author, CancellationToken cancellationToken = default);
@@ -25,8 +26,12 @@ public interface IBookCatalogMetadataService
 
 public sealed class BookCatalogMetadataService(
     IBookWorkspaceStateStore stateStore,
-    IBrandMetadataStore brandMetadataStore) : IBookCatalogMetadataService
+    IBrandMetadataStore brandMetadataStore,
+    BookKeywordBuilder? keywordBuilder = null,
+    IGlobalSettingsStore? settingsStore = null) : IBookCatalogMetadataService
 {
+    private readonly BookKeywordBuilder keywordBuilder = keywordBuilder ?? new BookKeywordBuilder();
+
     public async ValueTask SaveBookMetadataAsync(
         DiscoveredBook book,
         BookProductionMetadata metadata,
@@ -45,6 +50,23 @@ public sealed class BookCatalogMetadataService(
 
         var state = await LoadStateAsync(book, cancellationToken);
         await stateStore.SaveAsync(book.Workspace, state with { Metadata = metadata.Normalize() }, cancellationToken);
+    }
+
+    public async ValueTask<BookKeywordBuilderState> SaveKeywordBuilderAsync(
+        DiscoveredBook book,
+        IReadOnlyList<string> keywords,
+        string? adsAsin,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(book);
+        ArgumentNullException.ThrowIfNull(keywords);
+        var genericKeywords = settingsStore is null
+            ? []
+            : (await settingsStore.LoadAsync(cancellationToken)).EffectiveGenericKeywords;
+        var result = keywordBuilder.Build(genericKeywords, keywords, adsAsin, Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow);
+        var state = await LoadStateAsync(book, cancellationToken);
+        await stateStore.SaveAsync(book.Workspace, state with { KeywordBuilder = result }, cancellationToken);
+        return result;
     }
 
     public async ValueTask AssignBrandAsync(

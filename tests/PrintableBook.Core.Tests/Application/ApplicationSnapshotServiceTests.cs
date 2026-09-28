@@ -480,6 +480,25 @@ public sealed class ApplicationSnapshotServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_projects_the_saved_keyword_builder_without_rebuilding_it()
+    {
+        var builder = new BookKeywordBuilderState(
+            ["coloring books"],
+            "books coloring", null, null, null, null, null, null,
+            "coloring books",
+            "B0123",
+            "build-1",
+            DateTimeOffset.UnixEpoch,
+            1);
+        var state = BookProcessingState.NotStarted(new BookId("Book A")) with { KeywordBuilder = builder };
+
+        var snapshot = await new ApplicationSnapshotService(new StubDiscovery(), new StubSettingsStore(), new StubScanner(), new StubStateStore(explicitState: state), new StubFileSystem()).RefreshAsync();
+
+        Assert.Same(builder, Assert.Single(snapshot.BookSummaries).KeywordBuilder);
+        Assert.Equal("books coloring", Assert.Single(snapshot.BookSummaries).KeywordBuilder!.Keyword1);
+    }
+
+    [Fact]
     public async Task RefreshAsync_marks_an_empty_custom_intro_selection_as_needing_review()
     {
         var state = BookProcessingState.NotStarted(new BookId("Book A")).SetHasIntro(true).SetIntroInteriorSourceKeys([]);

@@ -50,6 +50,34 @@ public sealed class JsonGlobalSettingsStoreTests : IAsyncLifetime
         Assert.Equal(settings.BorderLineDetection, loaded.BorderLineDetection);
     }
 
+    [Fact]
+    public async Task SaveAsync_normalizes_and_round_trips_generic_keywords()
+    {
+        var paths = CreatePaths();
+        var store = CreateStore(paths);
+
+        await store.SaveAsync(GlobalSettings.Default with
+        {
+            GenericKeywords = [" coloring\tbooks ", "COLORING BOOKS", " ", "books for adults"]
+        });
+        var loaded = await store.LoadAsync(paths);
+
+        Assert.Equal(["coloring books", "books for adults"], loaded.GenericKeywords);
+    }
+
+    [Fact]
+    public async Task LoadAsync_legacy_settings_default_generic_keywords_to_empty()
+    {
+        var paths = CreatePaths();
+        Directory.CreateDirectory(root);
+        await File.WriteAllTextAsync(paths.SettingsFile.Value, "{\"maximumPageConcurrency\":4,\"artworkDetectionThreshold\":20,\"artworkMaximumSide\":2270,\"workingPageWidth\":2550,\"workingPageHeight\":2550,\"finalPageWidth\":2588,\"finalPageHeight\":2625,\"dpi\":300}");
+
+        var loaded = await CreateStore(paths).LoadAsync(paths);
+
+        Assert.Empty(loaded.EffectiveGenericKeywords);
+        Assert.Empty(loaded.GenericKeywords!);
+    }
+
     [Theory]
     [InlineData(0, 320)]
     [InlineData(2048, 1024)]

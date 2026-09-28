@@ -2,6 +2,7 @@ using System.Text.Json;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Abstractions;
+using PrintableBook.Core.Domain.Books;
 
 namespace PrintableBook.Infrastructure.Discovery;
 
@@ -58,7 +59,8 @@ public sealed class JsonGlobalSettingsStore(IApplicationRootDiscovery discovery,
     private static GlobalSettings Normalize(GlobalSettings settings) => settings with
     {
         ArtworkSourceNormalization = settings.EffectiveArtworkSourceNormalization,
-        BorderLineDetection = settings.EffectiveBorderLineDetection
+        BorderLineDetection = settings.EffectiveBorderLineDetection,
+        GenericKeywords = BookTextPolicy.NormalizePhrases(settings.EffectiveGenericKeywords, distinct: true)
     };
 
     private static bool IsRatio(double value) => value is >= 0 and <= 1;

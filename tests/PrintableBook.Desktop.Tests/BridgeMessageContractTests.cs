@@ -291,11 +291,12 @@ public sealed class BridgeMessageContractTests
         var settingsStore = new StubSettingsStore();
         var router = new WebViewBridgeRouter(settingsStore: settingsStore);
 
-        var response = await router.HandleAsync("""{"version":1,"id":"request-5","command":"settings.save","payload":{"maximumPageConcurrency":6,"artworkDetectionThreshold":20,"artworkMaximumSide":2270,"workingPageWidth":2550,"workingPageHeight":2550,"finalPageWidth":2588,"finalPageHeight":2625,"dpi":300}}""");
+        var response = await router.HandleAsync("""{"version":1,"id":"request-5","command":"settings.save","payload":{"maximumPageConcurrency":6,"artworkDetectionThreshold":20,"artworkMaximumSide":2270,"workingPageWidth":2550,"workingPageHeight":2550,"finalPageWidth":2588,"finalPageHeight":2625,"dpi":300,"genericKeywords":[" coloring\tbooks ","COLORING BOOKS","books for adults"]}}""");
 
         Assert.True(response.Ok);
         Assert.Equal("settings.saved", response.Command);
         Assert.Equal(6, settingsStore.Saved!.MaximumPageConcurrency);
+        Assert.Equal(["coloring books", "books for adults"], settingsStore.Saved.GenericKeywords);
     }
 
     [Fact]
@@ -714,6 +715,99 @@ public sealed class BridgeMessageContractTests
         Assert.True(service.Unassigned);
         Assert.Equal("Jane Doe", service.BrandAuthor);
         Assert.Equal(4, manager.Starts);
+    }
+
+    [Fact]
+    public async Task Keyword_builder_save_returns_the_exact_persisted_state_before_refresh_completion()
+    {
+        var service = new StubBookCatalogMetadataService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(manager),
+            backgroundTaskManager: manager,
+            bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"keywords","command":"book.keywords.save","payload":{"bookId":"Book One","keywords":["coloring books","coloring book"],"adsAsin":"B0123"}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("book.keywords.saved", response.Command);
+        Assert.Equal("coloring books book", service.KeywordBuilder!.Keyword1);
+        Assert.Equal(1, manager.Starts);
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            response.Payload,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.Contains("\"bookId\":\"Book One\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"buildId\":\"build-1\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"refreshTask\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Keyword_builder_rejects_malformed_input_without_refreshing()
+    {
+        var service = new StubBookCatalogMetadataService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"keywords","command":"book.keywords.save","payload":{"bookId":"Book One","keywords":["valid",42]}}""");
+
+        Assert.Equal("invalid_keyword_builder", response.Error);
+        Assert.Null(service.KeywordBuilder);
+        Assert.Equal(0, manager.Starts);
+    }
+
+    [Fact]
+    public async Task Keyword_builder_returns_versioned_word_length_error_details()
+    {
+        var service = new StubBookCatalogMetadataService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), bookCatalogMetadataService: service);
+        var word = new string('a', 51);
+
+        var response = await router.HandleAsync($"{{\"version\":1,\"id\":\"keywords\",\"command\":\"book.keywords.save\",\"payload\":{{\"bookId\":\"Book One\",\"keywords\":[\"{word}\"]}}}}");
+
+        Assert.Equal("keyword_word_too_long", response.Error);
+        var json = System.Text.Json.JsonSerializer.Serialize(
+            response.Payload,
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.Contains("\"policyVersion\":1", json, StringComparison.Ordinal);
+        Assert.Contains("\"field\":\"keywords\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"graphemeCount\":51", json, StringComparison.Ordinal);
+        Assert.Equal(0, manager.Starts);
+    }
+
+    [Theory]
+    [InlineData(BackgroundTaskKind.ProductionAction, "production_action_active")]
+    [InlineData(BackgroundTaskKind.CacheCleanup, "cache_cleanup_active")]
+    public async Task Keyword_builder_is_blocked_while_another_workspace_writer_is_active(BackgroundTaskKind activeKind, string expectedError)
+    {
+        var service = new StubBookCatalogMetadataService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot()) { ActiveKind = activeKind };
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(manager),
+            backgroundTaskManager: manager,
+            bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"keywords","command":"book.keywords.save","payload":{"bookId":"Book One","keywords":["coloring books"]}}""");
+
+        Assert.Equal(expectedError, response.Error);
+        Assert.Null(service.KeywordBuilder);
+        Assert.Equal(0, manager.Starts);
+    }
+
+    [Fact]
+    public async Task Keyword_builder_save_stays_successful_when_the_follow_up_refresh_cannot_start()
+    {
+        var service = new StubBookCatalogMetadataService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot()) { StartException = new InvalidOperationException("refresh failed") };
+        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"keywords","command":"book.keywords.save","payload":{"bookId":"Book One","keywords":["coloring books"]}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("book.keywords.saved", response.Command);
+        Assert.NotNull(service.KeywordBuilder);
+        var json = System.Text.Json.JsonSerializer.Serialize(response.Payload, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.Contains("\"refreshWarning\":\"Library refresh could not start.\"", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1225,22 +1319,29 @@ public sealed class BridgeMessageContractTests
         private readonly BackgroundTaskId id = new("retained-library-task");
         public int Starts { get; private set; }
         public int Lists { get; private set; }
+        public BackgroundTaskKind? ActiveKind { get; init; }
+        public Exception? StartException { get; init; }
         public ValueTask<BackgroundTaskSnapshot> StartAsync<TRequest>(BackgroundTaskKind kind, string key, string? subject, TRequest request, object? initialView = null, CancellationToken cancellationToken = default)
         {
             Starts++;
+            if (StartException is not null) return ValueTask.FromException<BackgroundTaskSnapshot>(StartException);
             return ValueTask.FromResult(Current());
         }
         public ValueTask<BackgroundTaskSnapshot?> GetAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) => ValueTask.FromResult<BackgroundTaskSnapshot?>(Current());
         public ValueTask<IReadOnlyList<BackgroundTaskSnapshot>> ListAsync(BackgroundTaskKind? kind = null, CancellationToken cancellationToken = default)
         {
             Lists++;
-            return ValueTask.FromResult<IReadOnlyList<BackgroundTaskSnapshot>>(snapshot is null ? [] : [Current()]);
+            var tasks = new List<BackgroundTaskSnapshot>();
+            if (snapshot is not null && (kind is null || kind == BackgroundTaskKind.LibraryRefresh)) tasks.Add(Current());
+            if (ActiveKind is { } activeKind && (kind is null || kind == activeKind)) tasks.Add(Active(activeKind));
+            return ValueTask.FromResult<IReadOnlyList<BackgroundTaskSnapshot>>(tasks);
         }
         public ValueTask<BackgroundTaskSnapshot?> CancelAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default) => ValueTask.FromResult<BackgroundTaskSnapshot?>(Current());
         public ValueTask<bool> WaitAsync(BackgroundTaskId taskId, TimeSpan timeout, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
         public bool TryGetResult<TResult>(BackgroundTaskId taskId, out TResult? result) { if (snapshot is TResult typed) { result = typed; return true; } result = default; return false; }
         public bool TryGetView<TView>(BackgroundTaskId taskId, out TView? view) where TView : class { view = null; return false; }
         private BackgroundTaskSnapshot Current() => new(id, BackgroundTaskKind.LibraryRefresh, BackgroundTaskState.Completed, "library", "Library", null, null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null, null);
+        private static BackgroundTaskSnapshot Active(BackgroundTaskKind kind) => new(new BackgroundTaskId($"active-{kind}"), kind, BackgroundTaskState.Running, kind.ToString(), "Book One", null, null, null, null, DateTimeOffset.UtcNow, null, null, null);
     }
 
     private sealed class NoopRecoveryService : IInterruptedProcessingRecoveryService
@@ -1456,6 +1557,7 @@ public sealed class BridgeMessageContractTests
         public string? AssignedBrand { get; private set; }
         public bool Unassigned { get; private set; }
         public string? BrandAuthor { get; private set; }
+        public BookKeywordBuilderState? KeywordBuilder { get; private set; }
 
         public ValueTask SaveBookMetadataAsync(DiscoveredBook book, BookProductionMetadata metadata, CancellationToken cancellationToken = default)
         {
@@ -1470,6 +1572,12 @@ public sealed class BridgeMessageContractTests
 
             Metadata = metadata;
             return ValueTask.CompletedTask;
+        }
+
+        public ValueTask<BookKeywordBuilderState> SaveKeywordBuilderAsync(DiscoveredBook book, IReadOnlyList<string> keywords, string? adsAsin, CancellationToken cancellationToken = default)
+        {
+            KeywordBuilder = new BookKeywordBuilder(new NoOpKeywordShuffler()).Build(keywords, adsAsin, "build-1", DateTimeOffset.UnixEpoch);
+            return ValueTask.FromResult(KeywordBuilder);
         }
 
         public ValueTask AssignBrandAsync(DiscoveredBook book, DiscoveredBrand brand, CancellationToken cancellationToken = default)
@@ -1488,6 +1596,11 @@ public sealed class BridgeMessageContractTests
         {
             BrandAuthor = author;
             return ValueTask.CompletedTask;
+        }
+
+        private sealed class NoOpKeywordShuffler : IKeywordWordShuffler
+        {
+            public void Shuffle(IList<string> words) { }
         }
     }
 
