@@ -121,6 +121,28 @@ public sealed class BookCatalogMetadataServiceTests
     }
 
     [Fact]
+    public void Asin_is_optional_normalized_serialized_and_limited_to_one_hundred_characters()
+    {
+        var oneHundredCharacters = new string('a', 100);
+        var metadata = BookProductionMetadata.Create(null, null, null, null, null, $" {oneHundredCharacters} ");
+
+        Assert.Equal(oneHundredCharacters, metadata.Asin);
+        Assert.Empty(metadata.ValidateForSave());
+        Assert.Null(BookProductionMetadata.Create(null, null, null, null, null, " ").Asin);
+
+        var json = System.Text.Json.JsonSerializer.Serialize(metadata);
+        var restored = System.Text.Json.JsonSerializer.Deserialize<BookProductionMetadata>(json);
+        Assert.Equal(oneHundredCharacters, restored!.Asin);
+
+        var error = Assert.Single(new BookProductionMetadata(null, null, null, null, null)
+        {
+            Asin = new string('a', 101)
+        }.ValidateForSave());
+        AssertError(error, "asin", "character_limit");
+        Assert.Equal("ASIN must contain at most 100 characters (currently 101).", error.Message);
+    }
+
+    [Fact]
     public void ValidateForSave_counts_graphemes_and_returns_deterministic_field_order()
     {
         var title = string.Concat(Enumerable.Repeat("a\u0301", 120));

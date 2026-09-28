@@ -9,6 +9,8 @@ public sealed record BookProductionMetadata(
     string? Description,
     string? Author)
 {
+    public string? Asin { get; init; }
+
     public IReadOnlyList<BookMetadataValidationError> ValidateForSave()
     {
         var errors = new List<BookMetadataValidationError>();
@@ -26,6 +28,9 @@ public sealed record BookProductionMetadata(
         ValidateTerms("subcover", "Subcover", Subcover, 4, 6, errors);
         ValidateCharacters("subcover", "Subcover", Subcover, 100, errors);
 
+        ValidateSingleLine("asin", "ASIN", Asin, errors);
+        ValidateMaximumCharacters("asin", "ASIN", Asin, 100, errors);
+
         ValidateSingleLine("author", "Author", Author, errors);
         return errors;
     }
@@ -35,7 +40,8 @@ public sealed record BookProductionMetadata(
         string? subtitle,
         string? subcover,
         string? description,
-        string? author)
+        string? author,
+        string? asin = null)
     {
         var normalizedSubcover = NormalizeSingleLine(subcover);
         if (normalizedSubcover is not null)
@@ -52,10 +58,13 @@ public sealed record BookProductionMetadata(
             NormalizeSingleLine(subtitle),
             normalizedSubcover,
             NormalizeMultiline(description),
-            NormalizeSingleLine(author));
+            NormalizeSingleLine(author))
+        {
+            Asin = NormalizeSingleLine(asin)
+        };
     }
 
-    public BookProductionMetadata Normalize() => Create(Title, Subtitle, Subcover, Description, Author);
+    public BookProductionMetadata Normalize() => Create(Title, Subtitle, Subcover, Description, Author, Asin);
 
     public static string? NormalizeSingleLine(string? value)
     {
@@ -118,6 +127,23 @@ public sealed record BookProductionMetadata(
         if (count >= maximumExclusive)
         {
             errors.Add(new(field, "character_limit", $"{label} must be under {maximumExclusive} characters (currently {count})."));
+        }
+    }
+
+    private static void ValidateMaximumCharacters(
+        string field,
+        string label,
+        string? value,
+        int maximumInclusive,
+        ICollection<BookMetadataValidationError> errors)
+    {
+        var effective = EffectiveValue(value);
+        if (effective is null) return;
+
+        var count = StringInfo.ParseCombiningCharacters(effective).Length;
+        if (count > maximumInclusive)
+        {
+            errors.Add(new(field, "character_limit", $"{label} must contain at most {maximumInclusive} characters (currently {count})."));
         }
     }
 
