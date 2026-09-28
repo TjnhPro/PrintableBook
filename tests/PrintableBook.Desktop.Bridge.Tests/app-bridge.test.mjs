@@ -106,6 +106,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   };
   const versionLabel = { textContent: "Version 0.1" };
   const messages = [];
+  const clipboardWrites = [];
   const intervals = [];
   const intervalDelays = [];
   const routeButtons = ["configuration", "brands", "books", "process", "outputs", "diagnostics"].map((route) => {
@@ -149,10 +150,11 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
       addEventListener: (eventName, handler) => { documentListeners[eventName] = handler; }
     },
     window: browserWindow,
+    navigator: { clipboard: { writeText: (value) => { clipboardWrites.push(value); return Promise.resolve(); } } },
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSettingsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, brandSettingsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -1697,6 +1699,26 @@ test("Keyword Builder structured validation keeps the draft and does not request
   assert.equal(messages.length, messageCount);
   assert.equal(getFullRenderCount(), renders);
   assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+});
+
+test("Keyword Builder Copy all transfers only saved fields in stable order", async () => {
+  const { messageHandler, contentListeners, clipboardWrites } = loadBridge("books");
+  const builder = { sourceKeywords: ["coloring books"], keyword_1: "books coloring", keyword_2: null, keyword_3: null, keyword_4: null, keyword_5: null, keyword_6: null, keyword_7: null, adsKeyword: "coloring books", adsAsin: "B0123", buildId: "build-1", builtAtUtc: "2026-09-28T10:00:00Z", algorithmVersion: 1 };
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{ bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], metadata: {}, interiorSourcePageCount: 0, activeInteriorSourcePageCount: 0, assets: [], keywordBuilder: builder }]
+  };
+  messageHandler({ data: { version: 1, id: "keyword-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const copy = { dataset: { action: "copy-book-keywords", bookId: "Book 001" }, closest: () => copy };
+
+  contentListeners.click({ target: copy });
+  await Promise.resolve();
+
+  assert.equal(clipboardWrites.length, 1);
+  assert.equal(clipboardWrites[0], "keyword_1: books coloring\nkeyword_2: \nkeyword_3: \nkeyword_4: \nkeyword_5: \nkeyword_6: \nkeyword_7: \nadsKeyword: coloring books\nadsAsin: B0123");
 });
 
 test("Saving Book Interior settings accepts the refreshed snapshot without redrawing the open drawer", () => {
