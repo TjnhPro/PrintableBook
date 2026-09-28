@@ -1615,6 +1615,90 @@ test("Book Information structured backend rejection retains the drawer without r
   assert.equal(messages.length, messageCount, "backend rejection must not request a snapshot refresh");
 });
 
+test("Keyword Builder submits normalized phrases without redrawing Book detail", () => {
+  const { messageHandler, content, contentListeners, messages, getFullRenderCount, getBookDrawerBodyRenderCount } = loadBridge("books");
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      metadata: {}, interiorSourcePageCount: 0, activeInteriorSourcePageCount: 0, assets: []
+    }]
+  };
+  messageHandler({ data: { version: 1, id: "keyword-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  assert.match(content.innerHTML, /Keyword Builder/);
+  assert.match(content.innerHTML, /Ads ASIN \(product targets\)/);
+  const fullRenders = getFullRenderCount();
+  const drawerRenders = getBookDrawerBodyRenderCount();
+
+  contentListeners.input({ target: { dataset: { action: "book-keyword-source", bookId: "Book 001" }, value: " coloring\tbooks for adults \n\nadult coloring book" } });
+  contentListeners.input({ target: { dataset: { action: "book-keyword-ads-asin", bookId: "Book 001" }, value: " B0123\nB0456 " } });
+  const build = { dataset: { action: "build-book-keywords", bookId: "Book 001" }, closest: () => build };
+  contentListeners.click({ target: build });
+
+  assert.equal(messages.at(-1).command, "book.keywords.save");
+  assert.deepEqual(messages.at(-1).payload.keywords, ["coloring books for adults", "adult coloring book"]);
+  assert.equal(messages.at(-1).payload.adsAsin, "B0123\nB0456");
+  assert.equal(getFullRenderCount(), fullRenders);
+  assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+});
+
+test("Keyword Builder keeps the acknowledged build when a joined refresh returns a stale snapshot", () => {
+  const { messageHandler, contentListeners, messages, browserWindow, getFullRenderCount } = loadBridge("books");
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      metadata: {}, interiorSourcePageCount: 0, activeInteriorSourcePageCount: 0, assets: [], keywordBuilder: null
+    }]
+  };
+  messageHandler({ data: { version: 1, id: "keyword-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  contentListeners.input({ target: { dataset: { action: "book-keyword-source", bookId: "Book 001" }, value: "coloring books" } });
+  const build = { dataset: { action: "build-book-keywords", bookId: "Book 001" }, closest: () => build };
+  contentListeners.click({ target: build });
+  const request = messages.at(-1);
+  const saved = { sourceKeywords: ["coloring books"], keyword_1: "books coloring", keyword_2: null, keyword_3: null, keyword_4: null, keyword_5: null, keyword_6: null, keyword_7: null, adsKeyword: "coloring books", adsAsin: null, buildId: "build-new", builtAtUtc: "2026-09-28T10:00:00Z", algorithmVersion: 1 };
+  const renders = getFullRenderCount();
+
+  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "book.keywords.saved", payload: { bookId: "Book 001", keywordBuilder: saved, refreshTask: { kind: "LibraryRefresh", taskId: "joined-refresh", state: "Completed" }, refreshWarning: null } } });
+  assert.equal(messages.at(-1).command, "app.refresh.result");
+  const refreshRequest = messages.at(-1);
+  messageHandler({ data: { version: 1, id: refreshRequest.id, ok: true, command: "app.snapshot", payload: snapshot } });
+
+  assert.equal(browserWindow.appSnapshot.bookSummaries[0].keywordBuilder.buildId, "build-new");
+  assert.equal(getFullRenderCount(), renders, "stale refresh must not redraw the open drawer");
+});
+
+test("Keyword Builder structured validation keeps the draft and does not request refresh", () => {
+  const { messageHandler, contentListeners, messages, getFullRenderCount, getBookDrawerBodyRenderCount } = loadBridge("books");
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{ bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], metadata: {}, interiorSourcePageCount: 0, activeInteriorSourcePageCount: 0, assets: [] }]
+  };
+  messageHandler({ data: { version: 1, id: "keyword-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  contentListeners.input({ target: { dataset: { action: "book-keyword-source", bookId: "Book 001" }, value: "x".repeat(51) } });
+  const build = { dataset: { action: "build-book-keywords", bookId: "Book 001" }, closest: () => build };
+  contentListeners.click({ target: build });
+  const request = messages.at(-1);
+  const messageCount = messages.length;
+  const renders = getFullRenderCount();
+  const drawerRenders = getBookDrawerBodyRenderCount();
+
+  messageHandler({ data: { version: 1, id: request.id, ok: false, error: "keyword_word_too_long", payload: { policyVersion: 1, field: "keywords", code: "keyword_word_too_long", message: "The word is 51 characters.", details: { graphemeCount: 51, maximumCharacters: 50 } } } });
+
+  assert.equal(messages.length, messageCount);
+  assert.equal(getFullRenderCount(), renders);
+  assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+});
+
 test("Saving Book Interior settings accepts the refreshed snapshot without redrawing the open drawer", () => {
   const { messageHandler, status, content, contentListeners, messages, getFullRenderCount } = loadBridge("books");
   const snapshot = {
