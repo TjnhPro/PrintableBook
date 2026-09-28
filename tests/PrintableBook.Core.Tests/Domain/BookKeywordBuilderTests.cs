@@ -58,20 +58,67 @@ public sealed class BookKeywordBuilderTests
     }
 
     [Fact]
-    public void Build_rejects_the_first_word_requiring_an_eighth_sequential_slot()
+    public void Build_omits_words_after_seven_slots_and_returns_a_non_blocking_count()
     {
         var words = Enumerable.Range(0, 8)
             .Select(index => ((char)('a' + index)) + new string((char)('a' + index), 49))
             .ToArray();
         var shuffler = new ReversingShuffler();
 
-        var exception = Assert.Throws<BookKeywordBuilderValidationException>(() =>
-            new BookKeywordBuilder(shuffler).Build([string.Join(' ', words)], null, "build-1", DateTimeOffset.UnixEpoch));
+        var result = new BookKeywordBuilder(shuffler).Build(
+            [],
+            [string.Join(' ', words)],
+            null,
+            "build-1",
+            DateTimeOffset.UnixEpoch);
 
-        Assert.Equal("keyword_capacity_exceeded", exception.Error.Code);
-        Assert.Equal(words[7], exception.Error.OffendingWord);
-        Assert.Equal("sequential_next_fit", exception.Error.PackingRule);
+        Assert.Equal(words.Take(7), result.Keywords);
+        Assert.Equal(1, result.OmittedWordCount);
         Assert.Equal(0, shuffler.Calls);
+    }
+
+    [Fact]
+    public void Build_prioritizes_generic_phrases_and_filters_matching_book_phrases()
+    {
+        var result = new BookKeywordBuilder(new NoOpShuffler()).Build(
+            [" coloring   books ", "books for adults"],
+            ["Coloring Books", "cute animals", "cute animals"],
+            " target ",
+            "build-1",
+            DateTimeOffset.UnixEpoch);
+
+        Assert.Equal(["coloring books", "books for adults"], result.GenericKeywords);
+        Assert.Equal(["Coloring Books", "cute animals", "cute animals"], result.SourceKeywords);
+        Assert.Equal("coloring books for adults cute animals", result.Keyword1);
+        Assert.Equal("coloring books, books for adults, cute animals", result.AdsKeyword);
+        Assert.Equal(2, result.AlgorithmVersion);
+    }
+
+    [Theory]
+    [InlineData(25, 20, 20, 10)]
+    [InlineData(15, 30, 15, 15)]
+    [InlineData(30, 5, 25, 5)]
+    [InlineData(8, 6, 8, 6)]
+    public void Build_ads_keyword_uses_flexible_generic_and_book_quotas(
+        int availableGeneric,
+        int availableBook,
+        int expectedGeneric,
+        int expectedBook)
+    {
+        var generic = Enumerable.Range(1, availableGeneric).Select(index => $"generic-{index}").ToArray();
+        var book = Enumerable.Range(1, availableBook).Select(index => $"book-{index}").ToArray();
+
+        var result = new BookKeywordBuilder(new NoOpShuffler()).Build(
+            generic,
+            book,
+            null,
+            "build-1",
+            DateTimeOffset.UnixEpoch);
+        var selected = result.AdsKeyword!.Split(", ");
+
+        Assert.Equal(expectedGeneric + expectedBook, selected.Length);
+        Assert.Equal(generic.Take(expectedGeneric), selected.Take(expectedGeneric));
+        Assert.Equal(book.Take(expectedBook), selected.Skip(expectedGeneric));
     }
 
     [Fact]

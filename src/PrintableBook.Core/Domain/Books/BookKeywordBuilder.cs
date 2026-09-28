@@ -16,17 +16,16 @@ public sealed record BookKeywordBuilderState(
     string? AdsAsin,
     string BuildId,
     DateTimeOffset BuiltAtUtc,
-    int AlgorithmVersion)
+    int AlgorithmVersion,
+    IReadOnlyList<string>? GenericKeywords = null,
+    int OmittedWordCount = 0)
 {
     public IReadOnlyList<string?> Keywords => [Keyword1, Keyword2, Keyword3, Keyword4, Keyword5, Keyword6, Keyword7];
 
     public BookKeywordBuilderState NormalizeStored() => this with
     {
-        SourceKeywords = SourceKeywords
-            .Select(BookTextPolicy.NormalizePhrase)
-            .Where(value => value is not null)
-            .Cast<string>()
-            .ToArray(),
+        SourceKeywords = BookTextPolicy.NormalizePhrases(SourceKeywords),
+        GenericKeywords = BookTextPolicy.NormalizePhrases(GenericKeywords ?? [], distinct: true),
         Keyword1 = NormalizeSlot(Keyword1),
         Keyword2 = NormalizeSlot(Keyword2),
         Keyword3 = NormalizeSlot(Keyword3),
@@ -85,7 +84,10 @@ public sealed class BookKeywordBuilder(IKeywordWordShuffler? shuffler = null)
 {
     public const int MaximumKeywordCharacters = 50;
     public const int MaximumKeywordSlots = 7;
-    public const int CurrentAlgorithmVersion = 1;
+    public const int MaximumAdsKeywordPhrases = 30;
+    public const int PreferredGenericAdsKeywordPhrases = 20;
+    public const int PreferredBookAdsKeywordPhrases = 10;
+    public const int CurrentAlgorithmVersion = 2;
 
     private readonly IKeywordWordShuffler shuffler = shuffler ?? new RandomKeywordWordShuffler();
 
@@ -93,18 +95,29 @@ public sealed class BookKeywordBuilder(IKeywordWordShuffler? shuffler = null)
         IReadOnlyList<string> sourceKeywords,
         string? adsAsin,
         string buildId,
+        DateTimeOffset builtAtUtc) =>
+        Build([], sourceKeywords, adsAsin, buildId, builtAtUtc);
+
+    public BookKeywordBuilderState Build(
+        IReadOnlyList<string> genericKeywords,
+        IReadOnlyList<string> bookKeywords,
+        string? adsAsin,
+        string buildId,
         DateTimeOffset builtAtUtc)
     {
-        ArgumentNullException.ThrowIfNull(sourceKeywords);
+        ArgumentNullException.ThrowIfNull(genericKeywords);
+        ArgumentNullException.ThrowIfNull(bookKeywords);
         if (string.IsNullOrWhiteSpace(buildId)) throw new ArgumentException("A build id is required.", nameof(buildId));
 
-        var normalizedPhrases = sourceKeywords
-            .Select(BookTextPolicy.NormalizePhrase)
-            .Where(value => value is not null)
-            .Cast<string>()
+        var normalizedGeneric = BookTextPolicy.NormalizePhrases(genericKeywords, distinct: true);
+        var normalizedBookSource = BookTextPolicy.NormalizePhrases(bookKeywords);
+        var genericSet = normalizedGeneric.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var effectiveBook = BookTextPolicy.NormalizePhrases(normalizedBookSource, distinct: true)
+            .Where(phrase => !genericSet.Contains(phrase))
             .ToArray();
-        var uniqueWords = OrderedUniqueWords(normalizedPhrases);
-        var slots = Pack(uniqueWords);
+        var uniqueWords = OrderedUniqueWords(normalizedGeneric.Concat(effectiveBook));
+        ValidateWords(uniqueWords);
+        var (slots, omittedWordCount) = Pack(uniqueWords);
 
         foreach (var slot in slots.Where(slot => slot.Count > 1)) shuffler.Shuffle(slot);
 
@@ -112,13 +125,15 @@ public sealed class BookKeywordBuilder(IKeywordWordShuffler? shuffler = null)
         while (values.Count < MaximumKeywordSlots) values.Add(null);
 
         return new BookKeywordBuilderState(
-            normalizedPhrases,
+            normalizedBookSource,
             values[0], values[1], values[2], values[3], values[4], values[5], values[6],
-            normalizedPhrases.Length == 0 ? null : string.Join(", ", normalizedPhrases),
+            BuildAdsKeyword(normalizedGeneric, effectiveBook),
             BookTextPolicy.NormalizeOptionalMultiline(adsAsin),
             buildId.Trim(),
             builtAtUtc,
-            CurrentAlgorithmVersion);
+            CurrentAlgorithmVersion,
+            normalizedGeneric,
+            omittedWordCount);
     }
 
     private static IReadOnlyList<string> OrderedUniqueWords(IEnumerable<string> phrases)
@@ -135,9 +150,8 @@ public sealed class BookKeywordBuilder(IKeywordWordShuffler? shuffler = null)
         return words;
     }
 
-    private static List<List<string>> Pack(IReadOnlyList<string> words)
+    private static void ValidateWords(IReadOnlyList<string> words)
     {
-        var slots = new List<List<string>>();
         foreach (var word in words)
         {
             var wordCount = BookTextPolicy.GraphemeCount(word);
@@ -150,7 +164,15 @@ public sealed class BookKeywordBuilder(IKeywordWordShuffler? shuffler = null)
                     wordCount,
                     MaximumKeywordCharacters));
             }
+        }
+    }
 
+    private static (List<List<string>> Slots, int OmittedWordCount) Pack(IReadOnlyList<string> words)
+    {
+        var slots = new List<List<string>>();
+        for (var index = 0; index < words.Count; index++)
+        {
+            var word = words[index];
             if (slots.Count == 0) slots.Add([]);
             var current = slots[^1];
             var candidate = current.Count == 0 ? word : $"{string.Join(' ', current)} {word}";
@@ -162,18 +184,26 @@ public sealed class BookKeywordBuilder(IKeywordWordShuffler? shuffler = null)
 
             if (slots.Count == MaximumKeywordSlots)
             {
-                throw new BookKeywordBuilderValidationException(new(
-                    "keyword_capacity_exceeded",
-                    "The ordered keyword stream needs an eighth slot under the sequential next-fit packing rule.",
-                    OffendingWord: word,
-                    UniqueWordCount: words.Count,
-                    RequiredSlotCount: MaximumKeywordSlots + 1,
-                    MaximumSlotCount: MaximumKeywordSlots,
-                    PackingRule: "sequential_next_fit"));
+                return (slots, words.Count - index);
             }
 
             slots.Add([word]);
         }
-        return slots;
+        return (slots, 0);
+    }
+
+    private static string? BuildAdsKeyword(IReadOnlyList<string> genericKeywords, IReadOnlyList<string> bookKeywords)
+    {
+        var genericCount = Math.Min(PreferredGenericAdsKeywordPhrases, genericKeywords.Count);
+        var bookCount = Math.Min(PreferredBookAdsKeywordPhrases, bookKeywords.Count);
+        var remaining = MaximumAdsKeywordPhrases - genericCount - bookCount;
+
+        var additionalGeneric = Math.Min(remaining, genericKeywords.Count - genericCount);
+        genericCount += additionalGeneric;
+        remaining -= additionalGeneric;
+        bookCount += Math.Min(remaining, bookKeywords.Count - bookCount);
+
+        var selected = genericKeywords.Take(genericCount).Concat(bookKeywords.Take(bookCount)).ToArray();
+        return selected.Length == 0 ? null : string.Join(", ", selected);
     }
 }

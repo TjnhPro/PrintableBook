@@ -44,4 +44,17 @@ public static class BookTextPolicy
         var normalized = value?.Trim();
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
+
+    public static IReadOnlyList<string> NormalizePhrases(IEnumerable<string> values, bool distinct = false)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        var normalized = values
+            .Select(NormalizePhrase)
+            .Where(value => value is not null)
+            .Cast<string>();
+
+        return distinct
+            ? normalized.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+            : normalized.ToArray();
+    }
 }

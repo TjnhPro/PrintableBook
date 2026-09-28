@@ -89,7 +89,9 @@ public sealed class JsonBookWorkspaceStateStoreTests : IAsyncLifetime
             "B0123\nB0456",
             "build-1",
             DateTimeOffset.UnixEpoch,
-            1);
+            2,
+            ["generic coloring"],
+            3);
 
         await store.SaveAsync(workspace, BookProcessingState.NotStarted(new BookId("book")) with { KeywordBuilder = builder });
         var json = await File.ReadAllTextAsync(StatePath(workspace));
@@ -103,6 +105,8 @@ public sealed class JsonBookWorkspaceStateStoreTests : IAsyncLifetime
         Assert.Equal(builder.AdsKeyword, restored.KeywordBuilder.AdsKeyword);
         Assert.Equal(builder.AdsAsin, restored.KeywordBuilder.AdsAsin);
         Assert.Equal(builder.BuildId, restored.KeywordBuilder.BuildId);
+        Assert.Equal(builder.GenericKeywords, restored.KeywordBuilder.GenericKeywords);
+        Assert.Equal(3, restored.KeywordBuilder.OmittedWordCount);
     }
 
     [Fact]

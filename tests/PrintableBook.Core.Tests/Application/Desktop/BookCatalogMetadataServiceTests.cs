@@ -134,6 +134,31 @@ public sealed class BookCatalogMetadataServiceTests
     }
 
     [Fact]
+    public async Task SaveKeywordBuilder_loads_saved_generic_keywords_before_building()
+    {
+        var stateStore = new StateStore(BookProcessingState.NotStarted(new BookId("book")));
+        var settingsStore = new SettingsStore(GlobalSettings.Default with
+        {
+            GenericKeywords = ["generic coloring", "books for adults"]
+        });
+        var service = new BookCatalogMetadataService(
+            stateStore,
+            new BrandStore(),
+            new BookKeywordBuilder(new NoOpKeywordShuffler()),
+            settingsStore);
+
+        var result = await service.SaveKeywordBuilderAsync(
+            Book(),
+            ["Generic Coloring", "cute animals"],
+            "B0123");
+
+        Assert.Equal(1, settingsStore.Loads);
+        Assert.Equal(["generic coloring", "books for adults"], result.GenericKeywords);
+        Assert.Equal("generic coloring books for adults cute animals", result.Keyword1);
+        Assert.Equal("generic coloring, books for adults, cute animals", result.AdsKeyword);
+    }
+
+    [Fact]
     public async Task SaveKeywordBuilder_validation_failure_does_not_load_or_save_state()
     {
         var stateStore = new StateStore(BookProcessingState.NotStarted(new BookId("book")));
@@ -260,6 +285,23 @@ public sealed class BookCatalogMetadataServiceTests
             values[brandDirectory.Value] = metadata;
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class SettingsStore(GlobalSettings settings) : IGlobalSettingsStore
+    {
+        public int Loads { get; private set; }
+
+        public ValueTask<GlobalSettings> LoadAsync(CancellationToken cancellationToken = default)
+        {
+            Loads++;
+            return ValueTask.FromResult(settings);
+        }
+
+        public ValueTask<GlobalSettings> LoadAsync(ApplicationPaths paths, CancellationToken cancellationToken = default) =>
+            LoadAsync(cancellationToken);
+
+        public ValueTask SaveAsync(GlobalSettings value, CancellationToken cancellationToken = default) =>
+            ValueTask.CompletedTask;
     }
 
     private sealed class NoOpKeywordShuffler : IKeywordWordShuffler

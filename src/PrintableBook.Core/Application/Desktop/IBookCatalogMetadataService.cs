@@ -27,7 +27,8 @@ public interface IBookCatalogMetadataService
 public sealed class BookCatalogMetadataService(
     IBookWorkspaceStateStore stateStore,
     IBrandMetadataStore brandMetadataStore,
-    BookKeywordBuilder? keywordBuilder = null) : IBookCatalogMetadataService
+    BookKeywordBuilder? keywordBuilder = null,
+    IGlobalSettingsStore? settingsStore = null) : IBookCatalogMetadataService
 {
     private readonly BookKeywordBuilder keywordBuilder = keywordBuilder ?? new BookKeywordBuilder();
 
@@ -59,7 +60,10 @@ public sealed class BookCatalogMetadataService(
     {
         ArgumentNullException.ThrowIfNull(book);
         ArgumentNullException.ThrowIfNull(keywords);
-        var result = keywordBuilder.Build(keywords, adsAsin, Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow);
+        var genericKeywords = settingsStore is null
+            ? []
+            : (await settingsStore.LoadAsync(cancellationToken)).EffectiveGenericKeywords;
+        var result = keywordBuilder.Build(genericKeywords, keywords, adsAsin, Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow);
         var state = await LoadStateAsync(book, cancellationToken);
         await stateStore.SaveAsync(book.Workspace, state with { KeywordBuilder = result }, cancellationToken);
         return result;
