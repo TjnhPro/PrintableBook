@@ -86,12 +86,15 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         Directory.CreateDirectory(request.TemporaryOutputDirectory.Value);
         var coverPdf = new FileReference(Path.Combine(request.TemporaryOutputDirectory.Value, "cover.pdf"));
         WriteSingleRasterPdf(coverPdf, request.Cover, request.CoverPageSize, cancellationToken);
-        var previewPdf = TryWriteSingleRasterPreviewPdf(
+        var previewArtifacts = TryWriteCoverPreviewArtifacts(
             request.TemporaryOutputDirectory,
             request.Cover,
             request.CoverPageSize,
             cancellationToken);
-        return ValueTask.FromResult(new CoverPdfExportResult(coverPdf, previewPdf));
+        return ValueTask.FromResult(new CoverPdfExportResult(
+            coverPdf,
+            previewArtifacts.PreviewPdf,
+            previewArtifacts.PanelPreviews));
     }
 
     private static void Validate(PrintableBookPdfExportRequest request, CancellationToken cancellationToken)
@@ -163,6 +166,27 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         PhysicalPageSize pageSize,
         CancellationToken cancellationToken)
     {
+        try
+        {
+            using var image = new MagickImage(source.Value);
+            return TryWriteSingleRasterPreviewPdf(outputDirectory, image, pageSize, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsExpectedPreviewFailure(exception))
+        {
+            return null;
+        }
+    }
+
+    private static FileReference? TryWriteSingleRasterPreviewPdf(
+        DirectoryReference outputDirectory,
+        MagickImage source,
+        PhysicalPageSize pageSize,
+        CancellationToken cancellationToken)
+    {
         var target = new FileReference(Path.Combine(outputDirectory.Value, "cover_thumbnail.pdf"));
         var thumbnailImage = new FileReference(Path.Combine(outputDirectory.Value, "cover_thumbnail.png"));
         try
@@ -186,6 +210,106 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
             DeletePreviewCandidate(target);
             DeletePreviewCandidate(thumbnailImage);
             return null;
+        }
+    }
+
+    private static CoverPreviewArtifacts TryWriteCoverPreviewArtifacts(
+        DirectoryReference outputDirectory,
+        FileReference source,
+        PhysicalPageSize pageSize,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var image = new MagickImage(source.Value);
+            var panelPreviews = TryWriteCoverPanelPreviews(outputDirectory, image, cancellationToken);
+            var previewPdf = TryWriteSingleRasterPreviewPdf(outputDirectory, image, pageSize, cancellationToken);
+            return new CoverPreviewArtifacts(previewPdf, panelPreviews);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (IsExpectedPreviewFailure(exception))
+        {
+            return new CoverPreviewArtifacts(
+                null,
+                CoverPanelPreviewOutcome.Unavailable());
+        }
+    }
+
+    private static CoverPanelPreviewOutcome TryWriteCoverPanelPreviews(
+        DirectoryReference outputDirectory,
+        MagickImage source,
+        CancellationToken cancellationToken)
+    {
+        var back = new FileReference(Path.Combine(outputDirectory.Value, CoverPanelPreviewContract.BackFileName));
+        var front = new FileReference(Path.Combine(outputDirectory.Value, CoverPanelPreviewContract.FrontFileName));
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (source.Width != CoverPanelPreviewContract.SourceWidth ||
+                source.Height != CoverPanelPreviewContract.SourceHeight)
+            {
+                throw new InvalidDataException(
+                    $"Cover panel preview source must be {CoverPanelPreviewContract.SourceWidth} x {CoverPanelPreviewContract.SourceHeight} px.");
+            }
+
+            WriteCoverPanelPreview(source, back, x: 0);
+            cancellationToken.ThrowIfCancellationRequested();
+            WriteCoverPanelPreview(source, front, CoverPanelPreviewContract.SplitX);
+            ValidateCoverPanelPreview(back);
+            ValidateCoverPanelPreview(front);
+            return CoverPanelPreviewOutcome.Ready(new CoverPanelPreviewPair(back, front));
+        }
+        catch (OperationCanceledException)
+        {
+            DeletePreviewCandidate(back);
+            DeletePreviewCandidate(front);
+            throw;
+        }
+        catch (Exception exception) when (IsExpectedPreviewFailure(exception))
+        {
+            DeletePreviewCandidate(back);
+            DeletePreviewCandidate(front);
+            return CoverPanelPreviewOutcome.Unavailable();
+        }
+    }
+
+    private static void WriteCoverPanelPreview(MagickImage source, FileReference target, int x)
+    {
+        using var panel = source.Clone();
+        panel.Crop(new MagickGeometry(
+            x,
+            0,
+            CoverPanelPreviewContract.SplitX,
+            CoverPanelPreviewContract.SourceHeight));
+        panel.ResetPage();
+        panel.ColorSpace = ColorSpace.sRGB;
+        panel.BackgroundColor = MagickColors.White;
+        panel.Alpha(AlphaOption.Remove);
+        panel.Resize(new MagickGeometry(
+            (uint)CoverPanelPreviewContract.PreviewSize.Width,
+            (uint)CoverPanelPreviewContract.PreviewSize.Height)
+        {
+            IgnoreAspectRatio = true
+        });
+        panel.Strip();
+        panel.ColorType = ColorType.TrueColor;
+        panel.Quality = CoverPanelPreviewContract.JpegQuality;
+        panel.Format = MagickFormat.Jpeg;
+        panel.Write(target.Value);
+    }
+
+    private static void ValidateCoverPanelPreview(FileReference candidate)
+    {
+        using var image = new MagickImage(candidate.Value);
+        if (image.Format != MagickFormat.Jpeg ||
+            image.Width != CoverPanelPreviewContract.PreviewSize.Width ||
+            image.Height != CoverPanelPreviewContract.PreviewSize.Height ||
+            image.HasAlpha)
+        {
+            throw new InvalidDataException($"Cover panel preview '{candidate.Value}' did not pass validation.");
         }
     }
 
@@ -477,6 +601,12 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
     private static byte[] CreatePreviewRaster(FileReference source, ImageSize targetSize)
     {
         using var image = new MagickImage(source.Value);
+        return CreatePreviewRaster(image, targetSize);
+    }
+
+    private static byte[] CreatePreviewRaster(MagickImage source, ImageSize targetSize)
+    {
+        using var image = source.Clone();
         image.AutoOrient();
         image.BackgroundColor = MagickColors.White;
         image.Alpha(AlphaOption.Remove);
@@ -751,4 +881,8 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
             }
         }
     }
+
+    private sealed record CoverPreviewArtifacts(
+        FileReference? PreviewPdf,
+        CoverPanelPreviewOutcome PanelPreviews);
 }
