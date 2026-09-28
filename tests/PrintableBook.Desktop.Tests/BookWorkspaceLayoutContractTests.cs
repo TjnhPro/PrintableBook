@@ -314,7 +314,12 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("type=\"text\" data-action=\"book-keyword-ads-asin\"", script, StringComparison.Ordinal);
         Assert.Contains("Copy to Clipboard", script, StringComparison.Ordinal);
         Assert.Contains("fields.join(\"\\t\")", script, StringComparison.Ordinal);
-        Assert.Contains(".keyword-list-input { resize:none; overflow-y:auto; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".keyword-list-input.control { height:7.625rem; min-height:7.625rem; max-height:7.625rem;", layout, StringComparison.Ordinal);
+        Assert.Contains("resize:none; overflow-y:auto;", layout, StringComparison.Ordinal);
+        Assert.Contains("keyword-builder-pane keyword-builder-inputs", script, StringComparison.Ordinal);
+        Assert.Contains("keyword-builder-pane keyword-builder-outputs", script, StringComparison.Ordinal);
+        Assert.Contains("aria-labelledby=\"keyword-builder-inputs-title\"", script, StringComparison.Ordinal);
+        Assert.Contains("aria-labelledby=\"keyword-builder-output-title\"", script, StringComparison.Ordinal);
     }
 
     [Fact]

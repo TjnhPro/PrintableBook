@@ -1660,7 +1660,9 @@ test("Keyword Builder submits normalized phrases without redrawing Book detail",
   assert.match(content.innerHTML, /rows="5" data-action="book-keyword-source"/);
   assert.match(content.innerHTML, /Ads ASIN \(product targets\)/);
   assert.match(content.innerHTML, /type="text" data-action="book-keyword-ads-asin"/);
-  assert.match(content.innerHTML, /Using 2 saved Generic Keywords/);
+  assert.match(content.innerHTML, /Build inputs/);
+  assert.match(content.innerHTML, />2 Generic</);
+  assert.match(content.innerHTML, /Generated output/);
   const fullRenders = getFullRenderCount();
   const drawerRenders = getBookDrawerBodyRenderCount();
 
