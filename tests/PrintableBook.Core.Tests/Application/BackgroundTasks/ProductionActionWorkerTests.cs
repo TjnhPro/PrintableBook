@@ -50,6 +50,24 @@ public sealed class ProductionActionWorkerTests
     }
 
     [Fact]
+    public async Task Cover_action_reports_a_non_fatal_notice_when_panel_previews_are_unavailable()
+    {
+        var cover = new CoverService(CoverPanelPreviewOutcome.Unavailable());
+        IBackgroundTaskWorker worker = new ProductionActionWorker(new Provider(Snapshot()), new PageService(), cover);
+        var context = new Context();
+
+        var result = Assert.IsType<ProductionActionResult>(await worker.ExecuteAsync(
+            new ProductionActionRequest("book-one", ProductionActionKind.BuildCoverPdf),
+            context,
+            CancellationToken.None));
+
+        Assert.Equal(CoverPanelPreviewContract.UnavailableWarningCode, result.NoticeCode);
+        Assert.Contains(context.Reports, report =>
+            report.Step == "Cover PDF built; panel previews need attention" &&
+            report.Detail == CoverPanelPreviewContract.UnavailableWarningCode);
+    }
+
+    [Fact]
     public async Task Missing_book_returns_a_safe_failure()
     {
         IBackgroundTaskWorker worker = new ProductionActionWorker(new Provider(Snapshot() with
@@ -100,14 +118,18 @@ public sealed class ProductionActionWorkerTests
         }
     }
 
-    private sealed class CoverService : IProductionCoverPdfService
+    private sealed class CoverService(CoverPanelPreviewOutcome? panelPreviews = null) : IProductionCoverPdfService
     {
         public DirectoryReference? Output { get; private set; }
 
         public ValueTask<ProductionCoverPdfResult> BuildAsync(BookWorkspace workspace, DirectoryReference finalOutputRoot, CancellationToken cancellationToken = default)
         {
             Output = finalOutputRoot;
-            return ValueTask.FromResult(new ProductionCoverPdfResult(new FileReference("cover.pdf"), ProductionCoverPdfService.CoverPageSize, DateTimeOffset.UnixEpoch));
+            return ValueTask.FromResult(new ProductionCoverPdfResult(
+                new FileReference("cover.pdf"),
+                ProductionCoverPdfService.CoverPageSize,
+                DateTimeOffset.UnixEpoch,
+                PanelPreviews: panelPreviews));
         }
     }
 
@@ -115,7 +137,12 @@ public sealed class ProductionActionWorkerTests
     {
         public BackgroundTaskId TaskId { get; } = new("production-test");
         public List<string> Steps { get; } = [];
-        public void Report(string step, int? completed = null, int? total = null, string? detail = null, string? subject = null) => Steps.Add(step);
+        public List<(string Step, string? Detail)> Reports { get; } = [];
+        public void Report(string step, int? completed = null, int? total = null, string? detail = null, string? subject = null)
+        {
+            Steps.Add(step);
+            Reports.Add((step, detail));
+        }
         public void SetView<TView>(TView view) where TView : class { }
     }
 }

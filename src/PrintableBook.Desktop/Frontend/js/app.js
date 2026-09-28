@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
   const bookStatuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
-  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookListRefreshPending: false, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookListRefreshPending: false, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -486,7 +486,9 @@
       feedback.hidden = !state.productionFeedback;
       feedback.textContent = state.productionFeedback;
       feedback.classList.toggle("is-error", state.productionFeedbackError);
-      feedback.setAttribute("role", state.productionFeedbackError ? "alert" : "status");
+      feedback.classList.toggle("is-warning", state.productionFeedbackWarning);
+      feedback.setAttribute("role", state.productionFeedbackError || state.productionFeedbackWarning ? "alert" : "status");
+      feedback.setAttribute("aria-atomic", "true");
     }
     workspace.querySelectorAll?.('[data-action="upload-production-asset"]').forEach((button) => {
       const importing = state.productionImportPending === button.dataset.productionAsset;
@@ -513,6 +515,7 @@
     state.productionActionTaskId = taskId;
     state.productionFeedback = valueFor(task, "step", "Preparing Production asset…") || "Preparing Production asset…";
     state.productionFeedbackError = false;
+    state.productionFeedbackWarning = false;
     if (["Queued", "Running", "Cancelling"].includes(taskState)) {
       if (state.productionActionPollTimer === null) state.productionActionPollTimer = window.setInterval(pollProductionAction, 250);
       if (state.bookDrawerOpen && state.selectedBookTab === "production") updateProductionInteractionUi();
@@ -522,9 +525,13 @@
     state.productionActionPollTimer = null;
     state.productionActionTaskId = "";
     state.productionActionName = "";
+    const panelPreviewWarning = taskState === "Completed" && valueFor(task, "detail", "") === "cover_panel_previews_unavailable";
     state.productionFeedbackError = taskState === "Failed";
-    state.productionFeedback = taskState === "Completed"
-      ? "Production action completed. Refreshing status…"
+    state.productionFeedbackWarning = panelPreviewWarning;
+    state.productionFeedback = panelPreviewWarning
+      ? "Cover PDF built. back_cover.jpg and front_cover.jpg are unavailable. Close open preview files, check Output folder permissions, then run Build Cover PDF again. Refreshing status…"
+      : taskState === "Completed"
+        ? "Production action completed. Refreshing status…"
       : taskState === "Cancelled"
         ? "Production action cancelled."
         : valueFor(task, "errorMessage", "Production action failed. The previous asset or PDF was kept.");
@@ -931,7 +938,8 @@
       return `<article class="production-asset-card production-asset-${kind}"><header><div><h3>${escapeHtml(label)}</h3><p>${escapeHtml(valueFor(asset, "fileName", ""))}</p></div>${badge(sourceStatus)}</header><div class="production-preview ${kind === "final-cover" ? "production-preview-cover" : ""}">${sourcePreview}</div>${processedPreview}<dl><div><dt>Derived output</dt><dd>${badge(actionStatus)}</dd></div><div><dt>Last processed</dt><dd>${dateTime(kind === "final-cover" ? valueFor(production, "coverBuiltAtUtc", null) : valueFor(asset, "processedAtUtc", null))}</dd></div></dl><div class="production-card-actions"><button class="button-secondary" data-action="upload-production-asset" data-production-asset="${kind}" data-production-idle-label="${exists ? "Replace" : "Upload"}" data-book-id="${escapeHtml(bookId(book))}" ${controlsBusy || importing ? "disabled" : ""}>${importing ? "Selecting…" : exists ? "Replace" : "Upload"}</button><button class="button-primary" data-action="start-production-action" data-production-action="${actionFor(kind)}" data-production-source-exists="${exists}" data-production-idle-label="${actionLabel(kind)}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-help-${kind}" aria-busy="${activeAction}" ${actionDisabled ? "disabled" : ""}>${activeAction ? "Working…" : actionLabel(kind)}</button></div><p class="production-action-help" id="production-help-${kind}">${escapeHtml(reason)}${kind === "final-cover" ? " Replaces the current Cover PDF only after a successful build." : " Final Interior remains unchanged."}</p></article>`;
     };
     const readiness = productionFinalReadiness(book, summary);
-    const feedback = `<p class="production-feedback ${state.productionFeedbackError ? "is-error" : ""}" data-production-feedback role="${state.productionFeedbackError ? "alert" : "status"}" ${state.productionFeedback ? "" : "hidden"}>${escapeHtml(state.productionFeedback)}</p>`;
+    const feedbackTone = state.productionFeedbackError ? "is-error" : state.productionFeedbackWarning ? "is-warning" : "";
+    const feedback = `<p class="production-feedback ${feedbackTone}" data-production-feedback role="${state.productionFeedbackError || state.productionFeedbackWarning ? "alert" : "status"}" aria-live="polite" aria-atomic="true" ${state.productionFeedback ? "" : "hidden"}>${escapeHtml(state.productionFeedback)}</p>`;
     const background = effectiveBackground(book, summary) ? "Enabled" : "Disabled";
     const finalBusy = productionInteriorIsRunning();
     const finalBlocked = processIsActive() || state.processStartPending || applicationIsLoading();
@@ -1779,6 +1787,7 @@
       state.productionFocusSelector = `[data-action="upload-production-asset"][data-production-asset="${target.dataset.productionAsset}"]`;
       state.productionFeedback = "Choose a PNG file in the system dialog.";
       state.productionFeedbackError = false;
+      state.productionFeedbackWarning = false;
       updateProductionInteractionUi();
       send("book.production.asset.import", { bookId: target.dataset.bookId, assetKind: target.dataset.productionAsset });
     }
@@ -1787,18 +1796,20 @@
       state.productionFocusSelector = `[data-action="start-production-action"][data-production-action="${target.dataset.productionAction}"]`;
       state.productionFeedback = "Queuing Production action…";
       state.productionFeedbackError = false;
+      state.productionFeedbackWarning = false;
       updateProductionInteractionUi();
       send("book.production.action.start", { bookId: target.dataset.bookId, action: target.dataset.productionAction });
     }
     if (action === "build-final-interior" && !state.processStartPending) {
       const book = books().find((item) => bookId(item) === target.dataset.bookId);
       const readiness = book ? productionFinalReadiness(book, summaryFor(book)) : { ready: false, reason: "Choose a Book first." };
-      if (!readiness.ready) { state.productionFeedback = readiness.reason; state.productionFeedbackError = true; updateProductionInteractionUi(); return; }
+      if (!readiness.ready) { state.productionFeedback = readiness.reason; state.productionFeedbackError = true; state.productionFeedbackWarning = false; updateProductionInteractionUi(); return; }
       state.processStartPending = true;
       state.productionFinalBuildActive = true;
       state.productionFocusSelector = '[data-action="build-final-interior"]';
       state.productionFeedback = "Starting Final Interior build…";
       state.productionFeedbackError = false;
+      state.productionFeedbackWarning = false;
       updateProductionInteractionUi();
       send("process.start", { bookIds: [target.dataset.bookId], mode: "production-interior" });
     }
@@ -2179,6 +2190,7 @@
       state.productionImportPending = "";
       state.productionFeedback = "";
       state.productionFeedbackError = false;
+      state.productionFeedbackWarning = false;
       if (state.bookDrawerOpen && state.selectedBookTab === "production") {
         updateProductionInteractionUi();
         document.querySelector(`[data-action="upload-production-asset"][data-production-asset="${assetKind}"]`)?.focus();
@@ -2188,6 +2200,7 @@
       state.productionImportPending = "";
       state.productionFeedback = "Production PNG imported. Refreshing status…";
       state.productionFeedbackError = false;
+      state.productionFeedbackWarning = false;
       if (state.bookDrawerOpen && state.selectedBookTab === "production") updateProductionInteractionUi();
       state.productionRefreshAwaitingSnapshot = true;
       beginApplicationRefresh();
@@ -2264,6 +2277,7 @@
           ? "Final Cover must be exactly 5242 × 2626 px. The previous asset was kept."
           : "The Production asset could not be imported. The previous asset was kept.";
         state.productionFeedbackError = true;
+        state.productionFeedbackWarning = false;
         if (state.bookDrawerOpen && state.selectedBookTab === "production") updateProductionInteractionUi();
       }
       if (requestCommand === "book.production.action.start") {
@@ -2276,6 +2290,7 @@
               ? "Clear Cache is running."
               : "Production action could not start. The previous asset or PDF was kept.";
         state.productionFeedbackError = true;
+        state.productionFeedbackWarning = false;
         if (state.bookDrawerOpen && state.selectedBookTab === "production") updateProductionInteractionUi();
       }
       if (requestCommand === "app.refresh") {
@@ -2285,6 +2300,7 @@
           state.applicationLoadError = "";
           state.productionFeedback = "Production status refresh failed. The completed file was kept; use Refresh to retry.";
           state.productionFeedbackError = true;
+          state.productionFeedbackWarning = false;
           updateGlobalRefreshControl();
           updateProductionInteractionUi();
           status.textContent = "Production status refresh failed";
@@ -2326,12 +2342,14 @@
         if (error === "production_action_active") {
           state.productionFeedback = "Wait for the active Production action to finish.";
           state.productionFeedbackError = true;
+          state.productionFeedbackWarning = false;
           if (state.bookDrawerOpen && state.selectedBookTab === "production") updateProductionInteractionUi();
           return;
         }
         if (productionBuildFailedToStart && state.bookDrawerOpen && state.selectedBookTab === "production") {
           state.productionFeedback = "Final Interior could not start. The previous Interior PDF was kept.";
           state.productionFeedbackError = true;
+          state.productionFeedbackWarning = false;
           updateProductionInteractionUi();
         }
       }
