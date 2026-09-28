@@ -248,6 +248,7 @@ internal sealed class WebViewBridgeRouter(
                                 if (!TryGetOptionalString(metadataPayload, "title", out var title) ||
                                     !TryGetOptionalString(metadataPayload, "subtitle", out var subtitle) ||
                                     !TryGetOptionalString(metadataPayload, "subcover", out var subcover) ||
+                                    !TryGetOptionalString(metadataPayload, "asin", out var asin) ||
                                     !TryGetOptionalString(metadataPayload, "description", out var description) ||
                                     !TryGetOptionalString(metadataPayload, "author", out var bookAuthor))
                                 {
@@ -255,7 +256,10 @@ internal sealed class WebViewBridgeRouter(
                                 }
                                 await bookCatalogMetadataService.SaveBookMetadataAsync(
                                     book,
-                                    new BookProductionMetadata(title, subtitle, subcover, description, bookAuthor),
+                                    new BookProductionMetadata(title, subtitle, subcover, description, bookAuthor)
+                                    {
+                                        Asin = asin
+                                    },
                                     cancellationToken);
                             }
                             else if (request.Command == "book.brand.assign")

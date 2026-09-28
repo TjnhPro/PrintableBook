@@ -1512,6 +1512,42 @@ test("Book Information accepts Subcover with four to six terms only", () => {
   }
 });
 
+test("Book Information accepts ASIN through 100 characters and blocks 101", () => {
+  const cases = [
+    ["A".repeat(100), true],
+    ["A".repeat(101), false]
+  ];
+
+  for (const [asin, valid] of cases) {
+    const { messageHandler, contentListeners, messages } = loadBridge("books");
+    messageHandler({ data: {
+      version: 1,
+      id: `asin-${asin.length}`,
+      ok: true,
+      command: "app.snapshot",
+      payload: {
+        discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+        globalSettings: {},
+        bookSummaries: [{
+          bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+          metadata: { title: "", subtitle: "", subcover: "", asin: "", description: "", author: "" },
+          interiorSourcePageCount: 0, activeInteriorSourcePageCount: 0, assets: []
+        }]
+      }
+    } });
+    const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+    contentListeners.click({ target: openBook });
+    contentListeners.input({ target: { dataset: { action: "book-metadata-input", metadataField: "asin", bookId: "Book 001" }, value: asin } });
+    const save = { dataset: { action: "save-book-metadata", bookId: "Book 001" }, closest: () => save };
+    const messageCount = messages.length;
+
+    contentListeners.click({ target: save });
+
+    assert.equal(messages.length, messageCount + (valid ? 1 : 0), `${asin.length}-character ASIN should be ${valid ? "accepted" : "rejected"}`);
+    if (valid) assert.equal(messages.at(-1).payload.asin, asin);
+  }
+});
+
 test("Book Information structured backend rejection retains the drawer without redraw", () => {
   const { messageHandler, contentListeners, messages, getFullRenderCount, getBookDrawerBodyRenderCount } = loadBridge("books");
   const snapshot = {
