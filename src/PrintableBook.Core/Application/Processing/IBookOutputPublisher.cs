@@ -51,7 +51,8 @@ public sealed record CoverOutputPublicationRequest(
 public sealed record PublishedCoverOutput(
     DirectoryReference PublishedDirectory,
     FileReference CoverPdf,
-    FileReference? PreviewPdf = null);
+    FileReference? PreviewPdf = null,
+    CoverPanelPreviewOutcome? PanelPreviews = null);
 
 public interface IBookOutputPublisher
 {

@@ -19,7 +19,8 @@ public sealed record ProductionActionResult(
     string BookId,
     ProductionActionKind Action,
     string OutputReference,
-    DateTimeOffset CompletedAtUtc);
+    DateTimeOffset CompletedAtUtc,
+    string? NoticeCode = null);
 
 public sealed class ProductionActionWorker(
     IApplicationSnapshotProvider snapshotProvider,

@@ -10,7 +10,8 @@ public sealed record ProductionCoverPdfResult(
     FileReference CoverPdf,
     PhysicalPageSize PageSize,
     DateTimeOffset CompletedAtUtc,
-    FileReference? PreviewPdf = null);
+    FileReference? PreviewPdf = null,
+    CoverPanelPreviewOutcome? PanelPreviews = null);
 
 public interface IProductionCoverPdfService
 {
