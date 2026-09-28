@@ -248,9 +248,11 @@ public sealed class BookWorkspaceLayoutContractTests
         var markup = File.ReadAllText(Path.Combine(frontend, "index.html"));
 
         Assert.Contains("Book Information", script, StringComparison.Ordinal);
-        Assert.Contains("data-metadata-field=\"subcover\"", script, StringComparison.Ordinal);
+        Assert.Contains("field(\"Subcover\", \"subcover\")", script, StringComparison.Ordinal);
         Assert.DoesNotContain("Short description, usually 4–5 words; fewer than 100 characters", script, StringComparison.Ordinal);
-        Assert.Contains("maxlength=\"99\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("maxlength=\"99\"", script, StringComparison.Ordinal);
+        Assert.Contains("bookMetadataValidation", script, StringComparison.Ordinal);
+        Assert.Contains("validateBookMetadataDraft", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"save-book-metadata\"", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"assign-book-brand\"", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"unassign-book-brand\"", script, StringComparison.Ordinal);
@@ -275,7 +277,10 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("Existing files and outputs will not be moved or changed", script, StringComparison.Ordinal);
         Assert.Contains("The existing assignment is preserved", script, StringComparison.Ordinal);
         Assert.Contains("Only Brands whose Author matches", script, StringComparison.Ordinal);
-        Assert.Contains("aria-describedby=\"book-subcover-error\"", script, StringComparison.Ordinal);
+        Assert.Contains("aria-describedby=\"${errorId}\"", script, StringComparison.Ordinal);
+        Assert.Contains("patchBookMetadataValidationUi", script, StringComparison.Ordinal);
+        Assert.Contains("scrollIntoView?.({ block: \"nearest\" })", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("subcoverTouchedBooks", script, StringComparison.Ordinal);
         Assert.Contains("const refreshBookCatalogCards", script, StringComparison.Ordinal);
         Assert.Contains("const preserveCatalogDrawer", script, StringComparison.Ordinal);
         Assert.Contains("state.bookListRefreshPending = true", script, StringComparison.Ordinal);

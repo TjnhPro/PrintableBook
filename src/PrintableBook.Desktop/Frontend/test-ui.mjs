@@ -34,8 +34,8 @@ const expected = [
   ,"remove-process-queue-book"
   ,"Run needs review"
   ,"Elapsed"
-  ,"Open original"
-  ,"Reveal in Explorer"
+  ,"Preview"
+  ,"Open Folder"
   ,"book.output.open"
   ,"book.output.copy-path"
   ,"Brands & templates"
@@ -51,6 +51,7 @@ const expected = [
   ,"book.production.asset.import"
   ,"book.production.action.start"
   ,"production-interior"
+  ,'role="${state.catalogFeedbackError ? "alert" : "status"}">'
   ,'role="tablist"'
   ,'role="tabpanel"'
   ,'aria-controls="book-panel-'

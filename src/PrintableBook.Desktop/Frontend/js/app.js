@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
   const bookStatuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
-  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookListRefreshPending: false, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), subcoverTouchedBooks: new Set(), brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookListRefreshPending: false, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -87,10 +87,85 @@
     const persisted = metadataValues(summary);
     return Object.keys(persisted).some((key) => draft[key] !== persisted[key]);
   };
-  const subcoverError = (value) => {
-    const trimmed = String(value ?? "").trim();
-    const length = trimmed && typeof Intl?.Segmenter === "function" ? [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(trimmed)].length : [...trimmed].length;
-    return length >= 100 ? "Subcover must contain fewer than 100 characters." : "";
+  const metadataFieldOrder = ["title", "subtitle", "subcover", "author"];
+  const metadataTermSeparator = /[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/u;
+  const metadataEffectiveValue = (value) => String(value ?? "").trim();
+  const metadataTerms = (value) => { const effective = metadataEffectiveValue(value); return effective ? effective.split(metadataTermSeparator).filter(Boolean) : []; };
+  const metadataGraphemeCount = (value) => {
+    const effective = metadataEffectiveValue(value);
+    if (!effective) return 0;
+    return typeof Intl?.Segmenter === "function" ? [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(effective)].length : null;
+  };
+  const asciiFold = (value) => /^[\x00-\x7f]+$/.test(value) ? value.toLowerCase() : null;
+  const metadataTermsDuplicate = (left, right) => {
+    if (left === right) return true;
+    const foldedLeft = asciiFold(left);
+    const foldedRight = asciiFold(right);
+    if (foldedLeft === null || foldedRight === null) return false;
+    if (foldedLeft === foldedRight) return true;
+    const longer = foldedLeft.length > foldedRight.length ? foldedLeft : foldedRight;
+    const shorter = foldedLeft.length > foldedRight.length ? foldedRight : foldedLeft;
+    return longer.length === shorter.length + 1 && longer.endsWith("s") && longer.slice(0, -1) === shorter;
+  };
+  const duplicateMetadataErrors = (field, label, value) => {
+    const terms = metadataTerms(value);
+    const emitted = [];
+    const errors = [];
+    for (let leftIndex = 0; leftIndex < terms.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < terms.length; rightIndex += 1) {
+        const left = terms[leftIndex];
+        const right = terms[rightIndex];
+        const relationshipExists = emitted.some(([existingLeft, existingRight]) => {
+          const first = asciiFold(existingLeft) ?? existingLeft;
+          const second = asciiFold(existingRight) ?? existingRight;
+          const candidateLeft = asciiFold(left) ?? left;
+          const candidateRight = asciiFold(right) ?? right;
+          return first === candidateLeft && second === candidateRight || first === candidateRight && second === candidateLeft;
+        });
+        if (!metadataTermsDuplicate(left, right) || relationshipExists) continue;
+        emitted.push([left, right]);
+        errors.push({ field, code: "duplicate_terms", message: `${label} contains duplicate terms: "${left}" and "${right}".`, tokens: [left, right] });
+      }
+    }
+    return errors;
+  };
+  const validateBookMetadataDraft = (draft, onlyField = "") => {
+    const errors = [];
+    const include = (field) => !onlyField || onlyField === field;
+    const singleLine = (field, label) => {
+      const effective = metadataEffectiveValue(draft?.[field]);
+      if (effective && /[\r\n]/.test(effective)) errors.push({ field, code: "single_line", message: `${label} must be a single line.` });
+    };
+    const characterLimit = (field, label, maximumExclusive) => {
+      const count = metadataGraphemeCount(draft?.[field]);
+      if (count !== null && count >= maximumExclusive) errors.push({ field, code: "character_limit", message: `${label} must be under ${maximumExclusive} characters (currently ${count}).` });
+    };
+    if (include("title")) {
+      singleLine("title", "Title");
+      const terms = metadataTerms(draft?.title);
+      if (terms.length && (terms.length < 2 || terms.length > 3)) errors.push({ field: "title", code: "term_count", message: `Title must contain 2 or 3 terms (currently ${terms.length}).` });
+      characterLimit("title", "Title", 120);
+      errors.push(...duplicateMetadataErrors("title", "Title", draft?.title));
+    }
+    if (include("subtitle")) {
+      singleLine("subtitle", "Subtitle");
+      characterLimit("subtitle", "Subtitle", 120);
+      errors.push(...duplicateMetadataErrors("subtitle", "Subtitle", draft?.subtitle));
+    }
+    if (include("subcover")) {
+      singleLine("subcover", "Subcover");
+      const terms = metadataTerms(draft?.subcover);
+      if (terms.length && (terms.length < 4 || terms.length > 6)) errors.push({ field: "subcover", code: "term_count", message: `Subcover must contain 4 to 6 terms (currently ${terms.length}).` });
+      characterLimit("subcover", "Subcover", 100);
+    }
+    if (include("author")) singleLine("author", "Author");
+    return errors;
+  };
+  const metadataValidationFor = (id) => state.bookMetadataValidation.get(id) ?? { attempted: false, errors: [] };
+  const metadataValidationSummary = (errors) => {
+    const fields = metadataFieldOrder.filter((field) => errors.some((error) => error.field === field));
+    const first = fields[0] ? fields[0][0].toUpperCase() + fields[0].slice(1) : "Book Information";
+    return `Book Information was not saved. Fix ${errors.length} issue${errors.length === 1 ? "" : "s"} in ${fields.length} field${fields.length === 1 ? "" : "s"}, starting with ${first}.`;
   };
   const brandAuthorDraftFor = (brand) => state.brandAuthorDrafts.get(valueFor(brand, "name", "")) ?? brandAuthor(brand);
   const brandAuthorIsDirty = (brand, value) => value !== brandAuthor(brand) || valueFor(brandSummaryFor(brand), "metadataStatus", "Missing") === "Unavailable";
@@ -858,12 +933,15 @@
   const renderBookInformation = (book, summary) => {
     const draft = metadataDraftFor(book, summary);
     const dirty = hasMetadataDraft(book, summary);
-    const error = subcoverError(draft.subcover);
-    const showError = Boolean(error) && state.subcoverTouchedBooks.has(bookId(book));
+    const validation = metadataValidationFor(bookId(book));
     const assignmentWarning = metadataAssignmentWarning(draft, summary);
     const disabled = catalogMutationBusy() || processIsActive();
-    const field = (label, name, placeholder = "Unknown") => `<label class="field"><span>${label}</span><input class="control" data-action="book-metadata-input" data-metadata-field="${name}" data-book-id="${escapeHtml(bookId(book))}" value="${escapeHtml(draft[name])}" placeholder="${placeholder}" autocomplete="off"></label>`;
-    return `<section class="catalog-card" data-book-information-card><div class="catalog-card-heading"><div><h3>Book Information</h3><p>Paste production metadata from your ChatGPT Web analysis. Blank fields remain Unknown.</p></div>${dirty ? '<span class="status-badge status-warn">Unsaved</span>' : ""}</div><div class="catalog-form-grid">${field("Title", "title")}${field("Subtitle", "subtitle")}<label class="field"><span>Subcover</span><input class="control ${showError ? "control-invalid" : ""}" data-action="book-metadata-input" data-metadata-field="subcover" data-book-id="${escapeHtml(bookId(book))}" value="${escapeHtml(draft.subcover)}" placeholder="Unknown" maxlength="99" aria-describedby="book-subcover-error" aria-invalid="${showError}" autocomplete="off"><small id="book-subcover-error" class="field-error" ${showError ? "" : "hidden"}>${escapeHtml(error)}</small></label>${field("Author", "author", "Primary Author or Unknown")}<label class="field catalog-description-field"><span>Description</span><textarea class="control" rows="4" data-action="book-metadata-input" data-metadata-field="description" data-book-id="${escapeHtml(bookId(book))}" placeholder="Unknown">${escapeHtml(draft.description)}</textarea></label></div><p id="book-author-assignment-warning" class="catalog-warning" role="alert" ${assignmentWarning ? "" : "hidden"}>${escapeHtml(assignmentWarning)}</p><div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="metadata" role="${state.catalogFeedbackError ? "alert" : "status"}">${state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand === "book.metadata.save" ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-book-metadata" data-book-id="${escapeHtml(bookId(book))}" ${!dirty || error || disabled ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save" ? "Saving…" : "Save Book Information"}</button></div></section>`;
+    const field = (label, name, placeholder = "Unknown") => {
+      const errors = validation.errors.filter((error) => error.field === name);
+      const errorId = `book-${name}-errors`;
+      return `<label class="field" for="book-${name}-input"><span>${label}</span><input id="book-${name}-input" class="control ${errors.length ? "control-invalid" : ""}" data-action="book-metadata-input" data-metadata-field="${name}" data-book-id="${escapeHtml(bookId(book))}" value="${escapeHtml(draft[name])}" placeholder="${placeholder}" aria-describedby="${errorId}" aria-invalid="${errors.length > 0}" autocomplete="off"><small id="${errorId}" class="field-error" ${errors.length ? "" : "hidden"}>${errors.map((error) => escapeHtml(error.message)).join("<br>")}</small></label>`;
+    };
+    return `<section class="catalog-card" data-book-information-card aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save"}"><div class="catalog-card-heading"><div><h3>Book Information</h3><p>Paste production metadata from your ChatGPT Web analysis. Blank fields remain Unknown.</p></div>${dirty ? '<span class="status-badge status-warn">Unsaved</span>' : ""}</div><div class="catalog-form-grid">${field("Title", "title")}${field("Subtitle", "subtitle")}${field("Subcover", "subcover")}${field("Author", "author", "Primary Author or Unknown")}<label class="field catalog-description-field"><span>Description</span><textarea class="control" rows="4" data-action="book-metadata-input" data-metadata-field="description" data-book-id="${escapeHtml(bookId(book))}" placeholder="Unknown">${escapeHtml(draft.description)}</textarea></label></div><p id="book-author-assignment-warning" class="catalog-warning" role="alert" ${assignmentWarning ? "" : "hidden"}>${escapeHtml(assignmentWarning)}</p><div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="metadata" role="${state.catalogFeedbackError ? "alert" : "status"}">${state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand === "book.metadata.save" ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-book-metadata" data-book-id="${escapeHtml(bookId(book))}" aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save"}" ${!dirty || disabled ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save" ? "Saving…" : "Save Book Information"}</button></div></section>`;
   };
 
   const renderBookBrandAssignment = (book, summary) => {
@@ -1048,6 +1126,45 @@
     return `<div class="book-drawer-layer"><section class="book-drawer" role="dialog" aria-labelledby="book-drawer-title"><header class="book-drawer-header"><span class="book-drawer-preview">${localImageMarkup(cover, `Cover for ${bookDisplayTitle(book, summary)}`)}</span><div><p class="eyebrow">Book detail</p><h2 id="book-drawer-title" tabindex="-1">${escapeHtml(bookDisplayTitle(book, summary))}</h2><p class="book-folder-name">${escapeHtml(valueFor(book, "name", bookId(book)))}</p><div>${badge(productionStatus(summary, book))} ${badge(bookFrameState(summary))} <span data-book-assigned-brand-badge>${badge(assignedBrandName(summary) || "Unassigned")}</span></div></div><div class="book-drawer-actions"><span data-book-interior-unsaved role="status" ${dirty || metadataDirty ? "" : "hidden"}>Unsaved changes</span><button class="button-primary" data-action="save-book-interior-settings" data-book-id="${escapeHtml(bookId(book))}" ${saveDisabled ? "disabled" : ""} aria-busy="${state.bookInteriorSavePending}">${state.bookInteriorSavePending ? "Saving…" : "Save Interior changes"}</button><button class="button-secondary" data-action="close-book-drawer" aria-label="Close Book detail">Close</button></div></header><div class="book-drawer-body">${renderBookTabs(book, summary)}</div></section></div>`;
   };
 
+  const patchBookMetadataValidationUi = (book, summary, focusFirst = false) => {
+    const metadataCard = document.querySelector("[data-book-information-card]");
+    if (!metadataCard) return;
+    const validation = metadataValidationFor(bookId(book));
+    for (const field of metadataFieldOrder) {
+      const errors = validation.errors.filter((error) => error.field === field);
+      const control = metadataCard.querySelector(`[data-metadata-field="${field}"]`);
+      const errorElement = document.getElementById(`book-${field}-errors`);
+      control?.classList.toggle("control-invalid", errors.length > 0);
+      control?.setAttribute("aria-invalid", String(errors.length > 0));
+      if (errorElement) {
+        errorElement.hidden = errors.length === 0;
+        errorElement.innerHTML = errors.map((error) => escapeHtml(error.message)).join("<br>");
+      }
+    }
+
+    const dirty = hasMetadataDraft(book, summary);
+    const heading = metadataCard.querySelector(".catalog-card-heading");
+    const dirtyBadge = heading?.querySelector(":scope > .status-badge");
+    if (dirty && !dirtyBadge) heading?.insertAdjacentHTML("beforeend", '<span class="status-badge status-warn">Unsaved</span>');
+    if (!dirty) dirtyBadge?.remove();
+    const save = metadataCard.querySelector('[data-action="save-book-metadata"]');
+    if (save) save.disabled = !dirty || catalogMutationBusy() || processIsActive();
+    const feedback = metadataCard.querySelector('[data-catalog-feedback="metadata"]');
+    if (feedback) {
+      const visible = state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand === "book.metadata.save";
+      feedback.textContent = visible ? state.catalogFeedback : "";
+      feedback.classList.toggle("is-error", visible && state.catalogFeedbackError);
+      feedback.setAttribute("role", visible && state.catalogFeedbackError ? "alert" : "status");
+    }
+
+    if (focusFirst && validation.errors.length) {
+      const firstField = metadataFieldOrder.find((field) => validation.errors.some((error) => error.field === field));
+      const firstControl = firstField ? metadataCard.querySelector(`[data-metadata-field="${firstField}"]`) : null;
+      firstControl?.focus();
+      firstControl?.scrollIntoView?.({ block: "nearest" });
+    }
+  };
+
   const updateBookCatalogMutationUi = () => {
     if (!state.bookDrawerOpen || currentRoute() !== "books") return;
     const book = selectedBook();
@@ -1056,19 +1173,14 @@
     const busy = catalogMutationBusy() || processIsActive();
     const metadataCard = document.querySelector("[data-book-information-card]");
     const metadataSave = metadataCard?.querySelector('[data-action="save-book-metadata"]');
-    const metadataError = subcoverError(metadataDraftFor(book, summary).subcover);
     metadataCard?.querySelectorAll("input, textarea").forEach((control) => { control.disabled = busy; });
+    metadataCard?.setAttribute("aria-busy", String(state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save"));
     if (metadataSave) {
-      metadataSave.disabled = busy || !hasMetadataDraft(book, summary) || Boolean(metadataError);
+      metadataSave.disabled = busy || !hasMetadataDraft(book, summary);
+      metadataSave.setAttribute("aria-busy", String(state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save"));
       metadataSave.textContent = state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save" ? "Saving…" : "Save Book Information";
     }
-    const metadataFeedback = metadataCard?.querySelector('[data-catalog-feedback="metadata"]');
-    if (metadataFeedback) {
-      const visible = state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand === "book.metadata.save";
-      metadataFeedback.textContent = visible ? state.catalogFeedback : "";
-      metadataFeedback.classList.toggle("is-error", visible && state.catalogFeedbackError);
-      metadataFeedback.setAttribute("role", visible && state.catalogFeedbackError ? "alert" : "status");
-    }
+    patchBookMetadataValidationUi(book, summary);
     const assignmentCard = document.querySelector("[data-book-assignment-card]");
     const select = assignmentCard?.querySelector('[data-action="book-brand-select"]');
     if (select) select.disabled = busy || !valueFor(metadataFor(summary), "author", "");
@@ -1553,7 +1665,7 @@
     if ((hasInteriorDraft(state.selectedBookId) || (book && summary && hasMetadataDraft(book, summary))) && !window.confirm("Discard unsaved Book changes?")) return;
     clearInteriorDraft(state.selectedBookId);
     state.bookMetadataDrafts.delete(state.selectedBookId);
-    state.subcoverTouchedBooks.delete(state.selectedBookId);
+    state.bookMetadataValidation.delete(state.selectedBookId);
     state.bookDrawerScrollTop = 0;
     state.bookDrawerOpen = false;
     document.querySelector(".book-drawer-layer")?.remove();
@@ -1577,7 +1689,7 @@
     if (currentRoute() === "books" && state.bookDrawerOpen) updateBookCatalogMutationUi();
     if (currentRoute() === "brands") render("brands", false);
   };
-  const catalogErrorMessage = (code) => ({ invalid_book_metadata: "Book Information is invalid. Single-line fields cannot contain line breaks, and Subcover must contain fewer than 100 characters.", invalid_brand_author: "Brand Author must be a single line.", book_author_required: "Save a Book Author before assigning a Brand.", brand_author_required: "The selected Brand does not have an Author.", book_brand_author_mismatch: "Book Author must match Brand Author before assignment.", brand_metadata_invalid: "Brand metadata could not be read. Fix the metadata file and retry.", processing_active: "Interior Processing is running. Try again when it finishes.", snapshot_unavailable: "The library snapshot is unavailable. Refresh and retry.", book_not_found: "This Book is no longer available. Refresh the library.", brand_not_found: "This Brand is no longer available. Refresh the library." })[code] ?? "The change could not be saved. Refresh and retry.";
+  const catalogErrorMessage = (code) => ({ invalid_book_metadata: "Book Information is invalid. Review Title, Subtitle, Subcover, and Author, then retry.", invalid_brand_author: "Brand Author must be a single line.", book_author_required: "Save a Book Author before assigning a Brand.", brand_author_required: "The selected Brand does not have an Author.", book_brand_author_mismatch: "Book Author must match Brand Author before assignment.", brand_metadata_invalid: "Brand metadata could not be read. Fix the metadata file and retry.", processing_active: "Interior Processing is running. Try again when it finishes.", snapshot_unavailable: "The library snapshot is unavailable. Refresh and retry.", book_not_found: "This Book is no longer available. Refresh the library.", brand_not_found: "This Brand is no longer available. Refresh the library." })[code] ?? "The change could not be saved. Refresh and retry.";
   document.addEventListener("keydown", (event) => {
     const activeTab = event.target.closest?.('[role="tab"][data-action="book-tab"]');
     if (activeTab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
@@ -1618,8 +1730,17 @@
       const book = books().find((item) => bookId(item) === target.dataset.bookId);
       const summary = book ? summaryFor(book) : null;
       const draft = book && summary ? metadataDraftFor(book, summary, true) : null;
-      const error = draft ? subcoverError(draft.subcover) : "Book not found.";
-      if (error) { state.catalogFeedback = error; state.catalogFeedbackError = true; refreshBookDrawerBody(); return; }
+      if (!draft) { state.catalogFeedback = "Book not found."; state.catalogFeedbackError = true; updateBookCatalogMutationUi(); return; }
+      const errors = validateBookMetadataDraft(draft);
+      state.bookMetadataValidation.set(target.dataset.bookId, { attempted: true, errors });
+      state.catalogMutationCommand = "book.metadata.save";
+      state.catalogMutationTarget = target.dataset.bookId;
+      if (errors.length) {
+        state.catalogFeedback = metadataValidationSummary(errors);
+        state.catalogFeedbackError = true;
+        patchBookMetadataValidationUi(book, summary, true);
+        return;
+      }
       beginCatalogMutation("book.metadata.save", target.dataset.bookId, { bookId: target.dataset.bookId, ...draft });
     }
     if (action === "assign-book-brand") {
@@ -1829,16 +1950,28 @@
       const summary = book ? summaryFor(book) : null;
       if (book && summary) {
         const draft = metadataDraftFor(book, summary, true);
-        draft[event.target.dataset.metadataField] = event.target.value;
-        const error = subcoverError(draft.subcover);
-        const save = document.querySelector('[data-action="save-book-metadata"]');
-        if (save) save.disabled = !hasMetadataDraft(book, summary) || Boolean(error) || state.catalogMutationPending || processIsActive();
-        const subcover = document.querySelector('[data-metadata-field="subcover"]');
-        const errorElement = document.getElementById("book-subcover-error");
-        const showError = Boolean(error) && state.subcoverTouchedBooks.has(bookId(book));
-        subcover?.classList.toggle("control-invalid", showError);
-        subcover?.setAttribute("aria-invalid", String(showError));
-        if (errorElement) { errorElement.hidden = !showError; errorElement.textContent = error; }
+        const field = event.target.dataset.metadataField;
+        draft[field] = event.target.value;
+        const dirty = hasMetadataDraft(book, summary);
+        const validation = metadataValidationFor(bookId(book));
+        if (!dirty) {
+          state.bookMetadataValidation.delete(bookId(book));
+          if (state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand === "book.metadata.save") {
+            state.catalogFeedback = "";
+            state.catalogFeedbackError = false;
+          }
+        } else if (validation.attempted && metadataFieldOrder.includes(field)) {
+          const errors = [
+            ...validation.errors.filter((error) => error.field !== field),
+            ...validateBookMetadataDraft(draft, field)
+          ].sort((left, right) => metadataFieldOrder.indexOf(left.field) - metadataFieldOrder.indexOf(right.field));
+          state.bookMetadataValidation.set(bookId(book), { attempted: true, errors });
+          state.catalogMutationCommand = "book.metadata.save";
+          state.catalogMutationTarget = bookId(book);
+          state.catalogFeedback = errors.length ? metadataValidationSummary(errors) : "";
+          state.catalogFeedbackError = errors.length > 0;
+        }
+        patchBookMetadataValidationUi(book, summary);
         const assignmentWarning = metadataAssignmentWarning(draft, summary);
         const assignmentWarningElement = document.getElementById("book-author-assignment-warning");
         if (assignmentWarningElement) { assignmentWarningElement.hidden = !assignmentWarning; assignmentWarningElement.textContent = assignmentWarning; }
@@ -1876,7 +2009,6 @@
     if (event.target.dataset.action === "book-sort") { state.bookSort = event.target.value; state.bookPage = 1; render("books", false); }
     if (event.target.dataset.action === "book-brand-filter") { state.bookBrandFilter = event.target.value; state.bookPage = 1; state.selectedBookIds.clear(); render("books", false); }
     if (event.target.dataset.action === "book-brand-select") { const assign = document.querySelector('[data-action="assign-book-brand"]'); const book = selectedBook(); const summary = book ? summaryFor(book) : null; if (assign) assign.disabled = !event.target.value || event.target.value === assignedBrandName(summary) || catalogMutationBusy() || processIsActive(); }
-    if (event.target.dataset.action === "book-metadata-input" && event.target.dataset.metadataField === "subcover") { state.subcoverTouchedBooks.add(event.target.dataset.bookId); refreshBookDrawerBody(); }
     if (event.target.dataset.action === "brand-author-input") render("brands", false);
     if (event.target.dataset.action === "pdf-library-sort") { state.pdfLibrarySort = ["newest", "name", "size"].includes(event.target.value) ? event.target.value : "newest"; state.pdfLibraryPage = 1; render("outputs", false); }
   });
@@ -1950,7 +2082,7 @@
       const catalogCommand = state.catalogMutationCommand;
       window.appSnapshot = valueFor(response, "payload", {});
       if (catalogWasAwaiting) {
-        if (catalogCommand === "book.metadata.save") { state.bookMetadataDrafts.delete(catalogTarget); state.subcoverTouchedBooks.delete(catalogTarget); }
+        if (catalogCommand === "book.metadata.save") { state.bookMetadataDrafts.delete(catalogTarget); state.bookMetadataValidation.delete(catalogTarget); }
         if (catalogCommand === "brand.author.save") state.brandAuthorDrafts.delete(catalogTarget);
         state.catalogMutationAwaitingSnapshot = false;
         state.catalogFeedback = "Saved";
@@ -2091,9 +2223,31 @@
       if (["book.metadata.save", "book.brand.assign", "book.brand.unassign", "brand.author.save"].includes(requestCommand)) {
         state.catalogMutationPending = false;
         state.catalogMutationAwaitingSnapshot = false;
-        state.catalogFeedback = catalogErrorMessage(error);
+        const responsePayload = valueFor(response, "payload", {});
+        const backendErrors = valueFor(responsePayload, "validationErrors", []);
+        const structuredMetadataErrors = requestCommand === "book.metadata.save" && error === "invalid_book_metadata" && valueFor(responsePayload, "policyVersion", 0) === 1 && Array.isArray(backendErrors)
+          ? backendErrors.map((item) => ({
+            field: String(valueFor(item, "field", "")),
+            code: String(valueFor(item, "code", "")),
+            message: String(valueFor(item, "message", "")),
+            ...(Array.isArray(valueFor(item, "tokens", null)) ? { tokens: valueFor(item, "tokens", []).map(String) } : {})
+          })).filter((item) => metadataFieldOrder.includes(item.field) && item.code && item.message)
+          : [];
+        if (structuredMetadataErrors.length) {
+          state.bookMetadataValidation.set(state.catalogMutationTarget, { attempted: true, errors: structuredMetadataErrors });
+          state.catalogFeedback = metadataValidationSummary(structuredMetadataErrors);
+        } else {
+          state.catalogFeedback = catalogErrorMessage(error);
+        }
         state.catalogFeedbackError = true;
-        if (currentRoute() === "books" && state.bookDrawerOpen) updateBookCatalogMutationUi();
+        if (currentRoute() === "books" && state.bookDrawerOpen) {
+          updateBookCatalogMutationUi();
+          if (structuredMetadataErrors.length) {
+            const book = selectedBook();
+            const summary = book ? summaryFor(book) : null;
+            if (book && summary) patchBookMetadataValidationUi(book, summary, true);
+          }
+        }
         if (currentRoute() === "brands") render("brands", false);
       }
       if (requestCommand === "book.production.asset.import") {

@@ -623,6 +623,7 @@ test("Book detail copies templates from the assigned validated Brand for a ready
   const copy = { dataset: { action: "copy-brand-templates", bookId: "Book 001" }, closest: () => copy };
   contentListeners.click({ target: copy });
   const request = messages.at(-1);
+  const messageCount = messages.length;
   assert.equal(request.command, "book.brand.templates.copy");
   assert.deepEqual(request.payload, { bookId: "Book 001" });
   assert.match(content.innerHTML, /Copying…/);
@@ -1434,6 +1435,117 @@ test("Book Interior edits stay local until one explicit save request", () => {
       assets: []
     }
   });
+});
+
+test("Book Information validation blocks invalid save without redrawing and submits after correction", () => {
+  const { messageHandler, contentListeners, messages, getFullRenderCount, getBookDrawerBodyRenderCount } = loadBridge("books");
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      metadata: { title: "", subtitle: "", subcover: "", description: "", author: "" },
+      interiorSourcePageCount: 0, activeInteriorSourcePageCount: 0, assets: []
+    }]
+  };
+
+  messageHandler({ data: { version: 1, id: "metadata-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const fullRenders = getFullRenderCount();
+  const drawerRenders = getBookDrawerBodyRenderCount();
+  const messageCount = messages.length;
+
+  contentListeners.input({ target: { dataset: { action: "book-metadata-input", metadataField: "title", bookId: "Book 001" }, value: "Only" } });
+  const save = { dataset: { action: "save-book-metadata", bookId: "Book 001" }, closest: () => save };
+  contentListeners.click({ target: save });
+
+  assert.equal(messages.length, messageCount, "known invalid metadata must not cross the bridge");
+  assert.equal(getFullRenderCount(), fullRenders);
+  assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+
+  contentListeners.input({ target: { dataset: { action: "book-metadata-input", metadataField: "title", bookId: "Book 001" }, value: "Peaceful Days" } });
+  contentListeners.click({ target: save });
+
+  assert.equal(messages.at(-1).command, "book.metadata.save");
+  assert.equal(messages.at(-1).payload.title, "Peaceful Days");
+  assert.equal(getFullRenderCount(), fullRenders);
+  assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+});
+
+test("Book Information accepts Subcover with four to six terms only", () => {
+  const cases = [
+    ["only three terms", false],
+    ["soft calm coloring pages", true],
+    ["soft calm coloring pages inside", true],
+    ["soft calm coloring pages inside today", true],
+    ["one two three four five six seven", false]
+  ];
+
+  for (const [subcover, valid] of cases) {
+    const { messageHandler, contentListeners, messages } = loadBridge("books");
+    messageHandler({ data: {
+      version: 1,
+      id: `subcover-${subcover}`,
+      ok: true,
+      command: "app.snapshot",
+      payload: {
+        discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+        globalSettings: {},
+        bookSummaries: [{
+          bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+          metadata: { title: "", subtitle: "", subcover: "", description: "", author: "" },
+          interiorSourcePageCount: 0, activeInteriorSourcePageCount: 0, assets: []
+        }]
+      }
+    } });
+    const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+    contentListeners.click({ target: openBook });
+    contentListeners.input({ target: { dataset: { action: "book-metadata-input", metadataField: "subcover", bookId: "Book 001" }, value: subcover } });
+    const save = { dataset: { action: "save-book-metadata", bookId: "Book 001" }, closest: () => save };
+    const messageCount = messages.length;
+
+    contentListeners.click({ target: save });
+
+    assert.equal(messages.length, messageCount + (valid ? 1 : 0), `${subcover} should be ${valid ? "accepted" : "rejected"}`);
+    if (valid) assert.equal(messages.at(-1).command, "book.metadata.save");
+  }
+});
+
+test("Book Information structured backend rejection retains the drawer without redraw", () => {
+  const { messageHandler, contentListeners, messages, getFullRenderCount, getBookDrawerBodyRenderCount } = loadBridge("books");
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      metadata: { title: "", subtitle: "", subcover: "", description: "", author: "" },
+      interiorSourcePageCount: 0, activeInteriorSourcePageCount: 0, assets: []
+    }]
+  };
+
+  messageHandler({ data: { version: 1, id: "metadata-backend", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  contentListeners.input({ target: { dataset: { action: "book-metadata-input", metadataField: "title", bookId: "Book 001" }, value: "Peaceful Days" } });
+  const save = { dataset: { action: "save-book-metadata", bookId: "Book 001" }, closest: () => save };
+  contentListeners.click({ target: save });
+  const request = messages.at(-1);
+  const messageCount = messages.length;
+  const fullRenders = getFullRenderCount();
+  const drawerRenders = getBookDrawerBodyRenderCount();
+
+  messageHandler({ data: {
+    version: 1,
+    id: request.id,
+    ok: false,
+    error: "invalid_book_metadata",
+    payload: { policyVersion: 1, validationErrors: [{ field: "title", code: "duplicate_terms", message: "Title contains duplicate terms.", tokens: ["Peaceful", "Peaceful"] }] }
+  } });
+
+  assert.equal(getFullRenderCount(), fullRenders);
+  assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+  assert.equal(messages.length, messageCount, "backend rejection must not request a snapshot refresh");
 });
 
 test("Saving Book Interior settings accepts the refreshed snapshot without redrawing the open drawer", () => {

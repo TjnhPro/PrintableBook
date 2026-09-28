@@ -6,9 +6,13 @@ using PrintableBook.Core.Domain.Processing;
 
 namespace PrintableBook.Core.Application.Desktop;
 
-public sealed class BookCatalogMetadataException(string code, string message) : InvalidOperationException(message)
+public sealed class BookCatalogMetadataException(
+    string code,
+    string message,
+    IReadOnlyList<BookMetadataValidationError>? validationErrors = null) : InvalidOperationException(message)
 {
     public string Code { get; } = code;
+    public IReadOnlyList<BookMetadataValidationError>? ValidationErrors { get; } = validationErrors;
 }
 
 public interface IBookCatalogMetadataService
@@ -30,6 +34,15 @@ public sealed class BookCatalogMetadataService(
     {
         ArgumentNullException.ThrowIfNull(book);
         ArgumentNullException.ThrowIfNull(metadata);
+        var validationErrors = metadata.ValidateForSave();
+        if (validationErrors.Count > 0)
+        {
+            throw new BookCatalogMetadataException(
+                "invalid_book_metadata",
+                "Book Information contains invalid values.",
+                validationErrors);
+        }
+
         var state = await LoadStateAsync(book, cancellationToken);
         await stateStore.SaveAsync(book.Workspace, state with { Metadata = metadata.Normalize() }, cancellationToken);
     }
