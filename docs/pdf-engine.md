@@ -48,4 +48,13 @@ Mỗi lần Cover hoặc Final Interior publish thành công, exporter cố gắ
 
 Preview giữ nguyên MediaBox, page count, thứ tự Production prefix → Intro → Interior và cách xen Background. Interior preview downsample tuần tự từng raster để không giữ toàn bộ ảnh resize trong RAM. Preview chỉ được publish khi hợp lệ và nhỏ hơn PDF chính; lỗi preview không làm main PDF thất bại. Các file `_thumbnail.pdf` là companion cho thao tác Preview, không phải production deliverable. PDF Library mở companion khi chọn hàng Cover/Interior và dùng một action Open Folder ở cấp Book để truy cập các file chính.
 
+Riêng **Build Cover PDF** còn tạo hai JPEG preview-only từ cùng snapshot `final_cover.png` đã dùng cho PDF:
+
+```text
+back_cover.jpg    # pixel nguồn x=0..2620, resize chính xác 1198×1200
+front_cover.jpg   # pixel nguồn x=2621..5241, resize chính xác 1198×1200
+```
+
+Hai file dùng JPEG quality 90, sRGB, không alpha/metadata và được publish như một cặp vào `Output`. Chúng không phải file in ấn và không tham gia freshness của Cover PDF. Nếu tạo, validate hoặc publish một trong hai file thất bại, Cover PDF đã hợp lệ vẫn được giữ; cả cặp JPEG được xem là unavailable và Production hiển thị cảnh báo để user kiểm tra file đang mở/quyền folder rồi build lại.
+
 References: <https://github.com/dlemstra/Magick.NET>, <https://github.com/empira/PDFsharp/blob/master/LICENSE>, and <https://github.com/empira/PDFsharp>.
