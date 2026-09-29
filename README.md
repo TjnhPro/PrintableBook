@@ -104,7 +104,7 @@ Hướng dẫn thao tác đầy đủ bằng tiếng Việt: [User Guide](docs/u
 dotnet restore PrintableBook.sln
 dotnet build PrintableBook.sln --configuration Release --no-restore
 dotnet test tests/PrintableBook.Core.Tests/PrintableBook.Core.Tests.csproj --configuration Release --no-build
-dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "TestScope!=LocalCorpus&TestScope!=ExternalCloakBrowser"
+dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "TestScope!=LocalCorpus&TestScope!=ExternalCloakBrowser&TestScope!=CapturedAmazonHtml"
 dotnet test tests/PrintableBook.Desktop.Tests/PrintableBook.Desktop.Tests.csproj --configuration Release --no-build
 node --test tests/PrintableBook.Desktop.Bridge.Tests/app-bridge.test.mjs
 node src/PrintableBook.Desktop/Frontend/test-production-ui.mjs
@@ -113,6 +113,8 @@ node src/PrintableBook.Desktop/Frontend/test-production-ui.mjs
 Corpus ảnh do user cung cấp ở `TestResults/` thuộc `LocalCorpus`, chỉ chạy local opt-in và không phải dependency của CI. Xem [Testing policy](docs/architecture.md#kiểm-thử).
 
 Ba integration test thật cho CloakBrowser (open/close profile, reconnect profile và truy cập Google) cũng là opt-in vì cần browser binary và network. Chạy bằng `./scripts/test-cloakbrowser-lifecycle.ps1`; binary cache và test profile được giữ dưới `artifacts/cloakbrowser-integration/` để lần sau reuse.
+
+Captured Amazon HTML là dữ liệu local, không đưa vào CI/release. Đặt capture tại `docs/screenshots/keyword.html` rồi chạy `./scripts/test-amazon-captured-html.ps1` để kiểm tra searchbox validity gate và các cặp ASIN/title bằng Html Agility Pack.
 
 ## Kiểm thử artifact với Book mẫu
 

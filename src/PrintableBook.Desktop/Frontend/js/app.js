@@ -256,6 +256,7 @@
     amazon_fetch_failed: "Search failed",
     amazon_challenge_detected: "Amazon needs attention in the browser",
     amazon_rate_limited: "Amazon rate limited the search",
+    amazon_searchbox_missing: "Amazon search box is missing from the response",
     amazon_markup_unsupported: "Amazon result layout is not supported"
   })[String(code ?? "")] ?? "Search failed";
   const asinFeedbackFor = (id) => state.asinResearchFeedback.get(id) ?? { message: "", error: false };

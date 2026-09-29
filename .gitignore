@@ -28,6 +28,9 @@ WebView2/
 *.temp
 artifacts/
 
+# Local captured third-party pages used by opt-in parser tests
+/docs/screenshots/keyword.html
+
 # Repository-owned test image fixtures are an explicit exception.
 !tests/**/*.png
 !tests/**/*.jpg

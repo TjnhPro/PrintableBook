@@ -24,6 +24,11 @@ public sealed partial class AmazonSearchHtmlParser : IAmazonSearchHtmlParser
 
         var document = new HtmlDocument();
         document.LoadHtml(html);
+        if (document.GetElementbyId("twotabsearchtextbox") is null)
+        {
+            return new(AmazonSearchPageDiagnostic.UnexpectedMarkup, [], "amazon_searchbox_missing");
+        }
+
         var nodes = document.DocumentNode.SelectNodes("//div[@data-component-type='s-search-result' and normalize-space(@data-asin)!='']");
         if (nodes is null || nodes.Count == 0)
         {

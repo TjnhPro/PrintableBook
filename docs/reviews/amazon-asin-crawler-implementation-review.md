@@ -20,8 +20,12 @@ The latest free binary still requires a CloakBrowser access key; this workstatio
 ## 2. AmazonCrawl — PASS
 
 - Html Agility Pack parses ordered result cards; ASIN/title normalization, title policy, duplicate selection, empty/challenge/unsupported markup and safe reason codes are isolated from browser and Book code.
+- A response is accepted as an Amazon search response only when Html Agility Pack finds `id="twotabsearchtextbox"`; challenge pages remain `NeedsAttention`, while other responses without the marker fail with `amazon_searchbox_missing`.
+- The local 2,246,595-byte `keyword.html` capture passed: one searchbox, 60 result cards, 57 ordered unique ASIN/title pairs. The three duplicate cards (`B0CNQ5X4Y1`, `B0DF77698M`, `1947243128`) were deduplicated, and five representative exact ASIN/title pairs matched.
 - Input is normalized and bounded at 30 phrases / 200 graphemes; fetch is bounded at 20 seconds / 5 MiB and crawl at 10 minutes.
-- Targeted Core Amazon tests: 13 passed. Targeted parser/browser-boundary tests: 8 passed.
+- Targeted Core Amazon tests: 13 passed. Targeted parser/browser-boundary tests: 10 passed, plus the opt-in captured HTML test.
+
+Re-run the local capture check with `./scripts/test-amazon-captured-html.ps1`.
 
 ## 3. Task and bridge — PASS
 

@@ -12,6 +12,7 @@ public sealed class AmazonSearchHtmlParserTests
     {
         const string html = """
             <html><body>
+              <input id="twotabsearchtextbox" type="text">
               <div data-component-type="s-search-result" data-asin="b000000001"><h2><a><span>Cozy &amp; Cute Coloring Book</span></a></h2></div>
               <div data-component-type="s-search-result" data-asin="B000000001"><h2><span>Duplicate</span></h2></div>
               <div data-component-type="s-search-result" data-asin="bad"><h2><span>Invalid</span></h2></div>
@@ -28,11 +29,23 @@ public sealed class AmazonSearchHtmlParserTests
 
     [Theory]
     [InlineData("<html><body>Sorry, we just need to make sure you're not a robot. Enter the characters you see below.</body></html>", AmazonSearchPageDiagnostic.NeedsAttention)]
-    [InlineData("<html><body>No results for your search. Try checking your spelling.</body></html>", AmazonSearchPageDiagnostic.NoSearchResult)]
-    [InlineData("<html><body><main>Different markup</main></body></html>", AmazonSearchPageDiagnostic.UnexpectedMarkup)]
+    [InlineData("<html><body><input id='twotabsearchtextbox'>No results for your search. Try checking your spelling.</body></html>", AmazonSearchPageDiagnostic.NoSearchResult)]
+    [InlineData("<html><body><input id='twotabsearchtextbox'><main>Different markup</main></body></html>", AmazonSearchPageDiagnostic.UnexpectedMarkup)]
     public void Parse_classifies_terminal_page_shapes(string html, AmazonSearchPageDiagnostic expected)
     {
         Assert.Equal(expected, parser.Parse(html).Diagnostic);
+    }
+
+    [Theory]
+    [InlineData("<html><body><div data-component-type='s-search-result' data-asin='B000000001'><h2><span>Coloring Book</span></h2></div></body></html>")]
+    [InlineData("<html><body><script>const marker = 'id=\"twotabsearchtextbox\"';</script><div data-component-type='s-search-result' data-asin='B000000001'><h2><span>Coloring Book</span></h2></div></body></html>")]
+    public void Parse_rejects_result_cards_when_the_amazon_searchbox_element_is_missing(string html)
+    {
+        var result = parser.Parse(html);
+
+        Assert.Equal(AmazonSearchPageDiagnostic.UnexpectedMarkup, result.Diagnostic);
+        Assert.Equal("amazon_searchbox_missing", result.ReasonCode);
+        Assert.Empty(result.Candidates);
     }
 
     [Fact]
