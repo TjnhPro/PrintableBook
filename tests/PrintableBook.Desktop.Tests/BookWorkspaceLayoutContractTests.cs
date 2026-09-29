@@ -323,6 +323,25 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
+    public void KeywordBuilderAsinResearchHasScopedResponsiveAndAccessibleUi()
+    {
+        var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
+        var script = File.ReadAllText(Path.Combine(frontend, "js", "app.js"));
+        var layout = File.ReadAllText(Path.Combine(frontend, "css", "book-workspace.css"));
+
+        Assert.Contains("ASIN Research", script, StringComparison.Ordinal);
+        Assert.Contains("rows=\"5\" data-action=\"asin-search-keywords\"", script, StringComparison.Ordinal);
+        Assert.Contains("aria-labelledby=\"asin-research-title\"", script, StringComparison.Ordinal);
+        Assert.Contains("role=\"progressbar\"", script, StringComparison.Ordinal);
+        Assert.Contains("readonly aria-readonly=\"true\"", script, StringComparison.Ordinal);
+        Assert.Contains("const patchAsinResearch", script, StringComparison.Ordinal);
+        Assert.Contains("section.outerHTML = renderAsinResearch", script, StringComparison.Ordinal);
+        Assert.Contains(".asin-result-list { display:grid; max-height:15rem; overflow-y:auto;", layout, StringComparison.Ordinal);
+        Assert.Contains("@media (max-width:760px)", layout, StringComparison.Ordinal);
+        Assert.Contains("prefers-reduced-motion:reduce", layout, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BoundedBookWorkspaceKeepsPreviewLoadingAndMotionAccessibilityContracts()
     {
         var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
