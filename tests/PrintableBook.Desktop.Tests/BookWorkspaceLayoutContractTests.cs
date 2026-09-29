@@ -318,6 +318,7 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("resize:none; overflow-y:auto;", layout, StringComparison.Ordinal);
         Assert.Contains("keyword-builder-pane keyword-builder-inputs", script, StringComparison.Ordinal);
         Assert.Contains("keyword-builder-pane keyword-builder-outputs", script, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-inputs { background:var(--pb-surface); }", layout, StringComparison.Ordinal);
         Assert.Contains("aria-labelledby=\"keyword-builder-inputs-title\"", script, StringComparison.Ordinal);
         Assert.Contains("aria-labelledby=\"keyword-builder-output-title\"", script, StringComparison.Ordinal);
         Assert.Contains("const renderAsinResearchWorkspace", script, StringComparison.Ordinal);
