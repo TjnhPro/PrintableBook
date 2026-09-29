@@ -21,3 +21,11 @@
 - Why separate: the No Frame patch introduces no new caller or external input path; changing the public request validation deserves its own compatibility/security review.
 - Revisit when: any caller can supply or mutate `InteriorPagePipelineRequest.PageId`, or before exposing the pipeline outside the current internal processing flow.
 - Acceptance: reject rooted paths, separators, `.`/`..`, and invalid filename components; verify resolved cache/final paths stay under their intended roots before writes/deletes; cover reparse-point behavior.
+
+## WebView bridge source and navigation hardening
+
+- Status: deferred from the Amazon ASIN crawler plan review.
+- Evidence: the application WebView message handler reads bridge messages without an explicit expected-source check, while the crawler design deliberately keeps Amazon browser automation in a separate CloakBrowser session.
+- Why separate: the crawler MVP does not navigate the application WebView or accept arbitrary URL/JavaScript through its bridge, so changing the global WebView trust boundary would expand scope beyond the additive feature.
+- Revisit when: the application WebView can navigate remote content, the bridge gains externally supplied scripts/URLs, or a focused bridge security review is scheduled.
+- Acceptance: allow only the expected local application document/origin to invoke privileged bridge commands and block unexpected top-level navigation without breaking current local UI startup.
