@@ -316,6 +316,7 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("fields.join(\"\\t\")", script, StringComparison.Ordinal);
         Assert.Contains(".keyword-list-input.control { height:7.625rem; min-height:7.625rem; max-height:7.625rem;", layout, StringComparison.Ordinal);
         Assert.Contains("resize:none; overflow-y:auto;", layout, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr));", layout, StringComparison.Ordinal);
         Assert.Contains("keyword-builder-pane keyword-builder-inputs", script, StringComparison.Ordinal);
         Assert.Contains("keyword-builder-pane keyword-builder-outputs", script, StringComparison.Ordinal);
         Assert.Contains(".keyword-builder-inputs { background:var(--pb-surface); }", layout, StringComparison.Ordinal);
