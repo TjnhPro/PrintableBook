@@ -19,11 +19,11 @@ The latest free binary still requires a CloakBrowser access key; this workstatio
 
 ## 2. AmazonCrawl — PASS
 
-- Html Agility Pack parses ordered result cards; ASIN/title normalization, title policy, duplicate selection, empty/challenge/unsupported markup and safe reason codes are isolated from browser and Book code.
+- Html Agility Pack parses ordered result cards, excludes a card when its full text contains `Sponsored`, and extracts title through the four verified selector fallbacks before normalization; title policy, duplicate selection, empty/challenge/unsupported markup and safe reason codes are isolated from browser and Book code.
 - A response is accepted as an Amazon search response only when Html Agility Pack finds `id="twotabsearchtextbox"`; challenge pages remain `NeedsAttention`, while other responses without the marker fail with `amazon_searchbox_missing`.
-- The local 2,246,595-byte `keyword.html` capture passed: one searchbox, 60 result cards, 57 ordered unique ASIN/title pairs. The three duplicate cards (`B0CNQ5X4Y1`, `B0DF77698M`, `1947243128`) were deduplicated, and five representative exact ASIN/title pairs matched.
+- The local 2,246,595-byte `keyword.html` capture passed: one searchbox and 60 result cards. Twelve Sponsored cards were excluded and 48 ordered organic ASIN/title pairs remained; ASINs appearing in both placements survive through their organic card, and four representative exact pairs matched.
 - Input is normalized and bounded at 30 phrases / 200 graphemes; fetch is bounded at 20 seconds / 5 MiB and crawl at 10 minutes.
-- Targeted Core Amazon tests: 13 passed. Targeted parser/browser-boundary tests: 10 passed, plus the opt-in captured HTML test.
+- Targeted Core Amazon tests: 14 passed. Targeted parser/browser-boundary tests: 15 passed, plus the opt-in captured HTML test.
 
 Re-run the local capture check with `./scripts/test-amazon-captured-html.ps1`.
 
@@ -44,7 +44,7 @@ Re-run the local capture check with `./scripts/test-amazon-captured-html.ps1`.
 ## 5. Compatibility, update and release — PASS
 
 - Existing Keyword Builder, Book metadata, Process Interior, Production, PDF Library and update flows remain green.
-- Full .NET result: Core 339, Infrastructure 427, Desktop 168, Updater 55, UpdateSecurity 43, ReleaseTool 32; total 1,064 passed, 0 failed.
+- Full .NET result: Core 340, Infrastructure 434, Desktop 168, Updater 55, UpdateSecurity 43, ReleaseTool 32; total 1,072 passed, 0 failed. Nine opt-in/local-corpus tests were skipped by their normal gates.
 - Restore/build succeeds with 0 warnings and 0 errors. NuGet vulnerable-package scan reports none, including transitive dependencies.
 - Updater backs up/replaces controlled `.playwright` and preserves `.cloakbrowser`; package validators and release verifier require both the driver package and Windows Node executable.
 

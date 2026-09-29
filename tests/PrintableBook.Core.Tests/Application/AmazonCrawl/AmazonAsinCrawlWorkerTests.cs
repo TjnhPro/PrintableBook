@@ -11,22 +11,35 @@ public sealed class AmazonAsinCrawlWorkerTests
         var page = new FakePageClient(
         [
             Response("one"),
-            Response("two")
+            Response("two"),
+            Response("three")
         ]);
         var parser = new QueueParser(
         [
-            Parsed(("B000000001", "Coloring book one")),
-            Parsed(("B000000001", "Coloring book duplicate"), ("B000000002", "Coloring books two"))
+            Parsed(
+                ("B000000001", "Coloring book one"),
+                ("B000000002", "Coloring book fallback one"),
+                ("B000000003", "Coloring book fallback two")),
+            Parsed(
+                ("B000000001", "Coloring book duplicate one"),
+                ("B000000004", "Coloring books two"),
+                ("B000000005", "Coloring book fallback three")),
+            Parsed(
+                ("B000000001", "Coloring book duplicate one"),
+                ("B000000004", "Coloring book duplicate two"),
+                ("B000000006", "Coloring books three"))
         ]);
         var context = new RecordingContext();
         var worker = new AmazonAsinCrawlWorker(page, parser, new NoDelay());
 
         var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)worker).ExecuteAsync(
-            AmazonAsinCrawlRequest.Create(["one", "two"]), context, CancellationToken.None));
+            AmazonAsinCrawlRequest.Create(["one", "two", "three"]), context, CancellationToken.None));
 
         Assert.Equal(AmazonAsinCrawlOutcome.Completed, result.Outcome);
-        Assert.Equal("B000000001,B000000002", result.FinalAsins);
-        Assert.Equal([AmazonAsinKeywordStatus.Selected, AmazonAsinKeywordStatus.Selected], result.Rows.Select(row => row.Status));
+        Assert.Equal("B000000001,B000000004,B000000006", result.FinalAsins);
+        Assert.Equal(
+            [AmazonAsinKeywordStatus.Selected, AmazonAsinKeywordStatus.Selected, AmazonAsinKeywordStatus.Selected],
+            result.Rows.Select(row => row.Status));
         Assert.Equal(CloakBrowserState.Ready, page.Status.State);
     }
 
@@ -68,6 +81,29 @@ public sealed class AmazonAsinCrawlWorkerTests
         Assert.Equal(AmazonAsinCrawlOutcome.NeedsAttention, result.Outcome);
         Assert.Equal("B000000001", result.FinalAsins);
         Assert.Equal(AmazonAsinKeywordStatus.NotProcessed, result.Rows[2].Status);
+    }
+
+    [Fact]
+    public async Task Worker_stops_when_searchbox_is_missing_and_keeps_prior_result()
+    {
+        var page = new FakePageClient([Response("one"), Response("two")]);
+        var parser = new QueueParser(
+        [
+            Parsed(("B000000001", "Coloring book")),
+            new AmazonSearchParseResult(AmazonSearchPageDiagnostic.UnexpectedMarkup, [], "amazon_searchbox_missing")
+        ]);
+        var context = new RecordingContext();
+
+        var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)new AmazonAsinCrawlWorker(page, parser, new NoDelay())).ExecuteAsync(
+            AmazonAsinCrawlRequest.Create(["one", "two", "three"]), context, CancellationToken.None));
+
+        Assert.Equal(AmazonAsinCrawlOutcome.Failed, result.Outcome);
+        Assert.Equal("amazon_searchbox_missing", result.StopReasonCode);
+        Assert.Equal("B000000001", result.FinalAsins);
+        Assert.Equal(2, page.FetchCount);
+        Assert.Equal(
+            [AmazonAsinKeywordStatus.Selected, AmazonAsinKeywordStatus.Failed, AmazonAsinKeywordStatus.NotProcessed],
+            result.Rows.Select(row => row.Status));
     }
 
     [Fact]

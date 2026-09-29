@@ -13,10 +13,10 @@ public sealed class AmazonSearchHtmlParserTests
         const string html = """
             <html><body>
               <input id="twotabsearchtextbox" type="text">
-              <div data-component-type="s-search-result" data-asin="b000000001"><h2><a><span>Cozy &amp; Cute Coloring Book</span></a></h2></div>
-              <div data-component-type="s-search-result" data-asin="B000000001"><h2><span>Duplicate</span></h2></div>
-              <div data-component-type="s-search-result" data-asin="bad"><h2><span>Invalid</span></h2></div>
-              <div data-component-type="s-search-result" data-asin="B000000002"><div data-cy="title-recipe"><span>Adult Coloring Books</span></div></div>
+              <div data-component-type="s-search-result" data-asin="b000000001"><span class="a-size-base-plus a-color-base a-text-normal">Cozy &amp; Cute Coloring Book</span></div>
+              <div data-component-type="s-search-result" data-asin="B000000001"><span class="a-size-base-plus a-color-base a-text-normal">Duplicate</span></div>
+              <div data-component-type="s-search-result" data-asin="bad"><span class="a-size-base-plus a-color-base a-text-normal">Invalid</span></div>
+              <div data-component-type="s-search-result" data-asin="B000000002"><div data-cy="title-recipe"><h2 aria-label="Adult Coloring Books"></h2></div></div>
             </body></html>
             """;
 
@@ -25,6 +25,43 @@ public sealed class AmazonSearchHtmlParserTests
         Assert.Equal(AmazonSearchPageDiagnostic.Results, result.Diagnostic);
         Assert.Equal(["B000000001", "B000000002"], result.Candidates.Select(item => item.Asin));
         Assert.Equal("Cozy & Cute Coloring Book", result.Candidates[0].Title);
+    }
+
+    [Fact]
+    public void Parse_excludes_sponsored_result_cards()
+    {
+        const string html = """
+            <html><body>
+              <input id="twotabsearchtextbox" type="text">
+              <div class="s-result-item" data-component-type="s-search-result" data-asin="B000000001">
+                <span class="a-size-base-plus a-color-base a-text-normal">Paid Coloring Book</span>
+                <span>Sponsored</span>
+              </div>
+              <div class="s-result-item AdHolder" data-component-type="s-search-result" data-asin="B000000001">
+                <span class="a-size-base-plus a-color-base a-text-normal">Organic Coloring Book</span>
+              </div>
+            </body></html>
+            """;
+
+        var result = parser.Parse(html);
+
+        var candidate = Assert.Single(result.Candidates);
+        Assert.Equal("B000000001", candidate.Asin);
+        Assert.Equal("Organic Coloring Book", candidate.Title);
+    }
+
+    [Theory]
+    [InlineData("<span class='a-size-base-plus a-color-base a-text-normal'>First Title</span>", "First Title")]
+    [InlineData("<span class='a-size-medium a-color-base a-text-normal'>Second Title</span>", "Second Title")]
+    [InlineData("<h2 class='a-size-base-plus a-spacing-none a-color-base a-text-normal' aria-label='Third Title'></h2>", "Third Title")]
+    [InlineData("<div data-cy='title-recipe'><h2 aria-label='Fourth Title'><span>Ignored text</span></h2></div>", "Fourth Title")]
+    public void Parse_uses_the_verified_title_fallbacks(string titleMarkup, string expectedTitle)
+    {
+        var html = $"<html><body><input id='twotabsearchtextbox'><div data-component-type='s-search-result' data-asin='B000000001'>{titleMarkup}</div></body></html>";
+
+        var candidate = Assert.Single(parser.Parse(html).Candidates);
+
+        Assert.Equal(expectedTitle, candidate.Title);
     }
 
     [Theory]

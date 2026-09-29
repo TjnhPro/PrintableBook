@@ -35,7 +35,7 @@ Thành công của MVP là giảm thao tác search/copy thủ công nhưng vẫn
 |---|---|
 | Marketplace | Cố định `https://www.amazon.com` |
 | Search depth | Chỉ trang kết quả đầu tiên |
-| Sponsored | Được phép chọn giống organic result |
+| Sponsored | Loại khi text của toàn result item chứa `Sponsored`; chỉ organic result được phép chọn |
 | Title filter | Regex `\bcoloring\s+books?\b`, ignore-case/culture-invariant; không match `colouring book` hoặc `coloring booklet` |
 | Nguồn input | Seed một lần từ Book Keywords draft hiện tại; sau đó là session draft độc lập |
 | Thứ tự | Giữ thứ tự keyword từ trên xuống |
@@ -136,10 +136,11 @@ BrowserFetchResponse
 
 - `AmazonCrawl` dùng Html Agility Pack và XPath; không dùng regex để parse toàn document.
 - Root selector ưu tiên: `//div[@data-component-type='s-search-result' and normalize-space(@data-asin)!='']`.
-- Title có ordered fallback selectors, cô lập trong parser.
+- Title dùng đúng ordered fallback đã kiểm chứng: hai selector `span` đọc `InnerText`, sau đó hai selector đọc `aria-label` (`.a-size-base-plus.a-spacing-none.a-color-base.a-text-normal`, rồi `[data-cy='title-recipe'] h2`).
 - HTML entity decode, collapse whitespace.
 - ASIN uppercase và validate `^[A-Z0-9]{10}$`.
-- Giữ đúng DOM order; organic và sponsored cùng policy.
+- Loại Sponsored trước normalize/dedupe khi `InnerText` của toàn result item chứa text `Sponsored`, tương đương function crawler đã kiểm chứng.
+- Giữ đúng DOM order của các organic candidate còn lại.
 - Phân biệt rõ:
   - `NoSearchResult`: có known empty marker.
   - `NoMatchingTitle`: có result nhưng không title nào match.
@@ -154,6 +155,7 @@ selected = OrdinalIgnoreCase set rỗng
 
 foreach keyword theo input order:
     candidates = parser(html)
+        → loại sponsored result
         → title match `\bcoloring\s+books?\b`
         → DOM order
     chọn candidate đầu tiên có ASIN chưa nằm trong selected
@@ -473,7 +475,7 @@ Real Amazon + published artifact ───► manual/opt-in smoke only
 
 ### `AmazonCrawl` fixture tests
 
-- Organic/sponsored, selector fallbacks, nested/entity-encoded titles.
+- Organic được giữ, Sponsored bị loại bằng result-item text; kiểm thử đủ bốn title fallbacks và entity-encoded titles.
 - Missing ASIN/title, invalid ASIN, duplicate nodes.
 - Known empty, no match, all used, challenge, 429/access denied, unexpected markup.
 - Oversized/malformed document.
@@ -623,7 +625,7 @@ Mỗi nhóm ghi PASS/FAIL cùng evidence/test command. Chỉ tạo PR khi cả 5
 
 - Input normalize đúng order; >30 keyword hoặc keyword >200 ký tự bị reject rõ, không truncate.
 - Mỗi keyword có đúng một row; final chỉ có selected unique ASIN, comma-separated.
-- Sponsored included; filter chỉ English `coloring book(s)`.
+- Sponsored excluded; organic candidate vẫn giữ DOM order và filter chỉ English `coloring book(s)`.
 - Browser dùng app-owned persistent profile và loopback CDP; không attach arbitrary browser.
 - Warm-up không lặp khi session còn Ready.
 - HTML fetch trong browser context, trả về C#, parse bằng HAP; HTML không tồn tại trong View/log.
@@ -686,7 +688,7 @@ Cross-phase themes: typed partial result, per-Book ownership, Cloak compatibilit
 | # | Phase | Decision | Classification | Principle | Rationale | Rejected |
 |---:|---|---|---|---|---|---|
 | 1 | CEO | Giữ feature là research-to-draft, không auto-save | Auto | Preserve user control | Giảm lỗi mà không đổi workflow | Auto persist |
-| 2 | CEO | Khóa amazon.com/first page/sponsored included | Auto | MVP narrow | Ít config, đúng nhu cầu đã chốt | Marketplace/toggle |
+| 2 | CEO | Khóa amazon.com/first page/sponsored excluded | User | Result quality | Không dùng paid placement làm ASIN research result | Marketplace/toggle |
 | 3 | CEO/Eng | 30 keywords, 200 chars, 20s fetch, 10m global | Taste | Bound work | Ngăn task vô hạn, vẫn đủ Ads batch | Unbounded input |
 | 4 | Design | ASIN Research full-width trong card hiện có | Auto | Hierarchy | Subordinate đúng Keyword Builder | Card/column thứ ba |
 | 5 | Design | Seed once rồi independent per-Book draft | Auto | Predictability | Không overwrite input user | Live sync |
