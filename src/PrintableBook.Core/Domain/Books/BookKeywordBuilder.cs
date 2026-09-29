@@ -21,7 +21,8 @@ public sealed record BookKeywordBuilderState(
     int OmittedWordCount = 0,
     string? ShuffleSeed = null,
     string? InputFingerprint = null,
-    string? OutputDigest = null)
+    string? OutputDigest = null,
+    string? AdsAsinSource = null)
 {
     public IReadOnlyList<string?> Keywords => [Keyword1, Keyword2, Keyword3, Keyword4, Keyword5, Keyword6, Keyword7];
 
@@ -41,7 +42,8 @@ public sealed record BookKeywordBuilderState(
         BuildId = BuildId.Trim(),
         ShuffleSeed = NormalizeSlot(ShuffleSeed),
         InputFingerprint = NormalizeSlot(InputFingerprint),
-        OutputDigest = NormalizeSlot(OutputDigest)
+        OutputDigest = NormalizeSlot(OutputDigest),
+        AdsAsinSource = AdsAsinPolicy.Join(AdsAsinPolicy.Normalize(AdsAsinSource))
     };
 
     private static string? NormalizeSlot(string? value)
@@ -161,7 +163,8 @@ public sealed class BookKeywordBuilder(IKeywordOutputShuffler? shuffler = null)
             omittedWordCount,
             seed.Value,
             inputFingerprint,
-            outputDigest);
+            outputDigest,
+            canonicalAdsAsin);
     }
 
     private static void ValidateSourceBounds(IReadOnlyList<string> bookKeywords, IReadOnlyList<string> genericKeywords)
