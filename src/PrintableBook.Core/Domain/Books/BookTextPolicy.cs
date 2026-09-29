@@ -36,12 +36,12 @@ public static class BookTextPolicy
     public static string? NormalizePhrase(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
-        return string.Join(' ', SplitWords(value.Trim()));
+        return string.Join(' ', SplitWords(value.Trim())).Normalize(NormalizationForm.FormC);
     }
 
     public static string? NormalizeOptionalMultiline(string? value)
     {
-        var normalized = value?.Trim();
+        var normalized = value?.Trim().Normalize(NormalizationForm.FormC);
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
 

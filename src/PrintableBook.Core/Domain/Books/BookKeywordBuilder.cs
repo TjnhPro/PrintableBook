@@ -18,7 +18,10 @@ public sealed record BookKeywordBuilderState(
     DateTimeOffset BuiltAtUtc,
     int AlgorithmVersion,
     IReadOnlyList<string>? GenericKeywords = null,
-    int OmittedWordCount = 0)
+    int OmittedWordCount = 0,
+    string? ShuffleSeed = null,
+    string? InputFingerprint = null,
+    string? OutputDigest = null)
 {
     public IReadOnlyList<string?> Keywords => [Keyword1, Keyword2, Keyword3, Keyword4, Keyword5, Keyword6, Keyword7];
 
@@ -35,7 +38,10 @@ public sealed record BookKeywordBuilderState(
         Keyword7 = NormalizeSlot(Keyword7),
         AdsKeyword = NormalizeSlot(AdsKeyword),
         AdsAsin = BookTextPolicy.NormalizeOptionalMultiline(AdsAsin),
-        BuildId = BuildId.Trim()
+        BuildId = BuildId.Trim(),
+        ShuffleSeed = NormalizeSlot(ShuffleSeed),
+        InputFingerprint = NormalizeSlot(InputFingerprint),
+        OutputDigest = NormalizeSlot(OutputDigest)
     };
 
     private static string? NormalizeSlot(string? value)
@@ -87,23 +93,36 @@ public sealed class BookKeywordBuilder(IKeywordOutputShuffler? shuffler = null)
     public const int MaximumAdsKeywordPhrases = 30;
     public const int PreferredGenericAdsKeywordPhrases = 20;
     public const int PreferredBookAdsKeywordPhrases = 10;
-    public const int CurrentAlgorithmVersion = 3;
+    public const int MaximumSourcePhrases = 500;
+    public const int MaximumSourcePhraseCharacters = 10_000;
+    public const int MaximumSourceUtf8Bytes = 64 * 1024;
+    public const int MaximumNormalizedWords = 10_000;
+    public const int CurrentAlgorithmVersion = 4;
 
-    private readonly IKeywordOutputShuffler shuffler = shuffler ?? new RandomKeywordOutputShuffler();
+    private readonly IKeywordOutputShuffler? compatibilityShuffler = shuffler;
 
     public BookKeywordBuilderState Build(
         IReadOnlyList<string> sourceKeywords,
         string? adsAsin,
         string buildId,
         DateTimeOffset builtAtUtc) =>
-        Build([], sourceKeywords, adsAsin, buildId, builtAtUtc);
+        Build([], sourceKeywords, adsAsin, buildId, builtAtUtc, KeywordShuffleSeed.Create());
 
     public BookKeywordBuilderState Build(
         IReadOnlyList<string> genericKeywords,
         IReadOnlyList<string> bookKeywords,
         string? adsAsin,
         string buildId,
-        DateTimeOffset builtAtUtc)
+        DateTimeOffset builtAtUtc) =>
+        Build(genericKeywords, bookKeywords, adsAsin, buildId, builtAtUtc, KeywordShuffleSeed.Create());
+
+    public BookKeywordBuilderState Build(
+        IReadOnlyList<string> genericKeywords,
+        IReadOnlyList<string> bookKeywords,
+        string? adsAsin,
+        string buildId,
+        DateTimeOffset builtAtUtc,
+        KeywordShuffleSeed seed)
     {
         ArgumentNullException.ThrowIfNull(genericKeywords);
         ArgumentNullException.ThrowIfNull(bookKeywords);
@@ -111,6 +130,8 @@ public sealed class BookKeywordBuilder(IKeywordOutputShuffler? shuffler = null)
 
         var normalizedGeneric = BookTextPolicy.NormalizePhrases(genericKeywords, distinct: true);
         var normalizedBookSource = BookTextPolicy.NormalizePhrases(bookKeywords);
+        ValidateSourceBounds(normalizedBookSource, normalizedGeneric);
+        var canonicalAdsAsin = AdsAsinPolicy.Join(AdsAsinPolicy.Normalize(adsAsin));
         var genericSet = normalizedGeneric.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var effectiveBook = BookTextPolicy.NormalizePhrases(normalizedBookSource, distinct: true)
             .Where(phrase => !genericSet.Contains(phrase))
@@ -119,21 +140,42 @@ public sealed class BookKeywordBuilder(IKeywordOutputShuffler? shuffler = null)
         ValidateWords(uniqueWords);
         var (slots, omittedWordCount) = Pack(uniqueWords);
 
-        foreach (var slot in slots) ShuffleIfNeeded(slot);
+        for (var index = 0; index < slots.Count; index++) ShuffleIfNeeded(slots[index], seed, $"slot/{index}");
 
         var values = slots.Select(slot => string.Join(' ', slot)).Cast<string?>().ToList();
         while (values.Count < MaximumKeywordSlots) values.Add(null);
 
+        var adsKeyword = BuildAdsKeyword(normalizedGeneric, effectiveBook, seed);
+        var shuffledAdsAsin = BuildAdsAsin(canonicalAdsAsin, seed);
+        var inputFingerprint = KeywordBuilderFingerprint.Input(normalizedGeneric, normalizedBookSource, canonicalAdsAsin);
+        var outputDigest = KeywordBuilderFingerprint.Output(values, adsKeyword, shuffledAdsAsin);
         return new BookKeywordBuilderState(
             normalizedBookSource,
             values[0], values[1], values[2], values[3], values[4], values[5], values[6],
-            BuildAdsKeyword(normalizedGeneric, effectiveBook),
-            BuildAdsAsin(adsAsin),
+            adsKeyword,
+            shuffledAdsAsin,
             buildId.Trim(),
             builtAtUtc,
             CurrentAlgorithmVersion,
             normalizedGeneric,
-            omittedWordCount);
+            omittedWordCount,
+            seed.Value,
+            inputFingerprint,
+            outputDigest);
+    }
+
+    private static void ValidateSourceBounds(IReadOnlyList<string> bookKeywords, IReadOnlyList<string> genericKeywords)
+    {
+        if (bookKeywords.Count > MaximumSourcePhrases) throw new BookKeywordBuilderValidationException(new(
+            "keyword_phrases_too_many", $"Book Keywords accepts at most {MaximumSourcePhrases} phrases."));
+        var oversized = bookKeywords.FirstOrDefault(value => BookTextPolicy.GraphemeCount(value) > MaximumSourcePhraseCharacters);
+        if (oversized is not null) throw new BookKeywordBuilderValidationException(new(
+            "keyword_phrase_too_long", $"Book Keyword '{oversized}' exceeds {MaximumSourcePhraseCharacters} characters."));
+        if (System.Text.Encoding.UTF8.GetByteCount(string.Join('\n', bookKeywords)) > MaximumSourceUtf8Bytes) throw new BookKeywordBuilderValidationException(new(
+            "keyword_input_too_large", $"Book Keywords accepts at most {MaximumSourceUtf8Bytes} UTF-8 bytes."));
+        var wordCount = genericKeywords.Concat(bookKeywords).Sum(value => BookTextPolicy.SplitWords(value).Count);
+        if (wordCount > MaximumNormalizedWords) throw new BookKeywordBuilderValidationException(new(
+            "keyword_words_too_many", $"Keyword Builder accepts at most {MaximumNormalizedWords} normalized words."));
     }
 
     private static IReadOnlyList<string> OrderedUniqueWords(IEnumerable<string> phrases)
@@ -192,7 +234,7 @@ public sealed class BookKeywordBuilder(IKeywordOutputShuffler? shuffler = null)
         return (slots, 0);
     }
 
-    private string? BuildAdsKeyword(IReadOnlyList<string> genericKeywords, IReadOnlyList<string> bookKeywords)
+    private string? BuildAdsKeyword(IReadOnlyList<string> genericKeywords, IReadOnlyList<string> bookKeywords, KeywordShuffleSeed seed)
     {
         var genericCount = Math.Min(PreferredGenericAdsKeywordPhrases, genericKeywords.Count);
         var bookCount = Math.Min(PreferredBookAdsKeywordPhrases, bookKeywords.Count);
@@ -204,25 +246,25 @@ public sealed class BookKeywordBuilder(IKeywordOutputShuffler? shuffler = null)
         bookCount += Math.Min(remaining, bookKeywords.Count - bookCount);
 
         var selected = genericKeywords.Take(genericCount).Concat(bookKeywords.Take(bookCount)).ToList();
-        ShuffleIfNeeded(selected);
+        ShuffleIfNeeded(selected, seed, "ads-keyword");
         return selected.Count == 0 ? null : string.Join(", ", selected);
     }
 
-    private string? BuildAdsAsin(string? adsAsin)
+    private string? BuildAdsAsin(string? adsAsin, KeywordShuffleSeed seed)
     {
-        var normalized = BookTextPolicy.NormalizeOptionalMultiline(adsAsin);
-        if (normalized is null) return null;
-
-        var targets = normalized
-            .Split([',', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(target => target.Length > 0)
-            .ToList();
-        ShuffleIfNeeded(targets);
-        return targets.Count == 0 ? null : string.Join(',', targets);
+        var targets = AdsAsinPolicy.Normalize(adsAsin).ToList();
+        ShuffleIfNeeded(targets, seed, "ads-asin");
+        return AdsAsinPolicy.Join(targets);
     }
 
-    private void ShuffleIfNeeded(IList<string> values)
+    private void ShuffleIfNeeded(IList<string> values, KeywordShuffleSeed seed, string label)
     {
-        if (values.Count > 1) shuffler.Shuffle(values);
+        if (values.Count < 2) return;
+        if (compatibilityShuffler is not null)
+        {
+            compatibilityShuffler.Shuffle(values);
+            return;
+        }
+        KeywordShuffleV4.Shuffle(values, seed, label);
     }
 }

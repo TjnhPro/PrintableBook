@@ -91,7 +91,7 @@ public sealed class BookKeywordBuilderTests
         Assert.Equal(["Coloring Books", "cute animals", "cute animals"], result.SourceKeywords);
         Assert.Equal("coloring books for adults cute animals", result.Keyword1);
         Assert.Equal("coloring books, books for adults, cute animals", result.AdsKeyword);
-        Assert.Equal(3, result.AlgorithmVersion);
+        Assert.Equal(4, result.AlgorithmVersion);
     }
 
     [Theory]
@@ -165,6 +165,55 @@ public sealed class BookKeywordBuilderTests
         Assert.Null(result.AdsKeyword);
         Assert.Equal("ONLY-ASIN", result.AdsAsin);
         Assert.Equal(0, shuffler.Calls);
+    }
+
+    [Fact]
+    public void Build_with_the_same_v4_seed_is_reproducible_across_instances()
+    {
+        var seed = KeywordShuffleSeed.FromBytes(Enumerable.Range(0, 32).Select(Convert.ToByte).ToArray());
+        var first = new BookKeywordBuilder().Build(
+            ["generic coloring", "books for adults"],
+            ["cozy animals", "calm moments"],
+            "B000000001,B000000002",
+            "build-1",
+            DateTimeOffset.UnixEpoch,
+            seed);
+        var second = new BookKeywordBuilder().Build(
+            ["generic coloring", "books for adults"],
+            ["cozy animals", "calm moments"],
+            "B000000001,B000000002",
+            "build-1",
+            DateTimeOffset.UnixEpoch,
+            seed);
+
+        Assert.Equal(first.Keywords, second.Keywords);
+        Assert.Equal(first.AdsKeyword, second.AdsKeyword);
+        Assert.Equal(first.AdsAsin, second.AdsAsin);
+        Assert.Equal(first.InputFingerprint, second.InputFingerprint);
+        Assert.Equal(first.OutputDigest, second.OutputDigest);
+        Assert.Equal(seed.Value, first.ShuffleSeed);
+    }
+
+    [Fact]
+    public void Build_changing_only_ads_asin_preserves_keyword_outputs_with_the_same_seed()
+    {
+        var seed = KeywordShuffleSeed.FromBytes(Enumerable.Repeat((byte)7, 32).ToArray());
+        var builder = new BookKeywordBuilder();
+        var first = builder.Build(["generic one"], ["book one", "book two"], "B000000001", "build-1", DateTimeOffset.UnixEpoch, seed);
+        var updated = builder.Build(["generic one"], ["book one", "book two"], "B000000001,B000000002", "build-2", DateTimeOffset.UnixEpoch.AddMinutes(1), seed);
+
+        Assert.Equal(first.Keywords, updated.Keywords);
+        Assert.Equal(first.AdsKeyword, updated.AdsKeyword);
+        Assert.NotEqual(first.AdsAsin, updated.AdsAsin);
+        Assert.NotEqual(first.InputFingerprint, updated.InputFingerprint);
+    }
+
+    [Fact]
+    public void Ads_asin_policy_stably_deduplicates_and_only_adds_valid_crawl_targets()
+    {
+        var result = AdsAsinPolicy.MergeCrawlerResults("manual, B000000001,manual", ["b000000001", "B000000002", "invalid"]);
+
+        Assert.Equal(["manual", "B000000001", "B000000002"], result);
     }
 
     private sealed class NoOpShuffler : IKeywordOutputShuffler
