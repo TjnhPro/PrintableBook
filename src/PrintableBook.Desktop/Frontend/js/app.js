@@ -1201,18 +1201,11 @@
             <small id="book-keyword-source-help">One phrase per line. Phrases matching Generic Keywords are excluded during Build.</small>
             <small id="book-keyword-source-error" class="field-error" ${errorMessage ? "" : "hidden"}>${escapeHtml(errorMessage)}</small>
           </label>
-          <label class="field" for="book-keyword-ads-asin">
-            <span>Ads ASIN (product targets)</span>
-            <input id="book-keyword-ads-asin" class="control" type="text" data-action="book-keyword-ads-asin" data-book-id="${escapeHtml(id)}" value="${escapeHtml(draft.adsAsin)}" aria-describedby="book-keyword-ads-asin-help" autocomplete="off" spellcheck="false" ${disabled ? "disabled" : ""}>
-            <small id="book-keyword-ads-asin-help">Optional comma-separated product targets. Empty values are ignored during Build.</small>
-          </label>
           ${clearing ? '<p class="catalog-warning" role="status">This will clear all saved generated keyword fields.</p>' : ""}
-          <button class="button-primary keyword-builder-build" data-action="build-book-keywords" data-book-id="${escapeHtml(id)}" ${disabled ? "disabled" : ""}>${pending ? "Building & saving…" : clearing ? "Clear & Save" : "Build & Save"}</button>
         </section>
         <section class="keyword-builder-pane keyword-builder-outputs" aria-labelledby="keyword-builder-output-title">
           <div class="keyword-builder-output-heading">
             <div><h4 id="keyword-builder-output-title">Generated output</h4><p>${escapeHtml(outputMessage)}${saved ? ` · ${escapeHtml(dateTime(valueFor(saved, "builtAtUtc", null)))}` : ""}</p></div>
-            <button class="button-secondary" data-action="copy-book-keywords" data-book-id="${escapeHtml(id)}" ${saved ? "" : "disabled"}>Copy to Clipboard</button>
           </div>
           ${overflowWarning}
           <div class="keyword-builder-output-list">${keywordRows}</div>
@@ -1220,6 +1213,15 @@
             <span>Ads Keyword</span>
             <textarea id="book-ads-keyword-output" class="control keyword-ads-output" rows="4" readonly aria-readonly="true">${escapeHtml(valueFor(saved, "adsKeyword", "") ?? "")}</textarea>
           </label>
+          <label class="field" for="book-keyword-ads-asin">
+            <span>Ads ASIN (product targets)</span>
+            <input id="book-keyword-ads-asin" class="control" type="text" data-action="book-keyword-ads-asin" data-book-id="${escapeHtml(id)}" value="${escapeHtml(draft.adsAsin)}" aria-describedby="book-keyword-ads-asin-help" autocomplete="off" spellcheck="false" ${disabled ? "disabled" : ""}>
+            <small id="book-keyword-ads-asin-help">Optional comma-separated product targets. Empty values are ignored during Build.</small>
+          </label>
+          <div class="keyword-builder-actions">
+            <button class="button-primary keyword-builder-build" data-action="build-book-keywords" data-book-id="${escapeHtml(id)}" ${disabled ? "disabled" : ""}>${pending ? "Building & saving…" : clearing ? "Clear & Save" : "Build & Save"}</button>
+            <button class="button-secondary" data-action="copy-book-keywords" data-book-id="${escapeHtml(id)}" ${saved ? "" : "disabled"}>Copy to Clipboard</button>
+          </div>
         </section>
       </div>
       <div class="catalog-actions keyword-builder-status"><p class="catalog-feedback ${feedbackVisible && state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="keywords" role="${feedbackVisible && state.catalogFeedbackError ? "alert" : "status"}" aria-live="polite" aria-atomic="true">${feedbackVisible ? escapeHtml(state.catalogFeedback) : ""}</p>${refreshNeeded ? `<button class="button-secondary" data-action="retry-keyword-refresh" data-book-id="${escapeHtml(id)}" ${applicationIsLoading() ? "disabled" : ""}>Retry refresh</button>` : ""}</div>

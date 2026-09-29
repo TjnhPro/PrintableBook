@@ -317,8 +317,18 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains(".keyword-list-input.control { height:7.625rem; min-height:7.625rem; max-height:7.625rem;", layout, StringComparison.Ordinal);
         Assert.Contains("resize:none; overflow-y:auto;", layout, StringComparison.Ordinal);
         Assert.Contains(".keyword-builder-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr));", layout, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-grid { align-items:stretch; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-pane { height:100%; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr));", layout, StringComparison.Ordinal);
         Assert.Contains("keyword-builder-pane keyword-builder-inputs", script, StringComparison.Ordinal);
         Assert.Contains("keyword-builder-pane keyword-builder-outputs", script, StringComparison.Ordinal);
+        var generatedOutputStart = script.IndexOf("<section class=\"keyword-builder-pane keyword-builder-outputs\"", StringComparison.Ordinal);
+        var adsAsinStart = script.IndexOf("<label class=\"field\" for=\"book-keyword-ads-asin\">", StringComparison.Ordinal);
+        var actionsStart = script.IndexOf("<div class=\"keyword-builder-actions\">", StringComparison.Ordinal);
+        var buildButtonStart = script.IndexOf("data-action=\"build-book-keywords\"", StringComparison.Ordinal);
+        var copyButtonStart = script.IndexOf("data-action=\"copy-book-keywords\"", StringComparison.Ordinal);
+        Assert.True(generatedOutputStart >= 0 && adsAsinStart > generatedOutputStart, "Ads ASIN must be inside Generated output.");
+        Assert.True(actionsStart > adsAsinStart && buildButtonStart > actionsStart && copyButtonStart > buildButtonStart, "Build and copy actions must share the final Generated output action row.");
         Assert.Contains(".keyword-builder-inputs { background:var(--pb-surface); }", layout, StringComparison.Ordinal);
         Assert.Contains("aria-labelledby=\"keyword-builder-inputs-title\"", script, StringComparison.Ordinal);
         Assert.Contains("aria-labelledby=\"keyword-builder-output-title\"", script, StringComparison.Ordinal);

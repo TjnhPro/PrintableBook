@@ -1723,6 +1723,13 @@ test("Keyword Builder submits normalized phrases without redrawing Book detail",
   assert.match(content.innerHTML, /Build inputs/);
   assert.match(content.innerHTML, />2 Generic</);
   assert.match(content.innerHTML, /Generated output/);
+  const generatedOutputIndex = content.innerHTML.indexOf("keyword-builder-pane keyword-builder-outputs");
+  const adsAsinIndex = content.innerHTML.indexOf('for="book-keyword-ads-asin"');
+  const actionsIndex = content.innerHTML.indexOf('class="keyword-builder-actions"');
+  const buildActionIndex = content.innerHTML.indexOf('data-action="build-book-keywords"');
+  const copyActionIndex = content.innerHTML.indexOf('data-action="copy-book-keywords"');
+  assert.ok(generatedOutputIndex >= 0 && adsAsinIndex > generatedOutputIndex, "Ads ASIN should render in Generated output");
+  assert.ok(actionsIndex > adsAsinIndex && buildActionIndex > actionsIndex && copyActionIndex > buildActionIndex, "Build and copy actions should share the final action row");
   const fullRenders = getFullRenderCount();
   const drawerRenders = getBookDrawerBodyRenderCount();
 
