@@ -330,15 +330,17 @@ public sealed class BookWorkspaceLayoutContractTests
         var layout = File.ReadAllText(Path.Combine(frontend, "css", "book-workspace.css"));
 
         Assert.Contains("ASIN Research", script, StringComparison.Ordinal);
-        Assert.Contains("rows=\"5\" data-action=\"asin-search-keywords\"", script, StringComparison.Ordinal);
+        Assert.Contains("rows=\"12\" data-action=\"asin-search-keywords\"", script, StringComparison.Ordinal);
+        Assert.Contains("tabButton(\"asin\", \"ASIN Research\")", script, StringComparison.Ordinal);
         Assert.Contains("aria-labelledby=\"asin-research-title\"", script, StringComparison.Ordinal);
         Assert.Contains("role=\"progressbar\"", script, StringComparison.Ordinal);
         Assert.Contains("readonly aria-readonly=\"true\"", script, StringComparison.Ordinal);
         Assert.Contains("const patchAsinResearch", script, StringComparison.Ordinal);
         Assert.Contains("const canUse = !active && !stale && Boolean(finalAsins)", script, StringComparison.Ordinal);
         Assert.DoesNotContain("!validInput || active || browserBusy || needsAttention", script, StringComparison.Ordinal);
-        Assert.Contains("section.outerHTML = renderAsinResearch", script, StringComparison.Ordinal);
-        Assert.Contains(".asin-result-list { display:grid; max-height:15rem; overflow-y:auto;", layout, StringComparison.Ordinal);
+        Assert.DoesNotContain("section.outerHTML = renderAsinResearch", script, StringComparison.Ordinal);
+        Assert.Contains("syncContent(\".asin-result-list\")", script, StringComparison.Ordinal);
+        Assert.Contains(".asin-result-list { display:grid; width:100%; height:15rem; min-height:15rem; max-height:15rem; overflow:auto;", layout, StringComparison.Ordinal);
         Assert.Contains("@media (max-width:760px)", layout, StringComparison.Ordinal);
         Assert.Contains("prefers-reduced-motion:reduce", layout, StringComparison.Ordinal);
     }
