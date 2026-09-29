@@ -357,15 +357,24 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("tabButton(\"asin\", \"ASIN Research\")", script, StringComparison.Ordinal);
         Assert.Contains("aria-labelledby=\"asin-research-title\"", script, StringComparison.Ordinal);
         Assert.Contains("role=\"progressbar\"", script, StringComparison.Ordinal);
-        Assert.Contains("readonly aria-readonly=\"true\"", script, StringComparison.Ordinal);
         Assert.Contains("const patchAsinResearch", script, StringComparison.Ordinal);
-        Assert.Contains("const canUse = !active && !stale && Boolean(finalAsins)", script, StringComparison.Ordinal);
+        Assert.Contains("const autoStageAsinCrawlResults", script, StringComparison.Ordinal);
+        Assert.Contains("draft.autoApplyPending = true", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("!shouldApply || outcome !== \"Completed\"", script, StringComparison.Ordinal);
+        Assert.Contains("added to the Ads ASIN draft. Use Build & Save when ready.", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("id=\"asin-research-result\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-action=\"copy-amazon-asins\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-action=\"use-amazon-asins\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain("!validInput || active || browserBusy || needsAttention", script, StringComparison.Ordinal);
         Assert.DoesNotContain("section.outerHTML = renderAsinResearch", script, StringComparison.Ordinal);
         Assert.Contains("syncContent(\".asin-result-list\")", script, StringComparison.Ordinal);
         Assert.Contains(".asin-research { display:grid; gap:14px; min-width:0; padding:16px; border:1px solid var(--pb-border); border-radius:10px; background:var(--pb-surface); }", layout, StringComparison.Ordinal);
-        Assert.Contains(".asin-research-inputs { background:var(--pb-surface); }", layout, StringComparison.Ordinal);
+        Assert.Contains(".asin-research-inputs { grid-template-rows:auto 15rem auto; background:var(--pb-surface); }", layout, StringComparison.Ordinal);
+        Assert.Contains(".asin-research-heading p { max-width:none;", layout, StringComparison.Ordinal);
+        Assert.Contains(".asin-research-pane { display:grid; height:100%;", layout, StringComparison.Ordinal);
+        Assert.Contains(".asin-research-results { grid-template-rows:auto minmax(15rem,1fr); }", layout, StringComparison.Ordinal);
         Assert.Contains(".asin-result-list { display:grid; width:100%; height:15rem; min-height:15rem; max-height:15rem; overflow:auto;", layout, StringComparison.Ordinal);
+        Assert.Contains(".asin-research-results .asin-result-list { height:100%; max-height:none; }", layout, StringComparison.Ordinal);
         Assert.Contains("@media (max-width:760px)", layout, StringComparison.Ordinal);
         Assert.Contains("prefers-reduced-motion:reduce", layout, StringComparison.Ordinal);
     }

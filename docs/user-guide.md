@@ -76,8 +76,8 @@ ASIN Research nằm bên dưới Keyword Builder và chỉ tạo draft quảng c
 3. Bấm **Open Browser** nếu cần đăng nhập hoặc xử lý thông báo Amazon. Nếu chưa mở, **Crawl ASINs** sẽ tự mở browser.
 4. Lần chạy đầu tải CloakBrowser Chromium vài trăm MB. Profile và binary cache nằm tại `.cloakbrowser/` cạnh app để các lần sau không tải lại. Để dùng binary mới nhất, lấy free access key từ `https://cloakbrowser.dev/free` rồi đặt vào biến môi trường `CLOAKBROWSER_LICENSE_KEY` trước khi mở app; Printable Book không đọc, lưu hoặc hiển thị key trong settings/bridge/log.
 5. Review từng row. App chỉ lấy title chứa `coloring book` hoặc `coloring books`, tối đa một ASIN unique cho mỗi phrase.
-6. Bấm **Copy ASINs** để copy, hoặc **Use in Ads ASIN** để thay Ads ASIN draft. Nếu draft đã có giá trị, app hỏi xác nhận trước khi thay.
-7. Bấm **Build & Save** trong Keyword Builder để lưu Ads ASIN cùng output keyword hiện tại.
+6. Khi crawl kết thúc, app tự đưa các ASIN hợp lệ đã tìm được vào **Ads ASIN** draft. Kết quả retained từ phiên trước không tự apply lại và crawl không tự lưu Book.
+7. Review **Ads ASIN**, sau đó bấm **Build & Save** trong Keyword Builder để lưu cùng output keyword hiện tại.
 
 Nếu Amazon báo CAPTCHA, robot check hoặc rate limit, crawl dừng và giữ các ASIN đã tìm được. Xử lý trong cửa sổ browser rồi chạy lại. Đóng Book Detail không hủy crawl; mở lại cùng Book sẽ nối lại trạng thái trong app session. App restart sẽ xóa draft/result research nhưng không xóa browser profile.
 

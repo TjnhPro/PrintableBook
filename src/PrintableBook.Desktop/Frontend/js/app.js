@@ -238,7 +238,7 @@
     const id = bookId(book);
     let draft = state.asinResearchDrafts.get(id);
     if (!draft) {
-      draft = { sourceText: keywordBuilderDraftFor(book, summary).sourceText, submittedKeywords: null };
+      draft = { sourceText: keywordBuilderDraftFor(book, summary).sourceText, submittedKeywords: null, autoApplyPending: false };
       state.asinResearchDrafts.set(id, draft);
     }
     return draft;
@@ -286,6 +286,37 @@
       stopAmazonAsinPolling();
     }
     patchAsinResearch(id);
+  };
+  const autoStageAsinCrawlResults = (session) => {
+    const id = String(valueFor(session, "bookId", "") ?? "");
+    const researchDraft = state.asinResearchDrafts.get(id);
+    const view = asinSessionView(session);
+    const outcome = asinOutcomeName(valueFor(view, "outcome", "Idle"));
+    const value = String(valueFor(view, "finalAsins", "") ?? "");
+    const count = value.split(",").filter(Boolean).length;
+    if (!id || asinSessionActive(session) || outcome === "Idle") return { status: "pending", count };
+    const shouldApply = Boolean(researchDraft?.autoApplyPending);
+    if (researchDraft) researchDraft.autoApplyPending = false;
+    if (!shouldApply) return { status: "skipped", count };
+    if (asinResultIsStale(id)) return { status: "stale", count };
+    if (!value || !/^[A-Z0-9]{10}(,[A-Z0-9]{10})*$/u.test(value)) return { status: value ? "invalid" : "empty", count };
+    const book = books().find((item) => bookId(item) === id);
+    const summary = book ? summaryFor(book) : null;
+    if (!book || !summary) return { status: "invalid", count };
+    const keywordDraft = keywordBuilderDraftFor(book, summary, true);
+    if (keywordDraft.adsAsin === value) return { status: "unchanged", count };
+    keywordDraft.adsAsin = value;
+    state.bookKeywordBuilderValidation.delete(id);
+    if (state.catalogMutationTarget === id && state.catalogMutationCommand === "book.keywords.save") {
+      state.catalogFeedback = "";
+      state.catalogFeedbackError = false;
+    }
+    if (id === state.selectedBookId) {
+      refreshBookKeywordBuilderCard();
+      const unsaved = document.querySelector("[data-book-interior-unsaved]");
+      if (unsaved) unsaved.hidden = !(hasInteriorDraft(id) || hasMetadataDraft(book, summary) || hasKeywordBuilderDraft(book, summary));
+    }
+    return { status: "updated", count };
   };
   const brandAuthorDraftFor = (brand) => state.brandAuthorDrafts.get(valueFor(brand, "name", "")) ?? brandAuthor(brand);
   const brandAuthorIsDirty = (brand, value) => value !== brandAuthor(brand) || valueFor(brandSummaryFor(brand), "metadataStatus", "Missing") === "Unavailable";
@@ -1137,9 +1168,8 @@
             : outcome === "Cancelled" ? "Crawl cancelled; available results were kept."
               : outcome === "Failed" ? "Crawl stopped. Review the result below."
                 : "Open Browser is optional; Crawl ASINs opens it automatically.";
-    const canUse = !active && !stale && Boolean(finalAsins);
     return `<section class="asin-research" data-asin-research data-book-id="${escapeHtml(id)}" aria-labelledby="asin-research-title" aria-busy="${active || browserBusy}">
-      <div class="asin-research-heading"><div><h3 id="asin-research-title">ASIN Research</h3><p>Search Amazon using this Book's research phrases, then review targets before applying them.</p></div><span data-asin-status class="status-badge ${needsAttention || outcome === "Failed" ? "status-bad" : active || browserBusy ? "status-warn" : browserState === "Ready" ? "status-good" : "status-muted"}">${escapeHtml(active ? cancelling ? "Cancelling" : "Running" : outcome !== "Idle" ? outcome : browserState)}</span></div>
+      <div class="asin-research-heading"><div><h3 id="asin-research-title">ASIN Research</h3><p>Search Amazon using this Book's research phrases. Successful results are added to Ads ASIN automatically.</p></div><span data-asin-status class="status-badge ${needsAttention || outcome === "Failed" ? "status-bad" : active || browserBusy ? "status-warn" : browserState === "Ready" ? "status-good" : "status-muted"}">${escapeHtml(active ? cancelling ? "Cancelling" : "Running" : outcome !== "Idle" ? outcome : browserState)}</span></div>
       <div class="asin-research-grid">
         <section class="asin-research-pane asin-research-inputs" aria-labelledby="asin-search-keywords-title">
           <div class="asin-research-pane-heading"><div><h4 id="asin-search-keywords-title">Search Keywords</h4><p>Separate phrases with commas or new lines · maximum 30 phrases · 200 characters each.</p></div><span data-asin-keyword-count>${keywords.length} / 30</span></div>
@@ -1149,7 +1179,7 @@
         <section class="asin-research-pane asin-research-results" aria-labelledby="asin-research-results-title">
           <div class="asin-research-pane-heading"><div><h4 id="asin-research-results-title">Crawl Results</h4><p class="asin-result-summary"><strong>${selectedCount} selected</strong><span>${noMatchCount} no match · ${failedCount} failed</span></p></div><div class="asin-progress-slot">${active && total ? `<div class="asin-progress" role="progressbar" aria-label="Amazon ASIN crawl progress" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${completed}"><span style="width:${Math.round(completed / total * 100)}%"></span></div>` : ""}</div></div>
           <ol class="asin-result-list">${rowMarkup || '<li class="asin-result-empty">No crawl results yet.</li>'}</ol>
-          <footer class="asin-research-pane-footer"><div class="asin-stale-slot">${stale && finalAsins ? '<p class="catalog-warning" role="status">Previous results — crawl again to refresh.</p>' : ""}</div><label class="field" for="asin-research-result"><span>ASIN Result</span><textarea id="asin-research-result" class="control asin-result-output" rows="1" wrap="off" readonly aria-readonly="true" placeholder="No matching ASINs yet">${escapeHtml(finalAsins)}</textarea></label><div class="asin-result-actions"><button class="button-secondary" data-action="copy-amazon-asins" data-book-id="${escapeHtml(id)}" ${canUse ? "" : "disabled"}>Copy ASINs</button><button class="button-primary" data-action="use-amazon-asins" data-book-id="${escapeHtml(id)}" ${canUse ? "" : "disabled"}>Use in Ads ASIN</button></div></footer>
+          <div class="asin-stale-slot">${stale && finalAsins ? '<p class="catalog-warning" role="status">Previous results — crawl again to refresh.</p>' : ""}</div>
         </section>
       </div>
       <p class="catalog-feedback ${feedback.error ? "is-error" : ""}" data-asin-feedback role="${feedback.error ? "alert" : "status"}" aria-live="polite" aria-atomic="true">${escapeHtml(feedback.message)}</p>
@@ -1501,15 +1531,11 @@
     syncContent(".asin-result-summary");
     syncContent(".asin-result-list");
     syncContent(".asin-stale-slot");
-    syncContent(".asin-result-actions");
     syncContent("[data-asin-feedback]");
     syncAttributes("[data-asin-feedback]", ["class", "role"]);
     const keywordInput = section.querySelector('[data-action="asin-search-keywords"]');
     const nextKeywordInput = rendered.querySelector('[data-action="asin-search-keywords"]');
     if (keywordInput && nextKeywordInput) keywordInput.disabled = nextKeywordInput.disabled;
-    const resultOutput = section.querySelector("#asin-research-result");
-    const nextResultOutput = rendered.querySelector("#asin-research-result");
-    if (resultOutput && nextResultOutput) resultOutput.value = nextResultOutput.value;
     const refreshedResultList = section.querySelector(".asin-result-list");
     if (refreshedResultList) {
       refreshedResultList.scrollTop = resultScrollTop;
@@ -2160,6 +2186,7 @@
         return;
       }
       draft.submittedKeywords = [...keywords];
+      draft.autoApplyPending = true;
       setAsinFeedback(id, "Preparing Amazon browser and search session…");
       patchAsinResearch(id);
       send("book.keywords.asin-crawl.start", { bookId: id, keywords });
@@ -2168,38 +2195,6 @@
       setAsinFeedback(target.dataset.bookId, "Cancelling crawl…");
       patchAsinResearch(target.dataset.bookId);
       send("book.keywords.asin-crawl.cancel", { bookId: target.dataset.bookId });
-    }
-    if (action === "copy-amazon-asins") {
-      const value = asinFinalValue(asinSessionFor(target.dataset.bookId));
-      if (!value) return;
-      const copied = () => { setAsinFeedback(target.dataset.bookId, "ASIN result copied to clipboard."); patchAsinResearch(target.dataset.bookId); };
-      const failed = () => { setAsinFeedback(target.dataset.bookId, "Clipboard access failed. Select the ASIN Result and copy it manually.", true); patchAsinResearch(target.dataset.bookId); };
-      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(value).then(copied, failed);
-      else failed();
-    }
-    if (action === "use-amazon-asins") {
-      const id = target.dataset.bookId;
-      const book = books().find((item) => bookId(item) === id);
-      const summary = book ? summaryFor(book) : null;
-      const value = asinFinalValue(asinSessionFor(id));
-      if (!book || !summary || !value || id !== state.selectedBookId || !/^[A-Z0-9]{10}(,[A-Z0-9]{10})*$/u.test(value)) {
-        setAsinFeedback(id, "This crawl result no longer belongs to the open Book. Crawl again.", true);
-        patchAsinResearch(id);
-        return;
-      }
-      const draft = keywordBuilderDraftFor(book, summary, true);
-      if (draft.adsAsin === value) {
-        setAsinFeedback(id, "These ASINs are already in the draft.");
-        patchAsinResearch(id);
-        return;
-      }
-      if (draft.adsAsin && !window.confirm(`Replace the current Ads ASIN draft with ${value.split(",").length} crawled ASINs? This does not save the Book.`)) return;
-      draft.adsAsin = value;
-      setAsinFeedback(id, "Ads ASIN draft updated. Use Build & Save when ready.");
-      patchAsinResearch(id);
-      refreshBookKeywordBuilderCard();
-      const unsaved = document.querySelector("[data-book-interior-unsaved]");
-      if (unsaved) unsaved.hidden = !(hasInteriorDraft(bookId(book)) || hasMetadataDraft(book, summary) || hasKeywordBuilderDraft(book, summary));
     }
     if (action === "retry-keyword-refresh") {
       const drawerBody = document.querySelector(".book-drawer-body");
@@ -2562,12 +2557,23 @@
         setAsinFeedback(state.selectedBookId, `Another ASIN crawl is active for ${sessionBookId}.`, true);
         patchAsinResearch(state.selectedBookId);
       }
+      const autoDraft = autoStageAsinCrawlResults(session);
       observeAmazonAsinCrawl(session);
       const view = asinSessionView(session);
       const outcome = asinOutcomeName(valueFor(view, "outcome", "Idle"));
       if (sessionBookId && !asinSessionActive(session) && outcome !== "Idle") {
         const count = String(valueFor(view, "finalAsins", "") ?? "").split(",").filter(Boolean).length;
-        setAsinFeedback(sessionBookId, outcome === "Completed" ? `${count} ASIN${count === 1 ? "" : "s"} ready to review.` : outcome === "NeedsAttention" ? "Crawl stopped because Amazon needs attention." : outcome === "Cancelled" ? "Crawl cancelled; partial results remain available." : "Crawl finished with partial results.", outcome === "Failed" || outcome === "NeedsAttention");
+        const resultMessage = autoDraft.status === "updated"
+          ? `${count} ASIN${count === 1 ? "" : "s"} added to the Ads ASIN draft. Use Build & Save when ready.`
+          : autoDraft.status === "unchanged" ? `${count} ASIN${count === 1 ? " is" : "s are"} already in the Ads ASIN draft.`
+            : autoDraft.status === "stale" ? "Search Keywords changed during the crawl. Crawl again to update Ads ASIN."
+              : autoDraft.status === "invalid" ? "Crawl returned an invalid ASIN result. Crawl again."
+                : count ? `${count} ASIN${count === 1 ? "" : "s"} available in Crawl Results.` : "No matching ASINs found. Adjust Search Keywords and crawl again.";
+        const outcomePrefix = outcome === "Completed" ? ""
+          : outcome === "NeedsAttention" ? "Amazon needs attention. "
+            : outcome === "Cancelled" ? "Crawl cancelled. "
+              : outcome === "Failed" ? "Crawl stopped. " : "Crawl finished with partial results. ";
+        setAsinFeedback(sessionBookId, `${outcomePrefix}${resultMessage}`, outcome === "Failed" || outcome === "NeedsAttention" || autoDraft.status === "invalid");
         patchAsinResearch(sessionBookId);
       }
     } else if (ok && command === "book.keywords.saved") {
@@ -2808,6 +2814,10 @@
         return;
       }
       if (requestCommand.startsWith("book.keywords.asin-crawl.")) {
+        if (requestCommand === "book.keywords.asin-crawl.start") {
+          const researchDraft = state.asinResearchDrafts.get(state.selectedBookId);
+          if (researchDraft) researchDraft.autoApplyPending = false;
+        }
         const message = error === "amazon_asin_crawl_active"
           ? "Another ASIN crawl is already running. Wait for it to finish or cancel it from its Book."
           : error === "amazon_keywords_required" ? "Enter at least one Search Keyword."
