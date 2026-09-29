@@ -335,6 +335,8 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("role=\"progressbar\"", script, StringComparison.Ordinal);
         Assert.Contains("readonly aria-readonly=\"true\"", script, StringComparison.Ordinal);
         Assert.Contains("const patchAsinResearch", script, StringComparison.Ordinal);
+        Assert.Contains("const canUse = !active && !stale && Boolean(finalAsins)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("!validInput || active || browserBusy || needsAttention", script, StringComparison.Ordinal);
         Assert.Contains("section.outerHTML = renderAsinResearch", script, StringComparison.Ordinal);
         Assert.Contains(".asin-result-list { display:grid; max-height:15rem; overflow-y:auto;", layout, StringComparison.Ordinal);
         Assert.Contains("@media (max-width:760px)", layout, StringComparison.Ordinal);

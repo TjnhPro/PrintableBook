@@ -156,6 +156,10 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
             {
                 throw new AmazonSearchPageException("amazon_origin_not_ready", "Open the Amazon browser before searching.");
             }
+            if (!AmazonCrawlPolicy.IsAllowedUri(TryUri(page.Url)))
+            {
+                throw new AmazonSearchPageException("amazon_origin_not_ready", "Return the browser to Amazon.com before searching.");
+            }
 
             FetchPayload payload;
             try
@@ -184,13 +188,13 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
             {
                 throw new AmazonSearchPageException("amazon_redirect_not_allowed", "Amazon redirected the search outside the allowed origin.");
             }
-            if (!payload.ContentType.Contains("text/html", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new AmazonSearchPageException("amazon_response_not_html", "Amazon did not return an HTML search page.");
-            }
             if (payload.Status is 403 or 429 or 503)
             {
                 throw new AmazonSearchPageException("amazon_rate_limited", "Amazon needs attention in the browser before crawling can continue.", needsAttention: true);
+            }
+            if (!payload.ContentType.Contains("text/html", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new AmazonSearchPageException("amazon_response_not_html", "Amazon did not return an HTML search page.");
             }
             if (!payload.Ok)
             {
@@ -206,8 +210,12 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
         }
         catch (PlaywrightException exception)
         {
-            status = new(CloakBrowserState.Error, "cloak_browser_closed");
-            throw new AmazonSearchPageException("cloak_browser_closed", "The Amazon browser closed or disconnected. Open it and try again.", innerException: exception);
+            if (page is null || page.IsClosed)
+            {
+                status = new(CloakBrowserState.Error, "cloak_browser_closed");
+                throw new AmazonSearchPageException("cloak_browser_closed", "The Amazon browser closed or disconnected. Open it and try again.", innerException: exception);
+            }
+            throw new AmazonSearchPageException("amazon_fetch_failed", "Amazon search could not be fetched. Check the browser connection and try again.", retryable: true, innerException: exception);
         }
         finally
         {
@@ -264,6 +272,11 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
     private static AmazonSearchPageException MapLaunchException(Exception exception)
     {
         var text = exception.Message;
+        if (text.Contains("license", StringComparison.OrdinalIgnoreCase) &&
+            (text.Contains("invalid", StringComparison.OrdinalIgnoreCase) || text.Contains("expired", StringComparison.OrdinalIgnoreCase)))
+        {
+            return new("cloak_browser_license_invalid", "The CloakBrowser access key or license is invalid or expired.", needsAttention: true, innerException: exception);
+        }
         if (text.Contains("license", StringComparison.OrdinalIgnoreCase))
         {
             return new("cloak_browser_license_required", "CloakBrowser needs a valid license or free access key.", needsAttention: true, innerException: exception);

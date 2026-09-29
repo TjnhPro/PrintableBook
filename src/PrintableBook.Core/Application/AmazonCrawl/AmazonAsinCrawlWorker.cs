@@ -85,6 +85,13 @@ public sealed class AmazonAsinCrawlWorker(
             Publish(AmazonAsinCrawlOutcome.Cancelled, timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested ? "amazon_crawl_timeout" : "amazon_crawl_cancelled");
             throw;
         }
+        catch (AmazonSearchPageException exception)
+        {
+            MarkRemainingNotProcessed(0);
+            return Publish(
+                exception.NeedsAttention ? AmazonAsinCrawlOutcome.NeedsAttention : AmazonAsinCrawlOutcome.Failed,
+                exception.Code);
+        }
 
         async ValueTask<BrowserFetchResponse> FetchWithRetryAsync(Uri uri, CancellationToken tokenValue)
         {
@@ -129,5 +136,6 @@ public sealed class AmazonAsinCrawlWorker(
         "cloak_browser_profile_locked" or
         "cloak_browser_launch_failed" or
         "cloak_browser_download_failed" or
+        "cloak_browser_license_invalid" or
         "cloak_browser_license_required";
 }

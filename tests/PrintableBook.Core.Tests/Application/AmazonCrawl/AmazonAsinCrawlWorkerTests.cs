@@ -70,6 +70,27 @@ public sealed class AmazonAsinCrawlWorkerTests
         Assert.Equal(AmazonAsinKeywordStatus.NotProcessed, result.Rows[2].Status);
     }
 
+    [Fact]
+    public async Task Worker_publishes_a_terminal_view_when_browser_setup_fails()
+    {
+        var page = new FakePageClient([])
+        {
+            OpenException = new AmazonSearchPageException(
+                "cloak_browser_license_required",
+                "license required",
+                needsAttention: true)
+        };
+        var context = new RecordingContext();
+
+        var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)new AmazonAsinCrawlWorker(page, new QueueParser([]), new NoDelay())).ExecuteAsync(
+            AmazonAsinCrawlRequest.Create(["one", "two"]), context, CancellationToken.None));
+
+        Assert.Equal(AmazonAsinCrawlOutcome.NeedsAttention, result.Outcome);
+        Assert.Equal("cloak_browser_license_required", result.StopReasonCode);
+        Assert.All(result.Rows, row => Assert.Equal(AmazonAsinKeywordStatus.NotProcessed, row.Status));
+        Assert.Same(result, context.View);
+    }
+
     private static BrowserFetchResponse Response(string marker) => new(200, true, false, "https://www.amazon.com/s", "text/html", marker);
 
     private static AmazonSearchParseResult Parsed(params (string Asin, string Title)[] candidates) =>
@@ -89,10 +110,13 @@ public sealed class AmazonAsinCrawlWorkerTests
     private sealed class FakePageClient(IEnumerable<object> responses) : IAmazonSearchPageClient
     {
         private readonly Queue<object> responses = new(responses);
+        public Exception? OpenException { get; init; }
         public CloakBrowserStatus Status { get; private set; } = new(CloakBrowserState.Closed);
         public int FetchCount { get; private set; }
         public ValueTask<CloakBrowserStatus> GetStatusAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(Status);
-        public ValueTask<CloakBrowserStatus> OpenAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(Status = new(CloakBrowserState.Ready));
+        public ValueTask<CloakBrowserStatus> OpenAsync(CancellationToken cancellationToken = default) => OpenException is null
+            ? ValueTask.FromResult(Status = new(CloakBrowserState.Ready))
+            : ValueTask.FromException<CloakBrowserStatus>(OpenException);
         public ValueTask<BrowserFetchResponse> FetchAsync(Uri uri, CancellationToken cancellationToken = default)
         {
             FetchCount++;

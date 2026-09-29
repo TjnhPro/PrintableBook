@@ -1130,13 +1130,13 @@
             : outcome === "Cancelled" ? "Crawl cancelled; available results were kept."
               : outcome === "Failed" ? "Crawl stopped. Review the result below."
                 : "Open Browser is optional; Crawl ASINs opens it automatically.";
-    const canUse = !active && Boolean(finalAsins);
+    const canUse = !active && !stale && Boolean(finalAsins);
     return `<section class="asin-research" data-asin-research data-book-id="${escapeHtml(id)}" aria-labelledby="asin-research-title" aria-busy="${active || browserBusy}">
       <div class="asin-research-heading"><div><h4 id="asin-research-title">ASIN Research</h4><p>Search Amazon using this Book's research phrases, then review targets before applying them.</p></div><span class="status-badge ${needsAttention || outcome === "Failed" ? "status-bad" : active || browserBusy ? "status-warn" : browserState === "Ready" ? "status-good" : "status-muted"}">${escapeHtml(active ? cancelling ? "Cancelling" : "Running" : outcome !== "Idle" ? outcome : browserState)}</span></div>
       <div class="asin-research-grid">
         <div class="asin-research-inputs">
           <label class="field" for="asin-search-keywords"><span>Search Keywords</span><textarea id="asin-search-keywords" class="control keyword-list-input" rows="5" data-action="asin-search-keywords" data-book-id="${escapeHtml(id)}" autocomplete="off" spellcheck="false" ${active ? "disabled" : ""}>${escapeHtml(draft.sourceText)}</textarea><small>One phrase per line · maximum 30 phrases · 200 characters each.</small></label>
-          <div class="asin-research-actions"><button class="button-secondary" data-action="open-amazon-browser" data-book-id="${escapeHtml(id)}" ${browserBusy ? "disabled" : ""}>${browserBusy ? "Opening Browser…" : "Open Browser"}</button><button class="button-primary" data-action="crawl-amazon-asins" data-book-id="${escapeHtml(id)}" ${!validInput || active || browserBusy || needsAttention ? "disabled" : ""}>Crawl ASINs</button>${active ? `<button class="button-secondary" data-action="cancel-amazon-asins" data-book-id="${escapeHtml(id)}" ${cancelling ? "disabled" : ""}>${cancelling ? "Cancelling…" : "Cancel"}</button>` : ""}</div>
+          <div class="asin-research-actions"><button class="button-secondary" data-action="open-amazon-browser" data-book-id="${escapeHtml(id)}" ${browserBusy ? "disabled" : ""}>${browserBusy ? "Opening Browser…" : "Open Browser"}</button><button class="button-primary" data-action="crawl-amazon-asins" data-book-id="${escapeHtml(id)}" ${!validInput || active || browserBusy ? "disabled" : ""}>Crawl ASINs</button>${active ? `<button class="button-secondary" data-action="cancel-amazon-asins" data-book-id="${escapeHtml(id)}" ${cancelling ? "disabled" : ""}>${cancelling ? "Cancelling…" : "Cancel"}</button>` : ""}</div>
           <p class="asin-research-state" role="${needsAttention ? "alert" : "status"}">${escapeHtml(stateCopy)}</p>
         </div>
         <div class="asin-research-results">
@@ -2746,6 +2746,7 @@
         const message = ({
           cloak_browser_download_failed: "Browser components could not be downloaded. Check network, disk space, and antivirus, then retry.",
           cloak_browser_license_required: "CloakBrowser needs a valid free access key or license.",
+          cloak_browser_license_invalid: "The CloakBrowser access key or license is invalid or expired. Update it and retry.",
           cloak_browser_profile_locked: "The Amazon browser profile is already in use. Close the other browser or app instance and retry.",
           browser_storage_not_writable: "The app cannot write the .cloakbrowser profile and cache folders."
         })[String(error)] ?? "Amazon browser could not be opened. Check the setup and retry.";
