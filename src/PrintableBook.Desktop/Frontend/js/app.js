@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
   const bookStatuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
-  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookListRefreshPending: false, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), bookKeywordBuilderDrafts: new Map(), bookKeywordBuilderValidation: new Map(), keywordBuilderConfirmed: new Map(), keywordBuilderSubmitted: null, keywordBuilderRefreshPending: false, keywordBuilderRefreshNeeded: false, keywordBuilderRefreshBookId: "", brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookListRefreshPending: false, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), bookKeywordBuilderDrafts: new Map(), bookKeywordBuilderValidation: new Map(), keywordBuilderConfirmed: new Map(), keywordBuilderSubmitted: null, keywordBuilderRefreshPending: false, keywordBuilderRefreshNeeded: false, keywordBuilderRefreshBookId: "", asinResearchDrafts: new Map(), asinResearchSessions: new Map(), asinResearchFeedback: new Map(), asinResearchActiveBookId: "", asinResearchPollTimer: null, amazonBrowserStatus: { state: "Closed", reasonCode: null }, amazonBrowserPending: false, brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -216,6 +216,69 @@
     fields.push(String(valueFor(builder, "adsKeyword", "") ?? ""));
     fields.push(String(valueFor(builder, "adsAsin", "") ?? ""));
     return fields.join("\t");
+  };
+  const browserStateName = (value) => typeof value === "number" ? ["Closed", "Checking", "Downloading", "Opening", "WarmingUp", "Ready", "NeedsAttention", "Error"][value] ?? "Error" : String(value ?? "Closed");
+  const asinOutcomeName = (value) => typeof value === "number" ? ["Idle", "Running", "Completed", "Partial", "NeedsAttention", "Failed", "Cancelled"][value] ?? "Idle" : String(value ?? "Idle");
+  const asinRowStatusName = (value) => typeof value === "number" ? ["Pending", "Searching", "Selected", "NoSearchResult", "NoMatchingTitle", "AllCandidatesUsed", "Failed", "Cancelled", "NotProcessed"][value] ?? "Pending" : String(value ?? "Pending");
+  const normalizedAsinSearchKeywords = (sourceText) => {
+    const seen = new Set();
+    return normalizeKeywordPhrases(sourceText).filter((keyword) => {
+      const key = keyword.toLocaleLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const asinResearchDraftFor = (book, summary) => {
+    const id = bookId(book);
+    let draft = state.asinResearchDrafts.get(id);
+    if (!draft) {
+      draft = { sourceText: keywordBuilderDraftFor(book, summary).sourceText, submittedKeywords: null };
+      state.asinResearchDrafts.set(id, draft);
+    }
+    return draft;
+  };
+  const asinSessionFor = (id) => state.asinResearchSessions.get(id) ?? null;
+  const asinSessionView = (session) => valueFor(session, "view", null);
+  const asinSessionActive = (session) => Boolean(valueFor(session, "isActive", false) || valueFor(session, "isCancelling", false));
+  const asinFinalValue = (session) => String(valueFor(asinSessionView(session), "finalAsins", "") ?? "");
+  const asinResultIsStale = (id) => {
+    const draft = state.asinResearchDrafts.get(id);
+    return Boolean(draft?.submittedKeywords) && JSON.stringify(normalizedAsinSearchKeywords(draft.sourceText)) !== JSON.stringify(draft.submittedKeywords);
+  };
+  const asinReasonLabel = (code) => ({
+    amazon_no_search_result: "No search results",
+    amazon_no_matching_title: "No title containing “coloring book”",
+    amazon_all_candidates_used: "Matching ASIN already used",
+    amazon_not_processed: "Not searched — crawl stopped",
+    amazon_crawl_cancelled: "Search cancelled",
+    amazon_fetch_timeout: "Search timed out",
+    amazon_fetch_failed: "Search failed",
+    amazon_challenge_detected: "Amazon needs attention in the browser",
+    amazon_rate_limited: "Amazon rate limited the search",
+    amazon_markup_unsupported: "Amazon result layout is not supported"
+  })[String(code ?? "")] ?? "Search failed";
+  const asinFeedbackFor = (id) => state.asinResearchFeedback.get(id) ?? { message: "", error: false };
+  const setAsinFeedback = (id, message, error = false) => state.asinResearchFeedback.set(id, { message, error });
+  const pollAmazonAsinCrawl = () => {
+    if (state.asinResearchActiveBookId) send("book.keywords.asin-crawl.get", { bookId: state.asinResearchActiveBookId });
+  };
+  const stopAmazonAsinPolling = () => {
+    if (state.asinResearchPollTimer !== null && window.clearInterval) window.clearInterval(state.asinResearchPollTimer);
+    state.asinResearchPollTimer = null;
+  };
+  const observeAmazonAsinCrawl = (session) => {
+    const id = String(valueFor(session, "bookId", "") ?? "");
+    if (!id) return;
+    state.asinResearchSessions.set(id, session);
+    if (asinSessionActive(session)) {
+      state.asinResearchActiveBookId = id;
+      if (state.asinResearchPollTimer === null) state.asinResearchPollTimer = window.setInterval(pollAmazonAsinCrawl, 500);
+    } else if (state.asinResearchActiveBookId === id) {
+      state.asinResearchActiveBookId = "";
+      stopAmazonAsinPolling();
+    }
+    patchAsinResearch(id);
   };
   const brandAuthorDraftFor = (brand) => state.brandAuthorDrafts.get(valueFor(brand, "name", "")) ?? brandAuthor(brand);
   const brandAuthorIsDirty = (brand, value) => value !== brandAuthor(brand) || valueFor(brandSummaryFor(brand), "metadataStatus", "Missing") === "Unavailable";
@@ -1031,6 +1094,64 @@
     return `<section class="catalog-card" data-book-assignment-card><div class="catalog-card-heading"><div><h3>Brand Assignment</h3><p>Only Brands whose Author matches this Book's saved Author are available.</p></div>${badge(assigned ? assignmentLabel(summary) : "Unassigned")}</div><dl class="catalog-assignment-summary"><div><dt>Book Author</dt><dd>${escapeHtml(author || "Unknown")}</dd></div><div><dt>Assigned Brand</dt><dd>${escapeHtml(assigned || "Unassigned")}</dd></div></dl>${reason ? `<p class="catalog-warning" role="alert">${escapeHtml(reason)} The existing assignment is preserved until you choose what to do.</p>` : ""}<label class="field"><span>Select Brand</span><select class="control" data-action="book-brand-select" data-book-id="${escapeHtml(bookId(book))}" ${!author || disabled ? "disabled" : ""}>${options}</select><small>${author ? candidates.length ? `${candidates.length} matching Brand${candidates.length === 1 ? "" : "s"}.` : "No Brand Author matches this Book Author." : "Save a Book Author before assigning a Brand."}</small></label><div class="catalog-actions"><p class="catalog-feedback ${feedbackVisible && state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="assignment" role="${feedbackVisible && state.catalogFeedbackError ? "alert" : "status"}">${feedbackVisible ? escapeHtml(state.catalogFeedback) : ""}</p><div><button class="button-secondary" data-action="unassign-book-brand" data-book-id="${escapeHtml(bookId(book))}" ${!assigned || disabled ? "disabled" : ""}>Unassign</button><button class="button-primary" data-action="assign-book-brand" data-book-id="${escapeHtml(bookId(book))}" disabled>${state.catalogMutationPending && state.catalogMutationCommand === "book.brand.assign" ? "Assigning…" : "Assign Brand"}</button></div></div></section>`;
   };
 
+  const renderAsinResearch = (book, summary) => {
+    const id = bookId(book);
+    const draft = asinResearchDraftFor(book, summary);
+    const keywords = normalizedAsinSearchKeywords(draft.sourceText);
+    const session = asinSessionFor(id);
+    const view = asinSessionView(session);
+    const rows = valueFor(view, "rows", []);
+    const outcome = asinOutcomeName(valueFor(view, "outcome", "Idle"));
+    const active = asinSessionActive(session);
+    const cancelling = valueFor(session, "isCancelling", false);
+    const finalAsins = asinFinalValue(session);
+    const browserState = browserStateName(valueFor(state.amazonBrowserStatus, "state", "Closed"));
+    const browserBusy = state.amazonBrowserPending || ["Checking", "Downloading", "Opening", "WarmingUp"].includes(browserState);
+    const needsAttention = browserState === "NeedsAttention" || outcome === "NeedsAttention";
+    const validInput = keywords.length > 0 && keywords.length <= 30 && keywords.every((keyword) => (metadataGraphemeCount(keyword) ?? keyword.length) <= 200);
+    const stale = asinResultIsStale(id);
+    const feedback = asinFeedbackFor(id);
+    const completed = Number(valueFor(view, "completedCount", 0)) || 0;
+    const total = Number(valueFor(view, "totalCount", keywords.length)) || keywords.length;
+    const selectedCount = rows.filter((row) => asinRowStatusName(valueFor(row, "status", "Pending")) === "Selected").length;
+    const failedCount = rows.filter((row) => ["Failed", "Cancelled"].includes(asinRowStatusName(valueFor(row, "status", "Pending")))).length;
+    const noMatchCount = rows.filter((row) => ["NoSearchResult", "NoMatchingTitle", "AllCandidatesUsed"].includes(asinRowStatusName(valueFor(row, "status", "Pending")))).length;
+    const rowMarkup = rows.map((row) => {
+      const rowStatus = asinRowStatusName(valueFor(row, "status", "Pending"));
+      const asin = String(valueFor(row, "asin", "") ?? "");
+      const label = rowStatus === "Selected" ? `Selected — ${asin}` : rowStatus === "Searching" ? "Searching…" : rowStatus === "Pending" ? "Waiting" : asinReasonLabel(valueFor(row, "reasonCode", ""));
+      return `<li class="asin-result-row asin-result-${rowStatus.toLowerCase()}"><span>${escapeHtml(valueFor(row, "keyword", ""))}</span><strong>${escapeHtml(label)}</strong></li>`;
+    }).join("");
+    const stateCopy = browserBusy
+      ? browserState === "WarmingUp" ? "Waiting for Amazon session…" : "Downloading or opening browser components…"
+      : needsAttention ? "Open the browser and resolve Amazon's prompt, then crawl again."
+        : outcome === "Completed" ? "Crawl completed."
+          : outcome === "Partial" ? "Crawl completed with partial results."
+            : outcome === "Cancelled" ? "Crawl cancelled; available results were kept."
+              : outcome === "Failed" ? "Crawl stopped. Review the result below."
+                : "Open Browser is optional; Crawl ASINs opens it automatically.";
+    const canUse = !active && Boolean(finalAsins);
+    return `<section class="asin-research" data-asin-research data-book-id="${escapeHtml(id)}" aria-labelledby="asin-research-title" aria-busy="${active || browserBusy}">
+      <div class="asin-research-heading"><div><h4 id="asin-research-title">ASIN Research</h4><p>Search Amazon using this Book's research phrases, then review targets before applying them.</p></div><span class="status-badge ${needsAttention || outcome === "Failed" ? "status-bad" : active || browserBusy ? "status-warn" : browserState === "Ready" ? "status-good" : "status-muted"}">${escapeHtml(active ? cancelling ? "Cancelling" : "Running" : outcome !== "Idle" ? outcome : browserState)}</span></div>
+      <div class="asin-research-grid">
+        <div class="asin-research-inputs">
+          <label class="field" for="asin-search-keywords"><span>Search Keywords</span><textarea id="asin-search-keywords" class="control keyword-list-input" rows="5" data-action="asin-search-keywords" data-book-id="${escapeHtml(id)}" autocomplete="off" spellcheck="false" ${active ? "disabled" : ""}>${escapeHtml(draft.sourceText)}</textarea><small>One phrase per line · maximum 30 phrases · 200 characters each.</small></label>
+          <div class="asin-research-actions"><button class="button-secondary" data-action="open-amazon-browser" data-book-id="${escapeHtml(id)}" ${browserBusy ? "disabled" : ""}>${browserBusy ? "Opening Browser…" : "Open Browser"}</button><button class="button-primary" data-action="crawl-amazon-asins" data-book-id="${escapeHtml(id)}" ${!validInput || active || browserBusy || needsAttention ? "disabled" : ""}>Crawl ASINs</button>${active ? `<button class="button-secondary" data-action="cancel-amazon-asins" data-book-id="${escapeHtml(id)}" ${cancelling ? "disabled" : ""}>${cancelling ? "Cancelling…" : "Cancel"}</button>` : ""}</div>
+          <p class="asin-research-state" role="${needsAttention ? "alert" : "status"}">${escapeHtml(stateCopy)}</p>
+        </div>
+        <div class="asin-research-results">
+          ${active && total ? `<div class="asin-progress" role="progressbar" aria-label="Amazon ASIN crawl progress" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${completed}"><span style="width:${Math.round(completed / total * 100)}%"></span></div>` : ""}
+          <div class="asin-result-summary"><strong>${selectedCount} selected</strong><span>${noMatchCount} no match · ${failedCount} failed</span></div>
+          ${stale && finalAsins ? '<p class="catalog-warning" role="status">Previous results — crawl again to refresh.</p>' : ""}
+          <ol class="asin-result-list">${rowMarkup || '<li class="asin-result-empty">No crawl results yet.</li>'}</ol>
+          <label class="field" for="asin-research-result"><span>ASIN Result</span><input id="asin-research-result" class="control" type="text" readonly aria-readonly="true" value="${escapeHtml(finalAsins)}" placeholder="No matching ASINs yet"></label>
+          <div class="asin-result-actions"><button class="button-secondary" data-action="copy-amazon-asins" data-book-id="${escapeHtml(id)}" ${canUse ? "" : "disabled"}>Copy ASINs</button><button class="button-primary" data-action="use-amazon-asins" data-book-id="${escapeHtml(id)}" ${canUse ? "" : "disabled"}>Use in Ads ASIN</button></div>
+        </div>
+      </div>
+      <p class="catalog-feedback ${feedback.error ? "is-error" : ""}" data-asin-feedback role="${feedback.error ? "alert" : "status"}" aria-live="polite" aria-atomic="true">${escapeHtml(feedback.message)}</p>
+    </section>`;
+  };
+
   const renderBookKeywordBuilder = (book, summary) => {
     const id = bookId(book);
     const saved = keywordBuilderFor(summary);
@@ -1097,6 +1218,7 @@
           </label>
         </section>
       </div>
+      ${renderAsinResearch(book, summary)}
       <div class="catalog-actions keyword-builder-status"><p class="catalog-feedback ${feedbackVisible && state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="keywords" role="${feedbackVisible && state.catalogFeedbackError ? "alert" : "status"}" aria-live="polite" aria-atomic="true">${feedbackVisible ? escapeHtml(state.catalogFeedback) : ""}</p>${refreshNeeded ? `<button class="button-secondary" data-action="retry-keyword-refresh" data-book-id="${escapeHtml(id)}" ${applicationIsLoading() ? "disabled" : ""}>Retry refresh</button>` : ""}</div>
     </section>`;
   };
@@ -1328,6 +1450,25 @@
       : action ? document.querySelector(`[data-action="${CSS.escape(action)}"]`) : null;
     next?.focus?.();
     if (!focusSource && Number.isInteger(selectionStart) && next?.setSelectionRange) next.setSelectionRange(selectionStart, selectionEnd);
+  };
+
+  const patchAsinResearch = (id) => {
+    if (!state.bookDrawerOpen || state.selectedBookTab !== "overview" || state.selectedBookId !== id) return;
+    const book = selectedBook();
+    const summary = book ? summaryFor(book) : null;
+    const section = document.querySelector("[data-asin-research]");
+    if (!book || !summary || !section) return;
+    const drawerBody = document.querySelector(".book-drawer-body");
+    const scrollTop = drawerBody?.scrollTop ?? state.bookDrawerScrollTop;
+    const active = section.contains(document.activeElement) ? document.activeElement : null;
+    const action = active?.dataset?.action ?? "";
+    const selectionStart = active?.selectionStart;
+    const selectionEnd = active?.selectionEnd;
+    section.outerHTML = renderAsinResearch(book, summary);
+    if (drawerBody) drawerBody.scrollTop = scrollTop;
+    const next = action ? document.querySelector(`[data-asin-research] [data-action="${CSS.escape(action)}"]`) : null;
+    next?.focus?.();
+    if (Number.isInteger(selectionStart) && next?.setSelectionRange && !next.disabled) next.setSelectionRange(selectionStart, selectionEnd);
   };
 
   const updateBookCatalogMutationUi = () => {
@@ -1823,6 +1964,8 @@
     if (!book) return;
     content.insertAdjacentHTML("beforeend", renderBookDrawer(book, summaryFor(book)));
     document.getElementById("book-drawer-title")?.focus();
+    send("amazon.browser.status");
+    send("book.keywords.asin-crawl.get", { bookId: id });
   };
   const closeBookDrawer = () => {
     if (state.bookInteriorSavePending || state.catalogMutationPending) return;
@@ -1948,6 +2091,63 @@
       };
       if (navigator.clipboard?.writeText) navigator.clipboard.writeText(keywordBuilderCopyText(saved)).then(copied, failed);
       else failed();
+    }
+    if (action === "open-amazon-browser") {
+      state.amazonBrowserPending = true;
+      setAsinFeedback(target.dataset.bookId, "Opening the app-owned Amazon browser…");
+      patchAsinResearch(target.dataset.bookId);
+      send("amazon.browser.open");
+    }
+    if (action === "crawl-amazon-asins") {
+      const id = target.dataset.bookId;
+      const book = books().find((item) => bookId(item) === id);
+      const summary = book ? summaryFor(book) : null;
+      const draft = book && summary ? asinResearchDraftFor(book, summary) : null;
+      const keywords = normalizedAsinSearchKeywords(draft?.sourceText);
+      const oversized = keywords.find((keyword) => (metadataGraphemeCount(keyword) ?? keyword.length) > 200);
+      if (!keywords.length || keywords.length > 30 || oversized) {
+        setAsinFeedback(id, !keywords.length ? "Enter at least one Search Keyword." : keywords.length > 30 ? "Search Keywords accepts at most 30 phrases." : `Search Keyword “${oversized}” exceeds 200 characters.`, true);
+        patchAsinResearch(id);
+        return;
+      }
+      draft.submittedKeywords = [...keywords];
+      setAsinFeedback(id, "Preparing Amazon browser and search session…");
+      patchAsinResearch(id);
+      send("book.keywords.asin-crawl.start", { bookId: id, keywords });
+    }
+    if (action === "cancel-amazon-asins") {
+      setAsinFeedback(target.dataset.bookId, "Cancelling crawl…");
+      patchAsinResearch(target.dataset.bookId);
+      send("book.keywords.asin-crawl.cancel", { bookId: target.dataset.bookId });
+    }
+    if (action === "copy-amazon-asins") {
+      const value = asinFinalValue(asinSessionFor(target.dataset.bookId));
+      if (!value) return;
+      const copied = () => { setAsinFeedback(target.dataset.bookId, "ASIN result copied to clipboard."); patchAsinResearch(target.dataset.bookId); };
+      const failed = () => { setAsinFeedback(target.dataset.bookId, "Clipboard access failed. Select the ASIN Result and copy it manually.", true); patchAsinResearch(target.dataset.bookId); };
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(value).then(copied, failed);
+      else failed();
+    }
+    if (action === "use-amazon-asins") {
+      const id = target.dataset.bookId;
+      const book = books().find((item) => bookId(item) === id);
+      const summary = book ? summaryFor(book) : null;
+      const value = asinFinalValue(asinSessionFor(id));
+      if (!book || !summary || !value || id !== state.selectedBookId || !/^[A-Z0-9]{10}(,[A-Z0-9]{10})*$/u.test(value)) {
+        setAsinFeedback(id, "This crawl result no longer belongs to the open Book. Crawl again.", true);
+        patchAsinResearch(id);
+        return;
+      }
+      const draft = keywordBuilderDraftFor(book, summary, true);
+      if (draft.adsAsin === value) {
+        setAsinFeedback(id, "These ASINs are already in the draft.");
+        patchAsinResearch(id);
+        return;
+      }
+      if (draft.adsAsin && !window.confirm(`Replace the current Ads ASIN draft with ${value.split(",").length} crawled ASINs? This does not save the Book.`)) return;
+      draft.adsAsin = value;
+      setAsinFeedback(id, "Ads ASIN draft updated. Use Build & Save when ready.");
+      refreshBookKeywordBuilderCard();
     }
     if (action === "retry-keyword-refresh") {
       const drawerBody = document.querySelector(".book-drawer-body");
@@ -2217,6 +2417,14 @@
         if (unsaved) unsaved.hidden = !(hasInteriorDraft(bookId(book)) || hasMetadataDraft(book, summary) || hasKeywordBuilderDraft(book, summary));
       }
     }
+    if (event.target.dataset.action === "asin-search-keywords") {
+      const book = books().find((item) => bookId(item) === event.target.dataset.bookId);
+      const summary = book ? summaryFor(book) : null;
+      if (book && summary) {
+        asinResearchDraftFor(book, summary).sourceText = event.target.value;
+        setAsinFeedback(bookId(book), "");
+      }
+    }
     if (event.target.dataset.action === "brand-author-input") {
       state.brandAuthorDrafts.set(event.target.dataset.brandName, event.target.value);
       const selected = brands().find((brand) => valueFor(brand, "name", "") === event.target.dataset.brandName);
@@ -2286,6 +2494,30 @@
       applyUpdateSnapshot(valueFor(response, "payload", {}));
     } else if (ok && command === "app.pong") {
       status.textContent = "Connected";
+    } else if (ok && command === "amazon.browser.status") {
+      state.amazonBrowserPending = false;
+      state.amazonBrowserStatus = valueFor(response, "payload", { state: "Closed" });
+      if (state.selectedBookId) {
+        const browserState = browserStateName(valueFor(state.amazonBrowserStatus, "state", "Closed"));
+        setAsinFeedback(state.selectedBookId, browserState === "Ready" ? "Amazon browser is ready." : browserState === "NeedsAttention" ? "Amazon needs attention in the browser." : "");
+        patchAsinResearch(state.selectedBookId);
+      }
+      status.textContent = browserStateName(valueFor(state.amazonBrowserStatus, "state", "Closed")) === "Ready" ? "Amazon browser ready" : "Connected";
+    } else if (ok && command === "book.keywords.asin-crawl") {
+      const session = valueFor(response, "payload", {});
+      const sessionBookId = String(valueFor(session, "bookId", "") ?? "");
+      if (sessionBookId && sessionBookId !== state.selectedBookId && valueFor(session, "isActive", false)) {
+        setAsinFeedback(state.selectedBookId, `Another ASIN crawl is active for ${sessionBookId}.`, true);
+        patchAsinResearch(state.selectedBookId);
+      }
+      observeAmazonAsinCrawl(session);
+      const view = asinSessionView(session);
+      const outcome = asinOutcomeName(valueFor(view, "outcome", "Idle"));
+      if (sessionBookId && !asinSessionActive(session) && outcome !== "Idle") {
+        const count = String(valueFor(view, "finalAsins", "") ?? "").split(",").filter(Boolean).length;
+        setAsinFeedback(sessionBookId, outcome === "Completed" ? `${count} ASIN${count === 1 ? "" : "s"} ready to review.` : outcome === "NeedsAttention" ? "Crawl stopped because Amazon needs attention." : outcome === "Cancelled" ? "Crawl cancelled; partial results remain available." : "Crawl finished with partial results.", outcome === "Failed" || outcome === "NeedsAttention");
+        patchAsinResearch(sessionBookId);
+      }
     } else if (ok && command === "book.keywords.saved") {
       const payload = valueFor(response, "payload", {});
       const savedBookId = String(valueFor(payload, "bookId", state.catalogMutationTarget));
@@ -2508,6 +2740,32 @@
         stopUpdatePolling();
       }
       const error = valueFor(response, "error", "unexpected response");
+      if (requestCommand === "amazon.browser.open" || requestCommand === "amazon.browser.status") {
+        state.amazonBrowserPending = false;
+        state.amazonBrowserStatus = { state: "Error", reasonCode: error };
+        const message = ({
+          cloak_browser_download_failed: "Browser components could not be downloaded. Check network, disk space, and antivirus, then retry.",
+          cloak_browser_license_required: "CloakBrowser needs a valid free access key or license.",
+          cloak_browser_profile_locked: "The Amazon browser profile is already in use. Close the other browser or app instance and retry.",
+          browser_storage_not_writable: "The app cannot write the .cloakbrowser profile and cache folders."
+        })[String(error)] ?? "Amazon browser could not be opened. Check the setup and retry.";
+        setAsinFeedback(state.selectedBookId, message, true);
+        patchAsinResearch(state.selectedBookId);
+        status.textContent = "Amazon browser needs attention";
+        return;
+      }
+      if (requestCommand.startsWith("book.keywords.asin-crawl.")) {
+        const message = error === "amazon_asin_crawl_active"
+          ? "Another ASIN crawl is already running. Wait for it to finish or cancel it from its Book."
+          : error === "amazon_keywords_required" ? "Enter at least one Search Keyword."
+            : error === "amazon_keywords_too_many" ? "Search Keywords accepts at most 30 phrases."
+              : error === "amazon_keyword_too_long" ? "Each Search Keyword must be at most 200 characters."
+                : "ASIN crawl could not start. Check the browser and retry.";
+        setAsinFeedback(state.selectedBookId, message, true);
+        patchAsinResearch(state.selectedBookId);
+        status.textContent = "ASIN crawl needs attention";
+        return;
+      }
       if (pdfLibraryAction) {
         const message = pdfLibraryActionError(String(error).split(":", 1)[0]);
         setPdfLibraryFeedback(message, true);
