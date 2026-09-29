@@ -23,6 +23,9 @@ if (Test-Path -LiteralPath (Join-Path $root ".cloakbrowser")) {
 } else {
     Write-Host "First Open Browser will download Chromium (~200 MB) into .cloakbrowser/cache."
 }
+if ([string]::IsNullOrWhiteSpace($env:CLOAKBROWSER_LICENSE_KEY) -and -not (Test-Path -LiteralPath (Join-Path $env:USERPROFILE ".cloakbrowser/license.key") -PathType Leaf)) {
+    Write-Warning "No CloakBrowser access key was detected. Configure CLOAKBROWSER_LICENSE_KEY to use the latest free binary before the live smoke."
+}
 
 Write-Host "Manual checks:"
 Write-Host "1. Open a Book and confirm ASIN Research is seeded from Book Keywords."
