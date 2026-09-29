@@ -67,6 +67,22 @@ Khi có `Clone book/`, ứng dụng chỉ dùng cấu trúc bên trong Clone đ�
 
 Với Book theo cấu trúc phẳng cũ, tiếp tục đặt `Book interior/`, `Book cover/` và các folder nguồn trực tiếp dưới thư mục Book. Ứng dụng dùng cấu trúc cũ này khi không có `Clone book/`; state của Book phẳng đã tồn tại không tự động chuyển sang đường dẫn Clone. Cover chưa phải điều kiện để chạy **Process Interior**; output full book vẫn dùng luồng Cover validation riêng.
 
+### 3.2 ASIN Research
+
+ASIN Research nằm bên dưới Keyword Builder và chỉ tạo draft quảng cáo; nó không tự lưu Book.
+
+1. Search Keywords được seed một lần từ Book Keywords. Sau đó hai ô độc lập với nhau.
+2. Nhập các phrase cách nhau bằng dấu phẩy hoặc xuống dòng, tối đa 30 phrase và 200 ký tự mỗi phrase.
+3. Bấm **Open Browser** nếu cần đăng nhập hoặc xử lý thông báo Amazon. Nếu chưa mở, **Crawl ASINs** sẽ tự mở browser.
+4. Lần chạy đầu tải CloakBrowser Chromium vài trăm MB. Profile và binary cache nằm tại `.cloakbrowser/` cạnh app để các lần sau không tải lại. Để dùng binary mới nhất, lấy free access key từ `https://cloakbrowser.dev/free` rồi đặt vào biến môi trường `CLOAKBROWSER_LICENSE_KEY` trước khi mở app; Printable Book không đọc, lưu hoặc hiển thị key trong settings/bridge/log.
+5. Review từng row. App chỉ lấy title chứa `coloring book` hoặc `coloring books`, tối đa một ASIN unique cho mỗi phrase.
+6. Bấm **Copy ASINs** để copy, hoặc **Use in Ads ASIN** để thay Ads ASIN draft. Nếu draft đã có giá trị, app hỏi xác nhận trước khi thay.
+7. Bấm **Build & Save** trong Keyword Builder để lưu Ads ASIN cùng output keyword hiện tại.
+
+Nếu Amazon báo CAPTCHA, robot check hoặc rate limit, crawl dừng và giữ các ASIN đã tìm được. Xử lý trong cửa sổ browser rồi chạy lại. Đóng Book Detail không hủy crawl; mở lại cùng Book sẽ nối lại trạng thái trong app session. App restart sẽ xóa draft/result research nhưng không xóa browser profile.
+
+Nếu báo license/access key không hợp lệ, cập nhật `CLOAKBROWSER_LICENSE_KEY`, đóng app và mở lại. Nếu tải browser lỗi, kiểm tra network, dung lượng đĩa, antivirus và quyền ghi tại folder app; không xóa `.cloakbrowser/profile-v1` nếu muốn giữ Amazon session.
+
 ## 4. Refresh Library
 
 Trong **Books**, nhấn **Refresh** để quét local folders và dựng snapshot mới. Chỉ dữ liệu snapshot mới được dùng cho các mutation Book/Brand. Không còn Processing Brand toàn cục: mọi Book action cần Brand luôn lấy Brand từ assignment đã lưu của chính Book.

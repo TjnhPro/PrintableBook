@@ -9,6 +9,9 @@ public sealed class UpdaterPayloadInstaller(UpdaterPayloadContractValidator payl
         var frontend = Path.Combine(appRoot, "Frontend");
         if (Directory.Exists(frontend)) Directory.Delete(frontend, recursive: true);
         UpdaterBackupService.CopyDirectory(Path.Combine(payloadDirectory, "Frontend"), frontend);
+        var playwright = Path.Combine(appRoot, ".playwright");
+        if (Directory.Exists(playwright)) Directory.Delete(playwright, recursive: true);
+        UpdaterBackupService.CopyDirectory(Path.Combine(payloadDirectory, ".playwright"), playwright);
         File.Copy(Path.Combine(payloadDirectory, "PrintableBook.exe"), Path.Combine(appRoot, "PrintableBook.exe"), overwrite: true);
         File.Copy(Path.Combine(payloadDirectory, "PrintableBook.Updater.exe"), Path.Combine(appRoot, "PrintableBook.Updater.exe"), overwrite: true);
         payloadValidator.ValidateInstalledPayload(appRoot);

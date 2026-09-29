@@ -7,7 +7,8 @@ internal enum BackgroundTaskLaneKind
     Library,
     Processing,
     Cleanup,
-    Production
+    Production,
+    Amazon
 }
 
 internal enum BackgroundTaskDuplicatePolicy
@@ -47,7 +48,12 @@ internal static class BackgroundTaskPolicies
                 BackgroundTaskLaneKind.Production,
                 1,
                 BackgroundTaskDuplicatePolicy.ReturnExistingByKey,
-                [BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup])
+                [BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup]),
+            [BackgroundTaskKind.AmazonAsinCrawl] = new(
+                BackgroundTaskLaneKind.Amazon,
+                1,
+                BackgroundTaskDuplicatePolicy.ReturnExistingByKey,
+                [])
         };
 
     internal static IReadOnlyDictionary<BackgroundTaskKind, BackgroundTaskPolicy> All => policies;

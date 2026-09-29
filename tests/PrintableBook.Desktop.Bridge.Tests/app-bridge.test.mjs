@@ -1642,6 +1642,47 @@ test("Book Information structured backend rejection retains the drawer without r
   assert.equal(messages.length, messageCount, "backend rejection must not request a snapshot refresh");
 });
 
+test("ASIN Research seeds per Book and only applies targets to the draft", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [],
+      keywordBuilder: { sourceKeywords: ["cozy coloring", "adult coloring"], adsAsin: "OLDTARGET", keywords: [] }
+    }]
+  };
+
+  messageHandler({ data: { version: 1, id: "asin-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+
+  assert.match(content.innerHTML, /ASIN Research/);
+  assert.match(content.innerHTML, /cozy coloring\nadult coloring/);
+  assert.equal(messages.at(-2).command, "amazon.browser.status");
+  assert.equal(messages.at(-1).command, "book.keywords.asin-crawl.get");
+
+  contentListeners.input({ target: { dataset: { action: "asin-search-keywords", bookId: "Book 001" }, value: "  cats   coloring, CATS COLORING\r\nbooks for adults,\nrelaxing animals" } });
+  const crawl = { dataset: { action: "crawl-amazon-asins", bookId: "Book 001" }, closest: () => crawl };
+  contentListeners.click({ target: crawl });
+  assert.equal(messages.at(-1).command, "book.keywords.asin-crawl.start");
+  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", keywords: ["cats coloring", "books for adults", "relaxing animals"] });
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "book.keywords.asin-crawl", payload: {
+    taskId: "crawl-1", bookId: "Book 001", isActive: false, isCancelling: false,
+    view: { outcome: "Completed", rows: [{ inputIndex: 0, keyword: "cats coloring", status: "Selected", asin: "B000000001" }], completedCount: 1, totalCount: 1, finalAsins: "B000000001", requestFingerprint: "fingerprint" }
+  } } });
+  const messageCountBeforeUse = messages.length;
+  const use = { dataset: { action: "use-amazon-asins", bookId: "Book 001" }, closest: () => use };
+  contentListeners.click({ target: use });
+  assert.equal(messages.length, messageCountBeforeUse, "Use in Ads ASIN must not save the Book");
+
+  const build = { dataset: { action: "build-book-keywords", bookId: "Book 001" }, closest: () => build };
+  contentListeners.click({ target: build });
+  assert.equal(messages.at(-1).command, "book.keywords.save");
+  assert.equal(messages.at(-1).payload.adsAsin, "B000000001");
+});
+
 test("Keyword Builder submits normalized phrases without redrawing Book detail", () => {
   const { messageHandler, content, contentListeners, messages, getFullRenderCount, getBookDrawerBodyRenderCount } = loadBridge("books");
   const snapshot = {

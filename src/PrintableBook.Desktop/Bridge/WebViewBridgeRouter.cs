@@ -16,6 +16,7 @@ using PrintableBook.Desktop.BackgroundTasks;
 using PrintableBook.Desktop.Updates;
 using PrintableBook.Core.Application.Production;
 using PrintableBook.Core.Domain.Books;
+using PrintableBook.Core.Application.AmazonCrawl;
 
 namespace PrintableBook.Desktop.Bridge;
 
@@ -39,7 +40,9 @@ internal sealed class WebViewBridgeRouter(
     IDesktopUpdateCoordinator? updateCoordinator = null,
     IProductionFilePicker? productionFilePicker = null,
     IProductionAssetImportService? productionAssetImportService = null,
-    IBookCatalogMetadataService? bookCatalogMetadataService = null)
+    IBookCatalogMetadataService? bookCatalogMetadataService = null,
+    IAmazonAsinCrawlSessionService? amazonAsinCrawlSessionService = null,
+    IAmazonSearchPageClient? amazonSearchPageClient = null)
 {
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
     private readonly ProcessingMutationGate processingMutationGate = processingMutationGate ?? new ProcessingMutationGate();
@@ -97,6 +100,61 @@ internal sealed class WebViewBridgeRouter(
                 return uiDiagnosticsService is null
                     ? BridgeResponse.UnsupportedCommand(request.Id)
                     : BridgeResponse.Succeeded(request.Id, "diagnostics.snapshot", uiDiagnosticsService.Snapshot());
+            }
+            if (request.Command == "amazon.browser.status")
+            {
+                if (amazonSearchPageClient is null) return BridgeResponse.UnsupportedCommand(request.Id);
+                return BridgeResponse.Succeeded(request.Id, "amazon.browser.status", await amazonSearchPageClient.GetStatusAsync(cancellationToken));
+            }
+            if (request.Command == "amazon.browser.open")
+            {
+                if (amazonSearchPageClient is null) return BridgeResponse.UnsupportedCommand(request.Id);
+                try
+                {
+                    return BridgeResponse.Succeeded(request.Id, "amazon.browser.status", await amazonSearchPageClient.OpenAsync(cancellationToken));
+                }
+                catch (AmazonSearchPageException exception)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, exception.Code);
+                }
+            }
+            if (request.Command is "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel")
+            {
+                if (amazonAsinCrawlSessionService is null || request.Payload is not { } crawlPayload ||
+                    !TryGetRequiredString(crawlPayload, "bookId", out var crawlBookId))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_amazon_asin_crawl");
+                }
+
+                try
+                {
+                    AmazonAsinCrawlSessionSnapshot snapshot;
+                    if (request.Command == "book.keywords.asin-crawl.start")
+                    {
+                        if (!TryGetStringArray(crawlPayload, "keywords", out var keywords))
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, "invalid_amazon_asin_crawl");
+                        }
+                        snapshot = await amazonAsinCrawlSessionService.StartAsync(crawlBookId, keywords, cancellationToken);
+                    }
+                    else if (request.Command == "book.keywords.asin-crawl.cancel")
+                    {
+                        snapshot = await amazonAsinCrawlSessionService.CancelAsync(crawlBookId, cancellationToken);
+                    }
+                    else
+                    {
+                        snapshot = await amazonAsinCrawlSessionService.GetAsync(crawlBookId, cancellationToken);
+                    }
+                    return BridgeResponse.Succeeded(request.Id, "book.keywords.asin-crawl", snapshot);
+                }
+                catch (AmazonCrawlValidationException exception)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, exception.Code);
+                }
+                catch (BackgroundTaskConflictException exception) when (exception.ActiveKind == BackgroundTaskKind.AmazonAsinCrawl)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "amazon_asin_crawl_active");
+                }
             }
             if (request.Command == "app.refresh")
             {
@@ -947,7 +1005,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.keywords.save" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

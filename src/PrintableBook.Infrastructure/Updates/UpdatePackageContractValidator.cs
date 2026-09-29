@@ -9,6 +9,8 @@ public sealed class UpdatePackageContractValidator
         Path.Combine("Frontend", "index.html"),
         Path.Combine("Frontend", "js", "app.js"),
         Path.Combine("Frontend", "assets", "printable-book-logo.png"),
+        Path.Combine(".playwright", "package", "package.json"),
+        Path.Combine(".playwright", "node", "win32_x64", "node.exe"),
     ];
 
     private static readonly string[] RequiredDirectories =
@@ -17,6 +19,10 @@ public sealed class UpdatePackageContractValidator
         Path.Combine("Frontend", "css"),
         Path.Combine("Frontend", "js"),
         Path.Combine("Frontend", "assets"),
+        ".playwright",
+        Path.Combine(".playwright", "package"),
+        Path.Combine(".playwright", "node"),
+        Path.Combine(".playwright", "node", "win32_x64"),
     ];
 
     private static readonly HashSet<string> AllowedRootEntries =
@@ -25,6 +31,7 @@ public sealed class UpdatePackageContractValidator
             "PrintableBook.exe",
             "PrintableBook.Updater.exe",
             "Frontend",
+            ".playwright",
         };
 
     public void Validate(string payloadDirectoryPath)

@@ -54,6 +54,7 @@ foreach ($relativePath in @("Frontend/node_modules", "Frontend/package-lock.json
     $fullPath = Join-Path $desktopPublishDirectory $relativePath
     if (Test-Path -LiteralPath $fullPath) { Remove-Item -LiteralPath $fullPath -Recurse -Force }
 }
+Remove-Item -LiteralPath (Join-Path $desktopPublishDirectory "playwright.ps1") -Force -ErrorAction SilentlyContinue
 
 foreach ($relativePath in @("PrintableBook.exe", "Frontend/index.html", "Frontend/js/app.js", "Frontend/assets/printable-book-logo.png")) {
     if (-not (Test-Path -LiteralPath (Join-Path $desktopPublishDirectory $relativePath))) { throw "Published Desktop artifact is missing '$relativePath'." }
@@ -61,11 +62,14 @@ foreach ($relativePath in @("PrintableBook.exe", "Frontend/index.html", "Fronten
 foreach ($relativePath in @("Frontend/css", "Frontend/js", "Frontend/assets")) {
     if (-not (Test-Path -LiteralPath (Join-Path $desktopPublishDirectory $relativePath) -PathType Container)) { throw "Published Desktop artifact is missing frontend directory '$relativePath'." }
 }
+foreach ($relativePath in @(".playwright/package/package.json", ".playwright/node/win32_x64/node.exe")) {
+    if (-not (Test-Path -LiteralPath (Join-Path $desktopPublishDirectory $relativePath) -PathType Leaf)) { throw "Published Desktop artifact is missing Playwright runtime file '$relativePath'." }
+}
 if (Test-Path -LiteralPath (Join-Path $desktopPublishDirectory "Assets")) { throw "Single-file Desktop release must not contain an external Assets directory." }
 $externalBinaryPatterns = @("*.dll", "*.pdb", "*.deps.json", "*.runtimeconfig.json")
 $desktopExternalBinaries = foreach ($pattern in $externalBinaryPatterns) { Get-ChildItem -LiteralPath $desktopPublishDirectory -File -Filter $pattern }
 if ($desktopExternalBinaries) { throw "Single-file Desktop release leaked external binary/runtime files: $($desktopExternalBinaries.Name -join ', ')" }
-$desktopUnexpected = Get-ChildItem -LiteralPath $desktopPublishDirectory | Where-Object { $_.Name -notin @("PrintableBook.exe", "Frontend") }
+$desktopUnexpected = Get-ChildItem -LiteralPath $desktopPublishDirectory | Where-Object { $_.Name -notin @("PrintableBook.exe", "Frontend", ".playwright") }
 if ($desktopUnexpected) { throw "Published Desktop artifact contains unexpected root entries: $($desktopUnexpected.Name -join ', ')" }
 
 dotnet publish $updaterProject `
@@ -90,10 +94,10 @@ if ($updaterUnexpected) { throw "Published Updater artifact contains unexpected 
 New-Item -ItemType Directory -Path $packageDirectory -Force | Out-Null
 Copy-Item (Join-Path $desktopPublishDirectory "*") $packageDirectory -Recurse -Force
 Copy-Item (Join-Path $updaterPublishDirectory "PrintableBook.Updater.exe") (Join-Path $packageDirectory "PrintableBook.Updater.exe") -Force
-$allowedPackageRootEntries = @("PrintableBook.exe", "PrintableBook.Updater.exe", "Frontend")
+$allowedPackageRootEntries = @("PrintableBook.exe", "PrintableBook.Updater.exe", "Frontend", ".playwright")
 $unexpectedPackageEntries = Get-ChildItem -LiteralPath $packageDirectory | Where-Object { $_.Name -notin $allowedPackageRootEntries }
 if ($unexpectedPackageEntries) { throw "Release package contains unexpected root entries: $($unexpectedPackageEntries.Name -join ', ')" }
-foreach ($forbidden in @("brands", "sources", "settings.json", ".workspace", "Output")) {
+foreach ($forbidden in @("brands", "sources", "settings.json", ".workspace", "Output", ".cloakbrowser")) {
     if (Test-Path -LiteralPath (Join-Path $packageDirectory $forbidden)) { throw "Release package must not contain '$forbidden'." }
 }
 

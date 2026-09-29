@@ -23,6 +23,12 @@ public sealed class UpdatePackageContractValidatorTests
     [InlineData("Frontend/css")]
     [InlineData("Frontend/assets")]
     [InlineData("Frontend/assets/printable-book-logo.png")]
+    [InlineData(".playwright")]
+    [InlineData(".playwright/package")]
+    [InlineData(".playwright/package/package.json")]
+    [InlineData(".playwright/node")]
+    [InlineData(".playwright/node/win32_x64")]
+    [InlineData(".playwright/node/win32_x64/node.exe")]
     public void ValidateRejectsMissingRequiredPath(string relativePath)
     {
         using var directory = new TemporaryDirectory();
@@ -81,6 +87,10 @@ public sealed class UpdatePackageContractValidatorTests
         File.WriteAllText(Path.Combine(root, "Frontend", "index.html"), "html");
         File.WriteAllText(Path.Combine(root, "Frontend", "js", "app.js"), "js");
         File.WriteAllText(Path.Combine(root, "Frontend", "assets", "printable-book-logo.png"), "logo");
+        Directory.CreateDirectory(Path.Combine(root, ".playwright", "package"));
+        Directory.CreateDirectory(Path.Combine(root, ".playwright", "node", "win32_x64"));
+        File.WriteAllText(Path.Combine(root, ".playwright", "package", "package.json"), "driver");
+        File.WriteAllText(Path.Combine(root, ".playwright", "node", "win32_x64", "node.exe"), "node");
     }
 
     private sealed class TemporaryDirectory : IDisposable

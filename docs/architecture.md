@@ -200,6 +200,23 @@ Cache stamp v5 và classification cache v2 lưu policy/origin/detection status r
 
 Clear Cache xóa raster nặng (canonical/processed cache) nhưng giữ Book state và metadata classification. Book `Completed` đủ điều kiện khi có processed previews hoặc published output hợp lệ; nếu state ghi nhận output nhưng file bị mất, cleanup vẫn fail closed. Sau cleanup, preview manifest được xóa còn PDF, companion thumbnail và provenance được giữ nguyên; lần process/build sau dựng lại cache cần thiết.
 
+## Amazon ASIN Research
+
+ASIN Research là luồng additive, không thuộc Book domain và không thay đổi Build & Save hiện tại:
+
+```text
+WebView bridge
+  → AmazonAsinCrawlSessionService / AmazonAsinCrawlWorker (Core)
+    → IAmazonSearchPageClient → Infrastructure/CloakBrowser
+    → IAmazonSearchHtmlParser → Infrastructure/AmazonCrawl
+```
+
+`CloakBrowser/` chỉ sở hữu persistent browser, profile/cache, navigation và fixed JavaScript fetch. `AmazonCrawl/` chỉ nhận HTML và parse DOM bằng Html Agility Pack. Hai folder không reference nhau; Core điều phối qua interface trung lập. Browser là singleton app-wide, còn draft/task/result được giữ theo Book trong app session.
+
+Profile nằm ở `<AppRoot>/.cloakbrowser/profile-v1`, downloaded Chromium ở `<AppRoot>/.cloakbrowser/cache`, và Playwright driver được ship trong `.playwright/`. Updater chỉ thay `.playwright/`; không backup, replace hoặc xóa `.cloakbrowser/`.
+
+Crawler có lane riêng, concurrency 1, input tối đa 30 phrase, fetch 20 giây, toàn task 10 phút và response HTML tối đa 5 MiB. URL/final redirect chỉ chấp nhận HTTPS `amazon.com`/`www.amazon.com`. Raw HTML, cookie, license và profile path không đi qua bridge hoặc diagnostics.
+
 ## Kiểm thử
 
 CI chỉ chạy fixture repository-owned, deterministic và redistributable. Corpus ảnh thật do user cung cấp nằm trong `TestResults/`, được đánh dấu `TestScope=LocalCorpus`, chỉ chạy explicit local opt-in và không được yêu cầu trên clean checkout/CI. Real-output certification phải kiểm tra file/raster/PDF thật thay vì chỉ mock.

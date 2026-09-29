@@ -199,6 +199,8 @@ public sealed class UpdatePreparationServiceTests
         ("Frontend/js/app.js", Bytes("js")),
         ("Frontend/assets/printable-book-logo.png", Bytes("logo")),
         ("Frontend/css/app.css", Bytes("css")),
+        (".playwright/package/package.json", Bytes("driver")),
+        (".playwright/node/win32_x64/node.exe", Bytes("node")),
     ];
 
     private static byte[] CreateZipBytes(params (string Path, byte[] Content)[] entries)
