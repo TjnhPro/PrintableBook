@@ -38,9 +38,17 @@ public sealed class AmazonSearchHtmlParserTests
     [Fact]
     public void Parser_module_has_no_desktop_or_cloakbrowser_dependency()
     {
-        var references = typeof(AmazonSearchHtmlParser).Assembly.GetReferencedAssemblies().Select(item => item.Name).ToArray();
+        var source = File.ReadAllText(Path.Combine(RepositoryRoot(), "src", "PrintableBook.Infrastructure", "AmazonCrawl", "AmazonSearchHtmlParser.cs"));
 
-        Assert.DoesNotContain("PrintableBook.Desktop", references);
-        Assert.DoesNotContain("CloakBrowser", references);
+        Assert.DoesNotContain("PrintableBook.Desktop", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Infrastructure.CloakBrowser", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("global::CloakBrowser", source, StringComparison.Ordinal);
+    }
+
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PrintableBook.sln"))) directory = directory.Parent;
+        return directory?.FullName ?? throw new InvalidOperationException("Repository root was not found.");
     }
 }

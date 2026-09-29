@@ -175,3 +175,15 @@ public interface IAmazonBrowserLifetime
 {
     ValueTask ShutdownAsync(CancellationToken cancellationToken = default);
 }
+
+public sealed class AmazonSearchPageException(
+    string code,
+    string message,
+    bool retryable = false,
+    bool needsAttention = false,
+    Exception? innerException = null) : Exception(message, innerException)
+{
+    public string Code { get; } = code;
+    public bool Retryable { get; } = retryable;
+    public bool NeedsAttention { get; } = needsAttention;
+}

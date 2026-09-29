@@ -19,6 +19,9 @@ using PrintableBook.Core.Application.Updates;
 using PrintableBook.Infrastructure.Updates;
 using PrintableBook.Core.Application.Production;
 using PrintableBook.Infrastructure.Production;
+using PrintableBook.Core.Application.AmazonCrawl;
+using PrintableBook.Infrastructure.AmazonCrawl;
+using PrintableBook.Infrastructure.CloakBrowser;
 
 namespace PrintableBook.Infrastructure.DependencyInjection;
 
@@ -64,6 +67,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBookWorkspaceStateStore, JsonBookWorkspaceStateStore>();
         services.AddSingleton<IProductionWorkspaceStateStore, JsonProductionWorkspaceStateStore>();
         services.AddSingleton<IProductionAssetImportService, ProductionAssetImportService>();
+        services.AddSingleton<IAmazonSearchHtmlParser, AmazonSearchHtmlParser>();
+        services.AddSingleton<CloakBrowserAmazonPageClient>();
+        services.AddSingleton<IAmazonSearchPageClient>(provider => provider.GetRequiredService<CloakBrowserAmazonPageClient>());
+        services.AddSingleton<IAmazonBrowserLifetime>(provider => provider.GetRequiredService<CloakBrowserAmazonPageClient>());
         services.AddSingleton<IBookStorageMaintenance, PhysicalBookStorageMaintenance>();
         services.AddSingleton<IInteriorShuffleStore, JsonInteriorShuffleStore>();
         services.AddHttpClient(GitHubReleaseUpdateFeed.HttpClientName, client =>
