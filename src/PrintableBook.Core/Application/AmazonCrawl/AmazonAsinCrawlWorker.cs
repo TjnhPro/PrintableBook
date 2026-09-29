@@ -128,6 +128,7 @@ public sealed class AmazonAsinCrawlWorker(
 
     private static bool IsStopError(string code) => code is
         "amazon_markup_unsupported" or
+        "amazon_fetch_payload_invalid" or
         "amazon_response_too_large" or
         "amazon_redirect_not_allowed" or
         "amazon_response_not_html" or

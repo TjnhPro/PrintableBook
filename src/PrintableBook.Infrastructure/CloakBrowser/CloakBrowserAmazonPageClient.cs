@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using global::CloakBrowser;
 using Microsoft.Playwright;
@@ -22,10 +23,10 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
             });
             const contentType = response.headers.get('content-type') || '';
             const declared = Number(response.headers.get('content-length') || 0);
-            if (declared > maxBytes) return { tooLarge: true, status: response.status, ok: response.ok, redirected: response.redirected, finalUrl: response.url, contentType, html: '' };
+            if (declared > maxBytes) return JSON.stringify({ tooLarge: true, status: response.status, ok: response.ok, redirected: response.redirected, finalUrl: response.url, contentType, html: '' });
             const html = await response.text();
             const bytes = new TextEncoder().encode(html).byteLength;
-            return { tooLarge: bytes > maxBytes, status: response.status, ok: response.ok, redirected: response.redirected, finalUrl: response.url, contentType, html: bytes > maxBytes ? '' : html };
+            return JSON.stringify({ tooLarge: bytes > maxBytes, status: response.status, ok: response.ok, redirected: response.redirected, finalUrl: response.url, contentType, html: bytes > maxBytes ? '' : html });
           } finally {
             clearTimeout(timer);
           }
@@ -161,10 +162,10 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
                 throw new AmazonSearchPageException("amazon_origin_not_ready", "Return the browser to Amazon.com before searching.");
             }
 
-            FetchPayload payload;
+            string payloadJson;
             try
             {
-                payload = await page.EvaluateAsync<FetchPayload>(FetchScript, new
+                payloadJson = await page.EvaluateAsync<string>(FetchScript, new
                 {
                     url = uri.AbsoluteUri,
                     timeoutMs = (int)AmazonCrawlPolicy.FetchTimeout.TotalMilliseconds,
@@ -179,6 +180,8 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
             {
                 throw new AmazonSearchPageException("amazon_fetch_timeout", "Amazon search timed out. Try the crawl again.", retryable: true, innerException: exception);
             }
+
+            var payload = DeserializeFetchPayload(payloadJson);
 
             if (payload.TooLarge)
             {
@@ -269,6 +272,46 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
 
     private static Uri? TryUri(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri : null;
 
+    internal FetchPayload DeserializeFetchPayload(string payloadJson)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(payloadJson))
+            {
+                throw new JsonException("The browser returned an empty fetch payload.");
+            }
+
+            var payload = JsonSerializer.Deserialize<FetchPayload>(payloadJson)
+                ?? throw new JsonException("The browser returned a null fetch payload.");
+            if (payload.Status is < 100 or > 599)
+            {
+                throw new JsonException($"The browser returned an invalid HTTP status '{payload.Status}'.");
+            }
+            if (payload.FinalUrl is null)
+            {
+                throw new JsonException("The browser fetch payload is missing 'finalUrl'.");
+            }
+            if (payload.ContentType is null)
+            {
+                throw new JsonException("The browser fetch payload is missing 'contentType'.");
+            }
+            if (payload.Html is null)
+            {
+                throw new JsonException("The browser fetch payload is missing 'html'.");
+            }
+
+            return payload;
+        }
+        catch (JsonException exception)
+        {
+            diagnostics.Record("amazon.fetch.payload.invalid", detail: exception.Message);
+            throw new AmazonSearchPageException(
+                "amazon_fetch_payload_invalid",
+                $"Amazon fetch payload could not be parsed: {exception.Message}",
+                innerException: exception);
+        }
+    }
+
     private static AmazonSearchPageException MapLaunchException(Exception exception)
     {
         var text = exception.Message;
@@ -294,7 +337,7 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(disposed, this);
 
-    private sealed record FetchPayload(
+    internal sealed record FetchPayload(
         [property: JsonPropertyName("tooLarge")] bool TooLarge,
         [property: JsonPropertyName("status")] int Status,
         [property: JsonPropertyName("ok")] bool Ok,

@@ -1,5 +1,9 @@
 using global::CloakBrowser;
 using Microsoft.Playwright;
+using PrintableBook.Core.Application.AmazonCrawl;
+using PrintableBook.Core.Application.Diagnostics;
+using PrintableBook.Infrastructure.AmazonCrawl;
+using PrintableBook.Infrastructure.CloakBrowser;
 
 namespace PrintableBook.Infrastructure.Tests.CloakBrowser;
 
@@ -110,6 +114,36 @@ public sealed class CloakBrowserLifecycleIntegrationTests
         finally
         {
             await CloseAsync(handle);
+        }
+    }
+
+    [ExternalCloakBrowserFact]
+    public async Task Amazon_fetch_returns_complete_html_as_a_json_string_payload()
+    {
+        var client = new CloakBrowserAmazonPageClient(
+            new CloakBrowserStorageLayout(Path.Combine(IntegrationRoot(), "amazon-fetch-client")),
+            new NoOpOperationDiagnostics());
+
+        try
+        {
+            var status = await client.OpenAsync().AsTask().WaitAsync(LaunchTimeout);
+            Assert.Equal(CloakBrowserState.Ready, status.State);
+
+            var response = await client.FetchAsync(AmazonCrawlPolicy.BuildSearchUri("coloring books for adults"))
+                .AsTask()
+                .WaitAsync(OperationTimeout);
+
+            Assert.True(response.Ok);
+            Assert.Contains("text/html", response.ContentType, StringComparison.OrdinalIgnoreCase);
+            Assert.InRange(response.Html.Length, 1, AmazonCrawlPolicy.MaximumHtmlBytes);
+
+            var parsed = new AmazonSearchHtmlParser().Parse(response.Html);
+            Assert.Equal(AmazonSearchPageDiagnostic.Results, parsed.Diagnostic);
+            Assert.NotEmpty(parsed.Candidates);
+        }
+        finally
+        {
+            await client.DisposeAsync();
         }
     }
 

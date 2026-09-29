@@ -107,6 +107,29 @@ public sealed class AmazonAsinCrawlWorkerTests
     }
 
     [Fact]
+    public async Task Worker_stops_when_browser_payload_cannot_be_parsed()
+    {
+        var page = new FakePageClient(
+        [
+            Response("one"),
+            new AmazonSearchPageException("amazon_fetch_payload_invalid", "invalid payload")
+        ]);
+        var parser = new QueueParser([Parsed(("B000000001", "Coloring book"))]);
+        var context = new RecordingContext();
+
+        var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)new AmazonAsinCrawlWorker(page, parser, new NoDelay())).ExecuteAsync(
+            AmazonAsinCrawlRequest.Create(["one", "two", "three"]), context, CancellationToken.None));
+
+        Assert.Equal(AmazonAsinCrawlOutcome.Failed, result.Outcome);
+        Assert.Equal("amazon_fetch_payload_invalid", result.StopReasonCode);
+        Assert.Equal("B000000001", result.FinalAsins);
+        Assert.Equal(2, page.FetchCount);
+        Assert.Equal(
+            [AmazonAsinKeywordStatus.Selected, AmazonAsinKeywordStatus.Failed, AmazonAsinKeywordStatus.NotProcessed],
+            result.Rows.Select(row => row.Status));
+    }
+
+    [Fact]
     public async Task Worker_publishes_a_terminal_view_when_browser_setup_fails()
     {
         var page = new FakePageClient([])

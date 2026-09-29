@@ -254,6 +254,7 @@
     amazon_crawl_cancelled: "Search cancelled",
     amazon_fetch_timeout: "Search timed out",
     amazon_fetch_failed: "Search failed",
+    amazon_fetch_payload_invalid: "Browser response could not be parsed",
     amazon_challenge_detected: "Amazon needs attention in the browser",
     amazon_rate_limited: "Amazon rate limited the search",
     amazon_searchbox_missing: "Amazon search box is missing from the response",

@@ -44,6 +44,9 @@ public sealed class CloakBrowserStorageLayoutTests
         Assert.DoesNotContain("AmazonSearchHtmlParser", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Domain.Books", source, StringComparison.Ordinal);
         Assert.Contains("credentials: 'include'", source, StringComparison.Ordinal);
+        Assert.Contains("JSON.stringify", source, StringComparison.Ordinal);
+        Assert.Contains("EvaluateAsync<string>", source, StringComparison.Ordinal);
+        Assert.Contains("JsonSerializer.Deserialize<FetchPayload>", source, StringComparison.Ordinal);
         Assert.Contains("AmazonCrawlPolicy.IsAllowedUri(TryUri(page.Url))", source, StringComparison.Ordinal);
         Assert.Contains("AmazonCrawlPolicy.IsAllowedUri(TryUri(payload.FinalUrl))", source, StringComparison.Ordinal);
     }
