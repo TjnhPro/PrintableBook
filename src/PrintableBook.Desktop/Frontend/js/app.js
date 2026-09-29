@@ -222,7 +222,12 @@
   const asinRowStatusName = (value) => typeof value === "number" ? ["Pending", "Searching", "Selected", "NoSearchResult", "NoMatchingTitle", "AllCandidatesUsed", "Failed", "Cancelled", "NotProcessed"][value] ?? "Pending" : String(value ?? "Pending");
   const normalizedAsinSearchKeywords = (sourceText) => {
     const seen = new Set();
-    return normalizeKeywordPhrases(sourceText).filter((keyword) => {
+    const phrases = String(sourceText ?? "")
+      .split(",")
+      .flatMap((value) => value.split(/\r?\n/u))
+      .map((value) => metadataTerms(value).join(" "))
+      .filter(Boolean);
+    return phrases.filter((keyword) => {
       const key = keyword.toLocaleLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);
@@ -1134,21 +1139,18 @@
                 : "Open Browser is optional; Crawl ASINs opens it automatically.";
     const canUse = !active && !stale && Boolean(finalAsins);
     return `<section class="asin-research" data-asin-research data-book-id="${escapeHtml(id)}" aria-labelledby="asin-research-title" aria-busy="${active || browserBusy}">
-      <div class="asin-research-heading"><div><h4 id="asin-research-title">ASIN Research</h4><p>Search Amazon using this Book's research phrases, then review targets before applying them.</p></div><span class="status-badge ${needsAttention || outcome === "Failed" ? "status-bad" : active || browserBusy ? "status-warn" : browserState === "Ready" ? "status-good" : "status-muted"}">${escapeHtml(active ? cancelling ? "Cancelling" : "Running" : outcome !== "Idle" ? outcome : browserState)}</span></div>
+      <div class="asin-research-heading"><div><h3 id="asin-research-title">ASIN Research</h3><p>Search Amazon using this Book's research phrases, then review targets before applying them.</p></div><span data-asin-status class="status-badge ${needsAttention || outcome === "Failed" ? "status-bad" : active || browserBusy ? "status-warn" : browserState === "Ready" ? "status-good" : "status-muted"}">${escapeHtml(active ? cancelling ? "Cancelling" : "Running" : outcome !== "Idle" ? outcome : browserState)}</span></div>
       <div class="asin-research-grid">
-        <div class="asin-research-inputs">
-          <label class="field" for="asin-search-keywords"><span>Search Keywords</span><textarea id="asin-search-keywords" class="control keyword-list-input" rows="5" data-action="asin-search-keywords" data-book-id="${escapeHtml(id)}" autocomplete="off" spellcheck="false" ${active ? "disabled" : ""}>${escapeHtml(draft.sourceText)}</textarea><small>One phrase per line · maximum 30 phrases · 200 characters each.</small></label>
-          <div class="asin-research-actions"><button class="button-secondary" data-action="open-amazon-browser" data-book-id="${escapeHtml(id)}" ${browserBusy ? "disabled" : ""}>${browserBusy ? "Opening Browser…" : "Open Browser"}</button><button class="button-primary" data-action="crawl-amazon-asins" data-book-id="${escapeHtml(id)}" ${!validInput || active || browserBusy ? "disabled" : ""}>Crawl ASINs</button>${active ? `<button class="button-secondary" data-action="cancel-amazon-asins" data-book-id="${escapeHtml(id)}" ${cancelling ? "disabled" : ""}>${cancelling ? "Cancelling…" : "Cancel"}</button>` : ""}</div>
-          <p class="asin-research-state" role="${needsAttention ? "alert" : "status"}">${escapeHtml(stateCopy)}</p>
-        </div>
-        <div class="asin-research-results">
-          ${active && total ? `<div class="asin-progress" role="progressbar" aria-label="Amazon ASIN crawl progress" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${completed}"><span style="width:${Math.round(completed / total * 100)}%"></span></div>` : ""}
-          <div class="asin-result-summary"><strong>${selectedCount} selected</strong><span>${noMatchCount} no match · ${failedCount} failed</span></div>
-          ${stale && finalAsins ? '<p class="catalog-warning" role="status">Previous results — crawl again to refresh.</p>' : ""}
+        <section class="asin-research-pane asin-research-inputs" aria-labelledby="asin-search-keywords-title">
+          <div class="asin-research-pane-heading"><div><h4 id="asin-search-keywords-title">Search Keywords</h4><p>Separate phrases with commas or new lines · maximum 30 phrases · 200 characters each.</p></div><span data-asin-keyword-count>${keywords.length} / 30</span></div>
+          <textarea id="asin-search-keywords" class="control asin-research-scroll" rows="12" data-action="asin-search-keywords" data-book-id="${escapeHtml(id)}" aria-labelledby="asin-search-keywords-title" autocomplete="off" spellcheck="false" ${active ? "disabled" : ""}>${escapeHtml(draft.sourceText)}</textarea>
+          <footer class="asin-research-pane-footer"><div class="asin-research-actions"><button class="button-secondary" data-action="open-amazon-browser" data-book-id="${escapeHtml(id)}" ${browserBusy ? "disabled" : ""}>${browserBusy ? "Opening Browser…" : "Open Browser"}</button><button class="button-primary" data-action="crawl-amazon-asins" data-book-id="${escapeHtml(id)}" ${!validInput || active || browserBusy ? "disabled" : ""}>Crawl ASINs</button>${active ? `<button class="button-secondary" data-action="cancel-amazon-asins" data-book-id="${escapeHtml(id)}" ${cancelling ? "disabled" : ""}>${cancelling ? "Cancelling…" : "Cancel"}</button>` : ""}</div><p class="asin-research-state" role="${needsAttention ? "alert" : "status"}">${escapeHtml(stateCopy)}</p></footer>
+        </section>
+        <section class="asin-research-pane asin-research-results" aria-labelledby="asin-research-results-title">
+          <div class="asin-research-pane-heading"><div><h4 id="asin-research-results-title">Crawl Results</h4><p class="asin-result-summary"><strong>${selectedCount} selected</strong><span>${noMatchCount} no match · ${failedCount} failed</span></p></div><div class="asin-progress-slot">${active && total ? `<div class="asin-progress" role="progressbar" aria-label="Amazon ASIN crawl progress" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${completed}"><span style="width:${Math.round(completed / total * 100)}%"></span></div>` : ""}</div></div>
           <ol class="asin-result-list">${rowMarkup || '<li class="asin-result-empty">No crawl results yet.</li>'}</ol>
-          <label class="field" for="asin-research-result"><span>ASIN Result</span><input id="asin-research-result" class="control" type="text" readonly aria-readonly="true" value="${escapeHtml(finalAsins)}" placeholder="No matching ASINs yet"></label>
-          <div class="asin-result-actions"><button class="button-secondary" data-action="copy-amazon-asins" data-book-id="${escapeHtml(id)}" ${canUse ? "" : "disabled"}>Copy ASINs</button><button class="button-primary" data-action="use-amazon-asins" data-book-id="${escapeHtml(id)}" ${canUse ? "" : "disabled"}>Use in Ads ASIN</button></div>
-        </div>
+          <footer class="asin-research-pane-footer"><div class="asin-stale-slot">${stale && finalAsins ? '<p class="catalog-warning" role="status">Previous results — crawl again to refresh.</p>' : ""}</div><label class="field" for="asin-research-result"><span>ASIN Result</span><textarea id="asin-research-result" class="control asin-result-output" rows="1" wrap="off" readonly aria-readonly="true" placeholder="No matching ASINs yet">${escapeHtml(finalAsins)}</textarea></label><div class="asin-result-actions"><button class="button-secondary" data-action="copy-amazon-asins" data-book-id="${escapeHtml(id)}" ${canUse ? "" : "disabled"}>Copy ASINs</button><button class="button-primary" data-action="use-amazon-asins" data-book-id="${escapeHtml(id)}" ${canUse ? "" : "disabled"}>Use in Ads ASIN</button></div></footer>
+        </section>
       </div>
       <p class="catalog-feedback ${feedback.error ? "is-error" : ""}" data-asin-feedback role="${feedback.error ? "alert" : "status"}" aria-live="polite" aria-atomic="true">${escapeHtml(feedback.message)}</p>
     </section>`;
@@ -1220,7 +1222,6 @@
           </label>
         </section>
       </div>
-      ${renderAsinResearch(book, summary)}
       <div class="catalog-actions keyword-builder-status"><p class="catalog-feedback ${feedbackVisible && state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="keywords" role="${feedbackVisible && state.catalogFeedbackError ? "alert" : "status"}" aria-live="polite" aria-atomic="true">${feedbackVisible ? escapeHtml(state.catalogFeedback) : ""}</p>${refreshNeeded ? `<button class="button-secondary" data-action="retry-keyword-refresh" data-book-id="${escapeHtml(id)}" ${applicationIsLoading() ? "disabled" : ""}>Retry refresh</button>` : ""}</div>
     </section>`;
   };
@@ -1254,7 +1255,9 @@
     const migrationWarning = migratedCount > 0
       ? `<section class="catalog-warning" role="status"><strong>Frame mode updated</strong><p>${migratedCount} Interior page${migratedCount === 1 ? "" : "s"} previously using Auto now use No Frame. Review Interior artwork before reprocessing.</p><button type="button" class="button-secondary" data-action="book-tab" data-book-tab="artwork">Review Interior artwork</button></section>`
       : "";
-    const body = state.selectedBookTab === "production"
+    const body = state.selectedBookTab === "asin"
+      ? renderAsinResearch(book, summary)
+      : state.selectedBookTab === "production"
       ? renderProductionWorkspace(book, summary)
       : state.selectedBookTab === "settings"
       ? `<section class="interior-settings"><section class="asset-background-setting"><div><h3>Brand background</h3><p>Insert the assigned Brand background after every active Interior page.</p></div><label class="asset-background-toggle"><input type="checkbox" data-action="set-book-background" data-book-id="${escapeHtml(bookId(book))}" ${effectiveBackground(book, summary) ? "checked" : ""} ${processIsActive() || state.bookInteriorSavePending ? "disabled" : ""}> Use Brand background</label></section>${renderIntroTemplateWorkspace(book, summary)}</section>`
@@ -1263,7 +1266,7 @@
         : state.selectedBookTab === "pages"
           ? renderProcessedInteriorPages(summary)
         : `<section class="book-overview">${migrationWarning}<div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Interior preflight</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div>${renderBookInformation(book, summary)}${renderBookBrandAssignment(book, summary)}${renderBookKeywordBuilder(book, summary)}${renderBrandTemplateCopyCard(book, summary)}<p class="panel-note">Review the summary, then configure Brand background and Intro pages in Interior settings.</p></section>`;
-    return `<div class="book-heading"><div><h2>${escapeHtml(bookDisplayTitle(book, summary))}</h2><p>Folder: ${escapeHtml(valueFor(book, "name", bookId(book)))}</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}" aria-label="Process Interior. ${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs" role="tablist" aria-label="Book detail sections">${tabButton("overview", "Overview")}${tabButton("production", "Production")}${tabButton("settings", "Interior settings")}${tabButton("artwork", "Interior artwork")}${tabButton("pages", "Interior pages")}</nav><div id="book-panel-${state.selectedBookTab}" class="tab-body ${state.selectedBookTab === "artwork" ? "tab-body-artwork" : state.selectedBookTab === "pages" ? "tab-body-processed-pages" : ""}" role="tabpanel" aria-labelledby="book-tab-${state.selectedBookTab}" tabindex="0">${body}</div>`;
+    return `<div class="book-heading"><div><h2>${escapeHtml(bookDisplayTitle(book, summary))}</h2><p>Folder: ${escapeHtml(valueFor(book, "name", bookId(book)))}</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}" aria-label="Process Interior. ${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs" role="tablist" aria-label="Book detail sections">${tabButton("overview", "Overview")}${tabButton("asin", "ASIN Research")}${tabButton("production", "Production")}${tabButton("settings", "Interior settings")}${tabButton("artwork", "Interior artwork")}${tabButton("pages", "Interior pages")}</nav><div id="book-panel-${state.selectedBookTab}" class="tab-body ${state.selectedBookTab === "asin" ? "tab-body-asin" : state.selectedBookTab === "artwork" ? "tab-body-artwork" : state.selectedBookTab === "pages" ? "tab-body-processed-pages" : ""}" role="tabpanel" aria-labelledby="book-tab-${state.selectedBookTab}" tabindex="0">${body}</div>`;
   };
 
   const renderIntroTemplateWorkspace = (book, summary) => {
@@ -1455,19 +1458,61 @@
   };
 
   const patchAsinResearch = (id) => {
-    if (!state.bookDrawerOpen || state.selectedBookTab !== "overview" || state.selectedBookId !== id) return;
+    if (!state.bookDrawerOpen || state.selectedBookTab !== "asin" || state.selectedBookId !== id) return;
     const book = selectedBook();
     const summary = book ? summaryFor(book) : null;
     const section = document.querySelector("[data-asin-research]");
     if (!book || !summary || !section) return;
-    const drawerBody = document.querySelector(".book-drawer-body");
-    const scrollTop = drawerBody?.scrollTop ?? state.bookDrawerScrollTop;
     const active = section.contains(document.activeElement) ? document.activeElement : null;
     const action = active?.dataset?.action ?? "";
     const selectionStart = active?.selectionStart;
     const selectionEnd = active?.selectionEnd;
-    section.outerHTML = renderAsinResearch(book, summary);
-    if (drawerBody) drawerBody.scrollTop = scrollTop;
+    const resultList = section.querySelector(".asin-result-list");
+    const resultScrollTop = resultList?.scrollTop ?? 0;
+    const resultScrollLeft = resultList?.scrollLeft ?? 0;
+    const template = document.createElement("template");
+    template.innerHTML = renderAsinResearch(book, summary);
+    const rendered = template.content.firstElementChild;
+    if (!rendered) return;
+    const syncAttributes = (selector, names) => {
+      const current = section.querySelector(selector);
+      const next = rendered.querySelector(selector);
+      if (!current || !next) return;
+      names.forEach((name) => {
+        const value = next.getAttribute(name);
+        if (value === null) current.removeAttribute(name); else current.setAttribute(name, value);
+      });
+    };
+    const syncContent = (selector) => {
+      const current = section.querySelector(selector);
+      const next = rendered.querySelector(selector);
+      if (current && next) current.innerHTML = next.innerHTML;
+    };
+    section.setAttribute("aria-busy", rendered.getAttribute("aria-busy") ?? "false");
+    syncContent("[data-asin-status]");
+    syncAttributes("[data-asin-status]", ["class"]);
+    syncContent("[data-asin-keyword-count]");
+    syncContent(".asin-research-actions");
+    syncContent(".asin-research-state");
+    syncAttributes(".asin-research-state", ["role"]);
+    syncContent(".asin-progress-slot");
+    syncContent(".asin-result-summary");
+    syncContent(".asin-result-list");
+    syncContent(".asin-stale-slot");
+    syncContent(".asin-result-actions");
+    syncContent("[data-asin-feedback]");
+    syncAttributes("[data-asin-feedback]", ["class", "role"]);
+    const keywordInput = section.querySelector('[data-action="asin-search-keywords"]');
+    const nextKeywordInput = rendered.querySelector('[data-action="asin-search-keywords"]');
+    if (keywordInput && nextKeywordInput) keywordInput.disabled = nextKeywordInput.disabled;
+    const resultOutput = section.querySelector("#asin-research-result");
+    const nextResultOutput = rendered.querySelector("#asin-research-result");
+    if (resultOutput && nextResultOutput) resultOutput.value = nextResultOutput.value;
+    const refreshedResultList = section.querySelector(".asin-result-list");
+    if (refreshedResultList) {
+      refreshedResultList.scrollTop = resultScrollTop;
+      refreshedResultList.scrollLeft = resultScrollLeft;
+    }
     const next = action ? document.querySelector(`[data-asin-research] [data-action="${CSS.escape(action)}"]`) : null;
     next?.focus?.();
     if (Number.isInteger(selectionStart) && next?.setSelectionRange && !next.disabled) next.setSelectionRange(selectionStart, selectionEnd);
@@ -2149,7 +2194,9 @@
       if (draft.adsAsin && !window.confirm(`Replace the current Ads ASIN draft with ${value.split(",").length} crawled ASINs? This does not save the Book.`)) return;
       draft.adsAsin = value;
       setAsinFeedback(id, "Ads ASIN draft updated. Use Build & Save when ready.");
-      refreshBookKeywordBuilderCard();
+      patchAsinResearch(id);
+      const unsaved = document.querySelector("[data-book-interior-unsaved]");
+      if (unsaved) unsaved.hidden = !(hasInteriorDraft(bookId(book)) || hasMetadataDraft(book, summary) || hasKeywordBuilderDraft(book, summary));
     }
     if (action === "retry-keyword-refresh") {
       const drawerBody = document.querySelector(".book-drawer-body");
@@ -2320,7 +2367,7 @@
         refreshInteriorArtworkWorkspace();
       }
     }
-    if (action === "book-tab") { state.selectedBookTab = ["production", "settings", "artwork", "pages"].includes(target.dataset.bookTab) ? target.dataset.bookTab : "overview"; refreshBookDrawerBody(state.selectedBookTab); }
+    if (action === "book-tab") { state.selectedBookTab = ["asin", "production", "settings", "artwork", "pages"].includes(target.dataset.bookTab) ? target.dataset.bookTab : "overview"; refreshBookDrawerBody(state.selectedBookTab); }
     if (action === "select-asset") { state.selectedAssetReference = target.dataset.sourceReference; render("books", false); }
     if (action === "asset-view") { state.assetView = target.dataset.assetView; render("books", false); }
     if (action === "asset-status") { const status = ["Active", "Inactive"].includes(target.dataset.assetStatus) ? target.dataset.assetStatus : ""; state.assetStatus = state.assetStatus === status ? "" : status; state.artworkGridScrollTop = 0; refreshInteriorArtworkWorkspace(); }

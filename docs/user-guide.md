@@ -72,7 +72,7 @@ Với Book theo cấu trúc phẳng cũ, tiếp tục đặt `Book interior/`, `
 ASIN Research nằm bên dưới Keyword Builder và chỉ tạo draft quảng cáo; nó không tự lưu Book.
 
 1. Search Keywords được seed một lần từ Book Keywords. Sau đó hai ô độc lập với nhau.
-2. Chỉnh mỗi phrase trên một dòng, tối đa 30 dòng và 200 ký tự mỗi dòng.
+2. Nhập các phrase cách nhau bằng dấu phẩy hoặc xuống dòng, tối đa 30 phrase và 200 ký tự mỗi phrase.
 3. Bấm **Open Browser** nếu cần đăng nhập hoặc xử lý thông báo Amazon. Nếu chưa mở, **Crawl ASINs** sẽ tự mở browser.
 4. Lần chạy đầu tải CloakBrowser Chromium vài trăm MB. Profile và binary cache nằm tại `.cloakbrowser/` cạnh app để các lần sau không tải lại. Để dùng binary mới nhất, lấy free access key từ `https://cloakbrowser.dev/free` rồi đặt vào biến môi trường `CLOAKBROWSER_LICENSE_KEY` trước khi mở app; Printable Book không đọc, lưu hoặc hiển thị key trong settings/bridge/log.
 5. Review từng row. App chỉ lấy title chứa `coloring book` hoặc `coloring books`, tối đa một ASIN unique cho mỗi phrase.

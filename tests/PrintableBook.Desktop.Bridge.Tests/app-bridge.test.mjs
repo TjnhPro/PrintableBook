@@ -1662,11 +1662,11 @@ test("ASIN Research seeds per Book and only applies targets to the draft", () =>
   assert.equal(messages.at(-2).command, "amazon.browser.status");
   assert.equal(messages.at(-1).command, "book.keywords.asin-crawl.get");
 
-  contentListeners.input({ target: { dataset: { action: "asin-search-keywords", bookId: "Book 001" }, value: "  cats   coloring  \nCATS COLORING\nbooks for adults" } });
+  contentListeners.input({ target: { dataset: { action: "asin-search-keywords", bookId: "Book 001" }, value: "  cats   coloring, CATS COLORING\r\nbooks for adults,\nrelaxing animals" } });
   const crawl = { dataset: { action: "crawl-amazon-asins", bookId: "Book 001" }, closest: () => crawl };
   contentListeners.click({ target: crawl });
   assert.equal(messages.at(-1).command, "book.keywords.asin-crawl.start");
-  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", keywords: ["cats coloring", "books for adults"] });
+  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", keywords: ["cats coloring", "books for adults", "relaxing animals"] });
 
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "book.keywords.asin-crawl", payload: {
     taskId: "crawl-1", bookId: "Book 001", isActive: false, isCancelling: false,
