@@ -40,7 +40,7 @@ Mỗi thư mục trực tiếp trong `sources/` là một Book. Gói Book mới 
 
 Để dùng workflow Production, mở tab **Production** trong Book detail, upload ba PNG canonical, build Cover và Final Interior theo hướng dẫn trong [User Guide](docs/user-guide.md#8-production-assets).
 
-Trong **Book Detail → Keyword Builder → ASIN Research**, app có thể mở một CloakBrowser profile riêng và tìm tối đa một Amazon ASIN cho mỗi Search Keyword. Lần mở đầu tiên tải Chromium khoảng 200 MB vào `.cloakbrowser/cache`; các lần sau reuse cả binary và profile. Kết quả chỉ cập nhật Ads ASIN draft khi bấm **Use in Ads ASIN** và vẫn cần **Build & Save** để lưu Book.
+Trong **Book Detail → Keyword Builder → ASIN Research**, app có thể mở một CloakBrowser profile riêng và tìm tối đa một Amazon ASIN cho mỗi Search Keyword. Lần mở đầu tiên tải Chromium vài trăm MB vào `.cloakbrowser/cache`; các lần sau reuse cả binary và profile. Kết quả chỉ cập nhật Ads ASIN draft khi bấm **Use in Ads ASIN** và vẫn cần **Build & Save** để lưu Book.
 
 ## Workflow
 
@@ -104,13 +104,15 @@ Hướng dẫn thao tác đầy đủ bằng tiếng Việt: [User Guide](docs/u
 dotnet restore PrintableBook.sln
 dotnet build PrintableBook.sln --configuration Release --no-restore
 dotnet test tests/PrintableBook.Core.Tests/PrintableBook.Core.Tests.csproj --configuration Release --no-build
-dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "TestScope!=LocalCorpus"
+dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "TestScope!=LocalCorpus&TestScope!=ExternalCloakBrowser"
 dotnet test tests/PrintableBook.Desktop.Tests/PrintableBook.Desktop.Tests.csproj --configuration Release --no-build
 node --test tests/PrintableBook.Desktop.Bridge.Tests/app-bridge.test.mjs
 node src/PrintableBook.Desktop/Frontend/test-production-ui.mjs
 ```
 
 Corpus ảnh do user cung cấp ở `TestResults/` thuộc `LocalCorpus`, chỉ chạy local opt-in và không phải dependency của CI. Xem [Testing policy](docs/architecture.md#kiểm-thử).
+
+Ba integration test thật cho CloakBrowser (open/close profile, reconnect profile và truy cập Google) cũng là opt-in vì cần browser binary và network. Chạy bằng `./scripts/test-cloakbrowser-lifecycle.ps1`; binary cache và test profile được giữ dưới `artifacts/cloakbrowser-integration/` để lần sau reuse.
 
 ## Kiểm thử artifact với Book mẫu
 

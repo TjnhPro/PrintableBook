@@ -74,7 +74,7 @@ ASIN Research nằm bên dưới Keyword Builder và chỉ tạo draft quảng c
 1. Search Keywords được seed một lần từ Book Keywords. Sau đó hai ô độc lập với nhau.
 2. Chỉnh mỗi phrase trên một dòng, tối đa 30 dòng và 200 ký tự mỗi dòng.
 3. Bấm **Open Browser** nếu cần đăng nhập hoặc xử lý thông báo Amazon. Nếu chưa mở, **Crawl ASINs** sẽ tự mở browser.
-4. Lần chạy đầu tải CloakBrowser Chromium khoảng 200 MB. Profile và binary cache nằm tại `.cloakbrowser/` cạnh app để các lần sau không tải lại. Để dùng binary mới nhất, lấy free access key từ `https://cloakbrowser.dev/free` rồi đặt vào biến môi trường `CLOAKBROWSER_LICENSE_KEY` trước khi mở app; Printable Book không đọc, lưu hoặc hiển thị key trong settings/bridge/log.
+4. Lần chạy đầu tải CloakBrowser Chromium vài trăm MB. Profile và binary cache nằm tại `.cloakbrowser/` cạnh app để các lần sau không tải lại. Để dùng binary mới nhất, lấy free access key từ `https://cloakbrowser.dev/free` rồi đặt vào biến môi trường `CLOAKBROWSER_LICENSE_KEY` trước khi mở app; Printable Book không đọc, lưu hoặc hiển thị key trong settings/bridge/log.
 5. Review từng row. App chỉ lấy title chứa `coloring book` hoặc `coloring books`, tối đa một ASIN unique cho mỗi phrase.
 6. Bấm **Copy ASINs** để copy, hoặc **Use in Ads ASIN** để thay Ads ASIN draft. Nếu draft đã có giá trị, app hỏi xác nhận trước khi thay.
 7. Bấm **Build & Save** trong Keyword Builder để lưu Ads ASIN cùng output keyword hiện tại.

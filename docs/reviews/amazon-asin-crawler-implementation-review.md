@@ -3,15 +3,19 @@
 Date: 2026-09-29
 Branch: `feat/amazon-asin-crawler`
 
-## 1. CloakBrowser — PASS (code/package), live smoke pending
+## 1. CloakBrowser — PASS (lifecycle and package), Amazon smoke pending
 
 - App-owned headed persistent context; profile is `<AppRoot>/.cloakbrowser/profile-v1` and binary cache is `<AppRoot>/.cloakbrowser/cache`.
 - Fixed in-page fetch uses cookies and validates the current origin plus final redirect against exact Amazon HTTPS hosts.
 - Startup/download/profile-lock/license/network failures are reduced to safe error codes; shutdown is bounded and closes the owned context.
 - Published `win-x64` artifact contains external `.playwright/node/win32_x64/node.exe` (80,511,640 bytes), while `.cloakbrowser` is absent.
 - Storage/module/publish contract tests pass.
+- Three real CloakBrowser integration tests pass: open/close with lock release, close/reconnect with persisted profile cookie, and navigation to `https://www.google.com/`.
+- The run downloaded and cryptographically verified free Chromium `146.0.7680.177.5` (535 MB) into `artifacts/cloakbrowser-integration/cache`; test profiles are retained under `artifacts/cloakbrowser-integration/profiles` for reuse.
 
-Live launch was not run on this workstation because neither `CLOAKBROWSER_LICENSE_KEY` nor the default license file is configured. Run `scripts/test-amazon-crawl-smoke.ps1 -ArtifactRoot <published-folder> -Launch` after configuring the access key.
+Re-run all three cases with `./scripts/test-cloakbrowser-lifecycle.ps1`.
+
+The latest free binary still requires a CloakBrowser access key; this workstation had no key, so the wrapper selected its keyless free v146 binary. Run `scripts/test-amazon-crawl-smoke.ps1 -ArtifactRoot <published-folder> -Launch` after configuring the key for the separate real Amazon checkpoint.
 
 ## 2. AmazonCrawl — PASS
 

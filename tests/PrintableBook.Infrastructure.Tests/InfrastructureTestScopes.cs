@@ -7,4 +7,5 @@ internal static class InfrastructureTestScopes
 {
     public const string TraitName = "TestScope";
     public const string LocalCorpus = "LocalCorpus";
+    public const string ExternalCloakBrowser = "ExternalCloakBrowser";
 }

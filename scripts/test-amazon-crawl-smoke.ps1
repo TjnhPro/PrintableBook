@@ -21,7 +21,7 @@ foreach ($relativePath in $required) {
 if (Test-Path -LiteralPath (Join-Path $root ".cloakbrowser")) {
     Write-Host "Existing .cloakbrowser runtime data will be reused."
 } else {
-    Write-Host "First Open Browser will download Chromium (~200 MB) into .cloakbrowser/cache."
+    Write-Host "First Open Browser will download Chromium (several hundred MB) into .cloakbrowser/cache."
 }
 if ([string]::IsNullOrWhiteSpace($env:CLOAKBROWSER_LICENSE_KEY) -and -not (Test-Path -LiteralPath (Join-Path $env:USERPROFILE ".cloakbrowser/license.key") -PathType Leaf)) {
     Write-Warning "No CloakBrowser access key was detected. Configure CLOAKBROWSER_LICENSE_KEY to use the latest free binary before the live smoke."

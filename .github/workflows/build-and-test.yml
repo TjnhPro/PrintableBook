@@ -47,7 +47,7 @@ jobs:
         run: dotnet test tests/PrintableBook.UpdateSecurity.Tests/PrintableBook.UpdateSecurity.Tests.csproj --configuration Release --no-build
 
       - name: Run repository-owned Infrastructure integration tests
-        run: dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "TestScope!=LocalCorpus"
+        run: dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "TestScope!=LocalCorpus&TestScope!=ExternalCloakBrowser"
 
       - name: Run Updater tests
         run: dotnet test tests/PrintableBook.Updater.Tests/PrintableBook.Updater.Tests.csproj --configuration Release --no-build
