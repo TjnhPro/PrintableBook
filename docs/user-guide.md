@@ -28,7 +28,7 @@ Trong tab **Overview** của Book detail, card **Book Information** lưu riêng:
 
 ### 3.1 Keyword Builder
 
-Card **Keyword Builder** nằm sau Brand Assignment trong tab Overview:
+Card **Keyword Builder** nằm ở đầu tab **ASIN Research**; công cụ ASIN Research nằm ngay bên dưới:
 
 1. Mở **Settings → Keyword Builder**, nhập **Generic Keywords** dùng chung, mỗi dòng một phrase, rồi Save settings.
 2. Trong Book detail, nhập **Book Keywords** riêng của Book, mỗi dòng một phrase.

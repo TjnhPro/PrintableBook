@@ -320,6 +320,12 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("keyword-builder-pane keyword-builder-outputs", script, StringComparison.Ordinal);
         Assert.Contains("aria-labelledby=\"keyword-builder-inputs-title\"", script, StringComparison.Ordinal);
         Assert.Contains("aria-labelledby=\"keyword-builder-output-title\"", script, StringComparison.Ordinal);
+        Assert.Contains("const renderAsinResearchWorkspace", script, StringComparison.Ordinal);
+        Assert.Contains("${renderBookKeywordBuilder(book, summary)}", script, StringComparison.Ordinal);
+        Assert.Contains("${renderAsinResearch(book, summary)}", script, StringComparison.Ordinal);
+        Assert.Contains("? renderAsinResearchWorkspace(book, summary)", script, StringComparison.Ordinal);
+        Assert.Contains("state.selectedBookTab !== \"asin\"", script, StringComparison.Ordinal);
+        Assert.Contains(".asin-research-workspace { display:grid; gap:20px; min-width:0; }", layout, StringComparison.Ordinal);
     }
 
     [Fact]

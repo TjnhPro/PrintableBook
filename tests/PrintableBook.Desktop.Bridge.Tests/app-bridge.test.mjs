@@ -88,6 +88,14 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     querySelectorAll: () => [],
     set outerHTML(_markup) { productionWorkspaceRenderCount += 1; }
   };
+  const keywordBuilderCard = {
+    contains: () => false,
+    set outerHTML(markup) {
+      const start = contentMarkup.indexOf('<section class="catalog-card keyword-builder-card"');
+      const end = contentMarkup.indexOf('\n    <section class="asin-research"', start);
+      if (start >= 0 && end > start) contentMarkup = `${contentMarkup.slice(0, start)}${markup}${contentMarkup.slice(end)}`;
+    }
+  };
   const brandSettingsEditor = { dataset: { brandSettings: "" }, value: "{}" };
   const genericKeywordsEditor = { dataset: { genericKeywords: "" }, value: "" };
   const settingsInputs = [
@@ -148,6 +156,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
         if (selector === ".intro-template-workspace" && contentMarkup.includes('class="intro-template-workspace"')) return introWorkspace;
         if (selector === ".interior-artwork-workspace" && contentMarkup.includes('class="interior-artwork-workspace"')) return artworkWorkspace;
         if (selector === ".book-drawer-body" && contentMarkup.includes('class="book-drawer-body"')) return bookDrawerBody;
+        if (selector === "[data-book-keyword-builder-card]" && contentMarkup.includes("data-book-keyword-builder-card")) return keywordBuilderCard;
         if (selector === ".production-workspace" && contentMarkup.includes('class="production-workspace"')) return productionWorkspace;
         if (selector === ".interior-artwork-grid-scroll" && contentMarkup.includes('class="interior-artwork-grid-scroll"')) return artworkGrid;
         if (selector.startsWith('[data-action="intro-template-page"]')) return introPaginationFocus;
@@ -1656,9 +1665,16 @@ test("ASIN Research seeds per Book and only applies targets to the draft", () =>
   messageHandler({ data: { version: 1, id: "asin-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
+  assert.doesNotMatch(content.innerHTML, /data-book-keyword-builder-card/, "Overview must not render Keyword Builder");
+  const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
+  contentListeners.click({ target: asinTab });
 
   assert.match(content.innerHTML, /ASIN Research/);
   assert.match(content.innerHTML, /cozy coloring\nadult coloring/);
+  const keywordBuilderPosition = content.innerHTML.indexOf("data-book-keyword-builder-card");
+  const asinResearchPosition = content.innerHTML.indexOf("data-asin-research");
+  assert.ok(keywordBuilderPosition >= 0, "ASIN Research panel must render Keyword Builder");
+  assert.ok(keywordBuilderPosition < asinResearchPosition, "Keyword Builder must render above ASIN Research");
   assert.equal(messages.at(-2).command, "amazon.browser.status");
   assert.equal(messages.at(-1).command, "book.keywords.asin-crawl.get");
 
@@ -1676,6 +1692,7 @@ test("ASIN Research seeds per Book and only applies targets to the draft", () =>
   const use = { dataset: { action: "use-amazon-asins", bookId: "Book 001" }, closest: () => use };
   contentListeners.click({ target: use });
   assert.equal(messages.length, messageCountBeforeUse, "Use in Ads ASIN must not save the Book");
+  assert.match(content.innerHTML, /data-action="book-keyword-ads-asin"[^>]*value="B000000001"/, "Use in Ads ASIN must update the visible Keyword Builder draft");
 
   const build = { dataset: { action: "build-book-keywords", bookId: "Book 001" }, closest: () => build };
   contentListeners.click({ target: build });
@@ -1696,6 +1713,8 @@ test("Keyword Builder submits normalized phrases without redrawing Book detail",
   messageHandler({ data: { version: 1, id: "keyword-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
+  const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
+  contentListeners.click({ target: asinTab });
   assert.match(content.innerHTML, /Keyword Builder/);
   assert.match(content.innerHTML, /Book Keywords/);
   assert.match(content.innerHTML, /rows="5" data-action="book-keyword-source"/);
@@ -1732,6 +1751,8 @@ test("Keyword Builder keeps the acknowledged build when a joined refresh returns
   messageHandler({ data: { version: 1, id: "keyword-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
+  const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
+  contentListeners.click({ target: asinTab });
   contentListeners.input({ target: { dataset: { action: "book-keyword-source", bookId: "Book 001" }, value: "coloring books" } });
   const build = { dataset: { action: "build-book-keywords", bookId: "Book 001" }, closest: () => build };
   contentListeners.click({ target: build });
@@ -1758,6 +1779,8 @@ test("Keyword Builder structured validation keeps the draft and does not request
   messageHandler({ data: { version: 1, id: "keyword-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
+  const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
+  contentListeners.click({ target: asinTab });
   contentListeners.input({ target: { dataset: { action: "book-keyword-source", bookId: "Book 001" }, value: "x".repeat(51) } });
   const build = { dataset: { action: "build-book-keywords", bookId: "Book 001" }, closest: () => build };
   contentListeners.click({ target: build });
@@ -1784,6 +1807,8 @@ test("Keyword Builder Copy to Clipboard transfers nine saved tab-separated field
   messageHandler({ data: { version: 1, id: "keyword-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
+  const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
+  contentListeners.click({ target: asinTab });
   assert.match(content.innerHTML, /Copy to Clipboard/);
   assert.match(content.innerHTML, /7 keyword fields are full\. 2 remaining words were not included\./);
   const copy = { dataset: { action: "copy-book-keywords", bookId: "Book 001" }, closest: () => copy };

@@ -1226,6 +1226,11 @@
     </section>`;
   };
 
+  const renderAsinResearchWorkspace = (book, summary) => `<div class="asin-research-workspace">
+    ${renderBookKeywordBuilder(book, summary)}
+    ${renderAsinResearch(book, summary)}
+  </div>`;
+
   const renderBrandTemplateCopyCard = (book, summary) => {
     const readiness = brandTemplateCopyReadiness(book, summary);
     const assigned = assignedBrandName(summary) || "Unassigned";
@@ -1256,7 +1261,7 @@
       ? `<section class="catalog-warning" role="status"><strong>Frame mode updated</strong><p>${migratedCount} Interior page${migratedCount === 1 ? "" : "s"} previously using Auto now use No Frame. Review Interior artwork before reprocessing.</p><button type="button" class="button-secondary" data-action="book-tab" data-book-tab="artwork">Review Interior artwork</button></section>`
       : "";
     const body = state.selectedBookTab === "asin"
-      ? renderAsinResearch(book, summary)
+      ? renderAsinResearchWorkspace(book, summary)
       : state.selectedBookTab === "production"
       ? renderProductionWorkspace(book, summary)
       : state.selectedBookTab === "settings"
@@ -1265,7 +1270,7 @@
         ? renderFolderAssetWorkspace(book, summary)
         : state.selectedBookTab === "pages"
           ? renderProcessedInteriorPages(summary)
-        : `<section class="book-overview">${migrationWarning}<div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Interior preflight</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div>${renderBookInformation(book, summary)}${renderBookBrandAssignment(book, summary)}${renderBookKeywordBuilder(book, summary)}${renderBrandTemplateCopyCard(book, summary)}<p class="panel-note">Review the summary, then configure Brand background and Intro pages in Interior settings.</p></section>`;
+        : `<section class="book-overview">${migrationWarning}<div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Interior preflight</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div>${renderBookInformation(book, summary)}${renderBookBrandAssignment(book, summary)}${renderBrandTemplateCopyCard(book, summary)}<p class="panel-note">Review the summary, then configure Brand background and Intro pages in Interior settings.</p></section>`;
     return `<div class="book-heading"><div><h2>${escapeHtml(bookDisplayTitle(book, summary))}</h2><p>Folder: ${escapeHtml(valueFor(book, "name", bookId(book)))}</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}" aria-label="Process Interior. ${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs" role="tablist" aria-label="Book detail sections">${tabButton("overview", "Overview")}${tabButton("asin", "ASIN Research")}${tabButton("production", "Production")}${tabButton("settings", "Interior settings")}${tabButton("artwork", "Interior artwork")}${tabButton("pages", "Interior pages")}</nav><div id="book-panel-${state.selectedBookTab}" class="tab-body ${state.selectedBookTab === "asin" ? "tab-body-asin" : state.selectedBookTab === "artwork" ? "tab-body-artwork" : state.selectedBookTab === "pages" ? "tab-body-processed-pages" : ""}" role="tabpanel" aria-labelledby="book-tab-${state.selectedBookTab}" tabindex="0">${body}</div>`;
   };
 
@@ -1441,7 +1446,7 @@
     const book = selectedBook();
     const summary = book ? summaryFor(book) : null;
     const card = document.querySelector("[data-book-keyword-builder-card]");
-    if (!book || !summary || !card || state.selectedBookTab !== "overview") return;
+    if (!book || !summary || !card || state.selectedBookTab !== "asin") return;
     const drawerBody = document.querySelector(".book-drawer-body");
     const scrollTop = drawerBody?.scrollTop ?? state.bookDrawerScrollTop;
     const active = card.contains(document.activeElement) ? document.activeElement : null;
@@ -2195,6 +2200,7 @@
       draft.adsAsin = value;
       setAsinFeedback(id, "Ads ASIN draft updated. Use Build & Save when ready.");
       patchAsinResearch(id);
+      refreshBookKeywordBuilderCard();
       const unsaved = document.querySelector("[data-book-interior-unsaved]");
       if (unsaved) unsaved.hidden = !(hasInteriorDraft(bookId(book)) || hasMetadataDraft(book, summary) || hasKeywordBuilderDraft(book, summary));
     }

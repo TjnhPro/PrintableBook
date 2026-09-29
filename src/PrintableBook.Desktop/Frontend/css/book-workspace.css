@@ -259,6 +259,7 @@ button.process-queue-card-main:hover { background:var(--pb-surface-muted); }
 @keyframes update-dialog-enter { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
 @keyframes update-progress-indeterminate { from { transform:translateX(-120%); } to { transform:translateX(330%); } }
 @media (prefers-reduced-motion:reduce) { .update-dialog,.update-progress-indeterminate > span { animation:none; } }
+.asin-research-workspace { display:grid; gap:20px; min-width:0; }
 .asin-research { display:grid; gap:14px; min-width:0; padding:16px; border:1px solid var(--pb-border); border-radius:10px; background:var(--pb-surface-muted); }
 .asin-research-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; min-width:0; }
 .asin-research-heading h3 { color:var(--pb-ink); font-size:15px; font-weight:700; }

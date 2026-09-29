@@ -40,7 +40,7 @@ Mỗi thư mục trực tiếp trong `sources/` là một Book. Gói Book mới 
 
 Để dùng workflow Production, mở tab **Production** trong Book detail, upload ba PNG canonical, build Cover và Final Interior theo hướng dẫn trong [User Guide](docs/user-guide.md#8-production-assets).
 
-Trong **Book Detail → Keyword Builder → ASIN Research**, app có thể mở một CloakBrowser profile riêng và tìm tối đa một Amazon ASIN cho mỗi Search Keyword. Lần mở đầu tiên tải Chromium vài trăm MB vào `.cloakbrowser/cache`; các lần sau reuse cả binary và profile. Kết quả chỉ cập nhật Ads ASIN draft khi bấm **Use in Ads ASIN** và vẫn cần **Build & Save** để lưu Book.
+Trong **Book Detail → ASIN Research**, Keyword Builder nằm phía trên công cụ ASIN Research. App có thể mở một CloakBrowser profile riêng và tìm tối đa một Amazon ASIN cho mỗi Search Keyword. Lần mở đầu tiên tải Chromium vài trăm MB vào `.cloakbrowser/cache`; các lần sau reuse cả binary và profile. Kết quả chỉ cập nhật Ads ASIN draft khi bấm **Use in Ads ASIN** và vẫn cần **Build & Save** để lưu Book.
 
 ## Workflow
 
