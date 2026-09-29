@@ -9,7 +9,9 @@ public sealed record AmazonAsinCrawlSessionSnapshot(
     bool IsActive,
     bool IsCancelling,
     AmazonAsinCrawlView? View,
-    string? ErrorCode = null);
+    string? ErrorCode = null,
+    string? SourceFingerprint = null,
+    string? ReceiptDigest = null);
 
 public interface IAmazonAsinCrawlSessionService
 {

@@ -697,6 +697,45 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Keyword_preview_commands_echo_book_revision_and_save_only_the_receipt()
+    {
+        var service = new StubBookKeywordPreviewService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(manager),
+            backgroundTaskManager: manager,
+            bookKeywordPreviewService: service);
+
+        var shuffled = await router.HandleAsync("""{"version":1,"id":"shuffle","command":"book.keywords.shuffle","payload":{"bookId":"Book One","clientRevision":4,"bookKeywords":["cute cats"],"adsAsin":"B012345678"}}""");
+        var saved = await router.HandleAsync("""{"version":1,"id":"save","command":"book.keywords.save","payload":{"bookId":"Book One","clientRevision":5,"receipt":"signed-receipt"}}""");
+
+        Assert.True(shuffled.Ok);
+        Assert.Equal("book.keywords.preview", shuffled.Command);
+        Assert.Equal(["cute cats"], service.BookKeywords);
+        Assert.True(saved.Ok);
+        Assert.Equal("signed-receipt", service.SavedReceipt);
+        var json = System.Text.Json.JsonSerializer.Serialize(shuffled.Payload, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.Contains("\"bookId\":\"Book One\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"clientRevision\":4", json, StringComparison.Ordinal);
+        Assert.Contains("\"receipt\":\"signed-receipt\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Keyword_preview_returns_structured_safe_errors()
+    {
+        var service = new StubBookKeywordPreviewService { Error = new KeywordPreviewError("keyword_preview_stale", "Shuffle again.", "preview", "shuffle") };
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            bookKeywordPreviewService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"save","command":"book.keywords.save","payload":{"bookId":"Book One","receipt":"expired"}}""");
+
+        Assert.Equal("keyword_preview_stale", response.Error);
+        var json = System.Text.Json.JsonSerializer.Serialize(response.Payload, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.Contains("\"retryAction\":\"shuffle\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Catalog_metadata_commands_route_authorized_entities_and_refresh()
     {
         var service = new StubBookCatalogMetadataService();
@@ -1596,6 +1635,58 @@ public sealed class BridgeMessageContractTests
         {
             BrandAuthor = author;
             return ValueTask.CompletedTask;
+        }
+
+        private sealed class NoOpKeywordShuffler : IKeywordOutputShuffler
+        {
+            public void Shuffle(IList<string> words) { }
+        }
+    }
+
+    private sealed class StubBookKeywordPreviewService : IBookKeywordPreviewService
+    {
+        private readonly BookKeywordBuilderState preview = new BookKeywordBuilder(new NoOpKeywordShuffler()).Build(
+            ["cute cats"], "B012345678", "build-1", DateTimeOffset.UnixEpoch);
+
+        public IReadOnlyList<string>? BookKeywords { get; private set; }
+        public string? SavedReceipt { get; private set; }
+        public KeywordPreviewError? Error { get; init; }
+
+        public ValueTask<KeywordPreviewResult> ShuffleAsync(DiscoveredBook book, IReadOnlyList<string> bookKeywords, string? adsAsin, CancellationToken cancellationToken = default)
+        {
+            ThrowIfNeeded();
+            BookKeywords = bookKeywords;
+            return ValueTask.FromResult(new KeywordPreviewResult(preview, "signed-receipt", "digest"));
+        }
+
+        public ValueTask<KeywordPreviewResult> OpenSavedAsync(DiscoveredBook book, string buildId, CancellationToken cancellationToken = default)
+        {
+            ThrowIfNeeded();
+            return ValueTask.FromResult(new KeywordPreviewResult(preview, "signed-receipt", "digest"));
+        }
+
+        public ValueTask<KeywordPreviewResult> UpdateAdsAsinAsync(DiscoveredBook book, string baseReceipt, string? adsAsin, CancellationToken cancellationToken = default)
+        {
+            ThrowIfNeeded();
+            return ValueTask.FromResult(new KeywordPreviewResult(preview, "signed-receipt", "digest"));
+        }
+
+        public ValueTask<KeywordPreviewSaveResult> SaveAsync(DiscoveredBook book, string receipt, CancellationToken cancellationToken = default)
+        {
+            ThrowIfNeeded();
+            SavedReceipt = receipt;
+            return ValueTask.FromResult(new KeywordPreviewSaveResult(preview, "saved"));
+        }
+
+        public ValueTask<KeywordCrawlSource> ResolveCrawlSourceAsync(DiscoveredBook book, string? previewReceipt, string? savedBuildId, CancellationToken cancellationToken = default)
+        {
+            ThrowIfNeeded();
+            return ValueTask.FromResult(new KeywordCrawlSource(["cute cats"], "source", "digest"));
+        }
+
+        private void ThrowIfNeeded()
+        {
+            if (Error is not null) throw new KeywordPreviewException(Error);
         }
 
         private sealed class NoOpKeywordShuffler : IKeywordOutputShuffler
