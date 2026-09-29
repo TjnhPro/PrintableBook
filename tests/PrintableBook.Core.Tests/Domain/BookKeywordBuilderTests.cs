@@ -17,9 +17,9 @@ public sealed class BookKeywordBuilderTests
         Assert.Equal(["coloring books for adults", "adult Coloring book", "coloring book"], result.SourceKeywords);
         Assert.Equal("book adult adults for books coloring", result.Keyword1);
         Assert.Null(result.Keyword2);
-        Assert.Equal("coloring books for adults, adult Coloring book, coloring book", result.AdsKeyword);
-        Assert.Equal("B0123\nB0456", result.AdsAsin);
-        Assert.Equal(1, shuffler.Calls);
+        Assert.Equal("coloring book, adult Coloring book, coloring books for adults", result.AdsKeyword);
+        Assert.Equal("B0456,B0123", result.AdsAsin);
+        Assert.Equal(3, shuffler.Calls);
     }
 
     [Fact]
@@ -91,7 +91,7 @@ public sealed class BookKeywordBuilderTests
         Assert.Equal(["Coloring Books", "cute animals", "cute animals"], result.SourceKeywords);
         Assert.Equal("coloring books for adults cute animals", result.Keyword1);
         Assert.Equal("coloring books, books for adults, cute animals", result.AdsKeyword);
-        Assert.Equal(2, result.AlgorithmVersion);
+        Assert.Equal(3, result.AlgorithmVersion);
     }
 
     [Theory]
@@ -132,12 +132,47 @@ public sealed class BookKeywordBuilderTests
         Assert.Equal("target", result.AdsAsin);
     }
 
-    private sealed class NoOpShuffler : IKeywordWordShuffler
+    [Fact]
+    public void Build_randomizes_every_populated_keyword_slot()
+    {
+        var words = Enumerable.Range(0, 14)
+            .Select(index => ((char)('a' + index)) + new string((char)('a' + index), 23))
+            .ToArray();
+        var shuffler = new ReversingShuffler();
+
+        var result = new BookKeywordBuilder(shuffler).Build(
+            [string.Join(' ', words)],
+            null,
+            "build-1",
+            DateTimeOffset.UnixEpoch);
+
+        Assert.Equal(7, result.Keywords.Count(keyword => keyword is not null));
+        Assert.Equal(7, shuffler.Calls);
+        for (var index = 0; index < 7; index++)
+        {
+            Assert.Equal($"{words[(index * 2) + 1]} {words[index * 2]}", result.Keywords[index]);
+        }
+    }
+
+    [Fact]
+    public void Build_skips_random_for_empty_or_single_value_outputs()
+    {
+        var shuffler = new ReversingShuffler();
+
+        var result = new BookKeywordBuilder(shuffler).Build([], " ONLY-ASIN ", "build-1", DateTimeOffset.UnixEpoch);
+
+        Assert.All(result.Keywords, Assert.Null);
+        Assert.Null(result.AdsKeyword);
+        Assert.Equal("ONLY-ASIN", result.AdsAsin);
+        Assert.Equal(0, shuffler.Calls);
+    }
+
+    private sealed class NoOpShuffler : IKeywordOutputShuffler
     {
         public void Shuffle(IList<string> words) { }
     }
 
-    private sealed class ReversingShuffler : IKeywordWordShuffler
+    private sealed class ReversingShuffler : IKeywordOutputShuffler
     {
         public int Calls { get; private set; }
         public void Shuffle(IList<string> words)

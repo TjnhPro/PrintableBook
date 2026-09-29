@@ -1598,7 +1598,7 @@ public sealed class BridgeMessageContractTests
             return ValueTask.CompletedTask;
         }
 
-        private sealed class NoOpKeywordShuffler : IKeywordWordShuffler
+        private sealed class NoOpKeywordShuffler : IKeywordOutputShuffler
         {
             public void Shuffle(IList<string> words) { }
         }

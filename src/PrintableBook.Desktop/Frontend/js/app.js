@@ -1204,7 +1204,7 @@
           <label class="field" for="book-keyword-ads-asin">
             <span>Ads ASIN (product targets)</span>
             <input id="book-keyword-ads-asin" class="control" type="text" data-action="book-keyword-ads-asin" data-book-id="${escapeHtml(id)}" value="${escapeHtml(draft.adsAsin)}" aria-describedby="book-keyword-ads-asin-help" autocomplete="off" spellcheck="false" ${disabled ? "disabled" : ""}>
-            <small id="book-keyword-ads-asin-help">Optional single-line target text, separate from the Book Information ASIN.</small>
+            <small id="book-keyword-ads-asin-help">Optional comma-separated product targets. Empty values are ignored during Build.</small>
           </label>
           ${clearing ? '<p class="catalog-warning" role="status">This will clear all saved generated keyword fields.</p>' : ""}
           <button class="button-primary keyword-builder-build" data-action="build-book-keywords" data-book-id="${escapeHtml(id)}" ${disabled ? "disabled" : ""}>${pending ? "Building & saving…" : clearing ? "Clear & Save" : "Build & Save"}</button>

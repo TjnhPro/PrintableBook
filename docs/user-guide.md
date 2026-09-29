@@ -32,14 +32,14 @@ Card **Keyword Builder** nằm ở đầu tab **ASIN Research**; công cụ ASIN
 
 1. Mở **Settings → Keyword Builder**, nhập **Generic Keywords** dùng chung, mỗi dòng một phrase, rồi Save settings.
 2. Trong Book detail, nhập **Book Keywords** riêng của Book, mỗi dòng một phrase.
-3. Có thể nhập **Ads ASIN (product targets)** trên một dòng. Field này dành cho advertising targets và hoàn toàn tách biệt với ASIN trong Book Information.
+3. Có thể nhập nhiều **Ads ASIN (product targets)** trên một dòng, phân cách bằng dấu phẩy. Field này dành cho advertising targets và hoàn toàn tách biệt với ASIN trong Book Information.
 4. Nhấn **Build & Save**. App normalize khoảng trắng, loại Book phrase trùng Generic phrase không phân biệt hoa/thường, rồi xử lý Generic trước Book theo thứ tự từ trên xuống.
 
 Mỗi `keyword_*` tối đa 50 ký tự và không bao giờ cắt giữa word. App cộng word theo đúng thứ tự input; khi word kế tiếp không vừa field hiện tại, app chuyển sang field kế tiếp. Đây là sequential packing, không tự reorder để tối ưu dung lượng. Nếu một word dài hơn 50 ký tự, Save bị chặn và lỗi chỉ rõ word gây vấn đề. Khi bảy field đã đầy, app vẫn Save phần đã build, bỏ các word còn dư và hiển thị warning. Singular/plural không bị gộp; punctuation vẫn thuộc về word.
 
-Sau khi packing hợp lệ, app shuffle word trong từng field đúng một lần rồi lưu kết quả. Refresh, redraw, mở lại Book hoặc restart app không shuffle lại. Có thể bấm **Build & Save** lần nữa dù input không đổi để chủ động tạo thứ tự mới.
+Sau khi packing hợp lệ, app shuffle word trong từng `keyword_1…keyword_7` có dữ liệu, shuffle các phrase của Ads Keyword và shuffle danh sách Ads ASIN đúng một lần rồi lưu kết quả. Field rỗng hoặc chỉ có một phần tử được bỏ qua. Refresh, redraw, mở lại Book hoặc restart app không shuffle lại. Có thể bấm **Build & Save** lần nữa dù input không đổi để chủ động tạo thứ tự mới.
 
-Ads Keyword giữ tối đa 30 phrase: ưu tiên tối đa 20 Generic và 10 Book; nếu một bên thiếu thì bên còn lại bù phần trống. Generic luôn đứng trước Book và Ads Keyword không bị shuffle.
+Ads Keyword giữ tối đa 30 phrase: ưu tiên tối đa 20 Generic và 10 Book; nếu một bên thiếu thì bên còn lại bù phần trống. Generic được chọn trước Book để tính quota, sau đó toàn bộ phrase đã chọn được shuffle trước khi lưu.
 
 Generated keywords và Ads Keyword là read-only. **Copy to Clipboard** copy chín giá trị đã Save (`keyword_1…keyword_7`, Ads Keyword, Ads ASIN) trên một dòng, phân cách bằng tab và không kèm label; field rỗng vẫn giữ cột. Nút không copy draft chưa lưu. Nếu cả Generic Keywords và Book Keywords đều trống, action đổi thành **Clear & Save** và cảnh báo rằng generated fields sẽ bị xóa; Ads ASIN vẫn có thể được giữ.
 

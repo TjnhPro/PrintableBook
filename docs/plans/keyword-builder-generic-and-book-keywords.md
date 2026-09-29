@@ -25,12 +25,12 @@ Khi Build:
 
 | Chủ đề | Quyết định |
 |---|---|
-| Sort output | Sort được hiểu là random shuffle như implementation hiện tại, không phải alphabetical sort. |
+| Sort output | Sort được hiểu là random shuffle cho từng keyword slot, Ads Keyword và Ads ASIN, không phải alphabetical sort. |
 | Duplicate phrase | So sánh toàn phrase sau normalize, không phân biệt hoa/thường. |
-| Thứ tự ưu tiên | Generic trước, Book sau; trong mỗi nguồn giữ thứ tự từ trên xuống. |
+| Thứ tự ưu tiên | Generic trước, Book sau khi chọn input/quota; output được shuffle sau khi selection và packing hoàn tất. |
 | Đủ bảy field | Dừng nhận token mới; loại phần còn dư thay vì báo lỗi hoặc tạo field thứ tám. |
 | Dữ liệu bị loại | Hiển thị warning không blocking; Build & Save vẫn thành công. |
-| Ads ASIN | Input một dòng, giữ nguyên nội dung sau outer trim; không split, join hoặc thay separator khi Copy. |
+| Ads ASIN | Input một dòng, tách target bằng dấu phẩy (và chấp nhận newline từ state cũ), trim, shuffle rồi join lại bằng dấu phẩy khi Build & Save. |
 | Generic/Book input | Textarea multiline có viewport cố định 5 dòng, không resize; nội dung dài hơn dùng scroll. |
 | Clipboard | Copy chín giá trị không kèm label, phân cách bằng `\t`. |
 
@@ -196,9 +196,9 @@ Ads Keyword sử dụng phrase, không sử dụng shuffled word output.
 - Quota ưu tiên ban đầu: tối đa 20 Generic và tối đa 10 Book.
 - Nếu Generic thiếu 20, Book được bù phần còn thiếu đến khi tổng đạt 30 hoặc hết Book.
 - Nếu Book thiếu 10, Generic được bù phần còn thiếu đến khi tổng đạt 30 hoặc hết Generic.
-- Trong kết quả cuối, toàn bộ Generic được chọn đứng trước toàn bộ Book được chọn.
-- Trong từng nguồn giữ thứ tự từ trên xuống.
-- Không shuffle Ads Keyword.
+- Chọn toàn bộ Generic quota trước Book quota, trong từng nguồn theo thứ tự từ trên xuống.
+- Sau khi chọn đủ quota, shuffle toàn bộ phrase đúng một lần trước khi persist.
+- Ads Keyword empty hoặc chỉ có một phrase không gọi random.
 
 Ví dụ:
 
@@ -225,7 +225,9 @@ Ads Keyword được build độc lập với giới hạn bảy field. Vì vậ
 
 - Dùng `<input type="text">`, không dùng multiline textarea.
 - Không đặt business `maxlength` trong MVP.
-- Outer trim khi Save; không split, dedupe, join hoặc đổi delimiter.
+- Outer trim, split bằng dấu phẩy/newline, bỏ phần tử rỗng và shuffle đúng một lần khi có từ hai target.
+- Join output đã shuffle bằng dấu phẩy; không dedupe target.
+- Empty hoặc một target không gọi random.
 - Copy đúng giá trị đã Save.
 - Book Information ASIN và Keyword Builder Ads ASIN tiếp tục là hai field khác nhau.
 
@@ -318,7 +320,7 @@ Quy tắc:
 - Không thêm header.
 - Không thêm newline giữa các field.
 - Field rỗng vẫn tạo vị trí tab tương ứng.
-- Ads ASIN đã là một dòng nên copy nguyên giá trị, không xử lý lại.
+- Ads ASIN được copy đúng giá trị canonical đã shuffle và Save.
 - Clipboard success/failure phải có feedback rõ ràng.
 
 ## 11. Bridge và application flow
@@ -374,8 +376,8 @@ Không dùng `keyword_capacity_exceeded` như blocking error nữa. Có thể gi
 - Tạo ordered unique word stream theo Generic trước, Book sau.
 - Đổi capacity behavior từ throw sang truncate có warning.
 - Giữ validation word vượt 50 ký tự.
-- Build Ads Keyword theo quota 20/10 có bù.
-- Shuffle từng packed slot đúng một lần.
+- Build Ads Keyword theo quota 20/10 có bù rồi shuffle phrase đã chọn.
+- Shuffle từng packed slot và danh sách Ads ASIN có dữ liệu đúng một lần.
 
 ### Phase 3 — Persistence và bridge
 

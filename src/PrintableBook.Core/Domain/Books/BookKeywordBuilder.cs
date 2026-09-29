@@ -62,34 +62,34 @@ public sealed class BookKeywordBuilderValidationException(BookKeywordBuilderVali
     public BookKeywordBuilderValidationError Error { get; } = error;
 }
 
-public interface IKeywordWordShuffler
+public interface IKeywordOutputShuffler
 {
-    void Shuffle(IList<string> words);
+    void Shuffle(IList<string> values);
 }
 
-public sealed class RandomKeywordWordShuffler : IKeywordWordShuffler
+public sealed class RandomKeywordOutputShuffler : IKeywordOutputShuffler
 {
-    public void Shuffle(IList<string> words)
+    public void Shuffle(IList<string> values)
     {
-        ArgumentNullException.ThrowIfNull(words);
-        for (var index = words.Count - 1; index > 0; index--)
+        ArgumentNullException.ThrowIfNull(values);
+        for (var index = values.Count - 1; index > 0; index--)
         {
             var swapIndex = RandomNumberGenerator.GetInt32(index + 1);
-            (words[index], words[swapIndex]) = (words[swapIndex], words[index]);
+            (values[index], values[swapIndex]) = (values[swapIndex], values[index]);
         }
     }
 }
 
-public sealed class BookKeywordBuilder(IKeywordWordShuffler? shuffler = null)
+public sealed class BookKeywordBuilder(IKeywordOutputShuffler? shuffler = null)
 {
     public const int MaximumKeywordCharacters = 50;
     public const int MaximumKeywordSlots = 7;
     public const int MaximumAdsKeywordPhrases = 30;
     public const int PreferredGenericAdsKeywordPhrases = 20;
     public const int PreferredBookAdsKeywordPhrases = 10;
-    public const int CurrentAlgorithmVersion = 2;
+    public const int CurrentAlgorithmVersion = 3;
 
-    private readonly IKeywordWordShuffler shuffler = shuffler ?? new RandomKeywordWordShuffler();
+    private readonly IKeywordOutputShuffler shuffler = shuffler ?? new RandomKeywordOutputShuffler();
 
     public BookKeywordBuilderState Build(
         IReadOnlyList<string> sourceKeywords,
@@ -119,7 +119,7 @@ public sealed class BookKeywordBuilder(IKeywordWordShuffler? shuffler = null)
         ValidateWords(uniqueWords);
         var (slots, omittedWordCount) = Pack(uniqueWords);
 
-        foreach (var slot in slots.Where(slot => slot.Count > 1)) shuffler.Shuffle(slot);
+        foreach (var slot in slots) ShuffleIfNeeded(slot);
 
         var values = slots.Select(slot => string.Join(' ', slot)).Cast<string?>().ToList();
         while (values.Count < MaximumKeywordSlots) values.Add(null);
@@ -128,7 +128,7 @@ public sealed class BookKeywordBuilder(IKeywordWordShuffler? shuffler = null)
             normalizedBookSource,
             values[0], values[1], values[2], values[3], values[4], values[5], values[6],
             BuildAdsKeyword(normalizedGeneric, effectiveBook),
-            BookTextPolicy.NormalizeOptionalMultiline(adsAsin),
+            BuildAdsAsin(adsAsin),
             buildId.Trim(),
             builtAtUtc,
             CurrentAlgorithmVersion,
@@ -192,7 +192,7 @@ public sealed class BookKeywordBuilder(IKeywordWordShuffler? shuffler = null)
         return (slots, 0);
     }
 
-    private static string? BuildAdsKeyword(IReadOnlyList<string> genericKeywords, IReadOnlyList<string> bookKeywords)
+    private string? BuildAdsKeyword(IReadOnlyList<string> genericKeywords, IReadOnlyList<string> bookKeywords)
     {
         var genericCount = Math.Min(PreferredGenericAdsKeywordPhrases, genericKeywords.Count);
         var bookCount = Math.Min(PreferredBookAdsKeywordPhrases, bookKeywords.Count);
@@ -203,7 +203,26 @@ public sealed class BookKeywordBuilder(IKeywordWordShuffler? shuffler = null)
         remaining -= additionalGeneric;
         bookCount += Math.Min(remaining, bookKeywords.Count - bookCount);
 
-        var selected = genericKeywords.Take(genericCount).Concat(bookKeywords.Take(bookCount)).ToArray();
-        return selected.Length == 0 ? null : string.Join(", ", selected);
+        var selected = genericKeywords.Take(genericCount).Concat(bookKeywords.Take(bookCount)).ToList();
+        ShuffleIfNeeded(selected);
+        return selected.Count == 0 ? null : string.Join(", ", selected);
+    }
+
+    private string? BuildAdsAsin(string? adsAsin)
+    {
+        var normalized = BookTextPolicy.NormalizeOptionalMultiline(adsAsin);
+        if (normalized is null) return null;
+
+        var targets = normalized
+            .Split([',', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(target => target.Length > 0)
+            .ToList();
+        ShuffleIfNeeded(targets);
+        return targets.Count == 0 ? null : string.Join(',', targets);
+    }
+
+    private void ShuffleIfNeeded(IList<string> values)
+    {
+        if (values.Count > 1) shuffler.Shuffle(values);
     }
 }
