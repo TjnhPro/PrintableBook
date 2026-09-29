@@ -4,6 +4,7 @@ public sealed class UpdaterBackupService(UpdaterPayloadContractValidator payload
 {
     private static readonly string[] ControlledFiles = ["PrintableBook.exe", "PrintableBook.Updater.exe"];
     private const string FrontendDirectory = "Frontend";
+    private const string PlaywrightDirectory = ".playwright";
 
     public void CreateBackup(string appRoot, string backupDirectory)
     {
@@ -42,6 +43,8 @@ public sealed class UpdaterBackupService(UpdaterPayloadContractValidator payload
 
         var frontend = Path.Combine(appRoot, FrontendDirectory);
         if (Directory.Exists(frontend)) Directory.Delete(frontend, recursive: true);
+        var playwright = Path.Combine(appRoot, PlaywrightDirectory);
+        if (Directory.Exists(playwright)) Directory.Delete(playwright, recursive: true);
         CopyControlledPayload(backupDirectory, appRoot);
         payloadValidator.ValidateInstalledPayload(appRoot);
     }
@@ -52,6 +55,7 @@ public sealed class UpdaterBackupService(UpdaterPayloadContractValidator payload
         foreach (var file in ControlledFiles)
             File.Copy(Path.Combine(source, file), Path.Combine(destination, file), overwrite: true);
         CopyDirectory(Path.Combine(source, FrontendDirectory), Path.Combine(destination, FrontendDirectory));
+        CopyDirectory(Path.Combine(source, PlaywrightDirectory), Path.Combine(destination, PlaywrightDirectory));
     }
 
     internal static void CopyDirectory(string source, string destination)

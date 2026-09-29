@@ -7,6 +7,16 @@ namespace PrintableBook.Desktop.Tests;
 public sealed class AmazonAsinBridgeContractTests
 {
     [Fact]
+    public void Desktop_publish_keeps_the_playwright_driver_outside_the_single_file_bundle()
+    {
+        var project = File.ReadAllText(Path.Combine(RepositoryRoot(), "src", "PrintableBook.Desktop", "PrintableBook.Desktop.csproj"));
+
+        Assert.Contains("ExcludePlaywrightDriverFromSingleFile", project, StringComparison.Ordinal);
+        Assert.Contains("ExcludeFromSingleFile=\"true\"", project, StringComparison.Ordinal);
+        Assert.Contains(".playwright\\", project, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Browser_status_and_open_use_the_typed_browser_boundary()
     {
         var browser = new StubBrowser();
@@ -79,5 +89,12 @@ public sealed class AmazonAsinBridgeContractTests
         public ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
 
         private static AmazonAsinCrawlSessionSnapshot Snapshot(string bookId) => new(null, bookId, false, false, null);
+    }
+
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PrintableBook.sln"))) directory = directory.Parent;
+        return directory?.FullName ?? throw new InvalidOperationException("Repository root was not found.");
     }
 }

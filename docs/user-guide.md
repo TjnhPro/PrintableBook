@@ -67,6 +67,20 @@ Khi có `Clone book/`, ứng dụng chỉ dùng cấu trúc bên trong Clone đ�
 
 Với Book theo cấu trúc phẳng cũ, tiếp tục đặt `Book interior/`, `Book cover/` và các folder nguồn trực tiếp dưới thư mục Book. Ứng dụng dùng cấu trúc cũ này khi không có `Clone book/`; state của Book phẳng đã tồn tại không tự động chuyển sang đường dẫn Clone. Cover chưa phải điều kiện để chạy **Process Interior**; output full book vẫn dùng luồng Cover validation riêng.
 
+### 3.2 ASIN Research
+
+ASIN Research nằm bên dưới Keyword Builder và chỉ tạo draft quảng cáo; nó không tự lưu Book.
+
+1. Search Keywords được seed một lần từ Book Keywords. Sau đó hai ô độc lập với nhau.
+2. Chỉnh mỗi phrase trên một dòng, tối đa 30 dòng và 200 ký tự mỗi dòng.
+3. Bấm **Open Browser** nếu cần đăng nhập hoặc xử lý thông báo Amazon. Nếu chưa mở, **Crawl ASINs** sẽ tự mở browser.
+4. Lần chạy đầu tải CloakBrowser Chromium khoảng 200 MB. Profile và binary cache nằm tại `.cloakbrowser/` cạnh app để các lần sau không tải lại.
+5. Review từng row. App chỉ lấy title chứa `coloring book` hoặc `coloring books`, tối đa một ASIN unique cho mỗi phrase.
+6. Bấm **Copy ASINs** để copy, hoặc **Use in Ads ASIN** để thay Ads ASIN draft. Nếu draft đã có giá trị, app hỏi xác nhận trước khi thay.
+7. Bấm **Build & Save** trong Keyword Builder để lưu Ads ASIN cùng output keyword hiện tại.
+
+Nếu Amazon báo CAPTCHA, robot check hoặc rate limit, crawl dừng và giữ các ASIN đã tìm được. Xử lý trong cửa sổ browser rồi chạy lại. Đóng Book Detail không hủy crawl; mở lại cùng Book sẽ nối lại trạng thái trong app session. App restart sẽ xóa draft/result research nhưng không xóa browser profile.
+
 ## 4. Refresh Library
 
 Trong **Books**, nhấn **Refresh** để quét local folders và dựng snapshot mới. Chỉ dữ liệu snapshot mới được dùng cho các mutation Book/Brand. Không còn Processing Brand toàn cục: mọi Book action cần Brand luôn lấy Brand từ assignment đã lưu của chính Book.

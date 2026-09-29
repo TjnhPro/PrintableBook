@@ -27,4 +27,14 @@
     <Resource Include="Assets\app-icon.ico" />
   </ItemGroup>
 
+  <!-- Playwright resolves its Node driver from .playwright at runtime. Keep that
+       payload beside the single-file executable instead of bundling it into it. -->
+  <Target Name="ExcludePlaywrightDriverFromSingleFile" BeforeTargets="_ComputeFilesToBundle">
+    <ItemGroup>
+      <ResolvedFileToPublish Update="@(ResolvedFileToPublish)"
+                             ExcludeFromSingleFile="true"
+                             Condition="$([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').StartsWith('.playwright\'))" />
+    </ItemGroup>
+  </Target>
+
 </Project>

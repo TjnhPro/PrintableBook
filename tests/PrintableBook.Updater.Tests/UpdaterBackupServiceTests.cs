@@ -14,11 +14,14 @@ public sealed class UpdaterBackupServiceTests : IDisposable
         UpdaterPayloadContractValidatorTests.CreateValidPayload(app);
         File.WriteAllText(Path.Combine(app, "PrintableBook.exe"), "old-main");
         File.WriteAllText(Path.Combine(app, "settings.json"), "user-data");
+        Directory.CreateDirectory(Path.Combine(app, ".cloakbrowser", "cache"));
+        File.WriteAllText(Path.Combine(app, ".cloakbrowser", "cache", "browser.bin"), "runtime-data");
         var service = new UpdaterBackupService(new UpdaterPayloadContractValidator());
 
         service.CreateBackup(app, backup);
         Assert.Equal("old-main", File.ReadAllText(Path.Combine(backup, "PrintableBook.exe")));
         Assert.False(File.Exists(Path.Combine(backup, "settings.json")));
+        Assert.False(Directory.Exists(Path.Combine(backup, ".cloakbrowser")));
         Assert.Empty(Directory.EnumerateDirectories(Path.GetDirectoryName(backup)!, "*.building-*"));
 
         File.WriteAllText(Path.Combine(app, "PrintableBook.exe"), "broken");
@@ -26,6 +29,7 @@ public sealed class UpdaterBackupServiceTests : IDisposable
         service.RestoreBackup(backup, app);
         Assert.Equal("old-main", File.ReadAllText(Path.Combine(app, "PrintableBook.exe")));
         Assert.Equal("user-data", File.ReadAllText(Path.Combine(app, "settings.json")));
+        Assert.Equal("runtime-data", File.ReadAllText(Path.Combine(app, ".cloakbrowser", "cache", "browser.bin")));
     }
 
     [Fact]
