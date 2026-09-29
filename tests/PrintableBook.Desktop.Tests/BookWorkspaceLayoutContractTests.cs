@@ -348,6 +348,8 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.DoesNotContain("!validInput || active || browserBusy || needsAttention", script, StringComparison.Ordinal);
         Assert.DoesNotContain("section.outerHTML = renderAsinResearch", script, StringComparison.Ordinal);
         Assert.Contains("syncContent(\".asin-result-list\")", script, StringComparison.Ordinal);
+        Assert.Contains(".asin-research { display:grid; gap:14px; min-width:0; padding:16px; border:1px solid var(--pb-border); border-radius:10px; background:var(--pb-surface); }", layout, StringComparison.Ordinal);
+        Assert.Contains(".asin-research-inputs { background:var(--pb-surface); }", layout, StringComparison.Ordinal);
         Assert.Contains(".asin-result-list { display:grid; width:100%; height:15rem; min-height:15rem; max-height:15rem; overflow:auto;", layout, StringComparison.Ordinal);
         Assert.Contains("@media (max-width:760px)", layout, StringComparison.Ordinal);
         Assert.Contains("prefers-reduced-motion:reduce", layout, StringComparison.Ordinal);
