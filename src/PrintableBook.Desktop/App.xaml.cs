@@ -11,6 +11,7 @@ using PrintableBook.Desktop.BackgroundTasks;
 using PrintableBook.Desktop.Updates;
 using System.Windows;
 using System.Windows.Threading;
+using PrintableBook.Core.Application.AmazonCrawl;
 
 namespace PrintableBook.Desktop;
 
@@ -70,6 +71,18 @@ public partial class App : Application
                 .AsTask()
                 .GetAwaiter()
                 .GetResult();
+
+            serviceProvider?
+                .GetService<IAmazonAsinCrawlSessionService>()?
+                .StopAndWaitAsync(ProcessWindowShutdownCoordinator.StopTimeout)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+            serviceProvider?
+                .GetService<IAmazonBrowserLifetime>()?
+                .ShutdownAsync()
+                .AsTask()
+                .Wait(ProcessWindowShutdownCoordinator.StopTimeout);
         }
         catch
         {

@@ -1,0 +1,83 @@
+using PrintableBook.Core.Application.AmazonCrawl;
+using PrintableBook.Core.Application.Desktop;
+using PrintableBook.Desktop.Bridge;
+
+namespace PrintableBook.Desktop.Tests;
+
+public sealed class AmazonAsinBridgeContractTests
+{
+    [Fact]
+    public async Task Browser_status_and_open_use_the_typed_browser_boundary()
+    {
+        var browser = new StubBrowser();
+        var router = new WebViewBridgeRouter(amazonSearchPageClient: browser);
+
+        var status = await router.HandleAsync("""{"version":1,"id":"status","command":"amazon.browser.status"}""");
+        var open = await router.HandleAsync("""{"version":1,"id":"open","command":"amazon.browser.open"}""");
+
+        Assert.True(status.Ok);
+        Assert.True(open.Ok);
+        Assert.Equal("amazon.browser.status", open.Command);
+        Assert.Equal(1, browser.OpenCount);
+    }
+
+    [Fact]
+    public async Task Crawl_start_validates_payload_and_forwards_only_book_and_keywords()
+    {
+        var session = new StubSession();
+        var router = new WebViewBridgeRouter(amazonAsinCrawlSessionService: session);
+
+        var invalid = await router.HandleAsync("""{"version":1,"id":"bad","command":"book.keywords.asin-crawl.start","payload":{"bookId":"book"}}""");
+        var valid = await router.HandleAsync("""{"version":1,"id":"ok","command":"book.keywords.asin-crawl.start","payload":{"bookId":"book","keywords":["cozy cats","adult coloring"]}}""");
+
+        Assert.Equal("invalid_amazon_asin_crawl", invalid.Error);
+        Assert.True(valid.Ok);
+        Assert.Equal("book", session.BookId);
+        Assert.Equal(["cozy cats", "adult coloring"], session.Keywords);
+    }
+
+    [Fact]
+    public async Task Crawl_validation_returns_stable_safe_error_code()
+    {
+        var router = new WebViewBridgeRouter(amazonAsinCrawlSessionService: new StubSession { ValidationError = true });
+
+        var response = await router.HandleAsync("""{"version":1,"id":"empty","command":"book.keywords.asin-crawl.start","payload":{"bookId":"book","keywords":[]}}""");
+
+        Assert.False(response.Ok);
+        Assert.Equal("amazon_keywords_required", response.Error);
+    }
+
+    private sealed class StubBrowser : IAmazonSearchPageClient
+    {
+        public int OpenCount { get; private set; }
+        public ValueTask<CloakBrowserStatus> GetStatusAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(new CloakBrowserStatus(CloakBrowserState.Closed));
+        public ValueTask<CloakBrowserStatus> OpenAsync(CancellationToken cancellationToken = default)
+        {
+            OpenCount++;
+            return ValueTask.FromResult(new CloakBrowserStatus(CloakBrowserState.Ready));
+        }
+        public ValueTask<BrowserFetchResponse> FetchAsync(Uri uri, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class StubSession : IAmazonAsinCrawlSessionService
+    {
+        public bool ValidationError { get; init; }
+        public string? BookId { get; private set; }
+        public IReadOnlyList<string>? Keywords { get; private set; }
+
+        public ValueTask<AmazonAsinCrawlSessionSnapshot> GetAsync(string bookId, CancellationToken cancellationToken = default) => ValueTask.FromResult(Snapshot(bookId));
+
+        public ValueTask<AmazonAsinCrawlSessionSnapshot> StartAsync(string bookId, IReadOnlyList<string> keywords, CancellationToken cancellationToken = default)
+        {
+            if (ValidationError) throw new AmazonCrawlValidationException("amazon_keywords_required", "Required");
+            BookId = bookId;
+            Keywords = keywords;
+            return ValueTask.FromResult(Snapshot(bookId));
+        }
+
+        public ValueTask<AmazonAsinCrawlSessionSnapshot> CancelAsync(string bookId, CancellationToken cancellationToken = default) => ValueTask.FromResult(Snapshot(bookId));
+        public ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
+
+        private static AmazonAsinCrawlSessionSnapshot Snapshot(string bookId) => new(null, bookId, false, false, null);
+    }
+}

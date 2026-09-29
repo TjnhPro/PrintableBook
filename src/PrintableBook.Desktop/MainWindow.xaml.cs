@@ -14,6 +14,7 @@ using PrintableBook.Core.Application.Brands;
 using System.Windows;
 using PrintableBook.Desktop.Updates;
 using PrintableBook.Core.Application.Production;
+using PrintableBook.Core.Application.AmazonCrawl;
 
 namespace PrintableBook.Desktop;
 
@@ -34,14 +35,14 @@ public partial class MainWindow : Window
     private bool closeFlowRunning;
     private bool systemShutdown;
 
-    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IBrandValidationService brandValidationService, IBrandTemplateCopyService brandTemplateCopyService, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookInteriorSettingsService bookInteriorSettingsService, IBookCatalogMetadataService bookCatalogMetadataService, ILocalOutputActionService outputActionService, IProductionFilePicker productionFilePicker, IProductionAssetImportService productionAssetImportService, IOperationDiagnostics diagnostics, UiDiagnosticsService uiDiagnosticsService, IBackgroundTaskManager backgroundTaskManager, DispatcherStallMonitor dispatcherStallMonitor, ProcessWindowShutdownCoordinator shutdownCoordinator, UpdateShutdownState updateShutdownState, IDesktopUpdateCoordinator updateCoordinator)
+    public MainWindow(IPrintableBookApplication application, ApplicationLoadCoordinator applicationLoadCoordinator, IGlobalSettingsStore settingsStore, IProcessSessionService processSessionService, IBrandValidationService brandValidationService, IBrandTemplateCopyService brandTemplateCopyService, IBookCoverSelectionService coverSelectionService, IInteriorFrameModeService interiorFrameModeService, IBookInteriorSettingsService bookInteriorSettingsService, IBookCatalogMetadataService bookCatalogMetadataService, ILocalOutputActionService outputActionService, IProductionFilePicker productionFilePicker, IProductionAssetImportService productionAssetImportService, IOperationDiagnostics diagnostics, UiDiagnosticsService uiDiagnosticsService, IBackgroundTaskManager backgroundTaskManager, DispatcherStallMonitor dispatcherStallMonitor, ProcessWindowShutdownCoordinator shutdownCoordinator, UpdateShutdownState updateShutdownState, IDesktopUpdateCoordinator updateCoordinator, IAmazonAsinCrawlSessionService amazonAsinCrawlSessionService, IAmazonSearchPageClient amazonSearchPageClient)
     {
         Application = application;
         this.diagnostics = diagnostics;
         this.shutdownCoordinator = shutdownCoordinator;
         this.dispatcherStallMonitor = dispatcherStallMonitor;
         this.updateShutdownState = updateShutdownState;
-        bridgeRouter = new WebViewBridgeRouter(applicationLoadCoordinator, settingsStore, processSessionService, coverSelectionService: coverSelectionService, interiorFrameModeService: interiorFrameModeService, bookInteriorSettingsService: bookInteriorSettingsService, outputActionService: outputActionService, diagnostics: diagnostics, uiDiagnosticsService: uiDiagnosticsService, backgroundTaskManager: backgroundTaskManager, brandValidationService: brandValidationService, brandTemplateCopyService: brandTemplateCopyService, updateCoordinator: updateCoordinator, productionFilePicker: productionFilePicker, productionAssetImportService: productionAssetImportService, bookCatalogMetadataService: bookCatalogMetadataService);
+        bridgeRouter = new WebViewBridgeRouter(applicationLoadCoordinator, settingsStore, processSessionService, coverSelectionService: coverSelectionService, interiorFrameModeService: interiorFrameModeService, bookInteriorSettingsService: bookInteriorSettingsService, outputActionService: outputActionService, diagnostics: diagnostics, uiDiagnosticsService: uiDiagnosticsService, backgroundTaskManager: backgroundTaskManager, brandValidationService: brandValidationService, brandTemplateCopyService: brandTemplateCopyService, updateCoordinator: updateCoordinator, productionFilePicker: productionFilePicker, productionAssetImportService: productionAssetImportService, bookCatalogMetadataService: bookCatalogMetadataService, amazonAsinCrawlSessionService: amazonAsinCrawlSessionService, amazonSearchPageClient: amazonSearchPageClient);
         InitializeComponent();
         dispatcherStallMonitor.Start();
         Closing += OnClosing;

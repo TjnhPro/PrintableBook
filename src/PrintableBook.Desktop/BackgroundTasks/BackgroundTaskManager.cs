@@ -398,7 +398,7 @@ public sealed class BackgroundTaskManager(
         }
     }
 
-    private bool IsLatestRetainedKindLocked(BackgroundTaskEntry candidate) => candidate.Kind is (BackgroundTaskKind.LibraryRefresh or BackgroundTaskKind.ProcessingSession or BackgroundTaskKind.CacheCleanup or BackgroundTaskKind.ProductionAction) &&
+    private bool IsLatestRetainedKindLocked(BackgroundTaskEntry candidate) => candidate.Kind is (BackgroundTaskKind.LibraryRefresh or BackgroundTaskKind.ProcessingSession or BackgroundTaskKind.CacheCleanup or BackgroundTaskKind.ProductionAction or BackgroundTaskKind.AmazonAsinCrawl) &&
         !registry.Values.Any(entry => entry.Kind == candidate.Kind && IsTerminal(entry.State) && entry.Sequence > candidate.Sequence);
 
     private static bool IsTerminal(BackgroundTaskState state) => state is BackgroundTaskState.Completed or BackgroundTaskState.Failed or BackgroundTaskState.Cancelled;

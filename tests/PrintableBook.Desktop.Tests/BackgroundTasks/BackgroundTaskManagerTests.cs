@@ -11,12 +11,13 @@ public sealed class BackgroundTaskManagerTests
     public void Policies_define_library_processing_and_cleanup_with_locked_conflicts()
     {
         Assert.Equal(
-            [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup, BackgroundTaskKind.ProductionAction],
+            [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup, BackgroundTaskKind.ProductionAction, BackgroundTaskKind.AmazonAsinCrawl],
             BackgroundTaskPolicies.All.Keys.Order());
         AssertPolicy(BackgroundTaskKind.LibraryRefresh, BackgroundTaskLaneKind.Library, BackgroundTaskDuplicatePolicy.JoinByKind, [BackgroundTaskKind.CacheCleanup]);
         AssertPolicy(BackgroundTaskKind.ProcessingSession, BackgroundTaskLaneKind.Processing, BackgroundTaskDuplicatePolicy.ReturnExisting, [BackgroundTaskKind.CacheCleanup, BackgroundTaskKind.ProductionAction]);
         AssertPolicy(BackgroundTaskKind.CacheCleanup, BackgroundTaskLaneKind.Cleanup, BackgroundTaskDuplicatePolicy.ReturnExisting, [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.ProductionAction]);
         AssertPolicy(BackgroundTaskKind.ProductionAction, BackgroundTaskLaneKind.Production, BackgroundTaskDuplicatePolicy.ReturnExistingByKey, [BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup]);
+        AssertPolicy(BackgroundTaskKind.AmazonAsinCrawl, BackgroundTaskLaneKind.Amazon, BackgroundTaskDuplicatePolicy.ReturnExistingByKey, []);
     }
 
     [Fact]

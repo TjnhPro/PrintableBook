@@ -6,7 +6,7 @@ using PrintableBook.Core.Application.Diagnostics;
 
 namespace PrintableBook.Infrastructure.CloakBrowser;
 
-public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAmazonBrowserLifetime, IAsyncDisposable
+public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAmazonBrowserLifetime, IAsyncDisposable, IDisposable
 {
     private const string CartUrl = "https://www.amazon.com/gp/cart/view.html?ref_=nav_cart";
     private const string FetchScript = """
@@ -233,6 +233,15 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
     {
         if (disposed) return;
         await ShutdownAsync();
+        disposed = true;
+        lifecycle.Dispose();
+    }
+
+    public void Dispose()
+    {
+        if (disposed) return;
+        try { ShutdownAsync().AsTask().Wait(TimeSpan.FromSeconds(5)); }
+        catch (Exception) { }
         disposed = true;
         lifecycle.Dispose();
     }
