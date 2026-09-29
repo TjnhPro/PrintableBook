@@ -1168,7 +1168,6 @@
     const refreshNeeded = state.keywordBuilderRefreshNeeded && state.keywordBuilderRefreshBookId === id;
     const feedbackVisible = state.catalogMutationTarget === id && state.catalogMutationCommand === "book.keywords.save";
     const genericKeywordCount = genericKeywords().length;
-    const omittedWordCount = Number(valueFor(saved, "omittedWordCount", 0)) || 0;
     const clearing = normalizedDraft.keywords.length === 0 && genericKeywordCount === 0 && Boolean(saved);
     const disabled = catalogMutationBusy() || processIsActive();
     const stateLabel = pending ? "Building & saving…" : validation ? "Needs attention" : refreshing ? "Saved · Refreshing…" : refreshNeeded ? "Saved · Refresh needed" : dirty ? "Unsaved inputs" : saved ? "Saved" : "Not built";
@@ -1181,9 +1180,6 @@
       return `<label class="keyword-builder-output-field" for="book-${name}-output"><span>Keyword ${index + 1}</span><input id="book-${name}-output" class="control" readonly value="${escapeHtml(value)}" aria-describedby="book-${name}-count"><small id="book-${name}-count">${counter}</small></label>`;
     }).join("");
     const errorMessage = validation?.message ?? "";
-    const overflowWarning = omittedWordCount > 0
-      ? `<p class="catalog-warning" role="status">7 keyword fields are full. ${omittedWordCount} remaining word${omittedWordCount === 1 ? " was" : "s were"} not included.</p>`
-      : "";
     return `<section class="catalog-card keyword-builder-card" data-book-keyword-builder-card aria-busy="${pending}">
       <div class="catalog-card-heading">
         <div><h3>Keyword Builder</h3><p>Combine shared Generic Keywords with phrases for this Book.</p></div>
@@ -1195,7 +1191,7 @@
             <div><h4 id="keyword-builder-inputs-title">Build inputs</h4><p>Generic Keywords are applied first; Book Keywords fill the remaining space.</p></div>
             <span class="keyword-builder-source-badge">${genericKeywordCount} Generic</span>
           </div>
-          <label class="field" for="book-keyword-source">
+          <label class="field keyword-builder-source-field" for="book-keyword-source">
             <span>Book Keywords</span>
             <textarea id="book-keyword-source" class="control keyword-list-input ${validation ? "control-invalid" : ""}" rows="5" data-action="book-keyword-source" data-book-id="${escapeHtml(id)}" aria-describedby="book-keyword-source-help book-keyword-source-error" aria-invalid="${Boolean(validation)}" autocomplete="off" spellcheck="false" ${disabled ? "disabled" : ""}>${escapeHtml(draft.sourceText)}</textarea>
             <small id="book-keyword-source-help">One phrase per line. Phrases matching Generic Keywords are excluded during Build.</small>
@@ -1207,7 +1203,6 @@
           <div class="keyword-builder-output-heading">
             <div><h4 id="keyword-builder-output-title">Generated output</h4><p>${escapeHtml(outputMessage)}${saved ? ` · ${escapeHtml(dateTime(valueFor(saved, "builtAtUtc", null)))}` : ""}</p></div>
           </div>
-          ${overflowWarning}
           <div class="keyword-builder-output-list">${keywordRows}</div>
           <label class="field" for="book-ads-keyword-output">
             <span>Ads Keyword</span>

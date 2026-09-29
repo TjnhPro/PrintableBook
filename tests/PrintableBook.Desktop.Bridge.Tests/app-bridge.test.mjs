@@ -1817,7 +1817,7 @@ test("Keyword Builder Copy to Clipboard transfers nine saved tab-separated field
   const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
   contentListeners.click({ target: asinTab });
   assert.match(content.innerHTML, /Copy to Clipboard/);
-  assert.match(content.innerHTML, /7 keyword fields are full\. 2 remaining words were not included\./);
+  assert.doesNotMatch(content.innerHTML, /remaining words? (?:was|were) not included\./);
   const copy = { dataset: { action: "copy-book-keywords", bookId: "Book 001" }, closest: () => copy };
 
   contentListeners.click({ target: copy });

@@ -78,7 +78,7 @@ Thành công của MVP là giảm thao tác search/copy thủ công nhưng vẫn
 
 - WPF + WebView2 local UI với JSON bridge v1.
 - Keyword Builder hai pane trong `Frontend/js/app.js`, draft theo `bookId`, Ads ASIN draft và `Build & Save` là điểm persist.
-- Textarea `.keyword-list-input` cố định 5 dòng và responsive breakpoint `1100px`.
+- Textarea Generic Keywords giữ chiều cao 5 dòng; Book Keywords giãn theo chiều cao pane và bố cục chuyển một cột tại breakpoint `1100px`.
 - `BackgroundTaskManager` có lane, duplicate policy, progress, cancellation, typed `Result` và typed `View` nội bộ.
 - Pattern typed session service qua `ProcessSessionService`.
 - `task.get` hiện **chỉ** trả `BackgroundTaskBridgeSnapshot`; không trả typed View/Result.
