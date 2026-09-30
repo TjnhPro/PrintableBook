@@ -1698,6 +1698,8 @@ test("ASIN Research uses the signed Ads Keyword preview and merges completed tar
   messageHandler({ data: { version: 1, id: updateRequest.id, ok: true, command: "book.keywords.preview", payload: { bookId: "Book 001", clientRevision: 1, preview: updatedPreview, receipt: "receipt-2", receiptDigest: "digest-2" } } });
   assert.match(content.innerHTML, /Preview · Not saved/);
   assert.match(content.innerHTML, /data-action="book-keyword-ads-asin"[^>]*value="OLDTARGET,B000000001"/, "Completed crawl must merge into the visible Ads ASIN draft");
+  assert.match(content.innerHTML, /Crawled ASINs added to the preview\. Save when ready\./);
+  assert.doesNotMatch(content.innerHTML, /Previous results — shuffle again before applying\./, "Applied crawl results must remain current after the signed preview digest changes");
   assert.doesNotMatch(content.innerHTML, /ASIN Result|copy-amazon-asins|use-amazon-asins/);
 
   const save = { dataset: { action: "save-book-keywords", bookId: "Book 001" }, closest: () => save };

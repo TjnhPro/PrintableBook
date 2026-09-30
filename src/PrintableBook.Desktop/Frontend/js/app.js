@@ -246,7 +246,7 @@
     const id = bookId(book);
     let draft = state.asinResearchDrafts.get(id);
     if (!draft) {
-      draft = { autoApplyPending: false, baseReceipt: "", targetRevision: -1 };
+      draft = { autoApplyPending: false, baseReceipt: "", targetRevision: -1, appliedRevision: -1 };
       state.asinResearchDrafts.set(id, draft);
     }
     return draft;
@@ -259,7 +259,12 @@
     const draft = state.asinResearchDrafts.get(id);
     const sessionDigest = String(valueFor(asinSessionFor(id), "receiptDigest", "") ?? "");
     const previewDigest = String(valueFor(keywordPreviewFor(id), "receiptDigest", "") ?? "");
-    return !draft || draft.targetRevision !== keywordRevisionFor(id) || !previewDigest || Boolean(sessionDigest && sessionDigest !== previewDigest);
+    const currentRevision = keywordRevisionFor(id);
+    const appliedToCurrentDraft = draft?.appliedRevision === currentRevision;
+    return !draft
+      || !previewDigest
+      || !appliedToCurrentDraft && draft.targetRevision !== currentRevision
+      || !appliedToCurrentDraft && Boolean(sessionDigest && sessionDigest !== previewDigest);
   };
   const asinReasonLabel = (code) => ({
     amazon_no_search_result: "No search results",
@@ -322,6 +327,7 @@
     keywordDraft.adsAsin = merged;
     const clientRevision = keywordRevisionFor(id) + 1;
     state.keywordBuilderRevisions.set(id, clientRevision);
+    researchDraft.appliedRevision = clientRevision;
     state.keywordBuilderPending.set(id, "update-ads-asin");
     state.catalogMutationCommand = "book.keywords.preview.update-ads-asin";
     state.catalogMutationTarget = id;
@@ -2221,6 +2227,7 @@
       researchDraft.autoApplyPending = true;
       researchDraft.baseReceipt = previewReceipt;
       researchDraft.targetRevision = keywordRevisionFor(id);
+      researchDraft.appliedRevision = -1;
       setAsinFeedback(id, "Preparing Amazon browser and search session…");
       patchAsinResearch(id);
       send("book.keywords.asin-crawl.start", { bookId: id, previewReceipt });
@@ -2603,6 +2610,9 @@
         state.catalogMutationTarget = previewBookId;
         state.catalogFeedback = requestCommand === "book.keywords.preview.update-ads-asin" ? "Crawled ASINs added to the preview. Save when ready." : "Preview shuffled. Review it, then Save.";
         state.catalogFeedbackError = false;
+        if (requestCommand === "book.keywords.preview.update-ads-asin") {
+          setAsinFeedback(previewBookId, "Crawled ASINs added to the preview. Save when ready.");
+        }
       }
       state.keywordBuilderPending.delete(previewBookId || state.selectedBookId);
       if (currentRoute() === "books" && state.bookDrawerOpen) refreshBookKeywordBuilderCard();
@@ -2919,6 +2929,10 @@
         state.catalogMutationPending = false;
         state.catalogMutationAwaitingSnapshot = false;
         if (requestCommand.startsWith("book.keywords.")) state.keywordBuilderPending.delete(state.catalogMutationTarget || state.selectedBookId);
+        if (requestCommand === "book.keywords.preview.update-ads-asin") {
+          const researchDraft = state.asinResearchDrafts.get(state.catalogMutationTarget || state.selectedBookId);
+          if (researchDraft) researchDraft.appliedRevision = -1;
+        }
         if (requestCommand === "book.keywords.save") state.keywordBuilderSubmitted = null;
         const responsePayload = valueFor(response, "payload", {});
         const backendErrors = valueFor(responsePayload, "validationErrors", []);
