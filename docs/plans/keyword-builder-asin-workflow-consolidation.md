@@ -6,7 +6,7 @@
 - Loại thay đổi: UI workflow + bridge/application contract refactor.
 - Branch mục tiêu: `feat/keyword-builder-in-asin-research`.
 - Base: `main`.
-- Trạng thái hiện tại: `/autoplan` approved; implementation đang thực hiện trên branch hiện tại.
+- Trạng thái hiện tại: **Hoàn tất triển khai và verification trên branch hiện tại (2026-09-30).**
 
 ## 1. Mục tiêu
 
@@ -207,6 +207,24 @@ Keyword Builder
 - Exact preview validation boundary: resolved by deterministic server seed + integrity-bound receipt; không nhận generated fields từ WebView và không cần preview registry.
 - Copy semantics: auto-decide copy output đang hiển thị; feedback phân biệt saved/unsaved.
 - Action row: state-dependent — chưa có preview thì `Shuffle` primary; preview current thì `Save` primary và `Shuffle again` secondary; Copy tertiary; stale thì `Regenerate preview` primary và Save/Copy disabled có reason.
+
+## 9.1 Kết quả triển khai
+
+- Core v4 dùng deterministic labelled streams; root seed vẫn là secure random khi user nhấn Shuffle, nên mỗi lần Shuffle có thể đổi thứ tự nhưng luôn nằm trong tập keyword đầu vào đã chuẩn hóa.
+- Preview lifecycle dùng receipt HMAC theo process, bind Book/input/algorithm/output; Save chỉ nhận receipt và rebuild exact preview trước khi persist.
+- Desktop bridge/frontend đã cut over sang Shuffle/Open/Update/Save receipt contracts; raw keyword save/crawl bị fail closed.
+- Keyword Builder và Crawl Results đã gộp trong tab ASIN Research; Book Keywords và Crawl Results đều có viewport 5 rows; Generated output chứa Ads ASIN cùng hàng action Shuffle/Save/Copy.
+- Crawl lấy Ads Keyword từ preview đã ký, tự merge/dedupe targets vào Ads ASIN, giữ targets thủ công, update cùng seed và không auto-save.
+- Race guards chặn late preview, cross-Book response, input edit trong lúc crawl và failed Ads ASIN update; result đã apply không bị đánh dấu stale chỉ vì receipt digest mới.
+- Toolchain được pin bằng `global.json` và `.node-version`; CI và release-candidate dùng một canonical full verification command.
+- Docs migration/rollback, architecture và user guide đã được cập nhật; desktop package smoke đảm bảo frontend dev/test files không lọt vào artifact.
+
+Verification hoàn tất ngày 2026-09-30:
+
+- Playwright visual QA trên production HTML/CSS/render path tại 1600×1000 và responsive stack 1100×900; kiểm tra cả empty và completed Crawl Results.
+- `./scripts/test-keyword-workflow.ps1 -Full` pass: Release build không warning; Core 354, UpdateSecurity 43, Infrastructure 438, Updater 55, ReleaseTool 32, Desktop 171; bridge 111; UI contracts 53; production certification; release orchestrator; CSS reproducibility; unsigned desktop package smoke; `git diff --check`.
+
+Điều chỉnh so với implementation sketch: frontend concurrency state được giữ trong reducer-like helpers hiện có của `app.js` và được test bằng Node bridge harness thay vì tạo thêm package/project Playwright lâu dài. Playwright được dùng làm visual acceptance trực tiếp; canonical automated coverage vẫn không cần browser binary hay network trong clean CI.
 
 ## 10. `/autoplan` Phase 1 — CEO/Product review
 

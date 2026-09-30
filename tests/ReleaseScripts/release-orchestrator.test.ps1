@@ -443,17 +443,20 @@ foreach ($requiredBuildText in @(
     "chore: release v",
     "branches:",
     "- main",
-    "Run release orchestrator tests",
-    "PrintableBook.Core.Tests",
-    "PrintableBook.UpdateSecurity.Tests",
-    "PrintableBook.Infrastructure.Tests",
-    "PrintableBook.Updater.Tests",
-    "PrintableBook.ReleaseTool.Tests",
-    "PrintableBook.Desktop.Tests",
-    "app-bridge.test.mjs",
-    "test-production-ui.mjs"
+    "global-json-file: global.json",
+    "node-version-file: .node-version",
+    "Run canonical full verification",
+    "./scripts/test-keyword-workflow.ps1 -Full"
 )) {
     Assert-True ($buildWorkflow.Contains($requiredBuildText)) "Build workflow is missing '$requiredBuildText'."
+}
+
+foreach ($forbiddenBuildText in @(
+    "dotnet test tests/PrintableBook.Core.Tests",
+    "node --test tests/PrintableBook.Desktop.Bridge.Tests",
+    "test-production-ui.mjs"
+)) {
+    Assert-True (-not $buildWorkflow.Contains($forbiddenBuildText)) "Build workflow bypasses the canonical verification script with '$forbiddenBuildText'."
 }
 
 Write-Output "all release orchestrator tests passed"

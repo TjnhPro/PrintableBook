@@ -18,42 +18,16 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.x
+          global-json-file: global.json
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 24.x
+          node-version-file: .node-version
 
-      - name: Restore
-        run: dotnet restore PrintableBook.sln
-
-      - name: Build
-        run: dotnet build PrintableBook.sln --configuration Release --no-restore
-
-      - name: Run Core tests
-        run: dotnet test tests/PrintableBook.Core.Tests/PrintableBook.Core.Tests.csproj --configuration Release --no-build
-
-      - name: Run UpdateSecurity tests
-        run: dotnet test tests/PrintableBook.UpdateSecurity.Tests/PrintableBook.UpdateSecurity.Tests.csproj --configuration Release --no-build
-
-      - name: Run repository-owned Infrastructure integration tests
-        run: dotnet test tests/PrintableBook.Infrastructure.Tests/PrintableBook.Infrastructure.Tests.csproj --configuration Release --no-build --filter "TestScope!=LocalCorpus"
-
-      - name: Run Updater tests
-        run: dotnet test tests/PrintableBook.Updater.Tests/PrintableBook.Updater.Tests.csproj --configuration Release --no-build
-
-      - name: Run Desktop tests
-        run: dotnet test tests/PrintableBook.Desktop.Tests/PrintableBook.Desktop.Tests.csproj --configuration Release --no-build
-
-      - name: Run ReleaseTool tests
-        run: dotnet test tests/PrintableBook.ReleaseTool.Tests/PrintableBook.ReleaseTool.Tests.csproj --configuration Release --no-build
-
-      - name: Run frontend bridge tests
-        run: node --test tests/PrintableBook.Desktop.Bridge.Tests/app-bridge.test.mjs
-
-      - name: Run production UI contract tests
-        run: node src/PrintableBook.Desktop/Frontend/test-production-ui.mjs
+      - name: Run canonical full verification
+        shell: pwsh
+        run: ./scripts/test-keyword-workflow.ps1 -Full
 
       - name: Read candidate version
         id: version

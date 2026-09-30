@@ -21,7 +21,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Frontend\**\*">
+    <Content Include="Frontend\**\*"
+             Exclude="Frontend\node_modules\**;Frontend\package.json;Frontend\package-lock.json;Frontend\tailwind.config.js;Frontend\test-*.mjs;Frontend\verify-css.mjs;Frontend\css\input.css">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Resource Include="Assets\app-icon.ico" />

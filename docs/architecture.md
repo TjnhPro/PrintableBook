@@ -200,12 +200,17 @@ Cache stamp v5 và classification cache v2 lưu policy/origin/detection status r
 
 Clear Cache xóa raster nặng (canonical/processed cache) nhưng giữ Book state và metadata classification. Book `Completed` đủ điều kiện khi có processed previews hoặc published output hợp lệ; nếu state ghi nhận output nhưng file bị mất, cleanup vẫn fail closed. Sau cleanup, preview manifest được xóa còn PDF, companion thumbnail và provenance được giữ nguyên; lần process/build sau dựng lại cache cần thiết.
 
-## Amazon ASIN Research
+## Keyword Builder v4 và Amazon ASIN Research
 
-ASIN Research là luồng additive, không thuộc Book domain và không thay đổi Build & Save hiện tại:
+Keyword Builder v4 tách **Shuffle preview** khỏi **Save**. Core canonicalize input rồi tạo các labelled random stream độc lập cho bảy keyword field, Ads Keyword và Ads ASIN. Persisted state bổ sung seed, input fingerprint, output digest và canonical Ads ASIN source; v1–v3 vẫn deserialize nhưng phải Shuffle một lần trước khi dùng receipt workflow.
+
+Application phát hành opaque receipt gồm payload versioned và HMAC-SHA256 bằng process-local key. Bridge/WebView không được tự khẳng định output: Save xác minh receipt, Book ownership, Generic Keywords fingerprint, rebuild cùng seed và so exact digest trước khi ghi state. Restart làm receipt cũ hết hiệu lực; `preview.open` rebuild persisted v4 và phát receipt mới mà không đổi BuildId/output.
+
+ASIN Research dùng chính Ads Keyword trong preview đã xác minh:
 
 ```text
-WebView bridge
+WebView signed preview/build reference
+  → BookKeywordPreviewService resolves trusted Ads Keyword
   → AmazonAsinCrawlSessionService / AmazonAsinCrawlWorker (Core)
     → IAmazonSearchPageClient → Infrastructure/CloakBrowser
     → IAmazonSearchHtmlParser → Infrastructure/AmazonCrawl
@@ -215,7 +220,7 @@ WebView bridge
 
 Profile nằm ở `<AppRoot>/.cloakbrowser/profile-v1`, downloaded Chromium ở `<AppRoot>/.cloakbrowser/cache`, và Playwright driver được ship trong `.playwright/`. Updater chỉ thay `.playwright/`; không backup, replace hoặc xóa `.cloakbrowser/`.
 
-Crawler có lane riêng, concurrency 1, input tối đa 30 phrase, fetch 20 giây, toàn task 10 phút và response HTML tối đa 5 MiB. URL/final redirect chỉ chấp nhận HTTPS `amazon.com`/`www.amazon.com`. Raw HTML, cookie, license và profile path không đi qua bridge hoặc diagnostics.
+Crawler có lane riêng, concurrency 1, input tối đa 30 phrase, fetch 20 giây, toàn task 10 phút và response HTML tối đa 5 MiB. Raw keyword arrays từ WebView bị từ chối. Session trả source fingerprint/receipt digest; frontend chỉ merge stable-dedupe ASIN hợp lệ khi source receipt và per-Book target revision vẫn current, sau đó gọi same-seed Ads ASIN preview update. Crawl không tự Save. URL/final redirect chỉ chấp nhận HTTPS `amazon.com`/`www.amazon.com`. Receipt, seed, signature, raw HTML, cookie, license và profile path không đi qua diagnostics.
 
 ## Kiểm thử
 
