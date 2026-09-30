@@ -118,6 +118,25 @@ public sealed class BookKeywordPreviewServiceTests
         Assert.Equal(PrintableBook.Core.Application.AmazonCrawl.AmazonCrawlPolicy.Fingerprint(source.Keywords), source.SourceFingerprint);
     }
 
+    [Fact]
+    public async Task Saved_crawl_source_is_rebuilt_and_rejects_changed_generic_keywords()
+    {
+        var stateStore = new StateStore();
+        var settings = new SettingsStore(GlobalSettings.Default with { GenericKeywords = ["first generic"] });
+        var service = CreateService(stateStore, settings);
+        var preview = await service.ShuffleAsync(Book(), ["cute animals"], null);
+        await service.SaveAsync(Book(), preview.Receipt);
+
+        var source = await service.ResolveCrawlSourceAsync(Book(), null, preview.Preview.BuildId);
+        settings.Value = settings.Value with { GenericKeywords = ["changed generic"] };
+        var stale = await Assert.ThrowsAsync<KeywordPreviewException>(() =>
+            service.ResolveCrawlSourceAsync(Book(), null, preview.Preview.BuildId).AsTask());
+
+        Assert.NotEmpty(source.Keywords);
+        Assert.Null(source.ReceiptDigest);
+        Assert.Equal("keyword_preview_stale", stale.Error.Code);
+    }
+
     private static BookKeywordPreviewService CreateService(
         StateStore stateStore,
         SettingsStore? settings = null,

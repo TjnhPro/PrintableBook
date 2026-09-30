@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
   const bookStatuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
-  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookListRefreshPending: false, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), bookKeywordBuilderDrafts: new Map(), bookKeywordBuilderValidation: new Map(), keywordBuilderConfirmed: new Map(), keywordBuilderSubmitted: null, keywordBuilderRefreshPending: false, keywordBuilderRefreshNeeded: false, keywordBuilderRefreshBookId: "", asinResearchDrafts: new Map(), asinResearchSessions: new Map(), asinResearchFeedback: new Map(), asinResearchActiveBookId: "", asinResearchPollTimer: null, amazonBrowserStatus: { state: "Closed", reasonCode: null }, amazonBrowserPending: false, brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookListRefreshPending: false, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), bookKeywordBuilderDrafts: new Map(), bookKeywordBuilderValidation: new Map(), keywordBuilderPreviews: new Map(), keywordBuilderRevisions: new Map(), keywordBuilderPending: new Map(), keywordBuilderConfirmed: new Map(), keywordBuilderSubmitted: null, keywordBuilderRefreshPending: false, keywordBuilderRefreshNeeded: false, keywordBuilderRefreshBookId: "", asinResearchDrafts: new Map(), asinResearchSessions: new Map(), asinResearchFeedback: new Map(), asinResearchActiveBookId: "", asinResearchPollTimer: null, amazonBrowserStatus: { state: "Closed", reasonCode: null }, amazonBrowserPending: false, brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -211,6 +211,14 @@
     if (Object.hasOwn(summary, "KeywordBuilder") && !Object.hasOwn(summary, "keywordBuilder")) summary.KeywordBuilder = builder;
     else summary.keywordBuilder = builder;
   };
+  const keywordRevisionFor = (id) => state.keywordBuilderRevisions.get(id) ?? 0;
+  const invalidateKeywordPreview = (id) => {
+    state.keywordBuilderRevisions.set(id, keywordRevisionFor(id) + 1);
+    state.keywordBuilderPreviews.delete(id);
+  };
+  const keywordPreviewFor = (id) => state.keywordBuilderPreviews.get(id) ?? null;
+  const keywordOutputFor = (id, summary) => valueFor(keywordPreviewFor(id), "preview", null) ?? keywordBuilderFor(summary);
+  const keywordPendingFor = (id) => state.keywordBuilderPending.get(id) ?? "";
   const keywordBuilderCopyText = (builder) => {
     const fields = Array.from({ length: 7 }, (_, index) => String(valueFor(builder, `keyword_${index + 1}`, "") ?? ""));
     fields.push(String(valueFor(builder, "adsKeyword", "") ?? ""));
@@ -238,7 +246,7 @@
     const id = bookId(book);
     let draft = state.asinResearchDrafts.get(id);
     if (!draft) {
-      draft = { sourceText: keywordBuilderDraftFor(book, summary).sourceText, submittedKeywords: null, autoApplyPending: false };
+      draft = { autoApplyPending: false, baseReceipt: "", targetRevision: -1 };
       state.asinResearchDrafts.set(id, draft);
     }
     return draft;
@@ -249,7 +257,9 @@
   const asinFinalValue = (session) => String(valueFor(asinSessionView(session), "finalAsins", "") ?? "");
   const asinResultIsStale = (id) => {
     const draft = state.asinResearchDrafts.get(id);
-    return Boolean(draft?.submittedKeywords) && JSON.stringify(normalizedAsinSearchKeywords(draft.sourceText)) !== JSON.stringify(draft.submittedKeywords);
+    const sessionDigest = String(valueFor(asinSessionFor(id), "receiptDigest", "") ?? "");
+    const previewDigest = String(valueFor(keywordPreviewFor(id), "receiptDigest", "") ?? "");
+    return !draft || draft.targetRevision !== keywordRevisionFor(id) || !previewDigest || Boolean(sessionDigest && sessionDigest !== previewDigest);
   };
   const asinReasonLabel = (code) => ({
     amazon_no_search_result: "No search results",
@@ -303,9 +313,19 @@
     const book = books().find((item) => bookId(item) === id);
     const summary = book ? summaryFor(book) : null;
     if (!book || !summary) return { status: "invalid", count };
+    const previewState = keywordPreviewFor(id);
+    const baseReceipt = String(researchDraft?.baseReceipt || valueFor(previewState, "receipt", "") || "");
+    if (!baseReceipt) return { status: "stale", count };
     const keywordDraft = keywordBuilderDraftFor(book, summary, true);
-    if (keywordDraft.adsAsin === value) return { status: "unchanged", count };
-    keywordDraft.adsAsin = value;
+    const merged = [...new Set(`${keywordDraft.adsAsin || ""},${value}`.split(/[\r\n,]+/u).map((item) => item.trim().toUpperCase()).filter(Boolean))].join(",");
+    if (keywordDraft.adsAsin === merged) return { status: "unchanged", count };
+    keywordDraft.adsAsin = merged;
+    const clientRevision = keywordRevisionFor(id) + 1;
+    state.keywordBuilderRevisions.set(id, clientRevision);
+    state.keywordBuilderPending.set(id, "update-ads-asin");
+    state.catalogMutationCommand = "book.keywords.preview.update-ads-asin";
+    state.catalogMutationTarget = id;
+    send("book.keywords.preview.update-ads-asin", { bookId: id, baseReceipt, adsAsin: merged || null, clientRevision });
     state.bookKeywordBuilderValidation.delete(id);
     if (state.catalogMutationTarget === id && state.catalogMutationCommand === "book.keywords.save") {
       state.catalogFeedback = "";
@@ -316,7 +336,7 @@
       const unsaved = document.querySelector("[data-book-interior-unsaved]");
       if (unsaved) unsaved.hidden = !(hasInteriorDraft(id) || hasMetadataDraft(book, summary) || hasKeywordBuilderDraft(book, summary));
     }
-    return { status: "updated", count };
+    return { status: "updating", count };
   };
   const brandAuthorDraftFor = (brand) => state.brandAuthorDrafts.get(valueFor(brand, "name", "")) ?? brandAuthor(brand);
   const brandAuthorIsDirty = (brand, value) => value !== brandAuthor(brand) || valueFor(brandSummaryFor(brand), "metadataStatus", "Missing") === "Unavailable";
@@ -1134,8 +1154,9 @@
 
   const renderAsinResearch = (book, summary) => {
     const id = bookId(book);
-    const draft = asinResearchDraftFor(book, summary);
-    const keywords = normalizedAsinSearchKeywords(draft.sourceText);
+    asinResearchDraftFor(book, summary);
+    const output = keywordOutputFor(id, summary);
+    const keywords = String(valueFor(output, "adsKeyword", "") ?? "").split(",").map((item) => item.trim()).filter(Boolean);
     const session = asinSessionFor(id);
     const view = asinSessionView(session);
     const rows = valueFor(view, "rows", []);
@@ -1146,7 +1167,9 @@
     const browserState = browserStateName(valueFor(state.amazonBrowserStatus, "state", "Closed"));
     const browserBusy = state.amazonBrowserPending || ["Checking", "Downloading", "Opening", "WarmingUp"].includes(browserState);
     const needsAttention = browserState === "NeedsAttention" || outcome === "NeedsAttention";
-    const validInput = keywords.length > 0 && keywords.length <= 30 && keywords.every((keyword) => (metadataGraphemeCount(keyword) ?? keyword.length) <= 200);
+    const previewState = keywordPreviewFor(id);
+    const hasTrustedSource = Boolean(valueFor(previewState, "receipt", ""));
+    const validInput = hasTrustedSource && keywords.length > 0 && keywords.length <= 30;
     const stale = asinResultIsStale(id);
     const feedback = asinFeedbackFor(id);
     const completed = Number(valueFor(view, "completedCount", 0)) || 0;
@@ -1168,20 +1191,13 @@
             : outcome === "Cancelled" ? "Crawl cancelled; available results were kept."
               : outcome === "Failed" ? "Crawl stopped. Review the result below."
                 : "Open Browser is optional; Crawl ASINs opens it automatically.";
-    return `<section class="asin-research" data-asin-research data-book-id="${escapeHtml(id)}" aria-labelledby="asin-research-title" aria-busy="${active || browserBusy}">
-      <div class="asin-research-heading"><div><h3 id="asin-research-title">ASIN Research</h3><p>Search Amazon using this Book's research phrases. Successful results are added to Ads ASIN automatically.</p></div><span data-asin-status class="status-badge ${needsAttention || outcome === "Failed" ? "status-bad" : active || browserBusy ? "status-warn" : browserState === "Ready" ? "status-good" : "status-muted"}">${escapeHtml(active ? cancelling ? "Cancelling" : "Running" : outcome !== "Idle" ? outcome : browserState)}</span></div>
-      <div class="asin-research-grid">
-        <section class="asin-research-pane asin-research-inputs" aria-labelledby="asin-search-keywords-title">
-          <div class="asin-research-pane-heading"><div><h4 id="asin-search-keywords-title">Search Keywords</h4><p>Separate phrases with commas or new lines · maximum 30 phrases · 200 characters each.</p></div><span data-asin-keyword-count>${keywords.length} / 30</span></div>
-          <textarea id="asin-search-keywords" class="control asin-research-scroll" rows="12" data-action="asin-search-keywords" data-book-id="${escapeHtml(id)}" aria-labelledby="asin-search-keywords-title" autocomplete="off" spellcheck="false" ${active ? "disabled" : ""}>${escapeHtml(draft.sourceText)}</textarea>
-          <footer class="asin-research-pane-footer"><div class="asin-research-actions"><button class="button-secondary" data-action="open-amazon-browser" data-book-id="${escapeHtml(id)}" ${browserBusy ? "disabled" : ""}>${browserBusy ? "Opening Browser…" : "Open Browser"}</button><button class="button-primary" data-action="crawl-amazon-asins" data-book-id="${escapeHtml(id)}" ${!validInput || active || browserBusy ? "disabled" : ""}>Crawl ASINs</button>${active ? `<button class="button-secondary" data-action="cancel-amazon-asins" data-book-id="${escapeHtml(id)}" ${cancelling ? "disabled" : ""}>${cancelling ? "Cancelling…" : "Cancel"}</button>` : ""}</div><p class="asin-research-state" role="${needsAttention ? "alert" : "status"}">${escapeHtml(stateCopy)}</p></footer>
-        </section>
-        <section class="asin-research-pane asin-research-results" aria-labelledby="asin-research-results-title">
-          <div class="asin-research-pane-heading"><div><h4 id="asin-research-results-title">Crawl Results</h4><p class="asin-result-summary"><strong>${selectedCount} selected</strong><span>${noMatchCount} no match · ${failedCount} failed</span></p></div><div class="asin-progress-slot">${active && total ? `<div class="asin-progress" role="progressbar" aria-label="Amazon ASIN crawl progress" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${completed}"><span style="width:${Math.round(completed / total * 100)}%"></span></div>` : ""}</div></div>
-          <ol class="asin-result-list">${rowMarkup || '<li class="asin-result-empty">No crawl results yet.</li>'}</ol>
-          <div class="asin-stale-slot">${stale && finalAsins ? '<p class="catalog-warning" role="status">Previous results — crawl again to refresh.</p>' : ""}</div>
-        </section>
-      </div>
+    return `<section class="keyword-builder-crawl" data-asin-research data-book-id="${escapeHtml(id)}" aria-labelledby="asin-research-results-title" aria-busy="${active || browserBusy}">
+      <div class="asin-research-pane-heading"><div><h4 id="asin-research-results-title">Crawl Results</h4><p class="asin-result-summary"><strong>${selectedCount} selected</strong><span>${noMatchCount} no match · ${failedCount} failed</span></p></div><span data-asin-status class="status-badge ${needsAttention || outcome === "Failed" ? "status-bad" : active || browserBusy ? "status-warn" : browserState === "Ready" ? "status-good" : "status-muted"}">${escapeHtml(active ? cancelling ? "Cancelling" : "Running" : outcome !== "Idle" ? outcome : browserState)}</span></div>
+      <p class="asin-keyword-source">Uses generated Ads Keyword · <span data-asin-keyword-count>${keywords.length} / 30</span></p>
+      <div class="asin-progress-slot">${active && total ? `<div class="asin-progress" role="progressbar" aria-label="Amazon ASIN crawl progress" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${completed}"><span style="width:${Math.round(completed / total * 100)}%"></span></div>` : ""}</div>
+      <ol class="asin-result-list">${rowMarkup || '<li class="asin-result-empty">No crawl results yet.</li>'}</ol>
+      <div class="asin-stale-slot">${stale && finalAsins ? '<p class="catalog-warning" role="status">Previous results — shuffle again before applying.</p>' : ""}</div>
+      <footer class="asin-research-pane-footer"><div class="asin-research-actions"><button class="button-secondary" data-action="open-amazon-browser" data-book-id="${escapeHtml(id)}" ${browserBusy ? "disabled" : ""}>${browserBusy ? "Opening Browser…" : "Open Browser"}</button><button class="button-secondary" data-action="crawl-amazon-asins" data-book-id="${escapeHtml(id)}" title="${validInput ? "Search with the generated Ads Keyword preview" : "Shuffle inputs before crawling"}" ${!validInput || active || browserBusy ? "disabled" : ""}>Crawl ASINs</button>${active ? `<button class="button-secondary" data-action="cancel-amazon-asins" data-book-id="${escapeHtml(id)}" ${cancelling ? "disabled" : ""}>${cancelling ? "Cancelling…" : "Cancel"}</button>` : ""}</div><p class="asin-research-state" role="${needsAttention ? "alert" : "status"}">${escapeHtml(stateCopy)}</p></footer>
       <p class="catalog-feedback ${feedback.error ? "is-error" : ""}" data-asin-feedback role="${feedback.error ? "alert" : "status"}" aria-live="polite" aria-atomic="true">${escapeHtml(feedback.message)}</p>
     </section>`;
   };
@@ -1189,22 +1205,24 @@
   const renderBookKeywordBuilder = (book, summary) => {
     const id = bookId(book);
     const saved = keywordBuilderFor(summary);
+    const previewState = keywordPreviewFor(id);
+    const output = keywordOutputFor(id, summary);
     const draft = keywordBuilderDraftFor(book, summary);
     const normalizedDraft = normalizeKeywordBuilderDraft(draft);
     const dirty = hasKeywordBuilderDraft(book, summary);
     const validation = state.bookKeywordBuilderValidation.get(id);
-    const pending = state.catalogMutationPending && state.catalogMutationCommand === "book.keywords.save" && state.catalogMutationTarget === id;
+    const pendingAction = keywordPendingFor(id);
+    const pending = Boolean(pendingAction) || state.catalogMutationPending && state.catalogMutationCommand === "book.keywords.save" && state.catalogMutationTarget === id;
     const refreshing = state.keywordBuilderRefreshPending && state.keywordBuilderRefreshBookId === id;
     const refreshNeeded = state.keywordBuilderRefreshNeeded && state.keywordBuilderRefreshBookId === id;
-    const feedbackVisible = state.catalogMutationTarget === id && state.catalogMutationCommand === "book.keywords.save";
+    const feedbackVisible = state.catalogMutationTarget === id && state.catalogMutationCommand.startsWith("book.keywords.");
     const genericKeywordCount = genericKeywords().length;
-    const clearing = normalizedDraft.keywords.length === 0 && genericKeywordCount === 0 && Boolean(saved);
     const disabled = catalogMutationBusy() || processIsActive();
-    const stateLabel = pending ? "Building & saving…" : validation ? "Needs attention" : refreshing ? "Saved · Refreshing…" : refreshNeeded ? "Saved · Refresh needed" : dirty ? "Unsaved inputs" : saved ? "Saved" : "Not built";
-    const outputMessage = saved ? (dirty ? "Saved output does not include these edits." : "Last saved generated keywords") : "No saved generated keywords.";
+    const stateLabel = pendingAction === "shuffle" ? "Shuffling…" : pendingAction === "save" ? "Saving…" : pendingAction === "update-ads-asin" ? "Applying ASINs…" : validation ? "Needs attention" : refreshing ? "Saved · Refreshing…" : refreshNeeded ? "Saved · Refresh needed" : previewState ? "Preview · Not saved" : dirty ? "Shuffle required" : saved ? "Saved" : "Not shuffled";
+    const outputMessage = previewState ? "Unsaved shuffled preview" : saved ? "Last saved generated keywords" : "Shuffle inputs to generate a preview.";
     const keywordRows = Array.from({ length: 7 }, (_, index) => {
       const name = `keyword_${index + 1}`;
-      const value = String(valueFor(saved, name, "") ?? "");
+      const value = String(valueFor(output, name, "") ?? "");
       const count = metadataGraphemeCount(value);
       const counter = count === null ? "≤ 50" : `${count} / 50`;
       return `<label class="keyword-builder-output-field" for="book-${name}-output"><span>Keyword ${index + 1}</span><input id="book-${name}-output" class="control" readonly value="${escapeHtml(value)}" aria-describedby="book-${name}-count"><small id="book-${name}-count">${counter}</small></label>`;
@@ -1218,25 +1236,25 @@
       <div class="keyword-builder-grid">
         <section class="keyword-builder-pane keyword-builder-inputs" aria-labelledby="keyword-builder-inputs-title">
           <div class="keyword-builder-pane-heading">
-            <div><h4 id="keyword-builder-inputs-title">Build inputs</h4><p>Generic Keywords are applied first; Book Keywords fill the remaining space.</p></div>
+            <div><h4 id="keyword-builder-inputs-title">Build inputs</h4><p>Generic Keywords are applied first; Book Keywords fill the remaining space when shuffled.</p></div>
             <span class="keyword-builder-source-badge">${genericKeywordCount} Generic</span>
           </div>
           <label class="field keyword-builder-source-field" for="book-keyword-source">
             <span>Book Keywords</span>
             <textarea id="book-keyword-source" class="control keyword-list-input ${validation ? "control-invalid" : ""}" rows="5" data-action="book-keyword-source" data-book-id="${escapeHtml(id)}" aria-describedby="book-keyword-source-help book-keyword-source-error" aria-invalid="${Boolean(validation)}" autocomplete="off" spellcheck="false" ${disabled ? "disabled" : ""}>${escapeHtml(draft.sourceText)}</textarea>
-            <small id="book-keyword-source-help">One phrase per line. Phrases matching Generic Keywords are excluded during Build.</small>
+            <small id="book-keyword-source-help">One phrase per line. Phrases matching Generic Keywords are excluded during Shuffle.</small>
             <small id="book-keyword-source-error" class="field-error" ${errorMessage ? "" : "hidden"}>${escapeHtml(errorMessage)}</small>
           </label>
-          ${clearing ? '<p class="catalog-warning" role="status">This will clear all saved generated keyword fields.</p>' : ""}
+          ${renderAsinResearch(book, summary)}
         </section>
         <section class="keyword-builder-pane keyword-builder-outputs" aria-labelledby="keyword-builder-output-title">
           <div class="keyword-builder-output-heading">
-            <div><h4 id="keyword-builder-output-title">Generated output</h4><p>${escapeHtml(outputMessage)}${saved ? ` · ${escapeHtml(dateTime(valueFor(saved, "builtAtUtc", null)))}` : ""}</p></div>
+            <div><h4 id="keyword-builder-output-title">Generated output</h4><p>${escapeHtml(outputMessage)}${output ? ` · ${escapeHtml(dateTime(valueFor(output, "builtAtUtc", null)))}` : ""}</p></div>
           </div>
           <div class="keyword-builder-output-list">${keywordRows}</div>
           <label class="field" for="book-ads-keyword-output">
             <span>Ads Keyword</span>
-            <textarea id="book-ads-keyword-output" class="control keyword-ads-output" rows="4" readonly aria-readonly="true">${escapeHtml(valueFor(saved, "adsKeyword", "") ?? "")}</textarea>
+            <textarea id="book-ads-keyword-output" class="control keyword-ads-output" rows="4" readonly aria-readonly="true">${escapeHtml(valueFor(output, "adsKeyword", "") ?? "")}</textarea>
           </label>
           <label class="field" for="book-keyword-ads-asin">
             <span>Ads ASIN (product targets)</span>
@@ -1244,8 +1262,9 @@
             <small id="book-keyword-ads-asin-help">Optional comma-separated product targets. Empty values are ignored during Build.</small>
           </label>
           <div class="keyword-builder-actions">
-            <button class="button-primary keyword-builder-build" data-action="build-book-keywords" data-book-id="${escapeHtml(id)}" ${disabled ? "disabled" : ""}>${pending ? "Building & saving…" : clearing ? "Clear & Save" : "Build & Save"}</button>
-            <button class="button-secondary" data-action="copy-book-keywords" data-book-id="${escapeHtml(id)}" ${saved ? "" : "disabled"}>Copy to Clipboard</button>
+            <button class="button-secondary keyword-builder-build" data-action="shuffle-book-keywords" data-book-id="${escapeHtml(id)}" ${disabled || pending ? "disabled" : ""}>${pendingAction === "shuffle" ? "Shuffling…" : "Shuffle"}</button>
+            <button class="button-primary" data-action="save-book-keywords" data-book-id="${escapeHtml(id)}" title="${previewState ? "Save this exact preview" : "Shuffle inputs before saving"}" ${disabled || pending || !valueFor(previewState, "receipt", "") ? "disabled" : ""}>${pendingAction === "save" ? "Saving…" : "Save"}</button>
+            <button class="button-secondary" data-action="copy-book-keywords" data-book-id="${escapeHtml(id)}" ${output ? "" : "disabled"}>Copy to Clipboard</button>
           </div>
         </section>
       </div>
@@ -1255,7 +1274,6 @@
 
   const renderAsinResearchWorkspace = (book, summary) => `<div class="asin-research-workspace">
     ${renderBookKeywordBuilder(book, summary)}
-    ${renderAsinResearch(book, summary)}
   </div>`;
 
   const renderBrandTemplateCopyCard = (book, summary) => {
@@ -1524,6 +1542,7 @@
     syncContent("[data-asin-status]");
     syncAttributes("[data-asin-status]", ["class"]);
     syncContent("[data-asin-keyword-count]");
+    syncContent(".asin-keyword-source");
     syncContent(".asin-research-actions");
     syncContent(".asin-research-state");
     syncAttributes(".asin-research-state", ["role"]);
@@ -1533,9 +1552,6 @@
     syncContent(".asin-stale-slot");
     syncContent("[data-asin-feedback]");
     syncAttributes("[data-asin-feedback]", ["class", "role"]);
-    const keywordInput = section.querySelector('[data-action="asin-search-keywords"]');
-    const nextKeywordInput = rendered.querySelector('[data-action="asin-search-keywords"]');
-    if (keywordInput && nextKeywordInput) keywordInput.disabled = nextKeywordInput.disabled;
     const refreshedResultList = section.querySelector(".asin-result-list");
     if (refreshedResultList) {
       refreshedResultList.scrollTop = resultScrollTop;
@@ -2075,7 +2091,7 @@
     if (currentRoute() === "books" && state.bookDrawerOpen) updateBookCatalogMutationUi();
     if (currentRoute() === "brands") render("brands", false);
   };
-  const catalogErrorMessage = (code) => ({ invalid_book_metadata: "Book Information is invalid. Review Title, Subtitle, Subcover, ASIN, and Author, then retry.", invalid_keyword_builder: "Keyword Builder input must contain one text phrase per line.", keyword_word_too_long: "A keyword word is longer than 50 characters. Shorten it and retry.", keyword_capacity_exceeded: "The ordered keyword stream needs more than seven fields. Remove, shorten, or reorder source keywords.", invalid_brand_author: "Brand Author must be a single line.", book_author_required: "Save a Book Author before assigning a Brand.", brand_author_required: "The selected Brand does not have an Author.", book_brand_author_mismatch: "Book Author must match Brand Author before assignment.", brand_metadata_invalid: "Brand metadata could not be read. Fix the metadata file and retry.", processing_active: "Interior Processing is running. Try again when it finishes.", production_action_active: "A Production action is running. Try again when it finishes.", cache_cleanup_active: "Cache Cleanup is running. Try again when it finishes.", snapshot_unavailable: "The library snapshot is unavailable. Refresh and retry.", book_not_found: "This Book is no longer available. Refresh the library.", brand_not_found: "This Brand is no longer available. Refresh the library." })[code] ?? "The change could not be saved. Refresh and retry.";
+  const catalogErrorMessage = (code) => ({ invalid_book_metadata: "Book Information is invalid. Review Title, Subtitle, Subcover, ASIN, and Author, then retry.", invalid_keyword_builder: "Keyword Builder input is invalid.", keyword_preview_invalid: "This preview is invalid or expired. Shuffle again.", keyword_preview_stale: "Inputs changed after this preview. Shuffle again.", keyword_preview_version_unsupported: "This saved output uses an older shuffle version. Shuffle again.", keyword_legacy_shuffle_required: "Shuffle once to update this legacy keyword output.", keyword_word_too_long: "A keyword word is longer than 50 characters. Shorten it and retry.", keyword_capacity_exceeded: "The ordered keyword stream needs more than seven fields. Remove, shorten, or reorder source keywords.", invalid_brand_author: "Brand Author must be a single line.", book_author_required: "Save a Book Author before assigning a Brand.", brand_author_required: "The selected Brand does not have an Author.", book_brand_author_mismatch: "Book Author must match Brand Author before assignment.", brand_metadata_invalid: "Brand metadata could not be read. Fix the metadata file and retry.", processing_active: "Interior Processing is running. Try again when it finishes.", production_action_active: "A Production action is running. Try again when it finishes.", cache_cleanup_active: "Cache Cleanup is running. Try again when it finishes.", snapshot_unavailable: "The library snapshot is unavailable. Refresh and retry.", book_not_found: "This Book is no longer available. Refresh the library.", brand_not_found: "This Brand is no longer available. Refresh the library." })[code] ?? "The change could not be saved. Refresh and retry.";
   document.addEventListener("keydown", (event) => {
     const activeTab = event.target.closest?.('[role="tab"][data-action="book-tab"]');
     if (activeTab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
@@ -2129,12 +2145,12 @@
       }
       beginCatalogMutation("book.metadata.save", target.dataset.bookId, { bookId: target.dataset.bookId, ...draft });
     }
-    if (action === "build-book-keywords") {
+    if (action === "shuffle-book-keywords") {
       const book = books().find((item) => bookId(item) === target.dataset.bookId);
       const summary = book ? summaryFor(book) : null;
       const draft = book && summary ? keywordBuilderDraftFor(book, summary, true) : null;
       if (!draft) {
-        state.catalogMutationCommand = "book.keywords.save";
+        state.catalogMutationCommand = "book.keywords.shuffle";
         state.catalogMutationTarget = target.dataset.bookId;
         state.catalogFeedback = "Book not found.";
         state.catalogFeedbackError = true;
@@ -2143,13 +2159,30 @@
       }
       const normalized = normalizeKeywordBuilderDraft(draft);
       state.bookKeywordBuilderValidation.delete(target.dataset.bookId);
-      state.keywordBuilderSubmitted = { bookId: target.dataset.bookId, draft: { ...draft } };
-      beginCatalogMutation("book.keywords.save", target.dataset.bookId, { bookId: target.dataset.bookId, keywords: normalized.keywords, adsAsin: normalized.adsAsin || null });
+      const clientRevision = keywordRevisionFor(target.dataset.bookId);
+      state.keywordBuilderPending.set(target.dataset.bookId, "shuffle");
+      state.catalogMutationCommand = "book.keywords.shuffle";
+      state.catalogMutationTarget = target.dataset.bookId;
+      state.catalogFeedback = "Shuffling preview…";
+      state.catalogFeedbackError = false;
+      send("book.keywords.shuffle", { bookId: target.dataset.bookId, bookKeywords: normalized.keywords, adsAsin: normalized.adsAsin || null, clientRevision });
+      refreshBookKeywordBuilderCard();
+    }
+    if (action === "save-book-keywords") {
+      const id = target.dataset.bookId;
+      const book = books().find((item) => bookId(item) === id);
+      const summary = book ? summaryFor(book) : null;
+      const previewState = keywordPreviewFor(id);
+      const receipt = String(valueFor(previewState, "receipt", "") ?? "");
+      if (!book || !summary || !receipt) return;
+      state.keywordBuilderPending.set(id, "save");
+      state.keywordBuilderSubmitted = { bookId: id, draft: { ...keywordBuilderDraftFor(book, summary, true) } };
+      beginCatalogMutation("book.keywords.save", id, { bookId: id, receipt, clientRevision: keywordRevisionFor(id) });
     }
     if (action === "copy-book-keywords") {
       const book = books().find((item) => bookId(item) === target.dataset.bookId);
-      const saved = book ? keywordBuilderFor(summaryFor(book)) : null;
-      if (!saved) return;
+      const output = book ? keywordOutputFor(target.dataset.bookId, summaryFor(book)) : null;
+      if (!output) return;
       const copied = () => {
         state.catalogMutationCommand = "book.keywords.save";
         state.catalogMutationTarget = target.dataset.bookId;
@@ -2164,7 +2197,7 @@
         state.catalogFeedbackError = true;
         refreshBookKeywordBuilderCard();
       };
-      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(keywordBuilderCopyText(saved)).then(copied, failed);
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(keywordBuilderCopyText(output)).then(copied, failed);
       else failed();
     }
     if (action === "open-amazon-browser") {
@@ -2177,19 +2210,20 @@
       const id = target.dataset.bookId;
       const book = books().find((item) => bookId(item) === id);
       const summary = book ? summaryFor(book) : null;
-      const draft = book && summary ? asinResearchDraftFor(book, summary) : null;
-      const keywords = normalizedAsinSearchKeywords(draft?.sourceText);
-      const oversized = keywords.find((keyword) => (metadataGraphemeCount(keyword) ?? keyword.length) > 200);
-      if (!keywords.length || keywords.length > 30 || oversized) {
-        setAsinFeedback(id, !keywords.length ? "Enter at least one Search Keyword." : keywords.length > 30 ? "Search Keywords accepts at most 30 phrases." : `Search Keyword “${oversized}” exceeds 200 characters.`, true);
+      const researchDraft = book && summary ? asinResearchDraftFor(book, summary) : null;
+      const previewState = keywordPreviewFor(id);
+      const previewReceipt = String(valueFor(previewState, "receipt", "") ?? "");
+      if (!researchDraft || !previewReceipt) {
+        setAsinFeedback(id, "Shuffle the Keyword Builder before starting ASIN Research.", true);
         patchAsinResearch(id);
         return;
       }
-      draft.submittedKeywords = [...keywords];
-      draft.autoApplyPending = true;
+      researchDraft.autoApplyPending = true;
+      researchDraft.baseReceipt = previewReceipt;
+      researchDraft.targetRevision = keywordRevisionFor(id);
       setAsinFeedback(id, "Preparing Amazon browser and search session…");
       patchAsinResearch(id);
-      send("book.keywords.asin-crawl.start", { bookId: id, keywords });
+      send("book.keywords.asin-crawl.start", { bookId: id, previewReceipt });
     }
     if (action === "cancel-amazon-asins") {
       setAsinFeedback(target.dataset.bookId, "Cancelling crawl…");
@@ -2365,7 +2399,22 @@
         refreshInteriorArtworkWorkspace();
       }
     }
-    if (action === "book-tab") { state.selectedBookTab = ["asin", "production", "settings", "artwork", "pages"].includes(target.dataset.bookTab) ? target.dataset.bookTab : "overview"; refreshBookDrawerBody(state.selectedBookTab); }
+    if (action === "book-tab") {
+      state.selectedBookTab = ["asin", "production", "settings", "artwork", "pages"].includes(target.dataset.bookTab) ? target.dataset.bookTab : "overview";
+      refreshBookDrawerBody(state.selectedBookTab);
+      if (state.selectedBookTab === "asin") {
+        const book = selectedBook();
+        const saved = book ? keywordBuilderFor(summaryFor(book)) : null;
+        const buildId = String(valueFor(saved, "buildId", "") ?? "");
+        if (buildId && Number(valueFor(saved, "algorithmVersion", 0)) === 4 && !keywordPreviewFor(state.selectedBookId)) {
+          const clientRevision = keywordRevisionFor(state.selectedBookId);
+          state.keywordBuilderPending.set(state.selectedBookId, "open");
+          state.catalogMutationCommand = "book.keywords.preview.open";
+          state.catalogMutationTarget = state.selectedBookId;
+          send("book.keywords.preview.open", { bookId: state.selectedBookId, buildId, clientRevision });
+        }
+      }
+    }
     if (action === "select-asset") { state.selectedAssetReference = target.dataset.sourceReference; render("books", false); }
     if (action === "asset-view") { state.assetView = target.dataset.assetView; render("books", false); }
     if (action === "asset-status") { const status = ["Active", "Inactive"].includes(target.dataset.assetStatus) ? target.dataset.assetStatus : ""; state.assetStatus = state.assetStatus === status ? "" : status; state.artworkGridScrollTop = 0; refreshInteriorArtworkWorkspace(); }
@@ -2454,6 +2503,7 @@
         const draft = keywordBuilderDraftFor(book, summary, true);
         if (event.target.dataset.action === "book-keyword-source") draft.sourceText = event.target.value;
         else draft.adsAsin = event.target.value;
+        invalidateKeywordPreview(bookId(book));
         state.bookKeywordBuilderValidation.delete(bookId(book));
         if (state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand === "book.keywords.save") {
           state.catalogFeedback = "";
@@ -2462,14 +2512,6 @@
         refreshBookKeywordBuilderCard();
         const unsaved = document.querySelector("[data-book-interior-unsaved]");
         if (unsaved) unsaved.hidden = !(hasInteriorDraft(bookId(book)) || hasMetadataDraft(book, summary) || hasKeywordBuilderDraft(book, summary));
-      }
-    }
-    if (event.target.dataset.action === "asin-search-keywords") {
-      const book = books().find((item) => bookId(item) === event.target.dataset.bookId);
-      const summary = book ? summaryFor(book) : null;
-      if (book && summary) {
-        asinResearchDraftFor(book, summary).sourceText = event.target.value;
-        setAsinFeedback(bookId(book), "");
       }
     }
     if (event.target.dataset.action === "brand-author-input") {
@@ -2550,6 +2592,21 @@
         patchAsinResearch(state.selectedBookId);
       }
       status.textContent = browserStateName(valueFor(state.amazonBrowserStatus, "state", "Closed")) === "Ready" ? "Amazon browser ready" : "Connected";
+    } else if (ok && command === "book.keywords.preview") {
+      const payload = valueFor(response, "payload", {});
+      const previewBookId = String(valueFor(payload, "bookId", "") ?? "");
+      const clientRevision = Number(valueFor(payload, "clientRevision", -1));
+      if (previewBookId && clientRevision === keywordRevisionFor(previewBookId)) {
+        state.keywordBuilderPreviews.set(previewBookId, payload);
+        state.bookKeywordBuilderValidation.delete(previewBookId);
+        state.catalogMutationCommand = requestCommand;
+        state.catalogMutationTarget = previewBookId;
+        state.catalogFeedback = requestCommand === "book.keywords.preview.update-ads-asin" ? "Crawled ASINs added to the preview. Save when ready." : "Preview shuffled. Review it, then Save.";
+        state.catalogFeedbackError = false;
+      }
+      state.keywordBuilderPending.delete(previewBookId || state.selectedBookId);
+      if (currentRoute() === "books" && state.bookDrawerOpen) refreshBookKeywordBuilderCard();
+      status.textContent = "Keyword preview ready";
     } else if (ok && command === "book.keywords.asin-crawl") {
       const session = valueFor(response, "payload", {});
       const sessionBookId = String(valueFor(session, "bookId", "") ?? "");
@@ -2563,10 +2620,10 @@
       const outcome = asinOutcomeName(valueFor(view, "outcome", "Idle"));
       if (sessionBookId && !asinSessionActive(session) && outcome !== "Idle") {
         const count = String(valueFor(view, "finalAsins", "") ?? "").split(",").filter(Boolean).length;
-        const resultMessage = autoDraft.status === "updated"
-          ? `${count} ASIN${count === 1 ? "" : "s"} added to the Ads ASIN draft. Use Build & Save when ready.`
+        const resultMessage = autoDraft.status === "updating"
+          ? `${count} ASIN${count === 1 ? "" : "s"} found. Updating the generated preview…`
           : autoDraft.status === "unchanged" ? `${count} ASIN${count === 1 ? " is" : "s are"} already in the Ads ASIN draft.`
-            : autoDraft.status === "stale" ? "Search Keywords changed during the crawl. Crawl again to update Ads ASIN."
+            : autoDraft.status === "stale" ? "Keyword Builder inputs changed during the crawl. Shuffle and crawl again."
               : autoDraft.status === "invalid" ? "Crawl returned an invalid ASIN result. Crawl again."
                 : count ? `${count} ASIN${count === 1 ? "" : "s"} available in Crawl Results.` : "No matching ASINs found. Adjust Search Keywords and crawl again.";
         const outcomePrefix = outcome === "Completed" ? ""
@@ -2584,6 +2641,7 @@
       const refreshWarning = String(valueFor(payload, "refreshWarning", "") ?? "");
       state.catalogMutationPending = false;
       state.catalogMutationAwaitingSnapshot = false;
+      state.keywordBuilderPending.delete(savedBookId);
       if (savedBuilder) {
         setSummaryKeywordBuilder(savedBookId, savedBuilder);
         state.keywordBuilderConfirmed.set(savedBookId, savedBuilder);
@@ -2594,6 +2652,7 @@
         state.bookKeywordBuilderDrafts.delete(savedBookId);
       }
       state.keywordBuilderSubmitted = null;
+      state.keywordBuilderPreviews.delete(savedBookId);
       state.bookKeywordBuilderValidation.delete(savedBookId);
       state.keywordBuilderRefreshBookId = savedBookId;
       state.keywordBuilderRefreshPending = Boolean(refreshTask) && !refreshWarning;
@@ -2856,9 +2915,10 @@
         state.bookInteriorSavePending = false;
         updateInteriorSaveUi();
       }
-      if (["book.metadata.save", "book.keywords.save", "book.brand.assign", "book.brand.unassign", "brand.author.save"].includes(requestCommand)) {
+      if (["book.metadata.save", "book.keywords.shuffle", "book.keywords.preview.open", "book.keywords.preview.update-ads-asin", "book.keywords.save", "book.brand.assign", "book.brand.unassign", "brand.author.save"].includes(requestCommand)) {
         state.catalogMutationPending = false;
         state.catalogMutationAwaitingSnapshot = false;
+        if (requestCommand.startsWith("book.keywords.")) state.keywordBuilderPending.delete(state.catalogMutationTarget || state.selectedBookId);
         if (requestCommand === "book.keywords.save") state.keywordBuilderSubmitted = null;
         const responsePayload = valueFor(response, "payload", {});
         const backendErrors = valueFor(responsePayload, "validationErrors", []);
@@ -2870,7 +2930,7 @@
             ...(Array.isArray(valueFor(item, "tokens", null)) ? { tokens: valueFor(item, "tokens", []).map(String) } : {})
           })).filter((item) => metadataFieldOrder.includes(item.field) && item.code && item.message)
           : [];
-        const structuredKeywordError = requestCommand === "book.keywords.save" && valueFor(responsePayload, "policyVersion", 0) === 1 && valueFor(responsePayload, "field", "") === "keywords"
+        const structuredKeywordError = requestCommand.startsWith("book.keywords.") && valueFor(responsePayload, "policyVersion", 0) === 1 && valueFor(responsePayload, "field", "") === "keywords"
           ? { code: String(valueFor(responsePayload, "code", error)), message: String(valueFor(responsePayload, "message", "")) }
           : null;
         if (structuredMetadataErrors.length) {
@@ -2890,7 +2950,7 @@
             const summary = book ? summaryFor(book) : null;
             if (book && summary) patchBookMetadataValidationUi(book, summary, true);
           }
-          if (requestCommand === "book.keywords.save") refreshBookKeywordBuilderCard(true);
+          if (requestCommand.startsWith("book.keywords.")) refreshBookKeywordBuilderCard(requestCommand === "book.keywords.shuffle");
         }
         if (currentRoute() === "brands") render("brands", false);
       }

@@ -148,9 +148,17 @@ public sealed class BookKeywordPreviewService(
         else
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(savedBuildId);
-            source = (await LoadStateAsync(book, cancellationToken)).KeywordBuilder?.NormalizeStored()
+            var saved = (await LoadStateAsync(book, cancellationToken)).KeywordBuilder?.NormalizeStored()
                 ?? throw Stale("The saved keyword output was not found. Refresh and try again.", "refresh");
-            if (!string.Equals(source.BuildId, savedBuildId, StringComparison.Ordinal)) throw Stale("The saved keyword output changed. Refresh and try again.", "refresh");
+            if (!string.Equals(saved.BuildId, savedBuildId, StringComparison.Ordinal)) throw Stale("The saved keyword output changed. Refresh and try again.", "refresh");
+            if (saved.AlgorithmVersion != BookKeywordBuilder.CurrentAlgorithmVersion || string.IsNullOrWhiteSpace(saved.ShuffleSeed) ||
+                string.IsNullOrWhiteSpace(saved.InputFingerprint) || string.IsNullOrWhiteSpace(saved.OutputDigest) || saved.AdsAsinSource is null && saved.AdsAsin is not null)
+            {
+                throw new KeywordPreviewException(new("keyword_legacy_shuffle_required", "Shuffle once to update this legacy keyword output.", "preview", "shuffle"));
+            }
+            var generic = await LoadGenericAsync(cancellationToken);
+            source = builder.Build(generic, saved.SourceKeywords, saved.AdsAsinSource, saved.BuildId, saved.BuiltAtUtc, new KeywordShuffleSeed(saved.ShuffleSeed));
+            EnsureExact(saved.InputFingerprint, saved.OutputDigest, source);
         }
         var adsKeywords = (source.AdsKeyword ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var normalized = AmazonCrawlPolicy.NormalizeKeywords(adsKeywords);
