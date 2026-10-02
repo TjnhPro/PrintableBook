@@ -33,6 +33,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   let contentMarkup = "";
   let fullRenderCount = 0;
   let bookDrawerBodyRenderCount = 0;
+  let bookDetailPanelRenderCount = 0;
   let productionWorkspaceRenderCount = 0;
   let introWorkspaceRenderCount = 0;
   let artworkWorkspaceRenderCount = 0;
@@ -71,6 +72,12 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     set innerHTML(markup) {
       bookDrawerBodyRenderCount += 1;
       contentMarkup = contentMarkup.replace(/(<div class="book-detail-body book-drawer-body">)[\s\S]*(<\/div><\/section><\/div><\/section>)$/, `$1${markup}$2`);
+    }
+  };
+  const bookDetailPanel = {
+    set outerHTML(markup) {
+      bookDetailPanelRenderCount += 1;
+      contentMarkup = contentMarkup.replace(/<section class="panel book-detail-panel[\s\S]*<\/section><\/div><\/section>$/, `${markup}</div></section>`);
     }
   };
   const productionFinalButton = {
@@ -166,6 +173,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
         if (selector === ".intro-template-workspace" && contentMarkup.includes('class="intro-template-workspace"')) return introWorkspace;
         if (selector === ".interior-artwork-workspace" && contentMarkup.includes('class="interior-artwork-workspace"')) return artworkWorkspace;
         if (selector === ".book-drawer-body" && contentMarkup.includes('class="book-detail-body book-drawer-body"')) return bookDrawerBody;
+        if (selector === ".book-detail-panel" && contentMarkup.includes("book-detail-panel")) return bookDetailPanel;
         if (selector === "[data-book-keyword-builder-card]" && contentMarkup.includes("data-book-keyword-builder-card")) return keywordBuilderCard;
         if (selector === ".production-workspace" && contentMarkup.includes('class="production-workspace"')) return productionWorkspace;
         if (selector === ".interior-artwork-grid-scroll" && contentMarkup.includes('class="interior-artwork-grid-scroll"')) return artworkGrid;
@@ -180,7 +188,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, settingsSaveButton, settingsLoadButton, settingsFeedback, processQueueScroll, processFocusTarget, setDocumentActiveElement: (element) => { documentActiveElement = element; }, brandResultCount, brandSettingsEditor, genericKeywordsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, settingsSaveButton, settingsLoadButton, settingsFeedback, processQueueScroll, processFocusTarget, setDocumentActiveElement: (element) => { documentActiveElement = element; }, brandResultCount, brandSettingsEditor, genericKeywordsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getBookDetailPanelRenderCount: () => bookDetailPanelRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -567,8 +575,8 @@ test("Book list rows expose the Book name thumbnail fallback and production stat
   assert.doesNotMatch(content.innerHTML, /Interior active/);
 });
 
-test("Book list rows open the inline detail panel without queue selection controls", () => {
-  const { messageHandler, content, contentListeners, getFullRenderCount } = loadBridge("books");
+test("Book list rows open the inline detail panel without rerendering the list", () => {
+  const { messageHandler, content, contentListeners, getFullRenderCount, getBookDetailPanelRenderCount } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-card-actions", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
@@ -580,13 +588,22 @@ test("Book list rows open the inline detail panel without queue selection contro
   assert.match(content.innerHTML, /Select a Book/);
 
   const rendersBeforeDetail = getFullRenderCount();
-  const row = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => row };
+  const rowClasses = new Set(["book-list-row"]);
+  const rowAttributes = { "aria-current": "false" };
+  const row = {
+    dataset: { action: "open-book-detail", bookId: "Book 001" },
+    classList: { toggle(name, enabled) { enabled ? rowClasses.add(name) : rowClasses.delete(name); } },
+    setAttribute(name, value) { rowAttributes[name] = value; },
+    closest: () => row
+  };
   contentListeners.click({ target: row });
   assert.match(content.innerHTML, /Book detail/);
   assert.match(content.innerHTML, /class="panel book-detail-panel"/);
-  assert.match(content.innerHTML, /aria-current="true"/);
+  assert.equal(rowClasses.has("is-active"), true);
+  assert.equal(rowAttributes["aria-current"], "true");
   assert.doesNotMatch(content.innerHTML, /role="dialog"/);
-  assert.equal(getFullRenderCount(), rendersBeforeDetail + 1);
+  assert.equal(getFullRenderCount(), rendersBeforeDetail);
+  assert.equal(getBookDetailPanelRenderCount(), 1);
 });
 
 test("a corrupt workspace stays inspectable but cannot be edited or processed", () => {

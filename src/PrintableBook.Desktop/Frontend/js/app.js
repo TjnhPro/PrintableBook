@@ -2090,11 +2090,16 @@
   };
 
   document.querySelectorAll("[data-route]").forEach((button) => button.addEventListener("click", () => { render(button.dataset.route); if (button.dataset.route === "diagnostics") { send("diagnostics.get"); send("task.list"); } }));
-  const openBookDetail = (id) => {
+  const setBookListRowActive = (row, active) => {
+    if (!row) return;
+    row.classList?.toggle("is-active", active);
+    row.setAttribute?.("aria-current", String(active));
+  };
+  const openBookDetail = (id, sourceRow = null) => {
     if (state.bookDrawerOpen && state.selectedBookId === id) {
-      document.getElementById("book-detail-title")?.focus();
       return;
     }
+    const previousBookId = state.selectedBookId;
     state.selectedBookId = id;
     state.selectedBookTab = "overview";
     state.selectedAssetReference = "";
@@ -2107,9 +2112,16 @@
     state.bookDrawerOpen = true;
     const book = selectedBook();
     if (!book) return;
-    document.querySelector(".book-detail-panel")?.remove();
-    render("books", false);
-    document.getElementById("book-detail-title")?.focus();
+    const summary = summaryFor(book);
+    const previousRow = previousBookId && previousBookId !== id
+      ? document.querySelector(`[data-book-card-id="${CSS.escape(previousBookId)}"]`)
+      : null;
+    const selectedRow = sourceRow ?? document.querySelector(`[data-book-card-id="${CSS.escape(id)}"]`);
+    setBookListRowActive(previousRow, false);
+    setBookListRowActive(selectedRow, true);
+    const detailPanel = document.querySelector(".book-detail-panel");
+    if (detailPanel) detailPanel.outerHTML = renderBookDetail(book, summary);
+    else render("books", false);
     send("amazon.browser.status");
     send("book.keywords.asin-crawl.get", { bookId: id });
   };
@@ -2333,7 +2345,7 @@
       updateProductionInteractionUi();
       send("process.start", { bookIds: [target.dataset.bookId], mode: "production-interior" });
     }
-    if (action === "select-book" || action === "open-book-detail") openBookDetail(target.dataset.bookId);
+    if (action === "select-book" || action === "open-book-detail") openBookDetail(target.dataset.bookId, action === "open-book-detail" ? target : null);
     if (action === "save-book-interior-settings" && !state.bookInteriorSavePending) {
       const payload = interiorSavePayload(target.dataset.bookId);
       if (payload) {
