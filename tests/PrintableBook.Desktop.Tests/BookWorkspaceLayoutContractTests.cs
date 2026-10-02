@@ -265,7 +265,10 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("const coverPreviewUrl = valueFor(coverOutput, \"thumbnailImageUrl\", \"\")", script, StringComparison.Ordinal);
         Assert.DoesNotContain("<h3>Production Assets</h3>", script, StringComparison.Ordinal);
         Assert.DoesNotContain("class=\"production-context\"", script, StringComparison.Ordinal);
-        Assert.Contains(".production-group-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr));", layout, StringComparison.Ordinal);
+        Assert.Contains(".production-group-grid { display:grid; grid-template-columns:minmax(0,1fr);", layout, StringComparison.Ordinal);
+        Assert.Contains(".production-asset-layout { display:grid; grid-template-columns:minmax(0,5fr) minmax(0,5fr) minmax(0,2fr);", layout, StringComparison.Ordinal);
+        Assert.Contains("class=\"production-asset-controls\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(".production-preview-grid", layout, StringComparison.Ordinal);
         Assert.Contains(".production-group>legend", layout, StringComparison.Ordinal);
         Assert.Contains(".production-final-action { grid-column:1/-1;", layout, StringComparison.Ordinal);
         Assert.Contains("@media (max-width:900px)", layout, StringComparison.Ordinal);

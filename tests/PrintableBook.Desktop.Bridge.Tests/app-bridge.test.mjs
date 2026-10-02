@@ -1254,6 +1254,8 @@ test("Production removes redundant context and places Final Interior before grou
   assert.match(content.innerHTML, /<legend>Final Interior<\/legend>/);
   assert.match(content.innerHTML, /Source image/);
   assert.match(content.innerHTML, /Preview image/);
+  assert.match(content.innerHTML, /class="production-asset-layout"/);
+  assert.match(content.innerHTML, /class="production-asset-controls"/);
   assert.match(content.innerHTML, /file:\/\/\/cover_thumbnail\.png/);
   assert.match(content.innerHTML, /file:\/\/\/processed_interior_cover\.png/);
   assert.doesNotMatch(content.innerHTML, /Production Assets/);
