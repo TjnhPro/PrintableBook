@@ -233,6 +233,11 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("book-settings-assignment", script, StringComparison.Ordinal);
         Assert.Contains("book-settings-background", script, StringComparison.Ordinal);
         Assert.Contains("book-settings-templates", script, StringComparison.Ordinal);
+        Assert.Contains("<legend>Book Information</legend>", script, StringComparison.Ordinal);
+        Assert.Contains("<legend>Brand Assignment</legend>", script, StringComparison.Ordinal);
+        Assert.Contains("<legend>Brand background</legend>", script, StringComparison.Ordinal);
+        Assert.Contains("<legend>Brand PSD templates</legend>", script, StringComparison.Ordinal);
+        Assert.Contains(".book-settings-card>legend", layout, StringComparison.Ordinal);
         Assert.Contains(".book-settings-information { grid-column:span 8; }", layout, StringComparison.Ordinal);
         Assert.Contains(".book-settings-assignment { grid-column:span 4; }", layout, StringComparison.Ordinal);
         Assert.Contains(".book-settings-background,.book-settings-templates { grid-column:span 6; }", layout, StringComparison.Ordinal);

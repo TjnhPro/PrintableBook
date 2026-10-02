@@ -1393,6 +1393,10 @@ test("Book detail changes tabs without redrawing its drawer shell", () => {
   assert.match(content.innerHTML, /book-settings-assignment/);
   assert.match(content.innerHTML, /book-settings-background/);
   assert.match(content.innerHTML, /book-settings-templates/);
+  assert.match(content.innerHTML, /<legend>Book Information<\/legend>/);
+  assert.match(content.innerHTML, /<legend>Brand Assignment<\/legend>/);
+  assert.match(content.innerHTML, /<legend>Brand background<\/legend>/);
+  assert.match(content.innerHTML, /<legend>Brand PSD templates<\/legend>/);
   assert.doesNotMatch(content.innerHTML, /class="summary-grid"/);
   assert.doesNotMatch(content.innerHTML, /Review the summary and Brand background/);
   assert.doesNotMatch(content.innerHTML, /data-book-tab="pages"/);
