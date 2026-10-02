@@ -597,7 +597,7 @@ test("Book list rows open the inline detail panel without rerendering the list",
     closest: () => row
   };
   contentListeners.click({ target: row });
-  assert.match(content.innerHTML, /Book detail/);
+  assert.match(content.innerHTML, /id="book-detail-title"/);
   assert.match(content.innerHTML, /class="panel book-detail-panel"/);
   assert.equal(rowClasses.has("is-active"), true);
   assert.equal(rowAttributes["aria-current"], "true");
@@ -1397,6 +1397,8 @@ test("Book detail changes tabs without redrawing its drawer shell", () => {
   assert.equal(getFullRenderCount(), fullRendersBeforeTabChange);
   assert.equal(getBookDrawerBodyRenderCount(), 1);
   assert.match(content.innerHTML, /Interior artwork/);
+  assert.match(content.innerHTML, /<strong>0<\/strong> shown · <strong>1<\/strong> total · <strong>0<\/strong> active · <strong>1<\/strong> inactive/);
+  assert.doesNotMatch(content.innerHTML, /class="asset-result-count"/);
   assert.match(content.innerHTML, /interior-artwork-grid-scroll/);
   assert.match(content.innerHTML, /No artwork matches this view/);
   assert.match(content.innerHTML, /data-asset-status="Active" aria-pressed="true"/);
@@ -2022,7 +2024,7 @@ test("Saving Book Interior settings accepts the refreshed snapshot without redra
 
   assert.equal(getFullRenderCount(), rendersBeforeRefreshResult);
   assert.equal(status.textContent, "Interior changes saved");
-  assert.match(content.innerHTML, /Book detail/);
+  assert.match(content.innerHTML, /id="book-detail-title"/);
 });
 
 test("Book detail configures an ordered custom Intro selection from Book interior", () => {

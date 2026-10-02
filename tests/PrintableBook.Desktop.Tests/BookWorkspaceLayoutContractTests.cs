@@ -77,14 +77,17 @@ public sealed class BookWorkspaceLayoutContractTests
     [Fact]
     public void BookRepresentativePreviewsAreSquareAndCenterCroppedWithoutChangingPdfGeometry()
     {
+        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
         var layout = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css"));
 
         Assert.Contains("--pb-representative-preview: 1 / 1", layout, StringComparison.Ordinal);
         Assert.Contains(".book-list-thumbnail { display:grid; width:68px; aspect-ratio:1", layout, StringComparison.Ordinal);
         Assert.Contains(".book-list-thumbnail img { width:100%; height:100%; object-fit:cover; object-position:center center; }", layout, StringComparison.Ordinal);
         Assert.Contains(".book-detail-preview img { width:100%; height:100%; object-fit:cover; object-position:center center; }", layout, StringComparison.Ordinal);
-        Assert.Contains(".book-detail-preview { display:grid; width:64px; height:64px", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-detail-preview { display:grid; width:52px; height:52px", layout, StringComparison.Ordinal);
         Assert.Contains(".book-detail-preview { width:48px; height:48px; }", layout, StringComparison.Ordinal);
+        Assert.Contains("book-detail-title-line", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("<p class=\"eyebrow\">Book detail</p>", script, StringComparison.Ordinal);
         Assert.Contains("--pb-book-card-preview: 4 / 3", layout, StringComparison.Ordinal);
         Assert.Contains(".pdf-library-book-grid .pdf-library-book-preview { aspect-ratio:2 / 1; }", layout, StringComparison.Ordinal);
         Assert.Contains(".pdf-library-book-preview img { width:100%; height:100%; object-fit:contain;", layout, StringComparison.Ordinal);
