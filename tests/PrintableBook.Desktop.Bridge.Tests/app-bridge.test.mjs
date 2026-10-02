@@ -1244,7 +1244,7 @@ const openProductionTab = (messageHandler, contentListeners) => {
   contentListeners.click({ target: productionTab });
 };
 
-test("Production uses grouped two-preview assets and a full-width Final Interior action", () => {
+test("Production removes redundant context and places Final Interior before grouped assets", () => {
   const { messageHandler, contentListeners, content } = loadBridge("books");
   openProductionTab(messageHandler, contentListeners);
 
@@ -1257,6 +1257,9 @@ test("Production uses grouped two-preview assets and a full-width Final Interior
   assert.match(content.innerHTML, /file:\/\/\/cover_thumbnail\.png/);
   assert.match(content.innerHTML, /file:\/\/\/processed_interior_cover\.png/);
   assert.doesNotMatch(content.innerHTML, /Production Assets/);
+  assert.doesNotMatch(content.innerHTML, /Assigned Brand:/);
+  assert.doesNotMatch(content.innerHTML, /Background: <strong>/);
+  assert.ok(content.innerHTML.indexOf("<legend>Final Interior</legend>") < content.innerHTML.indexOf("<legend>Final Cover</legend>"));
   assert.ok(content.innerHTML.indexOf("<legend>Final Cover</legend>") < content.innerHTML.indexOf("<legend>Interior Cover</legend>"));
   assert.ok(content.innerHTML.indexOf("<legend>Interior Cover</legend>") < content.innerHTML.indexOf("<legend>Book Owner</legend>"));
 });

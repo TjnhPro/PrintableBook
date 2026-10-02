@@ -253,7 +253,7 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
-    public void ProductionUsesBorderLegendGroupsWithPairedPreviewsAndFullWidthFinalInterior()
+    public void ProductionUsesBorderLegendGroupsWithPairedPreviewsAndTopFinalInterior()
     {
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
         var layout = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css"));
@@ -264,6 +264,7 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("Preview image", script, StringComparison.Ordinal);
         Assert.Contains("const coverPreviewUrl = valueFor(coverOutput, \"thumbnailImageUrl\", \"\")", script, StringComparison.Ordinal);
         Assert.DoesNotContain("<h3>Production Assets</h3>", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("class=\"production-context\"", script, StringComparison.Ordinal);
         Assert.Contains(".production-group-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr));", layout, StringComparison.Ordinal);
         Assert.Contains(".production-group>legend", layout, StringComparison.Ordinal);
         Assert.Contains(".production-final-action { grid-column:1/-1;", layout, StringComparison.Ordinal);
