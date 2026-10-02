@@ -105,7 +105,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   const keywordBuilderCard = {
     contains: () => false,
     set outerHTML(markup) {
-      const start = contentMarkup.indexOf('<section class="catalog-card keyword-builder-card"');
+      const start = contentMarkup.indexOf('<section class="keyword-builder-workspace"');
       const end = contentMarkup.indexOf('\n  </div>', start);
       if (start >= 0 && end > start) contentMarkup = `${contentMarkup.slice(0, start)}${markup}${contentMarkup.slice(end)}`;
     }
@@ -1776,7 +1776,7 @@ test("ASIN Research uses the signed Ads Keyword preview and merges completed tar
   const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
   contentListeners.click({ target: asinTab });
 
-  assert.match(content.innerHTML, /ASIN Research/);
+  assert.match(content.innerHTML, /data-book-tab="asin"[^>]*>Keyword/);
   assert.match(content.innerHTML, /cozy coloring\nadult coloring/);
   assert.match(content.innerHTML, /Uses generated Ads Keyword/);
   assert.doesNotMatch(content.innerHTML, /Search Keywords/);
@@ -1859,15 +1859,18 @@ test("Keyword Builder shuffles a preview before saving without redrawing Book de
   contentListeners.click({ target: openBook });
   const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
   contentListeners.click({ target: asinTab });
-  assert.match(content.innerHTML, /Keyword Builder/);
+  assert.doesNotMatch(content.innerHTML, /catalog-card keyword-builder-card/);
   assert.match(content.innerHTML, /Book Keywords/);
   assert.match(content.innerHTML, /rows="5" data-action="book-keyword-source"/);
   assert.match(content.innerHTML, /Ads ASIN \(product targets\)/);
   assert.match(content.innerHTML, /type="text" data-action="book-keyword-ads-asin"/);
   assert.match(content.innerHTML, /Build inputs/);
+  assert.match(content.innerHTML, /<legend id="keyword-builder-inputs-title">Build inputs<\/legend>/);
+  assert.match(content.innerHTML, /<legend id="asin-research-results-title">Crawl Results<\/legend>/);
   assert.match(content.innerHTML, />2 Generic</);
   assert.match(content.innerHTML, /Generated output/);
-  const generatedOutputIndex = content.innerHTML.indexOf("keyword-builder-pane keyword-builder-outputs");
+  assert.match(content.innerHTML, /<legend id="keyword-builder-output-title">Generated output<\/legend>/);
+  const generatedOutputIndex = content.innerHTML.indexOf("keyword-builder-group keyword-builder-outputs");
   const adsAsinIndex = content.innerHTML.indexOf('for="book-keyword-ads-asin"');
   const actionsIndex = content.innerHTML.indexOf('class="keyword-builder-actions"');
   const shuffleActionIndex = content.innerHTML.indexOf('data-action="shuffle-book-keywords"');

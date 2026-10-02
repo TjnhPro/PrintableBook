@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 const app = readFileSync(new URL("./js/app.js", import.meta.url), "utf8");
 const expected = [
   'tabButton("settings", "Settings")',
+  'tabButton("asin", "Keyword")',
   "No processed pages",
   "book.interior.settings.save",
   "Save changes",
@@ -63,7 +64,7 @@ if (app.includes("Advanced JSON settings") || app.includes("brand.settings")) {
   throw new Error("Removed Brand settings UI must not remain in the bridge contract.");
 }
 
-if (app.includes('tabButton("settings", "Interior settings")') || app.includes('tabButton("pages", "Interior pages")')) {
+if (app.includes('tabButton("settings", "Interior settings")') || app.includes('tabButton("asin", "ASIN Research")') || app.includes('tabButton("pages", "Interior pages")')) {
   throw new Error("Hidden Book detail tabs must not remain in the visible tablist.");
 }
 

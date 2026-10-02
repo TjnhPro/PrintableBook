@@ -1261,15 +1261,16 @@
             : outcome === "Cancelled" ? "Crawl cancelled; available results were kept."
               : outcome === "Failed" ? "Crawl stopped. Review the result below."
                 : "Open Browser is optional; Crawl ASINs opens it automatically.";
-    return `<section class="keyword-builder-crawl" data-asin-research data-book-id="${escapeHtml(id)}" aria-labelledby="asin-research-results-title" aria-busy="${active || browserBusy}">
-      <div class="asin-research-pane-heading"><div><h4 id="asin-research-results-title">Crawl Results</h4><p class="asin-result-summary"><strong>${selectedCount} selected</strong><span>${noMatchCount} no match · ${failedCount} failed</span></p></div><span data-asin-status class="status-badge ${needsAttention || outcome === "Failed" ? "status-bad" : active || browserBusy ? "status-warn" : browserState === "Ready" ? "status-good" : "status-muted"}">${escapeHtml(active ? cancelling ? "Cancelling" : "Running" : outcome !== "Idle" ? outcome : browserState)}</span></div>
+    return `<fieldset class="keyword-builder-group keyword-builder-crawl" data-asin-research data-book-id="${escapeHtml(id)}" aria-labelledby="asin-research-results-title" aria-busy="${active || browserBusy}">
+      <legend id="asin-research-results-title">Crawl Results</legend>
+      <div class="asin-research-pane-heading"><p class="asin-result-summary"><strong>${selectedCount} selected</strong><span>${noMatchCount} no match · ${failedCount} failed</span></p><span data-asin-status class="status-badge ${needsAttention || outcome === "Failed" ? "status-bad" : active || browserBusy ? "status-warn" : browserState === "Ready" ? "status-good" : "status-muted"}">${escapeHtml(active ? cancelling ? "Cancelling" : "Running" : outcome !== "Idle" ? outcome : browserState)}</span></div>
       <p class="asin-keyword-source">Uses generated Ads Keyword · <span data-asin-keyword-count>${keywords.length} / 30</span></p>
       <div class="asin-progress-slot">${active && total ? `<div class="asin-progress" role="progressbar" aria-label="Amazon ASIN crawl progress" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${completed}"><span style="width:${Math.round(completed / total * 100)}%"></span></div>` : ""}</div>
       <ol class="asin-result-list">${rowMarkup || '<li class="asin-result-empty">No crawl results yet.</li>'}</ol>
       <div class="asin-stale-slot">${stale && finalAsins ? '<p class="catalog-warning" role="status">Previous results — shuffle again before applying.</p>' : ""}</div>
       <footer class="asin-research-pane-footer"><div class="asin-research-actions"><button class="button-secondary" data-action="open-amazon-browser" data-book-id="${escapeHtml(id)}" ${browserBusy ? "disabled" : ""}>${browserBusy ? "Opening Browser…" : "Open Browser"}</button><button class="button-secondary" data-action="crawl-amazon-asins" data-book-id="${escapeHtml(id)}" title="${validInput ? "Search with the generated Ads Keyword preview" : "Shuffle inputs before crawling"}" ${!validInput || active || browserBusy ? "disabled" : ""}>Crawl ASINs</button>${active ? `<button class="button-secondary" data-action="cancel-amazon-asins" data-book-id="${escapeHtml(id)}" ${cancelling ? "disabled" : ""}>${cancelling ? "Cancelling…" : "Cancel"}</button>` : ""}</div><p class="asin-research-state" role="${needsAttention ? "alert" : "status"}">${escapeHtml(stateCopy)}</p></footer>
       <p class="catalog-feedback ${feedback.error ? "is-error" : ""}" data-asin-feedback role="${feedback.error ? "alert" : "status"}" aria-live="polite" aria-atomic="true">${escapeHtml(feedback.message)}</p>
-    </section>`;
+    </fieldset>`;
   };
 
   const renderBookKeywordBuilder = (book, summary) => {
@@ -1298,28 +1299,29 @@
       return `<label class="keyword-builder-output-field" for="book-${name}-output"><span>Keyword ${index + 1}</span><input id="book-${name}-output" class="control" readonly value="${escapeHtml(value)}" aria-describedby="book-${name}-count"><small id="book-${name}-count">${counter}</small></label>`;
     }).join("");
     const errorMessage = validation?.message ?? "";
-    return `<section class="catalog-card keyword-builder-card" data-book-keyword-builder-card aria-busy="${pending}">
-      <div class="catalog-card-heading">
-        <div><h3>Keyword Builder</h3><p>Combine shared Generic Keywords with phrases for this Book.</p></div>
-        ${badge(stateLabel)}
-      </div>
+    return `<section class="keyword-builder-workspace" data-book-keyword-builder-card aria-label="Keyword workspace" aria-busy="${pending}">
       <div class="keyword-builder-grid">
-        <section class="keyword-builder-pane keyword-builder-inputs" aria-labelledby="keyword-builder-inputs-title">
-          <div class="keyword-builder-pane-heading">
-            <div><h4 id="keyword-builder-inputs-title">Build inputs</h4><p>Generic Keywords are applied first; Book Keywords fill the remaining space when shuffled.</p></div>
-            <span class="keyword-builder-source-badge">${genericKeywordCount} Generic</span>
-          </div>
-          <label class="field keyword-builder-source-field" for="book-keyword-source">
-            <span>Book Keywords</span>
-            <textarea id="book-keyword-source" class="control keyword-list-input ${validation ? "control-invalid" : ""}" rows="5" data-action="book-keyword-source" data-book-id="${escapeHtml(id)}" aria-describedby="book-keyword-source-help book-keyword-source-error" aria-invalid="${Boolean(validation)}" autocomplete="off" spellcheck="false" ${disabled ? "disabled" : ""}>${escapeHtml(draft.sourceText)}</textarea>
-            <small id="book-keyword-source-help">One phrase per line. Phrases matching Generic Keywords are excluded during Shuffle.</small>
-            <small id="book-keyword-source-error" class="field-error" ${errorMessage ? "" : "hidden"}>${escapeHtml(errorMessage)}</small>
-          </label>
+        <div class="keyword-builder-column">
+          <fieldset class="keyword-builder-group keyword-builder-inputs" aria-labelledby="keyword-builder-inputs-title">
+            <legend id="keyword-builder-inputs-title">Build inputs</legend>
+            <div class="keyword-builder-group-summary">
+              <p>Generic Keywords are applied first; Book Keywords fill the remaining space when shuffled.</p>
+              <span class="keyword-builder-source-badge">${genericKeywordCount} Generic</span>
+            </div>
+            <label class="field keyword-builder-source-field" for="book-keyword-source">
+              <span>Book Keywords</span>
+              <textarea id="book-keyword-source" class="control keyword-list-input ${validation ? "control-invalid" : ""}" rows="5" data-action="book-keyword-source" data-book-id="${escapeHtml(id)}" aria-describedby="book-keyword-source-help book-keyword-source-error" aria-invalid="${Boolean(validation)}" autocomplete="off" spellcheck="false" ${disabled ? "disabled" : ""}>${escapeHtml(draft.sourceText)}</textarea>
+              <small id="book-keyword-source-help">One phrase per line. Phrases matching Generic Keywords are excluded during Shuffle.</small>
+              <small id="book-keyword-source-error" class="field-error" ${errorMessage ? "" : "hidden"}>${escapeHtml(errorMessage)}</small>
+            </label>
+          </fieldset>
           ${renderAsinResearch(book, summary)}
-        </section>
-        <section class="keyword-builder-pane keyword-builder-outputs" aria-labelledby="keyword-builder-output-title">
+        </div>
+        <fieldset class="keyword-builder-group keyword-builder-outputs" aria-labelledby="keyword-builder-output-title">
+          <legend id="keyword-builder-output-title">Generated output</legend>
           <div class="keyword-builder-output-heading">
-            <div><h4 id="keyword-builder-output-title">Generated output</h4><p>${escapeHtml(outputMessage)}${output ? ` · ${escapeHtml(dateTime(valueFor(output, "builtAtUtc", null)))}` : ""}</p></div>
+            <p>${escapeHtml(outputMessage)}${output ? ` · ${escapeHtml(dateTime(valueFor(output, "builtAtUtc", null)))}` : ""}</p>
+            ${badge(stateLabel)}
           </div>
           <div class="keyword-builder-output-list">${keywordRows}</div>
           <label class="field" for="book-ads-keyword-output">
@@ -1336,9 +1338,9 @@
             <button class="button-primary" data-action="save-book-keywords" data-book-id="${escapeHtml(id)}" title="${previewState ? "Save this exact preview" : "Shuffle inputs before saving"}" ${disabled || pending || !valueFor(previewState, "receipt", "") ? "disabled" : ""}>${pendingAction === "save" ? "Saving…" : "Save"}</button>
             <button class="button-secondary" data-action="copy-book-keywords" data-book-id="${escapeHtml(id)}" ${output ? "" : "disabled"}>Copy to Clipboard</button>
           </div>
-        </section>
+          <div class="catalog-actions keyword-builder-status"><p class="catalog-feedback ${feedbackVisible && state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="keywords" role="${feedbackVisible && state.catalogFeedbackError ? "alert" : "status"}" aria-live="polite" aria-atomic="true">${feedbackVisible ? escapeHtml(state.catalogFeedback) : ""}</p>${refreshNeeded ? `<button class="button-secondary" data-action="retry-keyword-refresh" data-book-id="${escapeHtml(id)}" ${applicationIsLoading() ? "disabled" : ""}>Retry refresh</button>` : ""}</div>
+        </fieldset>
       </div>
-      <div class="catalog-actions keyword-builder-status"><p class="catalog-feedback ${feedbackVisible && state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="keywords" role="${feedbackVisible && state.catalogFeedbackError ? "alert" : "status"}" aria-live="polite" aria-atomic="true">${feedbackVisible ? escapeHtml(state.catalogFeedback) : ""}</p>${refreshNeeded ? `<button class="button-secondary" data-action="retry-keyword-refresh" data-book-id="${escapeHtml(id)}" ${applicationIsLoading() ? "disabled" : ""}>Retry refresh</button>` : ""}</div>
     </section>`;
   };
 
@@ -1390,7 +1392,7 @@
         : state.selectedBookTab === "pages"
           ? renderProcessedInteriorPages(summary)
         : `<section class="book-settings-workspace" aria-label="Book settings">${renderBookInformation(book, summary)}${renderBookBrandAssignment(book, summary)}${backgroundSetting}${renderBrandTemplateCopyCard(book, summary)}</section>`;
-    return `<div class="book-heading"><div><h2>${escapeHtml(bookDisplayTitle(book, summary))}</h2><p>Folder: ${escapeHtml(valueFor(book, "name", bookId(book)))}</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}" aria-label="Process Interior. ${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs" role="tablist" aria-label="Book detail sections">${tabButton("settings", "Settings")}${tabButton("asin", "ASIN Research")}${tabButton("production", "Production")}${tabButton("artwork", "Interior artwork")}</nav><div id="book-panel-${state.selectedBookTab}" class="tab-body ${state.selectedBookTab === "settings" ? "tab-body-settings" : state.selectedBookTab === "asin" ? "tab-body-asin" : state.selectedBookTab === "artwork" ? "tab-body-artwork" : state.selectedBookTab === "pages" ? "tab-body-processed-pages" : ""}" role="tabpanel" aria-labelledby="book-tab-${state.selectedBookTab}" tabindex="0">${body}</div>`;
+    return `<div class="book-heading"><div><h2>${escapeHtml(bookDisplayTitle(book, summary))}</h2><p>Folder: ${escapeHtml(valueFor(book, "name", bookId(book)))}</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}" aria-label="Process Interior. ${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs" role="tablist" aria-label="Book detail sections">${tabButton("settings", "Settings")}${tabButton("asin", "Keyword")}${tabButton("production", "Production")}${tabButton("artwork", "Interior artwork")}</nav><div id="book-panel-${state.selectedBookTab}" class="tab-body ${state.selectedBookTab === "settings" ? "tab-body-settings" : state.selectedBookTab === "asin" ? "tab-body-asin" : state.selectedBookTab === "artwork" ? "tab-body-artwork" : state.selectedBookTab === "pages" ? "tab-body-processed-pages" : ""}" role="tabpanel" aria-labelledby="book-tab-${state.selectedBookTab}" tabindex="0">${body}</div>`;
   };
 
   const renderIntroTemplateWorkspace = (book, summary) => {
@@ -2266,7 +2268,7 @@
       const previewState = keywordPreviewFor(id);
       const previewReceipt = String(valueFor(previewState, "receipt", "") ?? "");
       if (!researchDraft || !previewReceipt) {
-        setAsinFeedback(id, "Shuffle the Keyword Builder before starting ASIN Research.", true);
+        setAsinFeedback(id, "Shuffle keywords before starting the ASIN crawl.", true);
         patchAsinResearch(id);
         return;
       }
