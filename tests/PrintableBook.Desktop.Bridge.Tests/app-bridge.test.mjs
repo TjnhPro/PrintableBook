@@ -21,6 +21,9 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   const settingsSaveButton = { disabled: false, textContent: "Save", attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } };
   const settingsLoadButton = { disabled: false };
   const settingsFeedback = { textContent: "Ready", dataset: { state: "ready" }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } };
+  const processQueueScroll = { scrollTop: 0 };
+  const processFocusTarget = { dataset: { action: "process-queue-page", processQueuePage: "next" }, focused: false, focusOptions: null, focus(options) { this.focused = true; this.focusOptions = options; } };
+  let documentActiveElement = null;
   const brandResultCount = { textContent: "" };
   const brandList = {
     set innerHTML(markup) {
@@ -44,10 +47,10 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   };
   const content = {
     get innerHTML() { return contentMarkup; },
-    set innerHTML(markup) { fullRenderCount += 1; contentMarkup = markup; },
+    set innerHTML(markup) { fullRenderCount += 1; contentMarkup = markup; if (markup.includes('class="process-queue-grid-scroll"')) processQueueScroll.scrollTop = 0; },
     addEventListener: (eventName, handler) => { contentListeners[eventName] = handler; },
     insertAdjacentHTML: (_position, markup) => { contentMarkup += markup; },
-    querySelector: (selector) => selector === '[data-action="pdf-library-search"]' ? searchInput : selector === "[data-settings-save]" ? settingsSaveButton : selector === '[data-action="refresh"]' ? settingsLoadButton : selector === "[data-settings-feedback]" ? settingsFeedback : selector === "[data-brand-list]" ? brandList : selector === "[data-brand-result-count]" ? brandResultCount : selector === "[data-pdf-library-feedback]" ? pdfLibraryFeedback : null
+    querySelector: (selector) => selector === ".process-queue-grid-scroll" && contentMarkup.includes('class="process-queue-grid-scroll"') ? processQueueScroll : selector === '[data-action="pdf-library-search"]' ? searchInput : selector === "[data-settings-save]" ? settingsSaveButton : selector === '[data-action="refresh"]' ? settingsLoadButton : selector === "[data-settings-feedback]" ? settingsFeedback : selector === "[data-brand-list]" ? brandList : selector === "[data-brand-result-count]" ? brandResultCount : selector === "[data-pdf-library-feedback]" ? pdfLibraryFeedback : null
   };
   const introWorkspace = {
     set outerHTML(markup) {
@@ -153,9 +156,10 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   vm.runInNewContext(readFileSync(appScriptPath, "utf8"), {
     crypto: { randomUUID: () => "request-1" },
     document: {
+      get activeElement() { return documentActiveElement; },
       getElementById: (id) => ({ "bridge-status": status, "app-content": content, "refresh-button": refreshButton, "update-dialog-root": updateDialog }[id]),
       createElement: (tagName) => ({ tagName, className: "", textContent: "", attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } }),
-      querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : selector === "[data-setting]" ? settingsInputs : selector === '[data-setting], [data-generic-keywords]' ? [...settingsInputs, genericKeywordsEditor] : [],
+      querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : selector === "[data-setting]" ? settingsInputs : selector === '[data-setting], [data-generic-keywords]' ? [...settingsInputs, genericKeywordsEditor] : selector === '[data-action]' ? [processFocusTarget] : [],
       querySelector: (selector) => {
         if (selector === "[data-brand-settings]") return brandSettingsEditor;
         if (selector === "[data-generic-keywords]") return genericKeywordsEditor;
@@ -176,7 +180,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, settingsSaveButton, settingsLoadButton, settingsFeedback, brandResultCount, brandSettingsEditor, genericKeywordsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, settingsSaveButton, settingsLoadButton, settingsFeedback, processQueueScroll, processFocusTarget, setDocumentActiveElement: (element) => { documentActiveElement = element; }, brandResultCount, brandSettingsEditor, genericKeywordsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -1041,7 +1045,7 @@ test("Build Final Interior session owns PDF export and publishing stages", () =>
   assert.match(content.innerHTML, />Publishing</);
 });
 
-test("selected queue is paged in its tab and a pending Book can be removed", () => {
+test("unified Process workspace pages its selected queue and removes a pending Book", () => {
   const { messageHandler, content, contentListeners, status } = loadBridge("process");
   const books = Array.from({ length: 13 }, (_, index) => ({ id: { value: `Book ${index + 1}` }, name: `Book ${index + 1}` }));
   const summaries = books.map((book) => ({ bookId: book.id, workspaceStatus: "Not started", validationStatus: "Ready", interiorSourcePageCount: 12, activeInteriorSourcePageCount: 12, assets: [] }));
@@ -1051,10 +1055,15 @@ test("selected queue is paged in its tab and a pending Book can be removed", () 
     const queue = { dataset: { action: "queue-book", bookId: book.id.value }, checked: true, closest: () => queue };
     contentListeners.click({ target: queue });
   }
-  const queueTab = { dataset: { action: "process-tab", processTab: "queue" }, closest: () => queueTab };
-  contentListeners.click({ target: queueTab });
+  const goProcess = { dataset: { action: "go-process" }, closest: () => goProcess };
+  contentListeners.click({ target: goProcess });
 
+  assert.match(content.innerHTML, /class="process-workspace"/);
+  assert.match(content.innerHTML, /Summary/);
+  assert.match(content.innerHTML, /Current stage/);
   assert.match(content.innerHTML, /Selected queue <span>13<\/span>/);
+  assert.doesNotMatch(content.innerHTML, /class="process-tabs"/);
+  assert.doesNotMatch(content.innerHTML, /data-action="process-tab"/);
   assert.match(content.innerHTML, /Page 1 of 2/);
   assert.match(content.innerHTML, /Book 1/);
   assert.doesNotMatch(content.innerHTML, /Book 13/);
@@ -1070,6 +1079,31 @@ test("selected queue is paged in its tab and a pending Book can be removed", () 
   assert.equal(status.textContent, "Book 13 removed from selected queue");
   assert.match(content.innerHTML, /Selected queue <span>12<\/span>/);
   assert.match(content.innerHTML, /Page 1 of 1/);
+});
+
+test("Process polling preserves selected queue scroll and keyboard focus", () => {
+  const { messageHandler, processQueueScroll, processFocusTarget, setDocumentActiveElement } = loadBridge("process");
+  const snapshot = {
+    isActive: true,
+    isCancelling: false,
+    currentStep: "interior-pages",
+    pagesCompleted: 3,
+    pagesTotal: 12,
+    queue: [{ bookId: { value: "Book 001" }, status: "Running", detail: "Processing" }]
+  };
+  messageHandler({ data: { version: 1, id: "process-initial", ok: true, command: "process.snapshot", payload: snapshot } });
+  processQueueScroll.scrollTop = 180;
+  processFocusTarget.focused = false;
+  setDocumentActiveElement({
+    dataset: { action: "process-queue-page", processQueuePage: "next" },
+    closest: (selector) => selector === ".process-page" ? {} : null
+  });
+
+  messageHandler({ data: { version: 1, id: "process-poll", ok: true, command: "process.snapshot", payload: { ...snapshot, pagesCompleted: 4 } } });
+
+  assert.equal(processQueueScroll.scrollTop, 180);
+  assert.equal(processFocusTarget.focused, true);
+  assert.equal(processFocusTarget.focusOptions.preventScroll, true);
 });
 
 for (const [status, serializedStatus, detail] of [["Completed", 4, null], ["Failed", 2, "PDF export failed"], ["Cancelled", 3, "Cancelled"]]) {

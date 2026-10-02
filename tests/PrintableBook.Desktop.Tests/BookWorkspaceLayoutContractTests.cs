@@ -336,6 +336,28 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
+    public void ProcessInteriorUsesOneUnifiedSixSixTwelveWorkspace()
+    {
+        var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
+        var script = File.ReadAllText(Path.Combine(frontend, "js", "app.js"));
+        var layout = File.ReadAllText(Path.Combine(frontend, "css", "book-workspace.css"));
+
+        Assert.Contains("class=\"process-workspace\"", script, StringComparison.Ordinal);
+        Assert.Contains("${summaryPanel}${currentStagePanel}${queuePanel}", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("processTab", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-action=\"process-tab\"", script, StringComparison.Ordinal);
+        Assert.Contains("processQueuePageSize = 12", script, StringComparison.Ordinal);
+        Assert.Contains("preserveProcessWorkspaceUi", script, StringComparison.Ordinal);
+        Assert.Contains("restoreProcessWorkspaceUi", script, StringComparison.Ordinal);
+        Assert.Contains("role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"", script, StringComparison.Ordinal);
+        Assert.Contains(".process-workspace { display:grid; grid-template-columns:repeat(12,minmax(0,1fr));", layout, StringComparison.Ordinal);
+        Assert.Contains(".process-summary-panel,.process-current-stage-panel { grid-column:span 6;", layout, StringComparison.Ordinal);
+        Assert.Contains(".process-queue-workspace { display:grid; grid-column:1/-1;", layout, StringComparison.Ordinal);
+        Assert.Contains(".process-queue-grid-scroll { min-height:0; overflow-y:auto;", layout, StringComparison.Ordinal);
+        Assert.Contains("@media (max-width:1080px)", layout, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void KeywordBuilderUsesFixedKeywordInputsAndTabSeparatedClipboardContract()
     {
         var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
