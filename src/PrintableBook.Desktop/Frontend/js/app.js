@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
   const bookStatuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
-  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookListRefreshPending: false, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), bookKeywordBuilderDrafts: new Map(), bookKeywordBuilderValidation: new Map(), keywordBuilderPreviews: new Map(), keywordBuilderRevisions: new Map(), keywordBuilderPending: new Map(), keywordBuilderConfirmed: new Map(), keywordBuilderSubmitted: null, keywordBuilderRefreshPending: false, keywordBuilderRefreshNeeded: false, keywordBuilderRefreshBookId: "", asinResearchDrafts: new Map(), asinResearchSessions: new Map(), asinResearchFeedback: new Map(), asinResearchActiveBookId: "", asinResearchPollTimer: null, amazonBrowserStatus: { state: "Closed", reasonCode: null }, amazonBrowserPending: false, brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processTab: "overview", processQueuePage: 1, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookListRefreshPending: false, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), bookKeywordBuilderDrafts: new Map(), bookKeywordBuilderValidation: new Map(), keywordBuilderPreviews: new Map(), keywordBuilderRevisions: new Map(), keywordBuilderPending: new Map(), keywordBuilderConfirmed: new Map(), keywordBuilderSubmitted: null, keywordBuilderRefreshPending: false, keywordBuilderRefreshNeeded: false, keywordBuilderRefreshBookId: "", asinResearchDrafts: new Map(), asinResearchSessions: new Map(), asinResearchFeedback: new Map(), asinResearchActiveBookId: "", asinResearchPollTimer: null, amazonBrowserStatus: { state: "Closed", reasonCode: null }, amazonBrowserPending: false, settingsSavePending: false, settingsFeedback: "", settingsFeedbackError: false, brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processQueuePage: 1, processQueueScrollTop: 0, processFocusIdentity: null, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -571,7 +571,7 @@
     refreshButton.setAttribute("aria-busy", String(loading));
     refreshButton.textContent = state.applicationLoadState === "refreshing" ? "Refreshing…" : state.applicationLoadState === "loading" ? "Loading…" : "Refresh";
   };
-  const refreshAction = (label = "Refresh") => `<button class="button-secondary" data-action="refresh" ${applicationIsLoading() ? "disabled" : ""}>${state.applicationLoadState === "refreshing" ? "Refreshing…" : label}</button>`;
+  const refreshAction = (label = "Refresh", disabled = false) => `<button class="button-secondary" type="button" data-action="refresh" ${applicationIsLoading() || disabled ? "disabled" : ""}>${state.applicationLoadState === "refreshing" ? "Refreshing…" : label}</button>`;
   const renderLoadFailure = () => `<section class="panel" role="alert"><h2 class="panel-title">Unable to load library</h2><p class="panel-note">${escapeHtml(state.applicationLoadError || "Application refresh failed.")}</p><div class="page-actions mt-4"><button class="button-primary" data-action="refresh">Retry</button></div></section>`;
   const renderRefreshFailure = () => `<section class="refresh-failure" role="alert"><span>Refresh failed</span><span>${escapeHtml(state.applicationLoadError || "Application refresh failed.")}</span><button class="button-secondary" data-action="refresh">Retry</button></section>`;
   const beginApplicationRefresh = () => {
@@ -997,23 +997,82 @@
     const setting = (name, fallback) => valueFor(settings, name, fallback);
     const grouped = (group, name, fallback) => valueFor(valueFor(settings, group, {}), name, fallback);
     const detectionInput = (label, name, fallback, extra = "") => `<label class="field"><span>${label}</span><input class="control" data-setting-group="borderLineDetection" data-setting="${name}" type="number" ${extra} value="${grouped("borderLineDetection", name, fallback)}"></label>`;
+    const group = (id, title, description, fields, wide = false) => `<fieldset class="configuration-group ${wide ? "configuration-group-wide" : ""}" aria-describedby="${id}-help"><legend>${title}</legend><p id="${id}-help">${description}</p>${fields}</fieldset>`;
     const genericKeywordText = genericKeywords().join("\n");
-    content.innerHTML = `<div class="page-header"><div><h1>Configuration</h1><p>Manage global application settings.</p></div><div class="page-actions">${refreshAction("Load")}<button class="button-primary" data-action="save-settings">Save</button></div></div><div class="detail-stack">${panel("Application", `<div class="form-grid two"><label class="field"><span>Maximum concurrency</span><input class="control" data-setting="maximumPageConcurrency" type="number" min="1" max="12" value="${setting("maximumPageConcurrency", 4)}"></label><label class="field"><span>Artwork dark threshold</span><input class="control" data-setting="artworkDetectionThreshold" type="number" min="0" max="255" value="${setting("artworkDetectionThreshold", 20)}"></label></div>`)}${panel("Keyword Builder", `<label class="field keyword-settings-field" for="generic-keywords-input"><span>Generic Keywords</span><textarea id="generic-keywords-input" class="control keyword-list-input" rows="5" data-generic-keywords aria-describedby="generic-keywords-help" autocomplete="off" spellcheck="false">${escapeHtml(genericKeywordText)}</textarea><small id="generic-keywords-help">One phrase per line. These shared phrases are saved once and used first whenever a Book is built.</small></label>`)}${panel("Interior processing", `<p class="hint">Working Area is the square processing canvas. Final Interior Page is the exported raster and determines the Interior PDF size at the configured DPI.</p><div class="form-grid three"><label class="field"><span>Max artwork side (px)</span><input class="control" data-setting="artworkMaximumSide" type="number" min="1" value="${setting("artworkMaximumSide", 2270)}"></label><label class="field"><span>Working Area width (px)</span><input class="control" data-setting="workingPageWidth" type="number" min="1" value="${setting("workingPageWidth", 2550)}"></label><label class="field"><span>Working Area height (px)</span><input class="control" data-setting="workingPageHeight" type="number" min="1" value="${setting("workingPageHeight", 2550)}"></label><label class="field"><span>Final Interior Page width (px)</span><input class="control" data-setting="finalPageWidth" type="number" min="1" value="${setting("finalPageWidth", 2588)}"></label><label class="field"><span>Final Interior Page height (px)</span><input class="control" data-setting="finalPageHeight" type="number" min="1" value="${setting("finalPageHeight", 2625)}"></label><label class="field"><span>Final Interior Page DPI</span><input class="control" data-setting="dpi" type="number" min="1" value="${setting("dpi", 300)}"></label></div>`)}${panel("Advanced artwork detection", `<div class="form-grid three"><label class="field"><span>Normalized source size</span><input class="control" data-setting-group="artworkSourceNormalization" data-setting="normalizedSourceSize" type="number" min="1" value="${grouped("artworkSourceNormalization", "normalizedSourceSize", 2048)}"></label>${detectionInput("Pass 1 depth", "pass1SearchDepth", 200, "min=1")}${detectionInput("Pass 2 depth", "pass2SearchDepth", 320, "min=1")}${detectionInput("Corner padding", "cornerSearchPadding", 40, "min=0")}${detectionInput("Track tolerance", "trackDepthTolerance", 6, "min=0")}${detectionInput("Corner-line tolerance", "cornerLineTolerance", 16, "min=0")}${detectionInput("Max depth spread", "maximumDepthSpread", 24, "min=0")}${detectionInput("Segments", "segmentCount", 8, "min=1")}${detectionInput("Corner exclusion ratio", "cornerExclusionRatio", .10, "min=0 max=1 step=0.01")}${detectionInput("Compatible corners", "minimumCompatibleCorners", 3, "min=1 max=4")}${detectionInput("Min segment support", "minimumSegmentSupportRatio", .35, "min=0 max=1 step=0.01")}${detectionInput("Min side support", "minimumSideSupportRatio", .55, "min=0 max=1 step=0.01")}${detectionInput("Min span", "minimumSpanRatio", .70, "min=0 max=1 step=0.01")}${detectionInput("Supported segments", "minimumSupportedSegments", 6, "min=1")}${detectionInput("Missing segment run", "maximumMissingSegmentRun", 2, "min=0")}</div>`)}</div>`;
+    const feedback = state.settingsFeedback || "Ready";
+    const feedbackState = state.settingsFeedbackError ? "error" : state.settingsSavePending ? "saving" : feedback === "Saved" ? "saved" : "ready";
+    const runtime = `<div class="configuration-field-grid"><label class="field"><span>Maximum concurrency</span><input class="control" data-setting="maximumPageConcurrency" type="number" min="1" max="12" value="${setting("maximumPageConcurrency", 4)}"></label></div>`;
+    const artworkPreparation = `<div class="configuration-field-grid three"><label class="field"><span>Artwork dark threshold</span><input class="control" data-setting="artworkDetectionThreshold" type="number" min="0" max="255" value="${setting("artworkDetectionThreshold", 20)}"></label><label class="field"><span>Maximum artwork side (px)</span><input class="control" data-setting="artworkMaximumSide" type="number" min="1" value="${setting("artworkMaximumSide", 2270)}"></label><label class="field"><span>Normalized source size (px)</span><input class="control" data-setting-group="artworkSourceNormalization" data-setting="normalizedSourceSize" type="number" min="1" value="${grouped("artworkSourceNormalization", "normalizedSourceSize", 2048)}"></label></div>`;
+    const keywordDefaults = `<label class="field keyword-settings-field" for="generic-keywords-input"><span>Generic Keywords</span><textarea id="generic-keywords-input" class="control keyword-list-input" rows="5" data-generic-keywords aria-describedby="generic-keywords-help" autocomplete="off" spellcheck="false">${escapeHtml(genericKeywordText)}</textarea><small id="generic-keywords-help">One phrase per line. These shared phrases are saved once and used first whenever a Book is built.</small></label>`;
+    const workingCanvas = `<div class="configuration-field-grid two"><label class="field"><span>Working Area width (px)</span><input class="control" data-setting="workingPageWidth" type="number" min="1" value="${setting("workingPageWidth", 2550)}"></label><label class="field"><span>Working Area height (px)</span><input class="control" data-setting="workingPageHeight" type="number" min="1" value="${setting("workingPageHeight", 2550)}"></label></div>`;
+    const finalOutput = `<div class="configuration-field-grid three"><label class="field"><span>Final Page width (px)</span><input class="control" data-setting="finalPageWidth" type="number" min="1" value="${setting("finalPageWidth", 2588)}"></label><label class="field"><span>Final Page height (px)</span><input class="control" data-setting="finalPageHeight" type="number" min="1" value="${setting("finalPageHeight", 2625)}"></label><label class="field"><span>Output DPI</span><input class="control" data-setting="dpi" type="number" min="1" value="${setting("dpi", 300)}"></label></div>`;
+    const borderRange = `<div class="configuration-field-grid three">${detectionInput("Pass 1 depth", "pass1SearchDepth", 200, "min=1")}${detectionInput("Pass 2 depth", "pass2SearchDepth", 320, "min=1")}${detectionInput("Corner padding", "cornerSearchPadding", 40, "min=0")}</div>`;
+    const borderTolerances = `<div class="configuration-field-grid three">${detectionInput("Track depth tolerance", "trackDepthTolerance", 6, "min=0")}${detectionInput("Corner-line tolerance", "cornerLineTolerance", 16, "min=0")}${detectionInput("Maximum depth spread", "maximumDepthSpread", 24, "min=0")}</div>`;
+    const borderAcceptance = `<div class="configuration-field-grid four">${detectionInput("Segment count", "segmentCount", 8, "min=1")}${detectionInput("Corner exclusion ratio", "cornerExclusionRatio", .10, "min=0 max=1 step=0.01")}${detectionInput("Compatible corners", "minimumCompatibleCorners", 3, "min=1 max=4")}${detectionInput("Minimum segment support", "minimumSegmentSupportRatio", .35, "min=0 max=1 step=0.01")}${detectionInput("Minimum side support", "minimumSideSupportRatio", .55, "min=0 max=1 step=0.01")}${detectionInput("Minimum span", "minimumSpanRatio", .70, "min=0 max=1 step=0.01")}${detectionInput("Supported segments", "minimumSupportedSegments", 6, "min=1")}${detectionInput("Missing segment run", "maximumMissingSegmentRun", 2, "min=0")}</div>`;
+    content.innerHTML = `<section class="configuration-page"><div class="page-header"><div><h1>Configuration</h1><p>Manage global application settings.</p></div></div><form class="panel configuration-panel" data-form="configuration"><header class="configuration-panel-header"><div><p class="eyebrow">Settings</p><h2>Application configuration</h2><p>Shared defaults for keyword building, artwork preparation, and final Interior output.</p></div><div class="configuration-panel-actions"><span class="configuration-save-status" data-settings-feedback data-state="${feedbackState}" role="${state.settingsFeedbackError ? "alert" : "status"}" aria-live="polite">${escapeHtml(feedback)}</span>${refreshAction("Load", state.settingsSavePending)}<button class="button-primary" type="submit" data-settings-save aria-busy="${state.settingsSavePending}" ${state.settingsSavePending ? "disabled" : ""}>${state.settingsSavePending ? "Saving…" : "Save"}</button></div></header><div class="configuration-panel-scroll"><div class="configuration-group-grid">${group("configuration-runtime", "Processing capacity", "Controls the number of pages processed in parallel.", runtime)}${group("configuration-artwork-preparation", "Artwork preparation", "Normalizes source artwork before border detection and page composition.", artworkPreparation)}${group("configuration-keywords", "Keyword Builder defaults", "Shared phrases applied before each Book's own keywords.", keywordDefaults, true)}${group("configuration-working-canvas", "Working canvas", "The processing canvas must be at least as large as the maximum artwork side.", workingCanvas)}${group("configuration-final-output", "Final Interior output", "The exported raster must be at least as large as the working canvas.", finalOutput)}${group("configuration-border-range", "Border search range", "Pass 2 must include Pass 1 and remain within half of the normalized source.", borderRange)}${group("configuration-border-tolerances", "Border tolerances", "Controls how much depth and corner variation a detected frame may contain.", borderTolerances)}${group("configuration-border-acceptance", "Border acceptance rules", "Defines the segment, corner, support, and span evidence required to accept a frame.", borderAcceptance, true)}</div></div></form></section>`;
+  };
+  const updateSettingsSaveUi = () => {
+    document.querySelectorAll('[data-setting], [data-generic-keywords]').forEach((input) => { input.disabled = state.settingsSavePending; });
+    const save = content.querySelector("[data-settings-save]");
+    if (save) {
+      save.disabled = state.settingsSavePending;
+      save.textContent = state.settingsSavePending ? "Saving…" : "Save";
+      save.setAttribute("aria-busy", String(state.settingsSavePending));
+    }
+    const load = content.querySelector('[data-action="refresh"]');
+    if (load) load.disabled = state.settingsSavePending || applicationIsLoading();
+    const feedback = content.querySelector("[data-settings-feedback]");
+    if (feedback) {
+      const message = state.settingsFeedback || "Ready";
+      feedback.textContent = message;
+      feedback.dataset.state = state.settingsFeedbackError ? "error" : state.settingsSavePending ? "saving" : message === "Saved" ? "saved" : "ready";
+      feedback.setAttribute("role", state.settingsFeedbackError ? "alert" : "status");
+    }
+  };
+  const beginSettingsSave = () => {
+    if (state.settingsSavePending) return;
+    const payload = {};
+    document.querySelectorAll("[data-setting]").forEach((input) => {
+      const group = input.dataset.settingGroup;
+      if (group) { payload[group] ??= {}; payload[group][input.dataset.setting] = Number(input.value); }
+      else payload[input.dataset.setting] = Number(input.value);
+    });
+    payload.genericKeywords = normalizeKeywordPhrases(document.querySelector("[data-generic-keywords]")?.value);
+    state.settingsSavePending = true;
+    state.settingsFeedback = "Saving…";
+    state.settingsFeedbackError = false;
+    updateSettingsSaveUi();
+    send("settings.save", payload);
   };
 
+  const brandMetadataPresentation = (brand) => {
+    const summary = brandSummaryFor(brand);
+    const metadataStatus = valueFor(summary, "metadataStatus", "Missing");
+    if (metadataStatus === "Unavailable") return { label: "Metadata unavailable", tone: "status-bad" };
+    if (brandAuthor(brand)) return { label: "Author ready", tone: "status-good" };
+    return { label: "Author missing", tone: "status-bad" };
+  };
   const brandListMarkup = (brands) => brands.length
-    ? brands.map((brand) => `<li class="${valueFor(brand, "name", "") === state.inspectedBrand ? "selected" : ""}" data-action="select-brand" data-brand-name="${escapeHtml(valueFor(brand, "name", ""))}"><span>${escapeHtml(valueFor(brand, "name", ""))}</span>${badge(brandValidationStatus(valueFor(brandSummaryFor(brand), "validationStatus", "NotValidated")))}</li>`).join("")
-    : "<li class=\"empty-row\">No matching Brands found.</li>";
+    ? brands.map((brand) => {
+      const name = valueFor(brand, "name", "");
+      const selected = name === state.inspectedBrand;
+      const metadata = brandMetadataPresentation(brand);
+      return `<button class="brand-row ${selected ? "brand-row-active" : ""}" type="button" data-action="select-brand" data-brand-name="${escapeHtml(name)}" aria-pressed="${selected}"><span class="brand-row-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong><small>${escapeHtml(brandAuthor(brand) || "Primary Author not set")}</small></span><span class="brand-row-badges"><span class="status-badge ${metadata.tone}">${escapeHtml(metadata.label)}</span>${badge(brandValidationStatus(valueFor(brandSummaryFor(brand), "validationStatus", "NotValidated")))}</span></button>`;
+    }).join("")
+    : "<div class=\"brand-list-empty\"><strong>No matching Brands</strong><p>Try a different Brand name.</p></div>";
   const refreshBrandList = () => {
     const search = state.brandFilter.trim().toLocaleLowerCase();
-    const brands = valueFor(discovery(), "brands", []).filter((brand) => !search || valueFor(brand, "name", "").toLocaleLowerCase().includes(search));
+    const availableBrands = valueFor(discovery(), "brands", []);
+    const brands = availableBrands.filter((brand) => !search || valueFor(brand, "name", "").toLocaleLowerCase().includes(search));
     const list = content.querySelector("[data-brand-list]");
     if (list) list.innerHTML = brandListMarkup(brands);
+    const count = content.querySelector("[data-brand-result-count]");
+    if (count) count.textContent = `${brands.length} of ${availableBrands.length} shown`;
   };
 
   const renderBrands = () => {
     const availableBrands = valueFor(discovery(), "brands", []);
-    if (!state.inspectedBrand && availableBrands.length) state.inspectedBrand = valueFor(availableBrands[0], "name", "");
+    if (!availableBrands.some((brand) => valueFor(brand, "name", "") === state.inspectedBrand)) state.inspectedBrand = valueFor(availableBrands[0], "name", "");
     const selected = availableBrands.find((brand) => valueFor(brand, "name", "") === state.inspectedBrand);
     const search = state.brandFilter.trim().toLocaleLowerCase();
     const allBrands = availableBrands.filter((brand) => !search || valueFor(brand, "name", "").toLocaleLowerCase().includes(search));
@@ -1071,15 +1130,20 @@
     };
     const folders = assets.filter((asset) => valueFor(asset, "type", "") === "Folder");
     const files = assets.filter((asset) => valueFor(asset, "type", "") !== "Folder");
-    const assetInventory = assets.length ? `<div class="brand-asset-inventory"><div class="brand-folder-list">${folders.map(renderFolder).join("")}</div><div class="brand-file-grid">${files.map(renderFile).join("")}</div></div>` : "<p class=\"empty-copy\">No brand assets found.</p>";
+    const assetInventory = assets.length ? `<section class="brand-template-section"><div class="brand-section-heading"><div><h3>Template inventory</h3><p>Review the discovered folders and required production files for this Brand.</p></div><span>${assets.length} asset${assets.length === 1 ? "" : "s"}</span></div><div class="brand-asset-inventory"><div class="brand-folder-list">${folders.map(renderFolder).join("")}</div><div class="brand-file-grid">${files.map(renderFile).join("")}</div></div></section>` : "<section class=\"brand-template-section\"><div class=\"brand-list-empty\"><strong>No Brand assets found</strong><p>Add the required folders and template files, then refresh the library.</p></div></section>";
     const authorDraft = selected ? brandAuthorDraftFor(selected) : "";
     const authorDirty = selected ? brandAuthorIsDirty(selected, authorDraft) : false;
     const impactedBooks = selected && authorDirty ? books().filter((book) => {
       const summary = summaryFor(book);
       return assignedBrandName(summary) === valueFor(selected, "name", "") && !authorMatches(valueFor(metadataFor(summary), "author", ""), authorDraft);
     }).length : 0;
-    const brandInfo = selected ? `<section class="catalog-card"><div class="catalog-card-heading"><div><h3>Brand Information</h3><p>MVP contract: one Brand has one Primary Author.</p></div>${badge(valueFor(selectedValidation, "metadataStatus", "Missing"))}</div><label class="field"><span>Author</span><input class="control" data-action="brand-author-input" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" value="${escapeHtml(authorDraft)}" placeholder="Unknown" autocomplete="off"></label>${impactedBooks ? `<p class="catalog-warning" role="alert">Saving this Author will make ${impactedBooks} assigned Book${impactedBooks === 1 ? "" : "s"} invalid. Their assignments will be kept for review.</p>` : ""}<div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" role="${state.catalogFeedbackError ? "alert" : "status"}">${state.catalogMutationTarget === valueFor(selected, "name", "") ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-brand-author" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" ${!authorDirty || state.catalogMutationPending || processIsActive() ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "brand.author.save" ? "Saving…" : "Save Author"}</button></div></section>` : "";
-    content.innerHTML = `<div class="page-header"><div><h1>Brands & templates</h1><p>Inspect reusable Brand assets and resolve exact file requirements before processing.</p></div></div><div class="master-detail"><section class="panel list-panel"><label class="brand-search"><span>Search Brands</span><input class="control" data-action="filter-brands" value="${escapeHtml(state.brandFilter)}" placeholder="Search by name" /></label><div class="list-title">Brands</div><ul class="item-list" data-brand-list>${brandListMarkup(allBrands)}</ul></section><section class="detail-pane">${selected ? panel(escapeHtml(valueFor(selected, "name", "")), `${brandInfo}<div class="page-actions brand-validation-actions"><div>${badge(validationStatus)}<p class="panel-note">Validate IntroTemplate, frame.png, background.png, cover.psd, app_plus.psd, and book_owner.psd before processing.</p></div><button class="button-primary" data-action="validate-brand" ${processIsActive() ? "disabled" : ""}>Validate Brand</button></div>${validationMessage}${assetInventory}`) : panel("Brand detail", "<p class=\"empty-copy\">Select a Brand to inspect its assets.</p>")}</section></div>`;
+    const metadata = selected ? brandMetadataPresentation(selected) : null;
+    const brandInfo = selected ? `<section class="catalog-card brand-region-card"><div class="catalog-card-heading"><div><h3>Brand Information</h3><p>One Brand has one Primary Author.</p></div><span class="status-badge ${metadata.tone}">${escapeHtml(metadata.label)}</span></div><label class="field"><span>Author</span><input class="control" data-action="brand-author-input" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" value="${escapeHtml(authorDraft)}" placeholder="Unknown" autocomplete="off"></label>${impactedBooks ? `<p class="catalog-warning" role="alert">Saving this Author will make ${impactedBooks} assigned Book${impactedBooks === 1 ? "" : "s"} invalid. Their assignments will be kept for review.</p>` : ""}<div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" role="${state.catalogFeedbackError ? "alert" : "status"} aria-live="polite">${state.catalogMutationTarget === valueFor(selected, "name", "") ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-brand-author" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "brand.author.save"}" ${!authorDirty || state.catalogMutationPending || processIsActive() ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "brand.author.save" ? "Saving…" : "Save Author"}</button></div></section>` : "";
+    const validationInfo = selected ? `<section class="catalog-card brand-region-card brand-validation-card"><div class="catalog-card-heading"><div><h3>Brand Validation</h3><p>Check every required asset before processing.</p></div>${badge(validationStatus)}</div><dl class="brand-validation-facts"><div><dt>Last validated</dt><dd>${escapeHtml(dateTime(valueFor(selectedValidation, "validatedAtUtc", null)))}</dd></div><div><dt>Files checked</dt><dd>IntroTemplate + 5 required files</dd></div></dl><p class="panel-note">Validate IntroTemplate, frame.png, background.png, cover.psd, app_plus.psd, and book_owner.psd.</p><div class="brand-validation-action"><button class="button-primary" data-action="validate-brand" ${processIsActive() ? "disabled" : ""}>Validate Brand</button></div></section>` : "";
+    const detail = selected
+      ? `<section class="panel brand-detail-panel"><header class="brand-panel-header"><div><p class="eyebrow">Selected Brand</p><h2>${escapeHtml(valueFor(selected, "name", ""))}</h2></div><div class="brand-detail-badges"><span class="status-badge ${metadata.tone}">${escapeHtml(metadata.label)}</span>${badge(validationStatus)}</div></header><div class="brand-detail-scroll"><div class="brand-region-grid">${brandInfo}${validationInfo}</div>${validationMessage}${assetInventory}</div></section>`
+      : `<section class="panel brand-detail-panel"><header class="brand-panel-header"><div><p class="eyebrow">Selected Brand</p><h2>Brand detail</h2></div></header><div class="brand-detail-scroll"><div class="brand-detail-empty"><strong>No Brand selected</strong><p>Add a Brand folder or refresh the library to inspect its templates.</p></div></div></section>`;
+    content.innerHTML = `<section class="brands-page"><div class="page-header"><div><h1>Brands & templates</h1><p>Inspect reusable Brand assets and resolve exact file requirements before processing.</p></div></div><div class="brand-workspace"><section class="panel brand-list-panel"><header class="brand-panel-header"><div><h2>Brands</h2><p data-brand-result-count aria-live="polite">${allBrands.length} of ${availableBrands.length} shown</p></div></header><label class="brand-search"><span class="sr-only">Search Brands by name</span><input class="control" type="search" data-action="filter-brands" value="${escapeHtml(state.brandFilter)}" placeholder="Search Brand name…" autocomplete="off"></label><div class="brand-list-scroll" data-brand-list>${brandListMarkup(allBrands)}</div></section>${detail}</div></section>`;
   };
 
   const renderProcessedInteriorPages = (summary) => {
@@ -1802,7 +1866,33 @@
     }
   };
 
+  const processControlIdentity = (element) => {
+    if (!element?.dataset?.action || !element.closest?.(".process-page")) return null;
+    return {
+      action: element.dataset.action,
+      bookId: element.dataset.bookId ?? "",
+      page: element.dataset.processQueuePage ?? ""
+    };
+  };
+  const preserveProcessWorkspaceUi = () => {
+    const queueScroll = content.querySelector(".process-queue-grid-scroll");
+    if (queueScroll) state.processQueueScrollTop = queueScroll.scrollTop;
+    state.processFocusIdentity = processControlIdentity(document.activeElement);
+  };
+  const restoreProcessWorkspaceUi = () => {
+    const queueScroll = content.querySelector(".process-queue-grid-scroll");
+    if (queueScroll) queueScroll.scrollTop = state.processQueueScrollTop;
+    const identity = state.processFocusIdentity;
+    if (!identity) return;
+    const focusTarget = [...document.querySelectorAll('[data-action]')].find((element) =>
+      element.dataset.action === identity.action &&
+      (element.dataset.bookId ?? "") === identity.bookId &&
+      (element.dataset.processQueuePage ?? "") === identity.page);
+    focusTarget?.focus?.({ preventScroll: true });
+  };
+
   const renderProcess = (requestProcess = true) => {
+    preserveProcessWorkspaceUi();
     const session = window.processSnapshot;
     const active = valueFor(session, "isActive", false);
     const cancelling = valueFor(session, "isCancelling", false);
@@ -1873,9 +1963,11 @@
         : `<button class="button-secondary process-queue-remove" data-action="remove-process-queue-book" data-book-id="${escapeHtml(id)}" aria-label="Remove ${escapeHtml(name)} from selected queue">Remove</button>`;
       return `<article class="process-queue-card">${main}<footer>${action}</footer></article>`;
     };
-    const queueTab = `<section class="process-queue-workspace" aria-labelledby="selected-queue-title"><header class="process-queue-heading"><div><h2 id="selected-queue-title">Selected queue <span>${queue.length}</span></h2><p>${queueLocked ? `Queue is locked while ${sessionName} is running.` : "Review selected Books before preparing Interior pages."}</p></div><span class="process-queue-range" aria-live="polite">${queueRangeStart}–${queueRangeEnd} of ${queue.length}</span></header><div class="process-queue-grid-scroll"><div class="process-queue-grid">${queueItems.length ? queueItems.map(renderQueueCard).join("") : `<div class="process-queue-empty"><strong>No Books selected</strong><span>Select ready Books from the Books workspace, then return here to process them.</span><button class="button-secondary" data-action="go-books">Go to Books</button></div>`}</div></div><footer class="process-queue-pagination" data-process-queue-total-pages="${queueTotalPages}"><span>${queueRangeStart}–${queueRangeEnd} of ${queue.length}</span><div><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="first" ${state.processQueuePage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="previous" ${state.processQueuePage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.processQueuePage} of ${queueTotalPages}</span><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="next" ${state.processQueuePage === queueTotalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="last" ${state.processQueuePage === queueTotalPages ? "disabled" : ""}>Last</button></div></footer></section>`;
+    const queuePanel = `<section class="process-queue-workspace" aria-labelledby="selected-queue-title"><header class="process-queue-heading"><div><h2 id="selected-queue-title">Selected queue <span>${queue.length}</span></h2><p>${queueLocked ? `Queue is locked while ${sessionName} is running.` : "Review selected Books before preparing Interior pages."}</p></div><span class="process-queue-range">${queueRangeStart}–${queueRangeEnd} of ${queue.length}</span></header><div class="process-queue-grid-scroll"><div class="process-queue-grid">${queueItems.length ? queueItems.map(renderQueueCard).join("") : `<div class="process-queue-empty"><strong>No Books selected</strong><span>Select ready Books from the Books workspace, then return here to process them.</span><button class="button-secondary" data-action="go-books">Go to Books</button></div>`}</div></div><footer class="process-queue-pagination" data-process-queue-total-pages="${queueTotalPages}"><span>${queueRangeStart}–${queueRangeEnd} of ${queue.length}</span><div><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="first" ${state.processQueuePage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="previous" ${state.processQueuePage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.processQueuePage} of ${queueTotalPages}</span><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="next" ${state.processQueuePage === queueTotalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="process-queue-page" data-process-queue-page="last" ${state.processQueuePage === queueTotalPages ? "disabled" : ""}>Last</button></div></footer></section>`;
     const resolvedQueueBrand = queueLocked ? valueFor(session, "brandName", "Resolving") || "Resolving" : selectionReadiness.brandName || "—";
-    const overviewTab = `<section class="process-overview-grid"><section class="panel process-summary-panel"><div class="process-panel-heading"><div><h2 class="panel-title">Summary</h2><p>${terminal ? `Last ${sessionName} session` : queueLocked ? `Current ${sessionName} session` : "Books ready to process"} · Assigned Brand: ${escapeHtml(resolvedQueueBrand)}</p></div>${badge(stage)}</div><div class="process-summary-stats" aria-live="polite"><div><span>Selected queue</span><strong>${queueLocked ? sessionQueue.length : pendingQueue.length}</strong></div><div><span>Completed</span><strong>${completedBooks}</strong></div><div><span>Failed</span><strong>${failedBooks}</strong></div><div><span>Workers</span><strong>${valueFor(session, "workerLimit", 0) || "—"}</strong></div><div><span>Elapsed</span><strong>${elapsedTime(valueFor(session, "startedAt", null))}</strong></div><div><span>Progress</span><strong>${completed} / ${total || "?"}</strong></div></div><ol class="process-stages">${stages.map((item, index) => `<li class="${index < currentStageIndex ? "complete" : index === currentStageIndex && queueLocked ? "active" : ""}"><span>${index + 1}</span>${item}</li>`).join("")}</ol></section><section class="panel process-current-stage-panel"><div class="process-panel-heading"><div><h2 class="panel-title">Current stage</h2><p>${queueLocked ? "Live progress for the active Book" : terminal ? "Final state of the last session" : "Start processing when the selected queue is ready"}</p></div></div><div class="process-book"><strong>${escapeHtml(currentBook)}</strong><span>${escapeHtml(currentStep)}</span></div><div class="progress-track"><span style="width:${percent}%"></span></div><p class="progress-copy">${completed} / ${total || "?"} pages · ${valueFor(session, "workerLimit", 0) || "?"} workers</p>${outcomeMarkup}${!selectionReadiness.ready && state.selectedBookIds.size ? `<div class="process-failure" role="alert"><strong>${selectionReadiness.mixed ? "Selected queue contains multiple Brands" : "Selected Book needs review"}</strong><p>${escapeHtml(selectionReadiness.reason)}</p></div>` : ""}${failureDetails.length ? `<div class="process-failure" role="alert"><strong>Run needs review</strong>${failureDetails.map((entry) => `<p>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}: ${escapeHtml(valueFor(entry, "detail", ""))}</p>`).join("")}</div>` : ""}<div class="page-actions mt-4">${queueLocked ? "" : `<button class="button-primary" data-action="start-process" ${selectionReadiness.ready ? "" : "disabled"}>${terminal ? "Start New Interior Processing" : "Start Interior Processing"}</button>`}</div></section></section>`;
+    const summaryPanel = `<section class="panel process-summary-panel"><div class="process-panel-heading"><div><h2 class="panel-title">Summary</h2><p>${terminal ? `Last ${sessionName} session` : queueLocked ? `Current ${sessionName} session` : "Books ready to process"} · Assigned Brand: ${escapeHtml(resolvedQueueBrand)}</p></div>${badge(stage)}</div><div class="process-summary-stats"><div><span>Selected queue</span><strong>${queueLocked ? sessionQueue.length : pendingQueue.length}</strong></div><div><span>Completed</span><strong>${completedBooks}</strong></div><div><span>Failed</span><strong>${failedBooks}</strong></div><div><span>Workers</span><strong>${valueFor(session, "workerLimit", 0) || "—"}</strong></div><div><span>Elapsed</span><strong>${elapsedTime(valueFor(session, "startedAt", null))}</strong></div><div><span>Progress</span><strong>${completed} / ${total || "?"}</strong></div></div><ol class="process-stages">${stages.map((item, index) => `<li class="${index < currentStageIndex ? "complete" : index === currentStageIndex && queueLocked ? "active" : ""}"><span>${index + 1}</span>${item}</li>`).join("")}</ol></section>`;
+    const currentStageStatus = `${stage}. ${currentBook}. ${completed} of ${total || "unknown"} pages.`;
+    const currentStagePanel = `<section class="panel process-current-stage-panel"><div class="process-panel-heading"><div><h2 class="panel-title">Current stage</h2><p>${queueLocked ? "Live progress for the active Book" : terminal ? "Final state of the last session" : "Start processing when the selected queue is ready"}</p></div></div><p class="sr-only" role="status" aria-live="polite" aria-atomic="true">${escapeHtml(currentStageStatus)}</p><div class="process-book"><strong>${escapeHtml(currentBook)}</strong><span>${escapeHtml(currentStep)}</span></div><div class="progress-track"><span style="width:${percent}%"></span></div><p class="progress-copy">${completed} / ${total || "?"} pages · ${valueFor(session, "workerLimit", 0) || "?"} workers</p>${outcomeMarkup}${!selectionReadiness.ready && state.selectedBookIds.size ? `<div class="process-failure" role="alert"><strong>${selectionReadiness.mixed ? "Selected queue contains multiple Brands" : "Selected Book needs review"}</strong><p>${escapeHtml(selectionReadiness.reason)}</p></div>` : ""}${failureDetails.length ? `<div class="process-failure" role="alert"><strong>Run needs review</strong>${failureDetails.map((entry) => `<p>${escapeHtml(valueFor(valueFor(entry, "bookId", {}), "value", ""))}: ${escapeHtml(valueFor(entry, "detail", ""))}</p>`).join("")}</div>` : ""}<div class="page-actions mt-4">${queueLocked ? "" : `<button class="button-primary" data-action="start-process" ${selectionReadiness.ready ? "" : "disabled"}>${terminal ? "Start New Interior Processing" : "Start Interior Processing"}</button>`}</div></section>`;
     const pageDescription = cancelling
       ? `Stopping ${sessionName} session…`
       : active
@@ -1883,7 +1975,8 @@
         : terminal
           ? `Last ${sessionName} session`
           : "Prepare Interior pages for preview. This does not build or replace a PDF.";
-    content.innerHTML = `<section class="process-page" aria-busy="${queueLocked}"><div class="page-header"><div><h1>${escapeHtml(sessionName)}</h1><p>${escapeHtml(pageDescription)}</p></div>${active ? cancelling ? '<button class="button-danger" disabled>Stopping processing…</button>' : '<button class="button-danger" data-action="cancel-process">Cancel session</button>' : ""}</div><nav class="process-tabs" role="tablist" aria-label="Interior Processing workspace"><button class="${state.processTab === "overview" ? "active" : ""}" data-action="process-tab" data-process-tab="overview" role="tab" aria-selected="${state.processTab === "overview"}">Overview</button><button class="${state.processTab === "queue" ? "active" : ""}" data-action="process-tab" data-process-tab="queue" role="tab" aria-selected="${state.processTab === "queue"}">Selected queue <span>${queue.length}</span></button></nav><div class="process-tab-body">${state.processTab === "queue" ? queueTab : overviewTab}</div></section>`;
+    content.innerHTML = `<section class="process-page" aria-busy="${queueLocked}"><div class="page-header"><div><h1>${escapeHtml(sessionName)}</h1><p>${escapeHtml(pageDescription)}</p></div>${active ? cancelling ? '<button class="button-danger" disabled>Stopping processing…</button>' : '<button class="button-danger" data-action="cancel-process">Cancel session</button>' : ""}</div><div class="process-workspace">${summaryPanel}${currentStagePanel}${queuePanel}</div></section>`;
+    restoreProcessWorkspaceUi();
     if (requestProcess) send("process.get");
   };
 
@@ -2125,9 +2218,14 @@
       render("diagnostics", false);
       return;
     }
-    if (action === "refresh" || action === "validate-all") beginApplicationRefresh();
+    if (action === "refresh" || action === "validate-all") {
+      if (action === "refresh" && currentRoute() === "configuration") {
+        state.settingsFeedback = "";
+        state.settingsFeedbackError = false;
+      }
+      beginApplicationRefresh();
+    }
     if (action === "refresh-diagnostics") { send("diagnostics.get"); send("task.list"); }
-    if (action === "save-settings") { const payload = {}; document.querySelectorAll("[data-setting]").forEach((input) => { const group = input.dataset.settingGroup; if (group) { payload[group] ??= {}; payload[group][input.dataset.setting] = Number(input.value); } else payload[input.dataset.setting] = Number(input.value); }); payload.genericKeywords = normalizeKeywordPhrases(document.querySelector("[data-generic-keywords]")?.value); send("settings.save", payload); }
     if (action === "select-brand") { state.inspectedBrand = target.dataset.brandName; state.brandValidationResult = null; render("brands"); }
     if (action === "validate-brand") { const requestId = send("brand.validate", { brandName: state.inspectedBrand }); state.brandValidationRequestBrands.set(requestId, state.inspectedBrand); }
     if (action === "save-brand-author") {
@@ -2371,8 +2469,8 @@
       const readiness = book ? processingReadiness(book, summaryFor(book)) : { ready: false, reason: "Choose a Book first." };
       if (!readiness.ready) { status.textContent = readiness.reason; return; }
       state.selectedBookIds.add(state.selectedBookId);
-      state.processTab = "queue";
       state.processQueuePage = 1;
+      state.processQueueScrollTop = 0;
       render("process");
     }
     if (action === "toggle-artwork-selection") {
@@ -2437,14 +2535,14 @@
     if (action === "book-page") { const last = Number(target.closest("[data-book-total-pages]")?.dataset.bookTotalPages ?? 1); state.bookPage = target.dataset.bookPage === "first" ? 1 : target.dataset.bookPage === "last" ? last : Math.min(last, Math.max(1, state.bookPage + (target.dataset.bookPage === "next" ? 1 : -1))); render("books", false); }
     if (action === "pdf-library-page") { const totalPages = Math.max(1, Math.ceil(pdfLibraryBooks().length / pdfLibraryPageSize)); state.pdfLibraryPage = target.dataset.pdfLibraryPage === "first" ? 1 : target.dataset.pdfLibraryPage === "last" ? totalPages : Math.min(totalPages, Math.max(1, state.pdfLibraryPage + (target.dataset.pdfLibraryPage === "next" ? 1 : -1))); render("outputs", false); }
     if (action === "pdf-library-view") { state.pdfLibraryView = target.dataset.pdfLibraryView === "list" ? "list" : "grid"; render("outputs", false); }
-    if (action === "process-tab") { state.processTab = target.dataset.processTab === "queue" ? "queue" : "overview"; render("process", false); }
-    if (action === "process-queue-page") { const last = Number(target.closest("[data-process-queue-total-pages]")?.dataset.processQueueTotalPages ?? 1); state.processQueuePage = target.dataset.processQueuePage === "first" ? 1 : target.dataset.processQueuePage === "last" ? last : Math.min(last, Math.max(1, state.processQueuePage + (target.dataset.processQueuePage === "next" ? 1 : -1))); render("process", false); }
+    if (action === "process-queue-page") { const last = Number(target.closest("[data-process-queue-total-pages]")?.dataset.processQueueTotalPages ?? 1); state.processQueuePage = target.dataset.processQueuePage === "first" ? 1 : target.dataset.processQueuePage === "last" ? last : Math.min(last, Math.max(1, state.processQueuePage + (target.dataset.processQueuePage === "next" ? 1 : -1))); state.processQueueScrollTop = 0; render("process", false); }
     if (action === "remove-process-queue-book" && !processIsActive()) {
       const id = target.dataset.bookId;
       const book = books().find((item) => bookId(item) === id);
       const name = valueFor(book, "name", id);
       if (!window.confirm(`Remove ${name} from the selected queue?`)) return;
       state.selectedBookIds.delete(id);
+      state.processQueueScrollTop = 0;
       status.textContent = `${name} removed from selected queue`;
       render("process", false);
     }
@@ -2464,7 +2562,17 @@
     if (action === "reveal-output") send("book.output.reveal", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
     if (action === "copy-output-path") send("book.output.copy-path", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
   });
+  content.addEventListener("submit", (event) => {
+    if (event.target.dataset.form !== "configuration") return;
+    event.preventDefault();
+    beginSettingsSave();
+  });
   content.addEventListener("input", (event) => {
+    if (!state.settingsSavePending && (event.target.dataset.setting || Object.hasOwn(event.target.dataset, "genericKeywords"))) {
+      state.settingsFeedback = "";
+      state.settingsFeedbackError = false;
+      updateSettingsSaveUi();
+    }
     if (event.target.dataset.action === "filter-books") { state.bookFilter = event.target.value; state.bookPage = 1; render("books", false); }
     if (event.target.dataset.action === "filter-brands") { state.brandFilter = event.target.value; refreshBrandList(); }
     if (event.target.dataset.action === "filter-assets") { state.assetFilter = event.target.value; state.artworkGridScrollTop = 0; refreshInteriorArtworkWorkspace(); }
@@ -2785,7 +2893,10 @@
       beginApplicationRefresh();
     } else if (ok && command === "settings.saved") {
       window.appSnapshot = { ...(window.appSnapshot ?? {}), globalSettings: valueFor(response, "payload", {}) };
-      render("configuration", false);
+      state.settingsSavePending = false;
+      state.settingsFeedback = "Saved";
+      state.settingsFeedbackError = false;
+      if (currentRoute() === "configuration") render("configuration", false);
       status.textContent = "Settings saved";
     } else if (ok && command === "process.snapshot") {
       const snapshot = valueFor(response, "payload", {});
@@ -2924,6 +3035,14 @@
       if (requestCommand === "book.interior.settings.save") {
         state.bookInteriorSavePending = false;
         updateInteriorSaveUi();
+      }
+      if (requestCommand === "settings.save") {
+        state.settingsSavePending = false;
+        state.settingsFeedback = error === "invalid_settings" ? "Review the configuration values and try again." : "Settings could not be saved. Try again.";
+        state.settingsFeedbackError = true;
+        updateSettingsSaveUi();
+        status.textContent = "Settings could not be saved";
+        return;
       }
       if (["book.metadata.save", "book.keywords.shuffle", "book.keywords.preview.open", "book.keywords.preview.update-ads-asin", "book.keywords.save", "book.brand.assign", "book.brand.unassign", "brand.author.save"].includes(requestCommand)) {
         state.catalogMutationPending = false;

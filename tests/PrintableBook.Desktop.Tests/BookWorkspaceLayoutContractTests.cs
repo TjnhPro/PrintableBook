@@ -290,14 +290,71 @@ public sealed class BookWorkspaceLayoutContractTests
     [Fact]
     public void BrandCatalogUiSupportsOneAuthorAndSurfacesImpactBeforeSave()
     {
-        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
+        var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
+        var script = File.ReadAllText(Path.Combine(frontend, "js", "app.js"));
+        var layout = File.ReadAllText(Path.Combine(frontend, "css", "book-workspace.css"));
 
         Assert.Contains("Brand Information", script, StringComparison.Ordinal);
-        Assert.Contains("MVP contract: one Brand has one Primary Author", script, StringComparison.Ordinal);
+        Assert.Contains("One Brand has one Primary Author", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"brand-author-input\"", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"save-brand-author\"", script, StringComparison.Ordinal);
         Assert.Contains("assigned Book${impactedBooks === 1", script, StringComparison.Ordinal);
-        Assert.Contains("metadataStatus\", \"Missing\") === \"Unavailable\"", script, StringComparison.Ordinal);
+        Assert.Contains("metadataStatus === \"Unavailable\"", script, StringComparison.Ordinal);
+        Assert.Contains("class=\"brand-row ${selected ? \"brand-row-active\" : \"\"}\"", script, StringComparison.Ordinal);
+        Assert.Contains("aria-pressed=\"${selected}\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-brand-result-count aria-live=\"polite\"", script, StringComparison.Ordinal);
+        Assert.Contains(".brands-page { display:grid; grid-template-rows:auto minmax(0,1fr);", layout, StringComparison.Ordinal);
+        Assert.Contains(".brand-workspace { display:grid; grid-template-columns:minmax(280px,3fr) minmax(0,9fr);", layout, StringComparison.Ordinal);
+        Assert.Contains(".brand-list-scroll { min-height:0;", layout, StringComparison.Ordinal);
+        Assert.Contains(".brand-detail-scroll { min-height:0;", layout, StringComparison.Ordinal);
+        Assert.Contains("@media (max-width:900px)", layout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ConfigurationUsesOneScrollablePanelWithPurposeBuiltGroups()
+    {
+        var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
+        var script = File.ReadAllText(Path.Combine(frontend, "js", "app.js"));
+        var layout = File.ReadAllText(Path.Combine(frontend, "css", "book-workspace.css"));
+
+        Assert.Contains("class=\"configuration-page\"", script, StringComparison.Ordinal);
+        Assert.Contains("class=\"panel configuration-panel\" data-form=\"configuration\"", script, StringComparison.Ordinal);
+        Assert.Contains("Processing capacity", script, StringComparison.Ordinal);
+        Assert.Contains("Keyword Builder defaults", script, StringComparison.Ordinal);
+        Assert.Contains("Artwork preparation", script, StringComparison.Ordinal);
+        Assert.Contains("Working canvas", script, StringComparison.Ordinal);
+        Assert.Contains("Final Interior output", script, StringComparison.Ordinal);
+        Assert.Contains("Border search range", script, StringComparison.Ordinal);
+        Assert.Contains("Border tolerances", script, StringComparison.Ordinal);
+        Assert.Contains("Border acceptance rules", script, StringComparison.Ordinal);
+        Assert.Contains("content.addEventListener(\"submit\"", script, StringComparison.Ordinal);
+        Assert.Contains("state.settingsSavePending", script, StringComparison.Ordinal);
+        Assert.Contains(".configuration-page { display:grid; grid-template-rows:auto minmax(0,1fr);", layout, StringComparison.Ordinal);
+        Assert.Contains(".configuration-panel-scroll { min-height:0;", layout, StringComparison.Ordinal);
+        Assert.Contains(".configuration-group-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr));", layout, StringComparison.Ordinal);
+        Assert.Contains("@media (max-width:900px)", layout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProcessInteriorUsesOneUnifiedSixSixTwelveWorkspace()
+    {
+        var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
+        var script = File.ReadAllText(Path.Combine(frontend, "js", "app.js"));
+        var layout = File.ReadAllText(Path.Combine(frontend, "css", "book-workspace.css"));
+
+        Assert.Contains("class=\"process-workspace\"", script, StringComparison.Ordinal);
+        Assert.Contains("${summaryPanel}${currentStagePanel}${queuePanel}", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("processTab", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-action=\"process-tab\"", script, StringComparison.Ordinal);
+        Assert.Contains("processQueuePageSize = 12", script, StringComparison.Ordinal);
+        Assert.Contains("preserveProcessWorkspaceUi", script, StringComparison.Ordinal);
+        Assert.Contains("restoreProcessWorkspaceUi", script, StringComparison.Ordinal);
+        Assert.Contains("role=\"status\" aria-live=\"polite\" aria-atomic=\"true\"", script, StringComparison.Ordinal);
+        Assert.Contains(".process-workspace { display:grid; grid-template-columns:repeat(12,minmax(0,1fr));", layout, StringComparison.Ordinal);
+        Assert.Contains(".process-summary-panel,.process-current-stage-panel { grid-column:span 6;", layout, StringComparison.Ordinal);
+        Assert.Contains(".process-queue-workspace { display:grid; grid-column:1/-1;", layout, StringComparison.Ordinal);
+        Assert.Contains(".process-queue-grid-scroll { min-height:0; overflow-y:auto;", layout, StringComparison.Ordinal);
+        Assert.Contains("@media (max-width:1080px)", layout, StringComparison.Ordinal);
     }
 
     [Fact]

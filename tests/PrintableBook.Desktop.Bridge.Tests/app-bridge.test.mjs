@@ -18,9 +18,16 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   const contentListeners = {};
   const documentListeners = {};
   const searchInput = { focused: false, selection: null, focus() { this.focused = true; }, setSelectionRange(start, end) { this.selection = [start, end]; } };
+  const settingsSaveButton = { disabled: false, textContent: "Save", attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } };
+  const settingsLoadButton = { disabled: false };
+  const settingsFeedback = { textContent: "Ready", dataset: { state: "ready" }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } };
+  const processQueueScroll = { scrollTop: 0 };
+  const processFocusTarget = { dataset: { action: "process-queue-page", processQueuePage: "next" }, focused: false, focusOptions: null, focus(options) { this.focused = true; this.focusOptions = options; } };
+  let documentActiveElement = null;
+  const brandResultCount = { textContent: "" };
   const brandList = {
     set innerHTML(markup) {
-      contentMarkup = contentMarkup.replace(/(<ul class="item-list" data-brand-list>).*?(<\/ul>)/, `$1${markup}$2`);
+      contentMarkup = contentMarkup.replace(/(<div class="brand-list-scroll" data-brand-list>)[\s\S]*?(<\/div><\/section><section class="panel brand-detail-panel">)/, `$1${markup}$2`);
     }
   };
   let contentMarkup = "";
@@ -40,10 +47,10 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   };
   const content = {
     get innerHTML() { return contentMarkup; },
-    set innerHTML(markup) { fullRenderCount += 1; contentMarkup = markup; },
+    set innerHTML(markup) { fullRenderCount += 1; contentMarkup = markup; if (markup.includes('class="process-queue-grid-scroll"')) processQueueScroll.scrollTop = 0; },
     addEventListener: (eventName, handler) => { contentListeners[eventName] = handler; },
     insertAdjacentHTML: (_position, markup) => { contentMarkup += markup; },
-    querySelector: (selector) => selector === '[data-action="pdf-library-search"]' ? searchInput : selector === "[data-brand-list]" ? brandList : selector === "[data-pdf-library-feedback]" ? pdfLibraryFeedback : null
+    querySelector: (selector) => selector === ".process-queue-grid-scroll" && contentMarkup.includes('class="process-queue-grid-scroll"') ? processQueueScroll : selector === '[data-action="pdf-library-search"]' ? searchInput : selector === "[data-settings-save]" ? settingsSaveButton : selector === '[data-action="refresh"]' ? settingsLoadButton : selector === "[data-settings-feedback]" ? settingsFeedback : selector === "[data-brand-list]" ? brandList : selector === "[data-brand-result-count]" ? brandResultCount : selector === "[data-pdf-library-feedback]" ? pdfLibraryFeedback : null
   };
   const introWorkspace = {
     set outerHTML(markup) {
@@ -99,10 +106,12 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   const brandSettingsEditor = { dataset: { brandSettings: "" }, value: "{}" };
   const genericKeywordsEditor = { dataset: { genericKeywords: "" }, value: "" };
   const settingsInputs = [
-    ["maximumPageConcurrency", "4"], ["artworkDetectionThreshold", "20"], ["artworkMaximumSide", "2270"],
-    ["workingPageWidth", "2550"], ["workingPageHeight", "2550"], ["finalPageWidth", "2588"],
-    ["finalPageHeight", "2625"], ["dpi", "300"]
+    ["maximumPageConcurrency", "4"], ["artworkDetectionThreshold", "20"], ["artworkMaximumSide", "2270"], ["workingPageWidth", "2550"], ["workingPageHeight", "2550"], ["finalPageWidth", "2588"], ["finalPageHeight", "2625"], ["dpi", "300"]
   ].map(([setting, value]) => ({ dataset: { setting }, value }));
+  settingsInputs.push({ dataset: { settingGroup: "artworkSourceNormalization", setting: "normalizedSourceSize" }, value: "2048" });
+  [
+    ["pass1SearchDepth", "200"], ["pass2SearchDepth", "320"], ["cornerSearchPadding", "40"], ["trackDepthTolerance", "6"], ["cornerLineTolerance", "16"], ["maximumDepthSpread", "24"], ["segmentCount", "8"], ["cornerExclusionRatio", "0.10"], ["minimumCompatibleCorners", "3"], ["minimumSegmentSupportRatio", "0.35"], ["minimumSideSupportRatio", "0.55"], ["minimumSpanRatio", "0.70"], ["minimumSupportedSegments", "6"], ["maximumMissingSegmentRun", "2"]
+  ].forEach(([setting, value]) => settingsInputs.push({ dataset: { settingGroup: "borderLineDetection", setting }, value }));
   const refreshButton = {
     disabled: false,
     textContent: "Refresh",
@@ -147,9 +156,10 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   vm.runInNewContext(readFileSync(appScriptPath, "utf8"), {
     crypto: { randomUUID: () => "request-1" },
     document: {
+      get activeElement() { return documentActiveElement; },
       getElementById: (id) => ({ "bridge-status": status, "app-content": content, "refresh-button": refreshButton, "update-dialog-root": updateDialog }[id]),
       createElement: (tagName) => ({ tagName, className: "", textContent: "", attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } }),
-      querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : selector === "[data-setting]" ? settingsInputs : [],
+      querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : selector === "[data-setting]" ? settingsInputs : selector === '[data-setting], [data-generic-keywords]' ? [...settingsInputs, genericKeywordsEditor] : selector === '[data-action]' ? [processFocusTarget] : [],
       querySelector: (selector) => {
         if (selector === "[data-brand-settings]") return brandSettingsEditor;
         if (selector === "[data-generic-keywords]") return genericKeywordsEditor;
@@ -170,7 +180,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandSettingsEditor, genericKeywordsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, settingsSaveButton, settingsLoadButton, settingsFeedback, processQueueScroll, processFocusTarget, setDocumentActiveElement: (element) => { documentActiveElement = element; }, brandResultCount, brandSettingsEditor, genericKeywordsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -298,21 +308,54 @@ test("webview shell exposes every top-level desktop route", () => {
 });
 
 test("Configuration saves reusable Generic Keywords from a fixed five-line input", () => {
-  const { messageHandler, content, contentListeners, genericKeywordsEditor, messages } = loadBridge("configuration");
+  const { messageHandler, content, contentListeners, settingsSaveButton, settingsLoadButton, settingsFeedback, genericKeywordsEditor, messages } = loadBridge("configuration");
   messageHandler({ data: { version: 1, id: "settings-snapshot", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [] },
     globalSettings: { maximumPageConcurrency: 4, artworkDetectionThreshold: 20, artworkMaximumSide: 2270, workingPageWidth: 2550, workingPageHeight: 2550, finalPageWidth: 2588, finalPageHeight: 2625, dpi: 300, genericKeywords: ["coloring books"] },
     bookSummaries: []
   } } });
 
+  assert.match(content.innerHTML, /class="configuration-page"/);
+  assert.match(content.innerHTML, /class="panel configuration-panel" data-form="configuration"/);
+  assert.match(content.innerHTML, /Processing capacity/);
+  assert.match(content.innerHTML, /Artwork preparation/);
+  assert.match(content.innerHTML, /Working canvas/);
+  assert.match(content.innerHTML, /Final Interior output/);
+  assert.match(content.innerHTML, /Border search range/);
+  assert.match(content.innerHTML, /Border tolerances/);
+  assert.match(content.innerHTML, /Border acceptance rules/);
   assert.match(content.innerHTML, /Generic Keywords/);
   assert.match(content.innerHTML, /class="control keyword-list-input" rows="5" data-generic-keywords/);
   genericKeywordsEditor.value = " coloring\tbooks \n\n books for adults ";
-  const save = { dataset: { action: "save-settings" }, closest: () => save };
-  contentListeners.click({ target: save });
+  const form = { dataset: { form: "configuration" } };
+  let prevented = false;
+  contentListeners.submit({ target: form, preventDefault: () => { prevented = true; } });
 
+  assert.equal(prevented, true);
   assert.equal(messages.at(-1).command, "settings.save");
   assert.deepEqual(messages.at(-1).payload.genericKeywords, ["coloring books", "books for adults"]);
+  assert.deepEqual(messages.at(-1).payload.artworkSourceNormalization, { normalizedSourceSize: 2048 });
+  assert.equal(messages.at(-1).payload.borderLineDetection.pass1SearchDepth, 200);
+  assert.equal(messages.at(-1).payload.borderLineDetection.minimumSpanRatio, 0.7);
+  assert.equal(settingsSaveButton.disabled, true);
+  assert.equal(settingsLoadButton.disabled, true);
+  assert.equal(settingsSaveButton.textContent, "Saving…");
+  assert.equal(settingsFeedback.textContent, "Saving…");
+  assert.equal(genericKeywordsEditor.disabled, true);
+  contentListeners.submit({ target: form, preventDefault: () => { } });
+  assert.equal(messages.filter(message => message.command === "settings.save").length, 1, "Configuration must suppress duplicate saves while pending");
+
+  messageHandler({ data: { version: 1, id: messages.at(-1).id, ok: true, command: "settings.saved", payload: messages.at(-1).payload } });
+  assert.match(content.innerHTML, /data-state="saved"[^>]*>Saved<\/span>/);
+  assert.match(content.innerHTML, /data-settings-save aria-busy="false"[^>]*>Save<\/button>/);
+
+  contentListeners.submit({ target: form, preventDefault: () => { } });
+  messageHandler({ data: { version: 1, id: messages.at(-1).id, ok: false, error: "invalid_settings" } });
+  assert.equal(settingsSaveButton.disabled, false);
+  assert.equal(genericKeywordsEditor.disabled, false);
+  assert.equal(settingsFeedback.dataset.state, "error");
+  assert.equal(settingsFeedback.attributes.role, "alert");
+  assert.match(settingsFeedback.textContent, /Review the configuration values/);
 });
 
 test("desktop shell ships the Printable Book logo for its sidebar and window icon", () => {
@@ -883,12 +926,18 @@ test("phase 4 page markup includes the interior-only processing workflow", () =>
 });
 
 test("Brands displays certification state and validates the selected Brand", () => {
-  const { messageHandler, content, contentListeners, getFullRenderCount, messages } = loadBridge("brands");
+  const { messageHandler, content, brandResultCount, contentListeners, getFullRenderCount, messages } = loadBridge("brands");
   messageHandler({ data: { version: 1, id: "initial-refresh", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Brand One", assets: [{ name: "IntroTemplate", type: "Folder", status: "Present", entries: [{ name: "intro.png", extension: ".png", size: { width: 1500, height: 1500 }, status: "Present" }] }, { name: "frame.png", type: "Image", status: "Present", extension: ".png", size: { width: 2270, height: 2270 } }, { name: "background.png", type: "Image", status: "Present", extension: ".png", size: { width: 2588, height: 2625 } }] }, { name: "Brand Two", assets: [] }], books: [] }, globalSettings: { artworkMaximumSide: 2270, finalPageWidth: 2588, finalPageHeight: 2625 }, brandImageSizeRequirements: [{ target: "IntroTemplate", allowedSizes: [{ width: 1024, height: 1024 }, { width: 2048, height: 2048 }, { width: 2588, height: 2625 }] }, { target: "frame.png", allowedSizes: [{ width: 2270, height: 2270 }] }, { target: "background.png", allowedSizes: [{ width: 2588, height: 2625 }] }], bookSummaries: [],
-    brandSummaries: [{ brandName: "Brand One", validationStatus: 2 }, { brandName: "Brand Two", validationStatus: 0 }]
+    brandSummaries: [{ brandName: "Brand One", validationStatus: 2, author: "Jane Doe", metadataStatus: "Available" }, { brandName: "Brand Two", validationStatus: 0, metadataStatus: "Missing" }]
   } } });
 
+  assert.match(content.innerHTML, /class="brands-page"/);
+  assert.match(content.innerHTML, /class="brand-workspace"/);
+  assert.match(content.innerHTML, /class="brand-row brand-row-active"[^>]*aria-pressed="true"/);
+  assert.match(content.innerHTML, /Author ready/);
+  assert.match(content.innerHTML, /Jane Doe/);
+  assert.match(content.innerHTML, /2 of 2 shown/);
   assert.match(content.innerHTML, /Needs validation/);
   assert.match(content.innerHTML, /Validate Brand/);
   const validate = { dataset: { action: "validate-brand" }, closest: () => validate };
@@ -912,8 +961,15 @@ test("Brands displays certification state and validates the selected Brand", () 
   const brandSearch = { dataset: { action: "filter-brands" }, value: "Two" };
   contentListeners.input({ target: brandSearch });
   assert.equal(getFullRenderCount(), rendersBeforeSearch, "Brand search must update only its result list");
+  assert.equal(brandResultCount.textContent, "1 of 2 shown");
   assert.match(content.innerHTML, /Brand Two/);
-  assert.doesNotMatch(content.innerHTML, /Brand One<\/span>/);
+  assert.doesNotMatch(content.innerHTML, /Brand One<\/strong>/);
+
+  brandSearch.value = "Missing";
+  contentListeners.input({ target: brandSearch });
+  assert.equal(getFullRenderCount(), rendersBeforeSearch, "Brand empty search must stay local to the list");
+  assert.equal(brandResultCount.textContent, "0 of 2 shown");
+  assert.match(content.innerHTML, /No matching Brands/);
 
   const selectSecondBrand = { dataset: { action: "select-brand", brandName: "Brand Two" }, closest: () => selectSecondBrand };
   contentListeners.click({ target: selectSecondBrand });
@@ -989,7 +1045,7 @@ test("Build Final Interior session owns PDF export and publishing stages", () =>
   assert.match(content.innerHTML, />Publishing</);
 });
 
-test("selected queue is paged in its tab and a pending Book can be removed", () => {
+test("unified Process workspace pages its selected queue and removes a pending Book", () => {
   const { messageHandler, content, contentListeners, status } = loadBridge("process");
   const books = Array.from({ length: 13 }, (_, index) => ({ id: { value: `Book ${index + 1}` }, name: `Book ${index + 1}` }));
   const summaries = books.map((book) => ({ bookId: book.id, workspaceStatus: "Not started", validationStatus: "Ready", interiorSourcePageCount: 12, activeInteriorSourcePageCount: 12, assets: [] }));
@@ -999,10 +1055,15 @@ test("selected queue is paged in its tab and a pending Book can be removed", () 
     const queue = { dataset: { action: "queue-book", bookId: book.id.value }, checked: true, closest: () => queue };
     contentListeners.click({ target: queue });
   }
-  const queueTab = { dataset: { action: "process-tab", processTab: "queue" }, closest: () => queueTab };
-  contentListeners.click({ target: queueTab });
+  const goProcess = { dataset: { action: "go-process" }, closest: () => goProcess };
+  contentListeners.click({ target: goProcess });
 
+  assert.match(content.innerHTML, /class="process-workspace"/);
+  assert.match(content.innerHTML, /Summary/);
+  assert.match(content.innerHTML, /Current stage/);
   assert.match(content.innerHTML, /Selected queue <span>13<\/span>/);
+  assert.doesNotMatch(content.innerHTML, /class="process-tabs"/);
+  assert.doesNotMatch(content.innerHTML, /data-action="process-tab"/);
   assert.match(content.innerHTML, /Page 1 of 2/);
   assert.match(content.innerHTML, /Book 1/);
   assert.doesNotMatch(content.innerHTML, /Book 13/);
@@ -1018,6 +1079,31 @@ test("selected queue is paged in its tab and a pending Book can be removed", () 
   assert.equal(status.textContent, "Book 13 removed from selected queue");
   assert.match(content.innerHTML, /Selected queue <span>12<\/span>/);
   assert.match(content.innerHTML, /Page 1 of 1/);
+});
+
+test("Process polling preserves selected queue scroll and keyboard focus", () => {
+  const { messageHandler, processQueueScroll, processFocusTarget, setDocumentActiveElement } = loadBridge("process");
+  const snapshot = {
+    isActive: true,
+    isCancelling: false,
+    currentStep: "interior-pages",
+    pagesCompleted: 3,
+    pagesTotal: 12,
+    queue: [{ bookId: { value: "Book 001" }, status: "Running", detail: "Processing" }]
+  };
+  messageHandler({ data: { version: 1, id: "process-initial", ok: true, command: "process.snapshot", payload: snapshot } });
+  processQueueScroll.scrollTop = 180;
+  processFocusTarget.focused = false;
+  setDocumentActiveElement({
+    dataset: { action: "process-queue-page", processQueuePage: "next" },
+    closest: (selector) => selector === ".process-page" ? {} : null
+  });
+
+  messageHandler({ data: { version: 1, id: "process-poll", ok: true, command: "process.snapshot", payload: { ...snapshot, pagesCompleted: 4 } } });
+
+  assert.equal(processQueueScroll.scrollTop, 180);
+  assert.equal(processFocusTarget.focused, true);
+  assert.equal(processFocusTarget.focusOptions.preventScroll, true);
 });
 
 for (const [status, serializedStatus, detail] of [["Completed", 4, null], ["Failed", 2, "PDF export failed"], ["Cancelled", 3, "Cancelled"]]) {

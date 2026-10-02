@@ -27,7 +27,7 @@ const expected = [
   ,"decoding=\"async\""
   ,"data-intro-total-pages"
   ,"Current stage"
-  ,"process-tabs"
+  ,"process-workspace"
   ,"Selected queue"
   ,"process-queue-grid-scroll"
   ,"process-queue-pagination"
