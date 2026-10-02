@@ -643,6 +643,9 @@ test("legacy Auto migration is shown as a non-blocking No Frame review warning",
   const edit = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => edit };
   contentListeners.click({ target: edit });
 
+  assert.doesNotMatch(content.innerHTML, /3 Interior pages previously using Auto now use No Frame/);
+  const artworkTab = { dataset: { action: "book-tab", bookTab: "artwork" }, closest: () => artworkTab };
+  contentListeners.click({ target: artworkTab });
   assert.match(content.innerHTML, /3 Interior pages previously using Auto now use No Frame/);
   assert.match(content.innerHTML, /Review Interior artwork before reprocessing/);
   assert.match(content.innerHTML, /data-action="book-tab" data-book-tab="artwork">Review Interior artwork/);
@@ -1384,7 +1387,14 @@ test("Book detail changes tabs without redrawing its drawer shell", () => {
   contentListeners.click({ target: openBook });
   const fullRendersBeforeTabChange = getFullRenderCount();
   assert.match(content.innerHTML, /Use Brand background/);
-  assert.doesNotMatch(content.innerHTML, /data-book-tab="settings"/);
+  assert.match(content.innerHTML, /data-book-tab="settings"[^>]*>Settings/);
+  assert.match(content.innerHTML, /class="book-settings-workspace"/);
+  assert.match(content.innerHTML, /book-settings-information/);
+  assert.match(content.innerHTML, /book-settings-assignment/);
+  assert.match(content.innerHTML, /book-settings-background/);
+  assert.match(content.innerHTML, /book-settings-templates/);
+  assert.doesNotMatch(content.innerHTML, /class="summary-grid"/);
+  assert.doesNotMatch(content.innerHTML, /Review the summary and Brand background/);
   assert.doesNotMatch(content.innerHTML, /data-book-tab="pages"/);
   assert.doesNotMatch(content.innerHTML, /Intro pages/);
   assert.doesNotMatch(content.innerHTML, /data-action="set-interior-active"/);
@@ -2027,8 +2037,8 @@ test("Saving Book Interior settings accepts the refreshed snapshot without redra
   assert.match(content.innerHTML, /id="book-detail-title"/);
 });
 
-test("Book detail configures an ordered custom Intro selection from Book interior", () => {
-  const { messageHandler, content, contentListeners, messages, getFullRenderCount, getIntroWorkspaceRenderCount } = loadBridge("books");
+test("Book Settings replaces legacy Intro controls with four grouped cards", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "intro-draft", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Demo", introTemplateAssets: [
       { key: "first.png", fileName: "first.png", sourceReference: "brand/IntroTemplate/first.png", localImageUrl: "file:///first.png" },
@@ -2042,29 +2052,18 @@ test("Book detail configures an ordered custom Intro selection from Book interio
   } } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
-  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
-  contentListeners.click({ target: settingsTab });
-  assert.match(content.innerHTML, /Intro pages/);
-  assert.match(content.innerHTML, /Automatic/);
-
-  const fullRendersBeforeModeChange = getFullRenderCount();
-  contentListeners.change({ target: { dataset: { action: "set-intro-mode", bookId: "Book 001" }, value: "custom" } });
-  assert.equal(getIntroWorkspaceRenderCount(), 1);
-  assert.equal(getFullRenderCount(), fullRendersBeforeModeChange);
-  const add = { dataset: { action: "intro-add-template", bookId: "Book 001", introSourceReference: "Book interior/page-003.png" }, closest: () => add };
-  const fullRendersBeforeAdd = getFullRenderCount();
-  contentListeners.click({ target: add });
-  assert.match(content.innerHTML, /Intro #1/);
-  assert.equal(getIntroWorkspaceRenderCount(), 2);
-  assert.equal(getFullRenderCount(), fullRendersBeforeAdd);
-  const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
-  contentListeners.click({ target: save });
-
-  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", hasIntro: true, introSourceReferences: ["Book interior/page-003.png"], assets: [] });
+  assert.match(content.innerHTML, /data-book-tab="settings"[^>]*aria-selected="true"/);
+  assert.match(content.innerHTML, /book-settings-information/);
+  assert.match(content.innerHTML, /book-settings-assignment/);
+  assert.match(content.innerHTML, /book-settings-background/);
+  assert.match(content.innerHTML, /book-settings-templates/);
+  assert.doesNotMatch(content.innerHTML, /Intro pages/);
+  assert.doesNotMatch(content.innerHTML, /data-action="set-intro-mode"/);
+  assert.doesNotMatch(content.innerHTML, /data-action="intro-add-template"/);
 });
 
-test("Interior settings pages Intro templates without redrawing the Book drawer", () => {
-  const { messageHandler, content, contentListeners, getFullRenderCount, getIntroWorkspaceRenderCount, introPaginationFocus } = loadBridge("books");
+test("Book Settings does not render legacy Brand Intro template pagination", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("books");
   const templates = Array.from({ length: 7 }, (_, index) => ({ key: `intro-${index + 1}.png`, fileName: `intro-${index + 1}.png`, localImageUrl: `file:///intro-${index + 1}.png` }));
   messageHandler({ data: { version: 1, id: "intro-page", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Demo", introTemplateAssets: templates }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
@@ -2074,21 +2073,12 @@ test("Interior settings pages Intro templates without redrawing the Book drawer"
   } } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
-  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
-  contentListeners.click({ target: settingsTab });
-
-  assert.match(content.innerHTML, /intro-6\.png/);
+  assert.match(content.innerHTML, /Brand PSD templates/);
+  assert.match(content.innerHTML, /Copy Brand Templates/);
+  assert.doesNotMatch(content.innerHTML, /intro-1\.png/);
+  assert.doesNotMatch(content.innerHTML, /intro-6\.png/);
   assert.doesNotMatch(content.innerHTML, /intro-7\.png/);
-  assert.match(content.innerHTML, /1–6 of 7/);
-
-  const next = { dataset: { action: "intro-template-page", introTemplatePage: "next" }, closest: () => next };
-  const fullRendersBeforeNext = getFullRenderCount();
-  contentListeners.click({ target: next });
-  assert.match(content.innerHTML, /intro-7\.png/);
-  assert.match(content.innerHTML, /Page 2 of 2/);
-  assert.equal(getIntroWorkspaceRenderCount(), 1);
-  assert.equal(getFullRenderCount(), fullRendersBeforeNext);
-  assert.equal(introPaginationFocus.action, "focused");
+  assert.doesNotMatch(content.innerHTML, /data-action="intro-template-page"/);
 });
 
 test("Adding to a persisted custom Intro submits asset source references instead of stored source keys", () => {
@@ -2123,7 +2113,7 @@ test("Adding to a persisted custom Intro submits asset source references instead
   assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", introSourceReferences: [firstReference, secondReference], assets: [] });
 });
 
-test("custom Book interior Intro selection has no global Brand override", () => {
+test("Book Settings keeps legacy Intro controls hidden and has no global Brand override", () => {
   const { messageHandler, content, contentListeners } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "brand-switch", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [
@@ -2136,17 +2126,13 @@ test("custom Book interior Intro selection has no global Brand override", () => 
   } } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
-  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
-  contentListeners.click({ target: settingsTab });
-  assert.match(content.innerHTML, /Custom Book interior/);
-  assert.match(content.innerHTML, /Intro #1/);
-
-  assert.match(content.innerHTML, /Custom Book interior/);
-  assert.match(content.innerHTML, /Intro #1/);
+  assert.match(content.innerHTML, /class="book-settings-workspace"/);
+  assert.doesNotMatch(content.innerHTML, /Custom Book interior/);
+  assert.doesNotMatch(content.innerHTML, /Intro #1/);
   assert.doesNotMatch(readFileSync(appScriptPath, "utf8"), /selectedBrand|activeBrand\(/);
 });
 
-test("Automatic Intro template preview dimensions gate the current Brand readiness without sending a bridge request", () => {
+test("Book Settings does not render legacy Automatic Intro template previews", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "intro-dimensions", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Demo", introTemplateAssets: [{ key: "intro.png", fileName: "intro.png", localImageUrl: "file:///intro.png" }] }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
@@ -2156,19 +2142,10 @@ test("Automatic Intro template preview dimensions gate the current Brand readine
   } } });
   const open = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => open };
   contentListeners.click({ target: open });
-  const settings = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settings };
-  contentListeners.click({ target: settings });
   const messageCount = messages.length;
-
-  contentListeners.load({ target: { matches: (selector) => selector === "img[data-local-image]", dataset: { introTemplateId: "Demo%00intro.png" }, naturalWidth: 1000, naturalHeight: 1000 } });
-
-  assert.match(content.innerHTML, /must be 1024 × 1024, 2048 × 2048, or 2588 × 2625 pixels/);
-  assert.match(content.innerHTML, /Needs review/);
-  assert.equal(messages.length, messageCount);
-
-  contentListeners.load({ target: { matches: (selector) => selector === "img[data-local-image]", dataset: { introTemplateId: "Demo%00intro.png" }, naturalWidth: 2588, naturalHeight: 2625 } });
-
-  assert.match(content.innerHTML, /Ready for backend size validation during processing\./);
+  assert.match(content.innerHTML, /Brand PSD templates/);
+  assert.doesNotMatch(content.innerHTML, /data-intro-template-id/);
+  assert.doesNotMatch(content.innerHTML, /must be 1024 × 1024, 2048 × 2048, or 2588 × 2625 pixels/);
   assert.equal(messages.length, messageCount);
 });
 
@@ -2190,7 +2167,7 @@ test("Books render direct Cover and Interior local image URLs and replace a fail
   contentListeners.click({ target: openBook });
   assert.match(content.innerHTML, /src="file:\/\/\/D:\/Printable%20Book\/Cover%20%231%20%25\.png"/);
   assert.match(content.innerHTML, /Use Brand background/);
-  assert.doesNotMatch(content.innerHTML, /data-book-tab="settings"/);
+  assert.match(content.innerHTML, /data-book-tab="settings"[^>]*>Settings/);
   assert.doesNotMatch(content.innerHTML, /data-book-tab="pages"/);
   assert.equal(messages.some((message) => message.command.includes("preview")), false);
 

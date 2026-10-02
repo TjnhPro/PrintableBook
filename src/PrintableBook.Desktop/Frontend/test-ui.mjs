@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 const app = readFileSync(new URL("./js/app.js", import.meta.url), "utf8");
 const expected = [
-  "Overview",
+  'tabButton("settings", "Settings")',
   "No processed pages",
   "book.interior.settings.save",
   "Save changes",
@@ -65,6 +65,10 @@ if (app.includes("Advanced JSON settings") || app.includes("brand.settings")) {
 
 if (app.includes('tabButton("settings", "Interior settings")') || app.includes('tabButton("pages", "Interior pages")')) {
   throw new Error("Hidden Book detail tabs must not remain in the visible tablist.");
+}
+
+if (app.includes('tabButton("overview"') || app.includes("Review the summary and Brand background before processing")) {
+  throw new Error("The legacy Book Overview summary must not remain in the visible Book detail UI.");
 }
 
 console.log(`UI contract passed (${expected.length} checks).`);
