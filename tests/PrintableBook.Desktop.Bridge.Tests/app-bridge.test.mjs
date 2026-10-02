@@ -1220,15 +1220,17 @@ const productionSnapshot = () => ({
     validationStatus: "Ready",
     assignedBrand: "Brand One",
     assignmentStatus: "Valid",
-    validationChecks: [], sourceFolders: [], publishedArtifacts: [], outputSummaries: [], interiorPages: [], logs: [], assets: [],
+    validationChecks: [], sourceFolders: [], publishedArtifacts: [], outputSummaries: [
+      { artifactKind: "Cover", thumbnailImageUrl: "file:///cover_thumbnail.png", generatedAtUtc: "2026-09-22T07:00:00Z" }
+    ], interiorPages: [], logs: [], assets: [],
     production: {
       coverOutputStatus: "Ready to process",
       interiorOutputStatus: "Ready to process",
       interiorOutputKind: "Legacy",
       assets: [
         { assetKind: "final-cover", displayName: "Final Cover", fileName: "final_cover.png", sourceStatus: "Ready to process", sourceLocalImageUrl: "file:///final_cover.png", processedStatus: "Not applicable" },
-        { assetKind: "interior-cover", displayName: "Interior Cover", fileName: "interior_cover.png", sourceStatus: "Ready to process", sourceLocalImageUrl: "file:///interior_cover.png", processedStatus: "Ready to process" },
-        { assetKind: "book-owner", displayName: "Book Owner", fileName: "interior_book_owner.png", sourceStatus: "Ready to process", sourceLocalImageUrl: "file:///interior_book_owner.png", processedStatus: "Ready to process" }
+        { assetKind: "interior-cover", displayName: "Interior Cover", fileName: "interior_cover.png", sourceStatus: "Ready to process", sourceLocalImageUrl: "file:///interior_cover.png", processedLocalImageUrl: "file:///processed_interior_cover.png", processedStatus: "Ready to process" },
+        { assetKind: "book-owner", displayName: "Book Owner", fileName: "interior_book_owner.png", sourceStatus: "Ready to process", sourceLocalImageUrl: "file:///interior_book_owner.png", processedLocalImageUrl: "file:///processed_book_owner.png", processedStatus: "Ready to process" }
       ]
     }
   }]
@@ -1241,6 +1243,23 @@ const openProductionTab = (messageHandler, contentListeners) => {
   const productionTab = { dataset: { action: "book-tab", bookTab: "production" }, closest: () => productionTab };
   contentListeners.click({ target: productionTab });
 };
+
+test("Production uses grouped two-preview assets and a full-width Final Interior action", () => {
+  const { messageHandler, contentListeners, content } = loadBridge("books");
+  openProductionTab(messageHandler, contentListeners);
+
+  assert.match(content.innerHTML, /<legend>Final Cover<\/legend>/);
+  assert.match(content.innerHTML, /<legend>Interior Cover<\/legend>/);
+  assert.match(content.innerHTML, /<legend>Book Owner<\/legend>/);
+  assert.match(content.innerHTML, /<legend>Final Interior<\/legend>/);
+  assert.match(content.innerHTML, /Source image/);
+  assert.match(content.innerHTML, /Preview image/);
+  assert.match(content.innerHTML, /file:\/\/\/cover_thumbnail\.png/);
+  assert.match(content.innerHTML, /file:\/\/\/processed_interior_cover\.png/);
+  assert.doesNotMatch(content.innerHTML, /Production Assets/);
+  assert.ok(content.innerHTML.indexOf("<legend>Final Cover</legend>") < content.innerHTML.indexOf("<legend>Interior Cover</legend>"));
+  assert.ok(content.innerHTML.indexOf("<legend>Interior Cover</legend>") < content.innerHTML.indexOf("<legend>Book Owner</legend>"));
+});
 
 test("Production import preserves the open drawer while refreshing its snapshot", () => {
   const { messageHandler, contentListeners, messages, getFullRenderCount, getBookDrawerBodyRenderCount, getProductionWorkspaceRenderCount } = loadBridge("books");
