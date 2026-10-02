@@ -290,14 +290,24 @@ public sealed class BookWorkspaceLayoutContractTests
     [Fact]
     public void BrandCatalogUiSupportsOneAuthorAndSurfacesImpactBeforeSave()
     {
-        var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
+        var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
+        var script = File.ReadAllText(Path.Combine(frontend, "js", "app.js"));
+        var layout = File.ReadAllText(Path.Combine(frontend, "css", "book-workspace.css"));
 
         Assert.Contains("Brand Information", script, StringComparison.Ordinal);
-        Assert.Contains("MVP contract: one Brand has one Primary Author", script, StringComparison.Ordinal);
+        Assert.Contains("One Brand has one Primary Author", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"brand-author-input\"", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"save-brand-author\"", script, StringComparison.Ordinal);
         Assert.Contains("assigned Book${impactedBooks === 1", script, StringComparison.Ordinal);
-        Assert.Contains("metadataStatus\", \"Missing\") === \"Unavailable\"", script, StringComparison.Ordinal);
+        Assert.Contains("metadataStatus === \"Unavailable\"", script, StringComparison.Ordinal);
+        Assert.Contains("class=\"brand-row ${selected ? \"brand-row-active\" : \"\"}\"", script, StringComparison.Ordinal);
+        Assert.Contains("aria-pressed=\"${selected}\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-brand-result-count aria-live=\"polite\"", script, StringComparison.Ordinal);
+        Assert.Contains(".brands-page { display:grid; grid-template-rows:auto minmax(0,1fr);", layout, StringComparison.Ordinal);
+        Assert.Contains(".brand-workspace { display:grid; grid-template-columns:minmax(280px,3fr) minmax(0,9fr);", layout, StringComparison.Ordinal);
+        Assert.Contains(".brand-list-scroll { min-height:0;", layout, StringComparison.Ordinal);
+        Assert.Contains(".brand-detail-scroll { min-height:0;", layout, StringComparison.Ordinal);
+        Assert.Contains("@media (max-width:900px)", layout, StringComparison.Ordinal);
     }
 
     [Fact]
