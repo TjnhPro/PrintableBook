@@ -215,13 +215,15 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
-    public void InteriorSettingsExposeOnlyBackgroundAndPaginatedIntroControls()
+    public void BookOverviewExposesBackgroundAndHidesLegacyInteriorTabs()
     {
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
 
         Assert.Contains("data-action=\"set-book-background\"", script, StringComparison.Ordinal);
-        Assert.Contains("tabButton(\"settings\", \"Interior settings\")", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("tabButton(\"settings\", \"Interior settings\")", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("tabButton(\"pages\", \"Interior pages\")", script, StringComparison.Ordinal);
         Assert.Contains("tabButton(\"artwork\", \"Interior artwork\")", script, StringComparison.Ordinal);
+        Assert.Contains("const renderProcessedInteriorPages", script, StringComparison.Ordinal);
         Assert.Contains("const introPageSize = 6", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"intro-template-page\"", script, StringComparison.Ordinal);
         Assert.Contains("const refreshIntroTemplateWorkspace", script, StringComparison.Ordinal);
@@ -238,7 +240,7 @@ public sealed class BookWorkspaceLayoutContractTests
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
 
         Assert.Contains("Run Interior preflight", script, StringComparison.Ordinal);
-        Assert.Contains("Review the summary, then configure Brand background and Intro pages", script, StringComparison.Ordinal);
+        Assert.Contains("Review the summary and Brand background before processing", script, StringComparison.Ordinal);
         Assert.DoesNotContain("Full-book preflight", script, StringComparison.Ordinal);
     }
 

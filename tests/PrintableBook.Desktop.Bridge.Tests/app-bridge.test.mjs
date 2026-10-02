@@ -923,7 +923,7 @@ test("an initial refresh failure shows a retryable load failure panel", () => {
 test("phase 4 page markup includes the interior-only processing workflow", () => {
   const script = readFileSync(appScriptPath, "utf8");
 
-  for (const state of ["Selected queue", "Process Interior", "Settings saved", "Interior processing", "Current stage", "Elapsed", "Interior settings"]) {
+  for (const state of ["Selected queue", "Process Interior", "Settings saved", "Interior processing", "Current stage", "Elapsed", "Brand background"]) {
     assert.match(script, new RegExp(state));
   }
   assert.match(script, /send\("settings\.save"/);
@@ -1383,16 +1383,10 @@ test("Book detail changes tabs without redrawing its drawer shell", () => {
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
   const fullRendersBeforeTabChange = getFullRenderCount();
-  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
-  contentListeners.click({ target: settingsTab });
-
-  assert.equal(getFullRenderCount(), fullRendersBeforeTabChange);
-  assert.equal(getBookDrawerBodyRenderCount(), 1);
-
-  assert.match(content.innerHTML, /Interior settings/);
   assert.match(content.innerHTML, /Use Brand background/);
-  assert.match(content.innerHTML, /Intro pages/);
-  assert.match(content.innerHTML, /data-intro-total-pages/);
+  assert.doesNotMatch(content.innerHTML, /data-book-tab="settings"/);
+  assert.doesNotMatch(content.innerHTML, /data-book-tab="pages"/);
+  assert.doesNotMatch(content.innerHTML, /Intro pages/);
   assert.doesNotMatch(content.innerHTML, /data-action="set-interior-active"/);
   const messageCountBeforeEdit = messages.length;
   contentListeners.change({ target: { dataset: { action: "set-book-background", bookId: "Book 001" }, checked: false } });
@@ -1401,7 +1395,7 @@ test("Book detail changes tabs without redrawing its drawer shell", () => {
   const artworkTab = { dataset: { action: "book-tab", bookTab: "artwork" }, closest: () => artworkTab };
   contentListeners.click({ target: artworkTab });
   assert.equal(getFullRenderCount(), fullRendersBeforeTabChange);
-  assert.equal(getBookDrawerBodyRenderCount(), 2);
+  assert.equal(getBookDrawerBodyRenderCount(), 1);
   assert.match(content.innerHTML, /Interior artwork/);
   assert.match(content.innerHTML, /interior-artwork-grid-scroll/);
   assert.match(content.innerHTML, /No artwork matches this view/);
@@ -2017,8 +2011,6 @@ test("Saving Book Interior settings accepts the refreshed snapshot without redra
   messageHandler({ data: { version: 1, id: "book-save-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
-  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
-  contentListeners.click({ target: settingsTab });
   contentListeners.change({ target: { dataset: { action: "set-book-background", bookId: "Book 001" }, checked: false } });
   const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
   contentListeners.click({ target: save });
@@ -2195,10 +2187,9 @@ test("Books render direct Cover and Interior local image URLs and replace a fail
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
   assert.match(content.innerHTML, /src="file:\/\/\/D:\/Printable%20Book\/Cover%20%231%20%25\.png"/);
-  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
-  contentListeners.click({ target: settingsTab });
-  assert.match(content.innerHTML, /Interior settings/);
   assert.match(content.innerHTML, /Use Brand background/);
+  assert.doesNotMatch(content.innerHTML, /data-book-tab="settings"/);
+  assert.doesNotMatch(content.innerHTML, /data-book-tab="pages"/);
   assert.equal(messages.some((message) => message.command.includes("preview")), false);
 
   let fallback;
