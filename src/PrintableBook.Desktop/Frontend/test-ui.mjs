@@ -56,6 +56,11 @@ const expected = [
   ,'role="tablist"'
   ,'role="tabpanel"'
   ,'aria-controls="book-panel-'
+  ,"S3 Storage"
+  ,"storage.settings.save"
+  ,"storage.book.check"
+  ,"storage.book.upload"
+  ,"Compare local Book outputs by SHA-256"
 ];
 
 for (const value of expected) {

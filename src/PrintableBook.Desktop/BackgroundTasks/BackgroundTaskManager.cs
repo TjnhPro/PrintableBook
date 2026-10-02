@@ -367,7 +367,7 @@ public sealed class BackgroundTaskManager(
     {
         BackgroundTaskDuplicatePolicy.JoinByKind or BackgroundTaskDuplicatePolicy.ReturnExisting => registry.Values.FirstOrDefault(entry =>
             entry.Kind == kind && !IsTerminal(entry.State)),
-        BackgroundTaskDuplicatePolicy.ReturnExistingByKey => registry.Values.FirstOrDefault(entry =>
+        BackgroundTaskDuplicatePolicy.ReturnExistingByKey or BackgroundTaskDuplicatePolicy.JoinByKey => registry.Values.FirstOrDefault(entry =>
             entry.Kind == kind && string.Equals(entry.Key, key, StringComparison.Ordinal) && !IsTerminal(entry.State)),
         _ => throw new ArgumentOutOfRangeException(nameof(policy), policy, "Unsupported background task duplicate policy.")
     };
@@ -398,7 +398,7 @@ public sealed class BackgroundTaskManager(
         }
     }
 
-    private bool IsLatestRetainedKindLocked(BackgroundTaskEntry candidate) => candidate.Kind is (BackgroundTaskKind.LibraryRefresh or BackgroundTaskKind.ProcessingSession or BackgroundTaskKind.CacheCleanup or BackgroundTaskKind.ProductionAction or BackgroundTaskKind.AmazonAsinCrawl) &&
+    private bool IsLatestRetainedKindLocked(BackgroundTaskEntry candidate) => candidate.Kind is (BackgroundTaskKind.LibraryRefresh or BackgroundTaskKind.ProcessingSession or BackgroundTaskKind.CacheCleanup or BackgroundTaskKind.ProductionAction or BackgroundTaskKind.AmazonAsinCrawl or BackgroundTaskKind.S3Storage) &&
         !registry.Values.Any(entry => entry.Kind == candidate.Kind && IsTerminal(entry.State) && entry.Sequence > candidate.Sequence);
 
     private static bool IsTerminal(BackgroundTaskState state) => state is BackgroundTaskState.Completed or BackgroundTaskState.Failed or BackgroundTaskState.Cancelled;

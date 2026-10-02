@@ -1,9 +1,13 @@
 (() => {
   const status = document.getElementById("bridge-status");
   const content = document.getElementById("app-content");
-  const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
+  const routeNames = { storage: "S3 Storage", configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
   const bookStatuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
-  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "settings", bookDrawerOpen: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), bookKeywordBuilderDrafts: new Map(), bookKeywordBuilderValidation: new Map(), keywordBuilderPreviews: new Map(), keywordBuilderRevisions: new Map(), keywordBuilderPending: new Map(), keywordBuilderConfirmed: new Map(), keywordBuilderSubmitted: null, keywordBuilderRefreshPending: false, keywordBuilderRefreshNeeded: false, keywordBuilderRefreshBookId: "", asinResearchDrafts: new Map(), asinResearchSessions: new Map(), asinResearchFeedback: new Map(), asinResearchActiveBookId: "", asinResearchPollTimer: null, amazonBrowserStatus: { state: "Closed", reasonCode: null }, amazonBrowserPending: false, settingsSavePending: false, settingsFeedback: "", settingsFeedbackError: false, brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processQueuePage: 1, processQueueScrollTop: 0, processFocusIdentity: null, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "settings", bookDrawerOpen: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), keywordBuilderPreviews: new Map(), keywordBuilderRevisions: new Map(), keywordBuilderPending: new Map(), keywordBuilderConfirmed: new Map(), keywordBuilderSubmitted: null, keywordBuilderRefreshPending: false, keywordBuilderRefreshNeeded: false, keywordBuilderRefreshBookId: "", asinResearchDrafts: new Map(), asinResearchSessions: new Map(), asinResearchFeedback: new Map(), asinResearchActiveBookId: "", asinResearchPollTimer: null, amazonBrowserStatus: { state: "Closed", reasonCode: null }, amazonBrowserPending: false, settingsSavePending: false, settingsFeedback: "", settingsFeedbackError: false, storageSnapshot: null, storageLoading: false, storageSettingsPending: false, storagePendingBooks: new Set(), storagePollTimers: new Map(), storageFeedback: "", storageFeedbackError: false, brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processQueuePage: 1, processQueueScrollTop: 0, processFocusIdentity: null, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+
+  state.bookKeywordBuilderDrafts = new Map();
+  state.bookKeywordBuilderValidation = new Map();
+  state.storageRequestBooks = new Map();
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -1043,6 +1047,104 @@
     state.settingsFeedbackError = false;
     updateSettingsSaveUi();
     send("settings.save", payload);
+  };
+
+  const storageFileStateName = (value) => typeof value === "number" ? ["Pending", "Missing", "Existing", "Changed", "Uploaded", "Skipped", "Failed"][value] ?? "Pending" : String(value ?? "Pending");
+  const storageOutcomeName = (value) => typeof value === "number" ? ["Pending", "Running", "Completed", "CompletedWithErrors", "Cancelled"][value] ?? "Pending" : String(value ?? "Pending");
+  const storageActionName = (value) => typeof value === "number" ? ["Check", "Upload"][value] ?? "Check" : String(value ?? "Check");
+  const storageErrorMessage = (code) => ({
+    s3_credentials_required: "Enter both Access Key and Secret Key before saving.",
+    s3_credentials_incomplete: "Enter both Access Key and Secret Key together.",
+    s3_bucket_invalid: "Enter a valid S3 bucket name.",
+    s3_region_invalid: "Enter a valid AWS region.",
+    s3_url_invalid: "Enter an absolute HTTP or HTTPS URL.",
+    s3_settings_required: "Save S3 settings before checking or uploading.",
+    s3_settings_unavailable: "Stored S3 settings cannot be read. Save the credentials again.",
+    s3_asin_invalid: "This Book needs a 10-character alphanumeric ASIN.",
+    s3_output_files_missing: "All seven required output files must exist before this action.",
+    s3_access_denied: "S3 denied access. Check credentials, bucket policy, and public-read permissions.",
+    s3_credentials_invalid: "S3 rejected the saved credentials.",
+    s3_service_unavailable: "S3 could not be reached. Check the network and endpoint URL.",
+    s3_request_failed: "The S3 request failed. Review the bucket and endpoint settings.",
+    book_not_found: "This Book is no longer available. Refresh Storage."
+  })[String(code)] ?? "The S3 request failed. Review the settings and retry.";
+  const storageTone = (value) => {
+    const name = storageFileStateName(value);
+    if (["Existing", "Uploaded", "Skipped"].includes(name)) return "status-good";
+    if (["Missing", "Changed"].includes(name)) return "status-warn";
+    if (name === "Failed") return "status-bad";
+    return "status-muted";
+  };
+  const storageSessionView = (book) => valueFor(valueFor(book, "session", {}), "view", null);
+  const storageSessionActive = (book) => Boolean(valueFor(valueFor(book, "session", {}), "isActive", false));
+  const storageReplaceSession = (session) => {
+    const booksValue = valueFor(state.storageSnapshot, "books", []);
+    const id = String(valueFor(session, "bookId", ""));
+    const book = booksValue.find((item) => String(valueFor(item, "bookId", "")) === id);
+    if (book) {
+      if (Object.hasOwn(book, "Session") && !Object.hasOwn(book, "session")) book.Session = session;
+      else book.session = session;
+    }
+  };
+  const stopStoragePoll = (bookIdValue) => {
+    const timer = state.storagePollTimers.get(bookIdValue);
+    if (timer) window.clearTimeout(timer);
+    state.storagePollTimers.delete(bookIdValue);
+  };
+  const observeStorageSession = (session) => {
+    const id = String(valueFor(session, "bookId", ""));
+    if (!id) return;
+    storageReplaceSession(session);
+    state.storagePendingBooks.delete(id);
+    stopStoragePoll(id);
+    if (valueFor(session, "isActive", false)) {
+      state.storagePollTimers.set(id, window.setTimeout(() => send("storage.book.get", { bookId: id }), 600));
+    }
+    if (currentRoute() === "storage") render("storage", false);
+  };
+  const loadStorage = () => {
+    if (state.storageLoading) return;
+    state.storageLoading = true;
+    send("storage.get");
+  };
+  const renderStorageFileRows = (book) => {
+    const view = storageSessionView(book);
+    const sessionError = String(valueFor(valueFor(book, "session", {}), "errorCode", "") ?? "");
+    const files = valueFor(view, "files", []);
+    if (!files.length) return `<div class="storage-file-empty">Run Check or Upload to inspect the seven required output files.</div>`;
+    return `<div class="storage-file-list">${files.map((file) => {
+      const fileState = storageFileStateName(valueFor(file, "state", "Pending"));
+      const url = String(valueFor(file, "publicUrl", ""));
+      const error = String(valueFor(file, "errorCode", "") ?? "");
+      return `<div class="storage-file-row"><div><strong>${escapeHtml(valueFor(file, "fileName", ""))}</strong>${url ? `<span class="storage-file-url" title="${escapeHtml(url)}">${escapeHtml(url)}</span>` : ""}${error ? `<small>${escapeHtml(storageErrorMessage(error))}</small>` : ""}</div><span class="status-badge ${storageTone(fileState)}">${escapeHtml(fileState)}</span></div>`;
+    }).join("")}</div>`;
+  };
+  const renderStorageBook = (book, configured) => {
+    const id = String(valueFor(book, "bookId", ""));
+    const eligible = Boolean(valueFor(book, "isEligible", false));
+    const active = storageSessionActive(book);
+    const pending = state.storagePendingBooks.has(id);
+    const view = storageSessionView(book);
+    const completed = Number(valueFor(view, "completedCount", 0));
+    const total = Number(valueFor(view, "totalCount", 7)) || 7;
+    const outcome = storageOutcomeName(valueFor(view, "outcome", "Pending"));
+    const action = storageActionName(valueFor(view, "action", "Check"));
+    const missing = valueFor(book, "missingFiles", []);
+    const disabled = !configured || !eligible || active || pending;
+    const reason = !configured ? "Save S3 settings to enable actions." : !valueFor(book, "isAsinValid", false) ? "Save a valid 10-character ASIN in Book Settings." : missing.length ? `${missing.length} required output file${missing.length === 1 ? " is" : "s are"} missing.` : "Ready to check or upload.";
+    const progress = Math.round((completed / total) * 100);
+    return `<article class="storage-book-card" data-storage-book="${escapeHtml(id)}"><header><div><h2>${escapeHtml(valueFor(book, "title", id))}</h2><p>${escapeHtml(id)} · ASIN ${escapeHtml(valueFor(book, "asin", "Not set") || "Not set")}</p></div>${badge(eligible ? active ? `${action} running` : "Ready" : "Not ready")}</header><p class="storage-book-reason">${escapeHtml(reason)}</p>${sessionError ? `<p class="storage-book-error" role="alert">${escapeHtml(storageErrorMessage(sessionError))}</p>` : ""}${view ? `<div class="storage-progress-copy"><span>${escapeHtml(action)} · ${escapeHtml(outcome)}</span><strong>${completed}/${total}</strong></div><div class="storage-progress" role="progressbar" aria-label="${escapeHtml(action)} progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div><div class="storage-time-row"><span>Checked ${dateTime(valueFor(view, "lastCheckedAtUtc", null))}</span><span>Uploaded ${dateTime(valueFor(view, "lastUploadedAtUtc", null))}</span></div>` : ""}${renderStorageFileRows(book)}<footer><button class="button-secondary" type="button" data-action="storage-check" data-book-id="${escapeHtml(id)}" ${disabled ? "disabled" : ""}>Check</button><button class="button-primary" type="button" data-action="storage-upload" data-book-id="${escapeHtml(id)}" ${disabled ? "disabled" : ""}>Upload</button>${active ? `<button class="button-danger" type="button" data-action="storage-cancel" data-book-id="${escapeHtml(id)}">Cancel</button>` : ""}</footer></article>`;
+  };
+  const renderStorage = () => {
+    if (!state.storageSnapshot) {
+      content.innerHTML = `<div class="page-header"><div><h1>S3 Storage</h1><p>Check and publish completed Book outputs.</p></div></div>${panel("Loading storage…", "<p class=\"panel-note\">Reading secure S3 configuration and local output readiness.</p>")}`;
+      return;
+    }
+    const configuration = valueFor(state.storageSnapshot, "configuration", {});
+    const configured = Boolean(valueFor(configuration, "hasCredentials", false));
+    const booksValue = valueFor(state.storageSnapshot, "books", []);
+    const feedbackState = state.storageFeedbackError ? "error" : state.storageSettingsPending ? "saving" : state.storageFeedback === "Saved" ? "saved" : "ready";
+    content.innerHTML = `<section class="storage-page"><div class="page-header"><div><h1>S3 Storage</h1><p>Compare local Book outputs by SHA-256, then upload only missing or changed files.</p></div><div class="page-actions"><button class="button-secondary" type="button" data-action="storage-refresh" ${state.storageLoading ? "disabled" : ""}>${state.storageLoading ? "Loading…" : "Refresh"}</button></div></div><form class="panel storage-settings" data-form="storage-settings"><fieldset><legend>Connection</legend><div class="storage-settings-heading"><p>Credentials are encrypted for the current Windows user and are never returned to this page.</p><span class="configuration-save-status" data-state="${feedbackState}" role="${state.storageFeedbackError ? "alert" : "status"}" aria-live="polite">${escapeHtml(state.storageFeedback || (configured ? "Credentials saved" : "Setup required"))}</span></div><div class="storage-settings-grid"><label class="field"><span>Access Key</span><input class="control" name="accessKey" type="password" autocomplete="off" placeholder="${configured ? "Leave blank to keep saved value" : "Required"}"></label><label class="field"><span>Secret Key</span><input class="control" name="secretKey" type="password" autocomplete="off" placeholder="${configured ? "Leave blank to keep saved value" : "Required"}"></label><label class="field"><span>Bucket</span><input class="control" name="bucket" required value="${escapeHtml(valueFor(configuration, "bucket", ""))}"></label><label class="field"><span>Region</span><input class="control" name="region" required placeholder="us-east-1" value="${escapeHtml(valueFor(configuration, "region", ""))}"></label><label class="field storage-url-field"><span>URL (optional)</span><input class="control" name="publicBaseUrl" type="url" placeholder="https://s3.dualstack.us-east-1.amazonaws.com" value="${escapeHtml(valueFor(configuration, "publicBaseUrl", "") || "")}"><small>Used as the S3 endpoint and public URL base. Leave blank for the standard regional endpoint.</small></label></div><div class="storage-settings-actions"><button class="button-primary" type="submit" ${state.storageSettingsPending ? "disabled" : ""}>${state.storageSettingsPending ? "Saving…" : "Save storage settings"}</button></div></fieldset></form><div class="storage-book-grid">${booksValue.length ? booksValue.map((book) => renderStorageBook(book, configured)).join("") : `<div class="storage-empty"><strong>No Books found</strong><p>Add a Book before configuring uploads.</p></div>`}</div></section>`;
   };
 
   const brandMetadataPresentation = (brand) => {
@@ -2092,6 +2194,7 @@
       return;
     }
     if (route === "configuration") renderConfiguration();
+    if (route === "storage") renderStorage();
     if (route === "brands") renderBrands();
     if (route === "books") renderBooks();
     if (route === "process") renderProcess(requestProcess);
@@ -2100,7 +2203,7 @@
     if (state.applicationLoadState === "failed") content.insertAdjacentHTML("afterbegin", renderRefreshFailure());
   };
 
-  document.querySelectorAll("[data-route]").forEach((button) => button.addEventListener("click", () => { render(button.dataset.route); if (button.dataset.route === "diagnostics") { send("diagnostics.get"); send("task.list"); } }));
+  document.querySelectorAll("[data-route]").forEach((button) => button.addEventListener("click", () => { render(button.dataset.route); if (button.dataset.route === "storage") loadStorage(); if (button.dataset.route === "diagnostics") { send("diagnostics.get"); send("task.list"); } }));
   const setBookListRowActive = (row, active) => {
     if (!row) return;
     row.classList?.toggle("is-active", active);
@@ -2168,6 +2271,22 @@
     const target = event.target.closest("[data-action]");
     if (!target) return;
     const action = target.dataset.action;
+    if (action === "storage-refresh") {
+      state.storageSnapshot = null;
+      state.storageLoading = false;
+      loadStorage();
+      render("storage", false);
+      return;
+    }
+    if (["storage-check", "storage-upload", "storage-cancel"].includes(action)) {
+      const id = target.dataset.bookId;
+      state.storagePendingBooks.add(id);
+      const command = action === "storage-check" ? "storage.book.check" : action === "storage-upload" ? "storage.book.upload" : "storage.book.cancel";
+      const requestId = send(command, { bookId: id });
+      state.storageRequestBooks.set(requestId, id);
+      render("storage", false);
+      return;
+    }
     if (action === "diagnostics-tab") {
       state.diagnosticsTab = diagnosticsTabValue(target.dataset.diagnosticsTab);
       render("diagnostics", false);
@@ -2491,6 +2610,23 @@
     if (action === "copy-output-path") send("book.output.copy-path", { bookId: target.dataset.bookId, artifactReference: target.dataset.artifactReference });
   });
   content.addEventListener("submit", (event) => {
+    if (event.target.dataset.form === "storage-settings") {
+      event.preventDefault();
+      if (state.storageSettingsPending) return;
+      const data = new FormData(event.target);
+      state.storageSettingsPending = true;
+      state.storageFeedback = "Saving…";
+      state.storageFeedbackError = false;
+      render("storage", false);
+      send("storage.settings.save", {
+        accessKey: String(data.get("accessKey") ?? ""),
+        secretKey: String(data.get("secretKey") ?? ""),
+        bucket: String(data.get("bucket") ?? ""),
+        region: String(data.get("region") ?? ""),
+        publicBaseUrl: String(data.get("publicBaseUrl") ?? "") || null
+      });
+      return;
+    }
     if (event.target.dataset.form !== "configuration") return;
     event.preventDefault();
     beginSettingsSave();
@@ -2616,9 +2752,11 @@
     const response = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
     const responseId = valueFor(response, "id", "");
     const requestCommand = state.pendingCommands.get(responseId) ?? "";
+    const storageRequestBookId = state.storageRequestBooks.get(responseId) ?? "";
     const validationRequestBrand = state.brandValidationRequestBrands.get(responseId) ?? "";
     const pdfLibraryAction = finishPdfLibraryAction(responseId);
     state.pendingCommands.delete(responseId);
+    state.storageRequestBooks.delete(responseId);
     state.brandValidationRequestBrands.delete(responseId);
     const ok = valueFor(response, "ok", false);
     const command = valueFor(response, "command", "");
@@ -2626,6 +2764,25 @@
       applyUpdateSnapshot(valueFor(response, "payload", {}));
     } else if (ok && command === "app.pong") {
       status.textContent = "Connected";
+    } else if (ok && command === "storage.snapshot") {
+      state.storageSnapshot = valueFor(response, "payload", {});
+      state.storageLoading = false;
+      state.storageSettingsPending = false;
+      if (requestCommand === "storage.settings.save") state.storageFeedback = "Saved";
+      state.storageFeedbackError = false;
+      for (const book of valueFor(state.storageSnapshot, "books", [])) {
+        const session = valueFor(book, "session", null);
+        if (session && valueFor(session, "isActive", false)) observeStorageSession(session);
+      }
+      if (currentRoute() === "storage") render("storage", false);
+      status.textContent = requestCommand === "storage.settings.save" ? "S3 settings saved" : "Storage refreshed";
+    } else if (ok && command === "storage.book.session") {
+      const session = valueFor(response, "payload", {});
+      observeStorageSession(session);
+      const view = valueFor(session, "view", {});
+      const active = valueFor(session, "isActive", false);
+      const outcome = storageOutcomeName(valueFor(view, "outcome", "Pending"));
+      status.textContent = active ? `${storageActionName(valueFor(view, "action", "Check"))} in progress` : outcome === "CompletedWithErrors" ? "Storage completed with errors" : "Storage action completed";
     } else if (ok && command === "amazon.browser.status") {
       state.amazonBrowserPending = false;
       state.amazonBrowserStatus = valueFor(response, "payload", { state: "Closed" });
@@ -2902,6 +3059,18 @@
       state.backgroundTasks = valueFor(response, "payload", []);
       if (currentRoute() === "diagnostics") render("diagnostics", false);
     } else {
+      if (requestCommand.startsWith("storage.")) {
+        state.storageLoading = false;
+        state.storageSettingsPending = false;
+        if (storageRequestBookId) state.storagePendingBooks.delete(storageRequestBookId);
+        const error = String(valueFor(response, "error", "storage_request_failed")).split(":", 1)[0];
+        const message = storageErrorMessage(error);
+        state.storageFeedback = message;
+        state.storageFeedbackError = true;
+        if (currentRoute() === "storage") render("storage", false);
+        status.textContent = "S3 Storage needs attention";
+        return;
+      }
       if (requestCommand.startsWith("updates.")) {
         state.updateCommandPending = "";
         updateUpdateControls();

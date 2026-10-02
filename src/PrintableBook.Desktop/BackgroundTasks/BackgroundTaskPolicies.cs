@@ -8,14 +8,16 @@ internal enum BackgroundTaskLaneKind
     Processing,
     Cleanup,
     Production,
-    Amazon
+    Amazon,
+    Storage
 }
 
 internal enum BackgroundTaskDuplicatePolicy
 {
     JoinByKind,
     ReturnExisting,
-    ReturnExistingByKey
+    ReturnExistingByKey,
+    JoinByKey
 }
 
 internal sealed record BackgroundTaskPolicy(
@@ -53,6 +55,11 @@ internal static class BackgroundTaskPolicies
                 BackgroundTaskLaneKind.Amazon,
                 1,
                 BackgroundTaskDuplicatePolicy.ReturnExistingByKey,
+                []),
+            [BackgroundTaskKind.S3Storage] = new(
+                BackgroundTaskLaneKind.Storage,
+                2,
+                BackgroundTaskDuplicatePolicy.JoinByKey,
                 [])
         };
 

@@ -18,6 +18,7 @@ node_modules/
 wwwroot/assets/tailwind.css.map
 WebView2Data/
 WebView2/
+/storage.json
 
 # Generated printable-book artifacts
 *.pdf
