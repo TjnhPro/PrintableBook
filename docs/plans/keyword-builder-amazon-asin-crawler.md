@@ -41,7 +41,7 @@ Thành công của MVP là giảm thao tác search/copy thủ công nhưng vẫn
 | Thứ tự | Giữ thứ tự keyword từ trên xuống |
 | Assignment | Tối đa 1 ASIN chưa dùng cho mỗi keyword |
 | Empty | Bỏ khỏi final string nhưng giữ row và lý do trong UI |
-| Ads ASIN | `Use in Ads ASIN` thay toàn bộ draft; không merge |
+| Ads ASIN | Crawl terminal auto-stage toàn bộ final ASIN hợp lệ vào draft; không merge |
 | Persistence | Search draft, task và crawl result chỉ sống trong app session; không ghi Book state |
 | Challenge | Dừng task, giữ partial result; không pause/resume, không bypass |
 | Browser | Headed persistent profile; một session app-wide, một crawl tại một thời điểm |
@@ -78,7 +78,7 @@ Thành công của MVP là giảm thao tác search/copy thủ công nhưng vẫn
 
 - WPF + WebView2 local UI với JSON bridge v1.
 - Keyword Builder hai pane trong `Frontend/js/app.js`, draft theo `bookId`, Ads ASIN draft và `Build & Save` là điểm persist.
-- Textarea `.keyword-list-input` cố định 5 dòng và responsive breakpoint `1100px`.
+- Textarea Generic Keywords giữ chiều cao 5 dòng; Book Keywords giãn theo chiều cao pane và bố cục chuyển một cột tại breakpoint `1100px`.
 - `BackgroundTaskManager` có lane, duplicate policy, progress, cancellation, typed `Result` và typed `View` nội bộ.
 - Pattern typed session service qua `ProcessSessionService`.
 - `task.get` hiện **chỉ** trả `BackgroundTaskBridgeSnapshot`; không trả typed View/Result.
@@ -350,7 +350,7 @@ Keyword Builder
 │  ├─ Search Keywords (5 lines) + Browser status
 │  ├─ Open Browser / Crawl ASINs / Cancel
 │  ├─ Progress + ordered result rows
-│  └─ ASIN Result / Copy ASINs / Use in Ads ASIN
+│  └─ Terminal results auto-stage valid ASINs into the Keyword Builder Ads ASIN draft
 └─ Keyword Builder feedback hiện tại
 ```
 
@@ -370,16 +370,16 @@ Không tạo card ngang hàng thứ ba hoặc modal UI mới. Reuse `keyword-bui
 
 ### 10.3 Button/state matrix
 
-| State | Search | Open Browser | Crawl | Cancel | Copy/Use |
+| State | Search | Open Browser | Crawl | Cancel | Ads ASIN draft |
 |---|---|---|---|---|---|
-| Browser closed | Enabled | Enabled | Enabled; auto EnsureReady | Hidden | Theo retained result |
-| Checking/downloading/opening/warm-up | Enabled | Pending, disabled | Disabled | Hidden | Theo retained result |
-| Ready + empty input | Enabled | Enabled | Disabled | Hidden | Theo retained result |
-| Ready + valid input | Enabled | Enabled | Enabled | Hidden | Theo retained result |
-| Running | Disabled | Enabled để surface browser | Disabled | Enabled | Disabled đến terminal |
-| Cancelling | Disabled | Enabled | Disabled | `Cancelling…`, disabled | Disabled |
-| Completed/Partial/Cancelled | Enabled | Enabled | Enabled | Hidden | Enabled khi final string khác rỗng |
-| Needs attention | Enabled | Enabled | Disabled đến khi browser recheck Ready | Hidden | Enabled nếu partial khác rỗng |
+| Browser closed | Enabled | Enabled | Enabled; auto EnsureReady | Hidden | Không đổi |
+| Checking/downloading/opening/warm-up | Enabled | Pending, disabled | Disabled | Hidden | Không đổi |
+| Ready + empty input | Enabled | Enabled | Disabled | Hidden | Không đổi |
+| Ready + valid input | Enabled | Enabled | Enabled | Hidden | Không đổi |
+| Running | Disabled | Enabled để surface browser | Disabled | Enabled | Chờ terminal |
+| Cancelling | Disabled | Enabled | Disabled | `Cancelling…`, disabled | Không đổi |
+| Completed | Enabled | Enabled | Enabled | Hidden | Auto-stage final ASINs hợp lệ |
+| Partial/Cancelled/Needs attention | Enabled | Enabled | Theo browser state | Hidden | Auto-stage các final ASIN hợp lệ đã tìm được |
 
 First-run copy: `Downloading browser components (~200 MB)…` dùng indeterminate progress nếu SDK không có byte progress. Warm-up copy: `Preparing Amazon browser…` rồi `Waiting for Amazon session…`; không hiển thị giả `0 / N` khi chưa search.
 
@@ -395,18 +395,16 @@ First-run copy: `Downloading browser components (~200 MB)…` dùng indeterminat
   - `Not searched — crawl stopped`
 - Summary: `7 selected · 3 no match · 2 failed`.
 - Result list cao khoảng 6–8 rows rồi internal scroll; không đẩy drawer quá dài.
-- ASIN Result là `readonly`, không `disabled`, để focus/select/Ctrl+C.
+- Không render ASIN Result hoặc nút Copy/Use riêng; selected ASINs vẫn hiển thị trong ordered result rows.
 - Zero match: `No matching ASINs found. Adjust Search Keywords and crawl again.`
 
 ### 10.5 Apply vào Ads ASIN
 
-- Blank Ads ASIN: apply ngay.
-- Giá trị đã giống result: không đổi, announce `These ASINs are already in the draft.`
-- Giá trị khác: dùng `window.confirm` hiện có:
-  - `Replace the current Ads ASIN draft with {N} crawled ASINs? This does not save the Book.`
-- Cancel confirmation là no-op.
-- Confirm chỉ đổi local Keyword Builder draft, bật unsaved indicator; không gửi `book.keywords.save`.
-- Trước apply phải verify result `bookId` trùng Book đang mở và output đúng ASIN contract.
+- Chỉ crawl vừa được start trong phiên hiện tại mới auto-stage khi chuyển sang terminal; retained result không tự apply lại.
+- Final output phải đúng ASIN contract và Search Keywords không stale.
+- Auto-stage thay Ads ASIN local draft, bật unsaved indicator và không gửi `book.keywords.save`.
+- Completed, Partial, Cancelled, Failed hoặc NeedsAttention đều giữ và auto-stage các final ASIN hợp lệ đã crawl được; nếu không có ASIN hợp lệ thì draft không đổi.
+- Giá trị đã giống result không đổi và được announce là đã có trong Ads ASIN draft.
 - `Build & Save` vẫn là điểm persist duy nhất.
 
 ### 10.6 Rendering, accessibility và responsive
@@ -634,7 +632,7 @@ Mỗi nhóm ghi PASS/FAIL cùng evidence/test command. Chỉ tạo PR khi cả 5
 - Exact duplicate reattach; distinct request không join nhầm.
 - Closing/reopening same Book reattach; Book khác không hiển thị/apply result.
 - Polling không redraw toàn card hoặc làm mất focus/caret/drafts/scroll.
-- `Use in Ads ASIN` chỉ sửa local draft, confirm đúng lúc, không tự Save.
+- Terminal crawl chỉ auto-stage final ASIN hợp lệ vào local draft, không tự Save; `Build & Save` vẫn là điểm persist duy nhất.
 - Browser/app shutdown không để orphan owned process hoặc profile lock.
 - App vẫn startup offline khi browser runtime chưa có.
 - ZIP chứa đúng controlled `.playwright/`, không chứa downloaded Chromium/profile/cookie và release/license contract được xác nhận.

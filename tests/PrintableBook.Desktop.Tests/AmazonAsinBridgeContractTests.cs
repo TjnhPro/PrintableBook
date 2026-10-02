@@ -32,7 +32,7 @@ public sealed class AmazonAsinBridgeContractTests
     }
 
     [Fact]
-    public async Task Crawl_start_validates_payload_and_forwards_only_book_and_keywords()
+    public async Task Crawl_start_rejects_legacy_raw_keyword_payloads()
     {
         var session = new StubSession();
         var router = new WebViewBridgeRouter(amazonAsinCrawlSessionService: session);
@@ -40,21 +40,21 @@ public sealed class AmazonAsinBridgeContractTests
         var invalid = await router.HandleAsync("""{"version":1,"id":"bad","command":"book.keywords.asin-crawl.start","payload":{"bookId":"book"}}""");
         var valid = await router.HandleAsync("""{"version":1,"id":"ok","command":"book.keywords.asin-crawl.start","payload":{"bookId":"book","keywords":["cozy cats","adult coloring"]}}""");
 
-        Assert.Equal("invalid_amazon_asin_crawl", invalid.Error);
-        Assert.True(valid.Ok);
-        Assert.Equal("book", session.BookId);
-        Assert.Equal(["cozy cats", "adult coloring"], session.Keywords);
+        Assert.Equal("keyword_preview_required", invalid.Error);
+        Assert.Equal("keyword_preview_required", valid.Error);
+        Assert.Null(session.BookId);
+        Assert.Null(session.Keywords);
     }
 
     [Fact]
-    public async Task Crawl_validation_returns_stable_safe_error_code()
+    public async Task Crawl_without_preview_service_returns_stable_safe_error_code()
     {
         var router = new WebViewBridgeRouter(amazonAsinCrawlSessionService: new StubSession { ValidationError = true });
 
         var response = await router.HandleAsync("""{"version":1,"id":"empty","command":"book.keywords.asin-crawl.start","payload":{"bookId":"book","keywords":[]}}""");
 
         Assert.False(response.Ok);
-        Assert.Equal("amazon_keywords_required", response.Error);
+        Assert.Equal("keyword_preview_required", response.Error);
     }
 
     private sealed class StubBrowser : IAmazonSearchPageClient

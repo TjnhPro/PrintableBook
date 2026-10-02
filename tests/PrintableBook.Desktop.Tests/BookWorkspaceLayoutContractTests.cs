@@ -316,10 +316,34 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("fields.join(\"\\t\")", script, StringComparison.Ordinal);
         Assert.Contains(".keyword-list-input.control { height:7.625rem; min-height:7.625rem; max-height:7.625rem;", layout, StringComparison.Ordinal);
         Assert.Contains("resize:none; overflow-y:auto;", layout, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr));", layout, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-grid { align-items:stretch; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-pane { height:100%; }", layout, StringComparison.Ordinal);
+        Assert.Contains("field keyword-builder-source-field", script, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-inputs { grid-template-rows:auto auto minmax(0,1fr); }", layout, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-source-field { grid-template-rows:auto minmax(0,1fr) auto auto; min-height:0; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-source-field .keyword-list-input.control { height:100%; max-height:none; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-actions { grid-template-columns:repeat(3,minmax(0,1fr)); }", layout, StringComparison.Ordinal);
         Assert.Contains("keyword-builder-pane keyword-builder-inputs", script, StringComparison.Ordinal);
         Assert.Contains("keyword-builder-pane keyword-builder-outputs", script, StringComparison.Ordinal);
+        var generatedOutputStart = script.IndexOf("<section class=\"keyword-builder-pane keyword-builder-outputs\"", StringComparison.Ordinal);
+        var adsAsinStart = script.IndexOf("<label class=\"field\" for=\"book-keyword-ads-asin\">", StringComparison.Ordinal);
+        var actionsStart = script.IndexOf("<div class=\"keyword-builder-actions\">", StringComparison.Ordinal);
+        var shuffleButtonStart = script.IndexOf("data-action=\"shuffle-book-keywords\"", StringComparison.Ordinal);
+        var saveButtonStart = script.IndexOf("data-action=\"save-book-keywords\"", StringComparison.Ordinal);
+        var copyButtonStart = script.IndexOf("data-action=\"copy-book-keywords\"", StringComparison.Ordinal);
+        Assert.True(generatedOutputStart >= 0 && adsAsinStart > generatedOutputStart, "Ads ASIN must be inside Generated output.");
+        Assert.True(actionsStart > adsAsinStart && shuffleButtonStart > actionsStart && saveButtonStart > shuffleButtonStart && copyButtonStart > saveButtonStart, "Shuffle, Save, and Copy must share the final Generated output action row.");
+        Assert.DoesNotContain("remaining word", script, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-inputs { background:var(--pb-surface); }", layout, StringComparison.Ordinal);
         Assert.Contains("aria-labelledby=\"keyword-builder-inputs-title\"", script, StringComparison.Ordinal);
         Assert.Contains("aria-labelledby=\"keyword-builder-output-title\"", script, StringComparison.Ordinal);
+        Assert.Contains("const renderAsinResearchWorkspace", script, StringComparison.Ordinal);
+        Assert.Contains("${renderBookKeywordBuilder(book, summary)}", script, StringComparison.Ordinal);
+        Assert.Contains("${renderAsinResearch(book, summary)}", script, StringComparison.Ordinal);
+        Assert.Contains("? renderAsinResearchWorkspace(book, summary)", script, StringComparison.Ordinal);
+        Assert.Contains("state.selectedBookTab !== \"asin\"", script, StringComparison.Ordinal);
+        Assert.Contains(".asin-research-workspace { display:grid; gap:20px; min-width:0; }", layout, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -330,17 +354,24 @@ public sealed class BookWorkspaceLayoutContractTests
         var layout = File.ReadAllText(Path.Combine(frontend, "css", "book-workspace.css"));
 
         Assert.Contains("ASIN Research", script, StringComparison.Ordinal);
-        Assert.Contains("rows=\"12\" data-action=\"asin-search-keywords\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-action=\"asin-search-keywords\"", script, StringComparison.Ordinal);
+        Assert.Contains("Uses generated Ads Keyword", script, StringComparison.Ordinal);
         Assert.Contains("tabButton(\"asin\", \"ASIN Research\")", script, StringComparison.Ordinal);
-        Assert.Contains("aria-labelledby=\"asin-research-title\"", script, StringComparison.Ordinal);
+        Assert.Contains("aria-labelledby=\"asin-research-results-title\"", script, StringComparison.Ordinal);
         Assert.Contains("role=\"progressbar\"", script, StringComparison.Ordinal);
-        Assert.Contains("readonly aria-readonly=\"true\"", script, StringComparison.Ordinal);
         Assert.Contains("const patchAsinResearch", script, StringComparison.Ordinal);
-        Assert.Contains("const canUse = !active && !stale && Boolean(finalAsins)", script, StringComparison.Ordinal);
+        Assert.Contains("const autoStageAsinCrawlResults", script, StringComparison.Ordinal);
+        Assert.Contains("researchDraft.autoApplyPending = true", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("!shouldApply || outcome !== \"Completed\"", script, StringComparison.Ordinal);
+        Assert.Contains("Crawled ASINs added to the preview. Save when ready.", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("id=\"asin-research-result\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-action=\"copy-amazon-asins\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-action=\"use-amazon-asins\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain("!validInput || active || browserBusy || needsAttention", script, StringComparison.Ordinal);
         Assert.DoesNotContain("section.outerHTML = renderAsinResearch", script, StringComparison.Ordinal);
         Assert.Contains("syncContent(\".asin-result-list\")", script, StringComparison.Ordinal);
-        Assert.Contains(".asin-result-list { display:grid; width:100%; height:15rem; min-height:15rem; max-height:15rem; overflow:auto;", layout, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-crawl { display:grid; grid-template-rows:auto auto auto 10.5rem auto auto auto;", layout, StringComparison.Ordinal);
+        Assert.Contains(".keyword-builder-crawl .asin-result-list { height:10.5rem; min-height:10.5rem; max-height:10.5rem; }", layout, StringComparison.Ordinal);
         Assert.Contains("@media (max-width:760px)", layout, StringComparison.Ordinal);
         Assert.Contains("prefers-reduced-motion:reduce", layout, StringComparison.Ordinal);
     }

@@ -25,19 +25,19 @@ Outcome cần đạt:
 
 | # | Quyết định | Contract MVP |
 |---|---|---|
-| 1A | Thời điểm shuffle | Pack unique words vào slot trước; chỉ sau khi toàn bộ packing hợp lệ mới shuffle words trong từng slot đã có dữ liệu, đúng một lần cho mỗi lần build thành công. |
+| 1A | Thời điểm shuffle | Pack/select trước; chỉ sau khi toàn bộ build hợp lệ mới shuffle words trong từng slot, phrase của Ads Keyword và target của Ads ASIN có từ hai phần tử, đúng một lần cho mỗi lần build thành công. |
 | 2A | Unique word | So sánh case-insensitively. `Book` và `book` trùng nhau; `book` và `books` khác nhau. Giữ spelling/casing của lần xuất hiện đầu tiên. |
 | 3A | Capacity failure | Chặn build nếu một word dài hơn 50 ký tự hoặc ordered unique-word stream cần slot thứ 8 theo sequential next-fit. Không truncate, split hoặc drop word. |
 | 4A | Field có thể edit | User chỉ edit source phrases và `adsAsin`. `keyword_1…keyword_7` và `adsKeyword` là read-only. |
-| 5A | Duplicate trong Ads Keyword | `adsKeyword` giữ toàn bộ phrase đã normalize theo đúng thứ tự input, kể cả phrase trùng nhau. Unique word chỉ áp dụng cho `keyword_1…keyword_7`. |
+| 5A | Duplicate trong Ads Keyword | `adsKeyword` giữ toàn bộ phrase đã normalize, kể cả phrase trùng nhau, rồi shuffle sau khi chọn. Unique word chỉ áp dụng cho `keyword_1…keyword_7`. |
 
 Contract bổ sung:
 
 - Giới hạn `keyword_*` là **tối đa 50 Unicode grapheme**: 50 hợp lệ, 51 không hợp lệ.
 - “Word” là token không rỗng khi split phrase bằng Unicode whitespace. Punctuation thuộc về token; không stem, bỏ punctuation hoặc gộp singular/plural.
 - Bỏ blank line; trim mỗi phrase; collapse whitespace bên trong thành một ASCII space.
-- `adsKeyword` là các phrase đã normalize nối bằng `", "`.
-- `adsAsin` là text dành cho **advertising product targets**, không phải ASIN riêng của Book Information. MVP chỉ trim hai đầu toàn bộ text, giữ nội dung/multiline bên trong, không dedupe và không giới hạn ký tự.
+- `adsKeyword` là các phrase đã normalize, shuffle rồi nối bằng `", "`.
+- `adsAsin` là danh sách **advertising product targets**, không phải ASIN riêng của Book Information. Build tách bằng dấu phẩy/newline, trim, giữ duplicate, shuffle rồi nối lại bằng dấu phẩy.
 - Source phrases và output đều có thể empty. Build nguồn empty sẽ lưu source empty, xóa bảy keyword và `adsKeyword`, nhưng vẫn lưu `adsAsin` đã submit.
 - Bấm **Build & Save** lần nữa là một build mới và có thể cho thứ tự shuffle mới. Load, refresh, redraw, resize hoặc reopen tuyệt đối không được shuffle.
 
@@ -199,15 +199,15 @@ Pipeline:
    - không split/truncate/drop/reorder word.
 8. Nếu một word `> 50`, fail `keyword_word_too_long` trước mọi random call và state write.
 9. Nếu phải mở slot thứ 8, fail `keyword_capacity_exceeded` trước mọi random call và state write.
-10. Chỉ sau khi toàn bộ dry-run pass, gọi Fisher–Yates một lần trên từng slot có từ hai word trở lên; slot 0/1 word không cần random call.
-11. Join mỗi slot bằng một ASCII space; tạo đủ bảy named properties; trim outer edge của `adsAsin`; tạo `buildId`, `builtAtUtc`, `algorithmVersion`.
+10. Chỉ sau khi toàn bộ dry-run pass, gọi Fisher–Yates một lần trên từng slot có từ hai word, danh sách Ads Keyword có từ hai phrase và Ads ASIN có từ hai target; collection 0/1 phần tử không gọi random.
+11. Join mỗi slot bằng một ASCII space, Ads Keyword bằng `", "`, Ads ASIN bằng dấu phẩy; tạo đủ bảy named properties cùng `buildId`, `builtAtUtc`, `algorithmVersion`.
 12. Load latest Book state **sau khi đã vào gate**, replace riêng `KeywordBuilder`, và thực hiện đúng một atomic save.
 13. Sau khi save thành công, không còn cancellable work trong transaction; trả exact persisted state ngay. Refresh library là best-effort riêng và không được đổi save success thành failure.
 
 ### Randomness test seam
 
 - Tách `normalize/dedupe/pack` khỏi `shuffle`.
-- Inject một abstraction rất nhỏ như `IKeywordWordShuffler` hoặc random-index source.
+- Inject một abstraction rất nhỏ như `IKeywordOutputShuffler` hoặc random-index source.
 - Production dùng unbiased index generation; test dùng fake deterministic.
 - Test số lần/call invariant, không assert output bắt buộc phải khác input vì identity permutation là hợp lệ.
 

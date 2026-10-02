@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.ComponentModel;
 using System.IO;
+using System.Collections.Concurrent;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
@@ -41,11 +42,13 @@ internal sealed class WebViewBridgeRouter(
     IProductionFilePicker? productionFilePicker = null,
     IProductionAssetImportService? productionAssetImportService = null,
     IBookCatalogMetadataService? bookCatalogMetadataService = null,
+    IBookKeywordPreviewService? bookKeywordPreviewService = null,
     IAmazonAsinCrawlSessionService? amazonAsinCrawlSessionService = null,
     IAmazonSearchPageClient? amazonSearchPageClient = null)
 {
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
     private readonly ProcessingMutationGate processingMutationGate = processingMutationGate ?? new ProcessingMutationGate();
+    private readonly ConcurrentDictionary<string, KeywordCrawlSource> crawlSources = new(StringComparer.Ordinal);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public const int Version = 1;
@@ -131,11 +134,22 @@ internal sealed class WebViewBridgeRouter(
                     AmazonAsinCrawlSessionSnapshot snapshot;
                     if (request.Command == "book.keywords.asin-crawl.start")
                     {
-                        if (!TryGetStringArray(crawlPayload, "keywords", out var keywords))
+                        if (bookKeywordPreviewService is null || applicationLoadCoordinator is null)
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, "keyword_preview_required");
+                        }
+                        if (!TryGetOptionalString(crawlPayload, "previewReceipt", out var previewReceipt) ||
+                            !TryGetOptionalString(crawlPayload, "savedBuildId", out var savedBuildId) ||
+                            string.IsNullOrWhiteSpace(previewReceipt) == string.IsNullOrWhiteSpace(savedBuildId))
                         {
                             return new BridgeResponse(Version, request.Id, false, null, "invalid_amazon_asin_crawl");
                         }
-                        snapshot = await amazonAsinCrawlSessionService.StartAsync(crawlBookId, keywords, cancellationToken);
+                        var current = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                        var book = current?.Discovery.Books.FirstOrDefault(item => string.Equals(item.Id.Value, crawlBookId, StringComparison.Ordinal));
+                        if (book is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+                        var trustedSource = await bookKeywordPreviewService.ResolveCrawlSourceAsync(book, previewReceipt, savedBuildId, cancellationToken);
+                        snapshot = await amazonAsinCrawlSessionService.StartAsync(crawlBookId, trustedSource.Keywords, cancellationToken);
+                        crawlSources[crawlBookId] = trustedSource;
                     }
                     else if (request.Command == "book.keywords.asin-crawl.cancel")
                     {
@@ -145,11 +159,19 @@ internal sealed class WebViewBridgeRouter(
                     {
                         snapshot = await amazonAsinCrawlSessionService.GetAsync(crawlBookId, cancellationToken);
                     }
+                    if (crawlSources.TryGetValue(crawlBookId, out var source))
+                    {
+                        snapshot = snapshot with { SourceFingerprint = source.SourceFingerprint, ReceiptDigest = source.ReceiptDigest };
+                    }
                     return BridgeResponse.Succeeded(request.Id, "book.keywords.asin-crawl", snapshot);
                 }
                 catch (AmazonCrawlValidationException exception)
                 {
                     return new BridgeResponse(Version, request.Id, false, null, exception.Code);
+                }
+                catch (KeywordPreviewException exception)
+                {
+                    return KeywordPreviewFailure(request.Id, exception);
                 }
                 catch (BackgroundTaskConflictException exception) when (exception.ActiveKind == BackgroundTaskKind.AmazonAsinCrawl)
                 {
@@ -266,7 +288,128 @@ internal sealed class WebViewBridgeRouter(
                 return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
             }
 
-            if (request.Command is "book.metadata.save" or "book.keywords.save" or "book.brand.assign" or "book.brand.unassign" or "brand.author.save")
+            if (request.Command == "book.keywords.save" && bookKeywordPreviewService is null)
+            {
+                return new BridgeResponse(Version, request.Id, false, null, "keyword_preview_required");
+            }
+
+            if (bookKeywordPreviewService is not null && request.Command is
+                "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save")
+            {
+                if (applicationLoadCoordinator is null || request.Payload is not { } keywordPayload ||
+                    !TryGetRequiredString(keywordPayload, "bookId", out var keywordBookId) ||
+                    !TryGetOptionalInt64(keywordPayload, "clientRevision", out var clientRevision))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_keyword_builder");
+                }
+
+                var current = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                if (current is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+                var keywordBook = current.Discovery.Books.FirstOrDefault(item => string.Equals(item.Id.Value, keywordBookId, StringComparison.Ordinal));
+                if (keywordBook is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+
+                try
+                {
+                    if (request.Command == "book.keywords.shuffle")
+                    {
+                        if (!TryGetStringArray(keywordPayload, "bookKeywords", out var bookKeywords) ||
+                            !TryGetOptionalString(keywordPayload, "adsAsin", out var adsAsin))
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, "invalid_keyword_builder");
+                        }
+                        var result = await bookKeywordPreviewService.ShuffleAsync(keywordBook, bookKeywords, adsAsin, cancellationToken);
+                        return BridgeResponse.Succeeded(request.Id, "book.keywords.preview", new
+                        {
+                            bookId = keywordBookId,
+                            clientRevision,
+                            preview = result.Preview,
+                            receipt = result.Receipt,
+                            receiptDigest = result.ReceiptDigest
+                        });
+                    }
+
+                    if (request.Command == "book.keywords.preview.open")
+                    {
+                        if (!TryGetRequiredString(keywordPayload, "buildId", out var buildId))
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, "invalid_keyword_builder");
+                        }
+                        var result = await bookKeywordPreviewService.OpenSavedAsync(keywordBook, buildId, cancellationToken);
+                        return BridgeResponse.Succeeded(request.Id, "book.keywords.preview", new
+                        {
+                            bookId = keywordBookId,
+                            clientRevision,
+                            preview = result.Preview,
+                            receipt = result.Receipt,
+                            receiptDigest = result.ReceiptDigest,
+                            saved = true
+                        });
+                    }
+
+                    if (request.Command == "book.keywords.preview.update-ads-asin")
+                    {
+                        if (!TryGetRequiredString(keywordPayload, "baseReceipt", out var baseReceipt) ||
+                            !TryGetOptionalString(keywordPayload, "adsAsin", out var adsAsin))
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, "invalid_keyword_builder");
+                        }
+                        var result = await bookKeywordPreviewService.UpdateAdsAsinAsync(keywordBook, baseReceipt, adsAsin, cancellationToken);
+                        return BridgeResponse.Succeeded(request.Id, "book.keywords.preview", new
+                        {
+                            bookId = keywordBookId,
+                            clientRevision,
+                            preview = result.Preview,
+                            receipt = result.Receipt,
+                            receiptDigest = result.ReceiptDigest
+                        });
+                    }
+
+                    if (!TryGetRequiredString(keywordPayload, "receipt", out var receipt))
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "invalid_keyword_builder");
+                    }
+
+                    await using (await processingMutationGate.EnterAsync(cancellationToken))
+                    {
+                        if (await IsProcessingActiveAsync(cancellationToken)) return new BridgeResponse(Version, request.Id, false, null, "processing_active");
+                        if (await GetActiveStateWriterErrorAsync(cancellationToken) is { } activityError)
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, activityError);
+                        }
+
+                        var saved = await bookKeywordPreviewService.SaveAsync(keywordBook, receipt, cancellationToken);
+                        object? refreshTask = null;
+                        string? refreshWarning = null;
+                        try
+                        {
+                            refreshTask = BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(CancellationToken.None));
+                        }
+                        catch (Exception)
+                        {
+                            refreshWarning = "Library refresh could not start.";
+                        }
+                        return BridgeResponse.Succeeded(request.Id, "book.keywords.saved", new
+                        {
+                            bookId = keywordBookId,
+                            clientRevision,
+                            keywordBuilder = saved.KeywordBuilder,
+                            disposition = saved.Disposition,
+                            refreshTask,
+                            refreshWarning
+                        });
+                    }
+                }
+                catch (KeywordPreviewException exception)
+                {
+                    return KeywordPreviewFailure(request.Id, exception);
+                }
+                catch (BookKeywordBuilderValidationException exception)
+                {
+                    return KeywordBuilderFailure(request.Id, exception);
+                }
+            }
+
+            if (request.Command is "book.metadata.save" or "book.brand.assign" or "book.brand.unassign" or "brand.author.save")
             {
                 if (applicationLoadCoordinator is null || bookCatalogMetadataService is null || request.Payload is not { } metadataPayload)
                 {
@@ -323,59 +466,6 @@ internal sealed class WebViewBridgeRouter(
                                         Asin = asin
                                     },
                                     cancellationToken);
-                            }
-                            else if (request.Command == "book.keywords.save")
-                            {
-                                if (!TryGetStringArray(metadataPayload, "keywords", out var keywords) ||
-                                    !TryGetOptionalString(metadataPayload, "adsAsin", out var adsAsin))
-                                {
-                                    return new BridgeResponse(Version, request.Id, false, null, "invalid_keyword_builder");
-                                }
-
-                                BookKeywordBuilderState saved;
-                                try
-                                {
-                                    saved = await bookCatalogMetadataService.SaveKeywordBuilderAsync(book, keywords, adsAsin, cancellationToken);
-                                }
-                                catch (BookKeywordBuilderValidationException exception)
-                                {
-                                    var error = exception.Error;
-                                    var details = new Dictionary<string, object?>();
-                                    if (error.OffendingWord is not null) details[error.Code == "keyword_word_too_long" ? "offendingWord" : "firstUnplacedWord"] = error.OffendingWord;
-                                    if (error.GraphemeCount is not null) details["graphemeCount"] = error.GraphemeCount;
-                                    if (error.MaximumCharacters is not null) details["maximumCharacters"] = error.MaximumCharacters;
-                                    if (error.UniqueWordCount is not null) details["uniqueWordCount"] = error.UniqueWordCount;
-                                    if (error.RequiredSlotCount is not null) details["requiredSlotCount"] = error.RequiredSlotCount;
-                                    if (error.MaximumSlotCount is not null) details["maximumSlotCount"] = error.MaximumSlotCount;
-                                    if (error.PackingRule is not null) details["packingRule"] = error.PackingRule;
-                                    return new BridgeResponse(Version, request.Id, false, null, error.Code, new
-                                    {
-                                        policyVersion = 1,
-                                        field = "keywords",
-                                        code = error.Code,
-                                        message = error.Message,
-                                        details
-                                    });
-                                }
-
-                                object? refreshTask = null;
-                                string? refreshWarning = null;
-                                try
-                                {
-                                    refreshTask = BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(CancellationToken.None));
-                                }
-                                catch (Exception)
-                                {
-                                    refreshWarning = "Library refresh could not start.";
-                                }
-
-                                return BridgeResponse.Succeeded(request.Id, "book.keywords.saved", new
-                                {
-                                    bookId,
-                                    keywordBuilder = saved,
-                                    refreshTask,
-                                    refreshWarning
-                                });
                             }
                             else if (request.Command == "book.brand.assign")
                             {
@@ -1005,7 +1095,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 
@@ -1024,6 +1114,39 @@ internal sealed class WebViewBridgeRouter(
         if (element.ValueKind != JsonValueKind.String) return false;
         value = element.GetString();
         return true;
+    }
+
+    private static bool TryGetOptionalInt64(JsonElement payload, string propertyName, out long? value)
+    {
+        value = null;
+        if (!payload.TryGetProperty(propertyName, out var element) || element.ValueKind == JsonValueKind.Null) return true;
+        if (element.ValueKind != JsonValueKind.Number || !element.TryGetInt64(out var parsed)) return false;
+        value = parsed;
+        return true;
+    }
+
+    private static BridgeResponse KeywordPreviewFailure(string requestId, KeywordPreviewException exception) =>
+        new(Version, requestId, false, null, exception.Error.Code, exception.Error);
+
+    private static BridgeResponse KeywordBuilderFailure(string requestId, BookKeywordBuilderValidationException exception)
+    {
+        var error = exception.Error;
+        var details = new Dictionary<string, object?>();
+        if (error.OffendingWord is not null) details[error.Code == "keyword_word_too_long" ? "offendingWord" : "firstUnplacedWord"] = error.OffendingWord;
+        if (error.GraphemeCount is not null) details["graphemeCount"] = error.GraphemeCount;
+        if (error.MaximumCharacters is not null) details["maximumCharacters"] = error.MaximumCharacters;
+        if (error.UniqueWordCount is not null) details["uniqueWordCount"] = error.UniqueWordCount;
+        if (error.RequiredSlotCount is not null) details["requiredSlotCount"] = error.RequiredSlotCount;
+        if (error.MaximumSlotCount is not null) details["maximumSlotCount"] = error.MaximumSlotCount;
+        if (error.PackingRule is not null) details["packingRule"] = error.PackingRule;
+        return new BridgeResponse(Version, requestId, false, null, error.Code, new
+        {
+            policyVersion = 1,
+            field = "keywords",
+            code = error.Code,
+            message = error.Message,
+            details
+        });
     }
 
     private static bool TryGetStringArray(JsonElement payload, string propertyName, out IReadOnlyList<string> values)

@@ -88,6 +88,14 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     querySelectorAll: () => [],
     set outerHTML(_markup) { productionWorkspaceRenderCount += 1; }
   };
+  const keywordBuilderCard = {
+    contains: () => false,
+    set outerHTML(markup) {
+      const start = contentMarkup.indexOf('<section class="catalog-card keyword-builder-card"');
+      const end = contentMarkup.indexOf('\n  </div>', start);
+      if (start >= 0 && end > start) contentMarkup = `${contentMarkup.slice(0, start)}${markup}${contentMarkup.slice(end)}`;
+    }
+  };
   const brandSettingsEditor = { dataset: { brandSettings: "" }, value: "{}" };
   const genericKeywordsEditor = { dataset: { genericKeywords: "" }, value: "" };
   const settingsInputs = [
@@ -148,6 +156,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
         if (selector === ".intro-template-workspace" && contentMarkup.includes('class="intro-template-workspace"')) return introWorkspace;
         if (selector === ".interior-artwork-workspace" && contentMarkup.includes('class="interior-artwork-workspace"')) return artworkWorkspace;
         if (selector === ".book-drawer-body" && contentMarkup.includes('class="book-drawer-body"')) return bookDrawerBody;
+        if (selector === "[data-book-keyword-builder-card]" && contentMarkup.includes("data-book-keyword-builder-card")) return keywordBuilderCard;
         if (selector === ".production-workspace" && contentMarkup.includes('class="production-workspace"')) return productionWorkspace;
         if (selector === ".interior-artwork-grid-scroll" && contentMarkup.includes('class="interior-artwork-grid-scroll"')) return artworkGrid;
         if (selector.startsWith('[data-action="intro-template-page"]')) return introPaginationFocus;
@@ -1642,48 +1651,93 @@ test("Book Information structured backend rejection retains the drawer without r
   assert.equal(messages.length, messageCount, "backend rejection must not request a snapshot refresh");
 });
 
-test("ASIN Research seeds per Book and only applies targets to the draft", () => {
+test("ASIN Research uses the signed Ads Keyword preview and merges completed targets", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   const snapshot = {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
     bookSummaries: [{
       bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [],
-      keywordBuilder: { sourceKeywords: ["cozy coloring", "adult coloring"], adsAsin: "OLDTARGET", keywords: [] }
+      keywordBuilder: { sourceKeywords: ["cozy coloring", "adult coloring"], adsKeyword: "cozy coloring, adult coloring", adsAsin: "OLDTARGET", adsAsinSource: "OLDTARGET", keywords: [], buildId: "build-1", algorithmVersion: 4 }
     }]
   };
 
   messageHandler({ data: { version: 1, id: "asin-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
+  assert.doesNotMatch(content.innerHTML, /data-book-keyword-builder-card/, "Overview must not render Keyword Builder");
+  const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
+  contentListeners.click({ target: asinTab });
 
   assert.match(content.innerHTML, /ASIN Research/);
   assert.match(content.innerHTML, /cozy coloring\nadult coloring/);
-  assert.equal(messages.at(-2).command, "amazon.browser.status");
-  assert.equal(messages.at(-1).command, "book.keywords.asin-crawl.get");
+  assert.match(content.innerHTML, /Uses generated Ads Keyword/);
+  assert.doesNotMatch(content.innerHTML, /Search Keywords/);
+  assert.equal(messages.at(-1).command, "book.keywords.preview.open");
+  const openRequest = messages.at(-1);
+  const preview = { ...snapshot.bookSummaries[0].keywordBuilder, keyword_1: "coloring cozy", keyword_2: null, keyword_3: null, keyword_4: null, keyword_5: null, keyword_6: null, keyword_7: null, builtAtUtc: "2026-09-29T00:00:00Z" };
+  messageHandler({ data: { version: 1, id: openRequest.id, ok: true, command: "book.keywords.preview", payload: { bookId: "Book 001", clientRevision: 0, preview, receipt: "receipt-1", receiptDigest: "digest-1", saved: true } } });
+  assert.match(content.innerHTML, /Preview · Not saved/);
 
-  contentListeners.input({ target: { dataset: { action: "asin-search-keywords", bookId: "Book 001" }, value: "  cats   coloring, CATS COLORING\r\nbooks for adults,\nrelaxing animals" } });
   const crawl = { dataset: { action: "crawl-amazon-asins", bookId: "Book 001" }, closest: () => crawl };
   contentListeners.click({ target: crawl });
   assert.equal(messages.at(-1).command, "book.keywords.asin-crawl.start");
-  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", keywords: ["cats coloring", "books for adults", "relaxing animals"] });
+  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", previewReceipt: "receipt-1" });
 
+  const messageCountBeforeCompletion = messages.length;
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "book.keywords.asin-crawl", payload: {
     taskId: "crawl-1", bookId: "Book 001", isActive: false, isCancelling: false,
-    view: { outcome: "Completed", rows: [{ inputIndex: 0, keyword: "cats coloring", status: "Selected", asin: "B000000001" }], completedCount: 1, totalCount: 1, finalAsins: "B000000001", requestFingerprint: "fingerprint" }
+    receiptDigest: "digest-1", sourceFingerprint: "source-1",
+    view: { outcome: "Completed", rows: [{ inputIndex: 0, keyword: "cozy coloring", status: "Selected", asin: "B000000001" }], completedCount: 1, totalCount: 1, finalAsins: "B000000001", requestFingerprint: "source-1" }
   } } });
-  const messageCountBeforeUse = messages.length;
-  const use = { dataset: { action: "use-amazon-asins", bookId: "Book 001" }, closest: () => use };
-  contentListeners.click({ target: use });
-  assert.equal(messages.length, messageCountBeforeUse, "Use in Ads ASIN must not save the Book");
+  assert.equal(messages.length, messageCountBeforeCompletion + 1, "Completed crawl must rebuild the preview with the same signed seed");
+  assert.equal(messages.at(-1).command, "book.keywords.preview.update-ads-asin");
+  assert.equal(messages.at(-1).payload.adsAsin, "OLDTARGET,B000000001");
+  const updateRequest = messages.at(-1);
+  const updatedPreview = { ...preview, adsAsin: "B000000001,OLDTARGET", adsAsinSource: "OLDTARGET,B000000001" };
+  messageHandler({ data: { version: 1, id: updateRequest.id, ok: true, command: "book.keywords.preview", payload: { bookId: "Book 001", clientRevision: 1, preview: updatedPreview, receipt: "receipt-2", receiptDigest: "digest-2" } } });
+  assert.match(content.innerHTML, /Preview · Not saved/);
+  assert.match(content.innerHTML, /data-action="book-keyword-ads-asin"[^>]*value="OLDTARGET,B000000001"/, "Completed crawl must merge into the visible Ads ASIN draft");
+  assert.match(content.innerHTML, /Crawled ASINs added to the preview\. Save when ready\./);
+  assert.doesNotMatch(content.innerHTML, /Previous results — shuffle again before applying\./, "Applied crawl results must remain current after the signed preview digest changes");
+  assert.doesNotMatch(content.innerHTML, /ASIN Result|copy-amazon-asins|use-amazon-asins/);
 
-  const build = { dataset: { action: "build-book-keywords", bookId: "Book 001" }, closest: () => build };
-  contentListeners.click({ target: build });
+  const save = { dataset: { action: "save-book-keywords", bookId: "Book 001" }, closest: () => save };
+  contentListeners.click({ target: save });
   assert.equal(messages.at(-1).command, "book.keywords.save");
-  assert.equal(messages.at(-1).payload.adsAsin, "B000000001");
+  assert.equal(messages.at(-1).payload.receipt, "receipt-2");
 });
 
-test("Keyword Builder submits normalized phrases without redrawing Book detail", () => {
+test("ASIN Research does not apply crawl results after Keyword Builder inputs change", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+  const builder = { sourceKeywords: ["cozy coloring"], keyword_1: "cozy coloring", keyword_2: null, keyword_3: null, keyword_4: null, keyword_5: null, keyword_6: null, keyword_7: null, adsKeyword: "cozy coloring", adsAsin: null, adsAsinSource: null, buildId: "build-1", builtAtUtc: "2026-09-29T00:00:00Z", algorithmVersion: 4 };
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{ bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], metadata: {}, assets: [], keywordBuilder: builder }]
+  };
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
+  contentListeners.click({ target: asinTab });
+  const openRequest = messages.at(-1);
+  messageHandler({ data: { version: 1, id: openRequest.id, ok: true, command: "book.keywords.preview", payload: { bookId: "Book 001", clientRevision: 0, preview: builder, receipt: "receipt-1", receiptDigest: "digest-1" } } });
+  const crawl = { dataset: { action: "crawl-amazon-asins", bookId: "Book 001" }, closest: () => crawl };
+  contentListeners.click({ target: crawl });
+  const beforeEdit = messages.length;
+
+  contentListeners.input({ target: { dataset: { action: "book-keyword-source", bookId: "Book 001" }, value: "new phrase" } });
+  messageHandler({ data: { version: 1, id: "crawl-result", ok: true, command: "book.keywords.asin-crawl", payload: {
+    taskId: "crawl", bookId: "Book 001", isActive: false, isCancelling: false, receiptDigest: "digest-1", sourceFingerprint: "source",
+    view: { outcome: "Completed", rows: [{ keyword: "cozy coloring", status: "Selected", asin: "B000000001" }], completedCount: 1, totalCount: 1, finalAsins: "B000000001" }
+  } } });
+
+  assert.equal(messages.length, beforeEdit, "stale crawl results must not issue an Ads ASIN preview update");
+  assert.match(content.innerHTML, />new phrase<\/textarea>/);
+});
+
+test("Keyword Builder shuffles a preview before saving without redrawing Book detail", () => {
   const { messageHandler, content, contentListeners, messages, getFullRenderCount, getBookDrawerBodyRenderCount } = loadBridge("books");
   const snapshot = {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
@@ -1696,6 +1750,8 @@ test("Keyword Builder submits normalized phrases without redrawing Book detail",
   messageHandler({ data: { version: 1, id: "keyword-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
+  const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
+  contentListeners.click({ target: asinTab });
   assert.match(content.innerHTML, /Keyword Builder/);
   assert.match(content.innerHTML, /Book Keywords/);
   assert.match(content.innerHTML, /rows="5" data-action="book-keyword-source"/);
@@ -1704,19 +1760,62 @@ test("Keyword Builder submits normalized phrases without redrawing Book detail",
   assert.match(content.innerHTML, /Build inputs/);
   assert.match(content.innerHTML, />2 Generic</);
   assert.match(content.innerHTML, /Generated output/);
+  const generatedOutputIndex = content.innerHTML.indexOf("keyword-builder-pane keyword-builder-outputs");
+  const adsAsinIndex = content.innerHTML.indexOf('for="book-keyword-ads-asin"');
+  const actionsIndex = content.innerHTML.indexOf('class="keyword-builder-actions"');
+  const shuffleActionIndex = content.innerHTML.indexOf('data-action="shuffle-book-keywords"');
+  const saveActionIndex = content.innerHTML.indexOf('data-action="save-book-keywords"');
+  const copyActionIndex = content.innerHTML.indexOf('data-action="copy-book-keywords"');
+  assert.ok(generatedOutputIndex >= 0 && adsAsinIndex > generatedOutputIndex, "Ads ASIN should render in Generated output");
+  assert.ok(actionsIndex > adsAsinIndex && shuffleActionIndex > actionsIndex && saveActionIndex > shuffleActionIndex && copyActionIndex > saveActionIndex, "Shuffle, Save, and Copy actions should share the final action row");
   const fullRenders = getFullRenderCount();
   const drawerRenders = getBookDrawerBodyRenderCount();
 
   contentListeners.input({ target: { dataset: { action: "book-keyword-source", bookId: "Book 001" }, value: " coloring\tbooks for adults \n\nadult coloring book" } });
   contentListeners.input({ target: { dataset: { action: "book-keyword-ads-asin", bookId: "Book 001" }, value: " B0123, B0456 " } });
-  const build = { dataset: { action: "build-book-keywords", bookId: "Book 001" }, closest: () => build };
-  contentListeners.click({ target: build });
+  const shuffle = { dataset: { action: "shuffle-book-keywords", bookId: "Book 001" }, closest: () => shuffle };
+  contentListeners.click({ target: shuffle });
 
-  assert.equal(messages.at(-1).command, "book.keywords.save");
-  assert.deepEqual(messages.at(-1).payload.keywords, ["coloring books for adults", "adult coloring book"]);
+  assert.equal(messages.at(-1).command, "book.keywords.shuffle");
+  assert.deepEqual(messages.at(-1).payload.bookKeywords, ["coloring books for adults", "adult coloring book"]);
   assert.equal(messages.at(-1).payload.adsAsin, "B0123, B0456");
+  assert.equal(messages.at(-1).payload.clientRevision, 2);
   assert.equal(getFullRenderCount(), fullRenders);
   assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
+
+  const request = messages.at(-1);
+  const preview = { sourceKeywords: request.payload.bookKeywords, keyword_1: "books coloring", keyword_2: null, keyword_3: null, keyword_4: null, keyword_5: null, keyword_6: null, keyword_7: null, adsKeyword: "adult coloring book", adsAsin: "B0456,B0123", adsAsinSource: request.payload.adsAsin, buildId: "build-preview", builtAtUtc: "2026-09-29T10:00:00Z", algorithmVersion: 4 };
+  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "book.keywords.preview", payload: { bookId: "Book 001", clientRevision: 2, preview, receipt: "receipt-preview", receiptDigest: "digest" } } });
+  const save = { dataset: { action: "save-book-keywords", bookId: "Book 001" }, closest: () => save };
+  contentListeners.click({ target: save });
+  assert.equal(messages.at(-1).command, "book.keywords.save");
+  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", receipt: "receipt-preview", clientRevision: 2 });
+});
+
+test("Keyword Builder ignores a late preview after the Book draft revision changes", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{ bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], metadata: {}, interiorSourcePageCount: 0, activeInteriorSourcePageCount: 0, assets: [] }]
+  };
+  messageHandler({ data: { version: 1, id: "snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
+  contentListeners.click({ target: asinTab });
+  contentListeners.input({ target: { dataset: { action: "book-keyword-source", bookId: "Book 001" }, value: "first draft" } });
+  const shuffle = { dataset: { action: "shuffle-book-keywords", bookId: "Book 001" }, closest: () => shuffle };
+  contentListeners.click({ target: shuffle });
+  const request = messages.at(-1);
+
+  contentListeners.input({ target: { dataset: { action: "book-keyword-source", bookId: "Book 001" }, value: "newer draft" } });
+  const latePreview = { sourceKeywords: ["first draft"], keyword_1: "draft first", keyword_2: null, keyword_3: null, keyword_4: null, keyword_5: null, keyword_6: null, keyword_7: null, adsKeyword: "first draft", buildId: "late", builtAtUtc: "2026-09-29T10:00:00Z", algorithmVersion: 4 };
+  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "book.keywords.preview", payload: { bookId: "Book 001", clientRevision: 1, preview: latePreview, receipt: "late-receipt", receiptDigest: "late" } } });
+
+  assert.doesNotMatch(content.innerHTML, /Preview · Not saved/);
+  assert.match(content.innerHTML, /data-action="save-book-keywords"[^>]*disabled/);
+  assert.match(content.innerHTML, />newer draft<\/textarea>/);
 });
 
 test("Keyword Builder keeps the acknowledged build when a joined refresh returns a stale snapshot", () => {
@@ -1732,11 +1831,17 @@ test("Keyword Builder keeps the acknowledged build when a joined refresh returns
   messageHandler({ data: { version: 1, id: "keyword-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
+  const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
+  contentListeners.click({ target: asinTab });
   contentListeners.input({ target: { dataset: { action: "book-keyword-source", bookId: "Book 001" }, value: "coloring books" } });
-  const build = { dataset: { action: "build-book-keywords", bookId: "Book 001" }, closest: () => build };
-  contentListeners.click({ target: build });
+  const shuffle = { dataset: { action: "shuffle-book-keywords", bookId: "Book 001" }, closest: () => shuffle };
+  contentListeners.click({ target: shuffle });
+  const shuffleRequest = messages.at(-1);
+  const saved = { sourceKeywords: ["coloring books"], keyword_1: "books coloring", keyword_2: null, keyword_3: null, keyword_4: null, keyword_5: null, keyword_6: null, keyword_7: null, adsKeyword: "coloring books", adsAsin: null, adsAsinSource: null, buildId: "build-new", builtAtUtc: "2026-09-28T10:00:00Z", algorithmVersion: 4 };
+  messageHandler({ data: { version: 1, id: shuffleRequest.id, ok: true, command: "book.keywords.preview", payload: { bookId: "Book 001", clientRevision: 1, preview: saved, receipt: "receipt-new", receiptDigest: "digest-new" } } });
+  const save = { dataset: { action: "save-book-keywords", bookId: "Book 001" }, closest: () => save };
+  contentListeners.click({ target: save });
   const request = messages.at(-1);
-  const saved = { sourceKeywords: ["coloring books"], keyword_1: "books coloring", keyword_2: null, keyword_3: null, keyword_4: null, keyword_5: null, keyword_6: null, keyword_7: null, adsKeyword: "coloring books", adsAsin: null, buildId: "build-new", builtAtUtc: "2026-09-28T10:00:00Z", algorithmVersion: 1 };
   const renders = getFullRenderCount();
 
   messageHandler({ data: { version: 1, id: request.id, ok: true, command: "book.keywords.saved", payload: { bookId: "Book 001", keywordBuilder: saved, refreshTask: { kind: "LibraryRefresh", taskId: "joined-refresh", state: "Completed" }, refreshWarning: null } } });
@@ -1758,9 +1863,11 @@ test("Keyword Builder structured validation keeps the draft and does not request
   messageHandler({ data: { version: 1, id: "keyword-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
+  const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
+  contentListeners.click({ target: asinTab });
   contentListeners.input({ target: { dataset: { action: "book-keyword-source", bookId: "Book 001" }, value: "x".repeat(51) } });
-  const build = { dataset: { action: "build-book-keywords", bookId: "Book 001" }, closest: () => build };
-  contentListeners.click({ target: build });
+  const shuffle = { dataset: { action: "shuffle-book-keywords", bookId: "Book 001" }, closest: () => shuffle };
+  contentListeners.click({ target: shuffle });
   const request = messages.at(-1);
   const messageCount = messages.length;
   const renders = getFullRenderCount();
@@ -1784,8 +1891,10 @@ test("Keyword Builder Copy to Clipboard transfers nine saved tab-separated field
   messageHandler({ data: { version: 1, id: "keyword-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
+  const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
+  contentListeners.click({ target: asinTab });
   assert.match(content.innerHTML, /Copy to Clipboard/);
-  assert.match(content.innerHTML, /7 keyword fields are full\. 2 remaining words were not included\./);
+  assert.doesNotMatch(content.innerHTML, /remaining words? (?:was|were) not included\./);
   const copy = { dataset: { action: "copy-book-keywords", bookId: "Book 001" }, closest: () => copy };
 
   contentListeners.click({ target: copy });

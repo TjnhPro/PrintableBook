@@ -28,22 +28,23 @@ Trong tab **Overview** của Book detail, card **Book Information** lưu riêng:
 
 ### 3.1 Keyword Builder
 
-Card **Keyword Builder** nằm sau Brand Assignment trong tab Overview:
+Tab **ASIN Research** chứa một Keyword Builder workspace hai panel: **Build inputs** bên trái và **Generated output** bên phải. Crawl Results nằm ngay dưới Book Keywords trong Build inputs:
 
 1. Mở **Settings → Keyword Builder**, nhập **Generic Keywords** dùng chung, mỗi dòng một phrase, rồi Save settings.
 2. Trong Book detail, nhập **Book Keywords** riêng của Book, mỗi dòng một phrase.
-3. Có thể nhập **Ads ASIN (product targets)** trên một dòng. Field này dành cho advertising targets và hoàn toàn tách biệt với ASIN trong Book Information.
-4. Nhấn **Build & Save**. App normalize khoảng trắng, loại Book phrase trùng Generic phrase không phân biệt hoa/thường, rồi xử lý Generic trước Book theo thứ tự từ trên xuống.
+3. Có thể nhập nhiều **Ads ASIN (product targets)** trên một dòng, phân cách bằng dấu phẩy. Field này dành cho advertising targets và hoàn toàn tách biệt với ASIN trong Book Information.
+4. Nhấn **Shuffle**. App normalize khoảng trắng, loại Book phrase trùng Generic phrase không phân biệt hoa/thường, xử lý Generic trước Book, rồi tạo một preview chưa lưu.
+5. Review chín output. Nhấn **Save** để ghi đúng preview đang hiển thị; Save không random hoặc build một thứ tự mới.
 
-Mỗi `keyword_*` tối đa 50 ký tự và không bao giờ cắt giữa word. App cộng word theo đúng thứ tự input; khi word kế tiếp không vừa field hiện tại, app chuyển sang field kế tiếp. Đây là sequential packing, không tự reorder để tối ưu dung lượng. Nếu một word dài hơn 50 ký tự, Save bị chặn và lỗi chỉ rõ word gây vấn đề. Khi bảy field đã đầy, app vẫn Save phần đã build, bỏ các word còn dư và hiển thị warning. Singular/plural không bị gộp; punctuation vẫn thuộc về word.
+Mỗi `keyword_*` tối đa 50 ký tự và không bao giờ cắt giữa word. App cộng word theo đúng thứ tự input; khi word kế tiếp không vừa field hiện tại, app chuyển sang field kế tiếp. Đây là sequential packing, không tự reorder để tối ưu dung lượng. Nếu một word dài hơn 50 ký tự, Shuffle bị chặn và lỗi chỉ rõ word gây vấn đề. Word còn dư sau field thứ bảy được bỏ qua, không hiện notification riêng. Singular/plural không bị gộp; punctuation vẫn thuộc về word.
 
-Sau khi packing hợp lệ, app shuffle word trong từng field đúng một lần rồi lưu kết quả. Refresh, redraw, mở lại Book hoặc restart app không shuffle lại. Có thể bấm **Build & Save** lần nữa dù input không đổi để chủ động tạo thứ tự mới.
+Sau khi packing hợp lệ, app shuffle word trong từng `keyword_1…keyword_7` có dữ liệu, shuffle các phrase của Ads Keyword và shuffle danh sách Ads ASIN bằng một seed bảo mật. Field rỗng hoặc chỉ có một phần tử được bỏ qua. Preview mang receipt đã ký; Save rebuild cùng seed và từ chối receipt bị sửa, hết hiệu lực, thuộc Book khác hoặc stale. Bấm **Shuffle** lần nữa để chủ động tạo thứ tự mới.
 
-Ads Keyword giữ tối đa 30 phrase: ưu tiên tối đa 20 Generic và 10 Book; nếu một bên thiếu thì bên còn lại bù phần trống. Generic luôn đứng trước Book và Ads Keyword không bị shuffle.
+Ads Keyword giữ tối đa 30 phrase: ưu tiên tối đa 20 Generic và 10 Book; nếu một bên thiếu thì bên còn lại bù phần trống. Generic được chọn trước Book để tính quota, sau đó toàn bộ phrase đã chọn được shuffle trước khi lưu.
 
-Generated keywords và Ads Keyword là read-only. **Copy to Clipboard** copy chín giá trị đã Save (`keyword_1…keyword_7`, Ads Keyword, Ads ASIN) trên một dòng, phân cách bằng tab và không kèm label; field rỗng vẫn giữ cột. Nút không copy draft chưa lưu. Nếu cả Generic Keywords và Book Keywords đều trống, action đổi thành **Clear & Save** và cảnh báo rằng generated fields sẽ bị xóa; Ads ASIN vẫn có thể được giữ.
+Generated keywords và Ads Keyword là read-only. **Copy to Clipboard** copy chín giá trị đang hiển thị (`keyword_1…keyword_7`, Ads Keyword, Ads ASIN) trên một dòng, phân cách bằng tab và không kèm label; field rỗng vẫn giữ cột. Preview chưa Save cũng có thể copy để review.
 
-Nếu Save đã hoàn thành nhưng library refresh lỗi, card hiển thị **Saved · Refresh needed**. Dùng **Retry refresh** để đồng bộ snapshot; nút này không build, shuffle hoặc Save lần nữa. Khi quay lại binary cũ, state vẫn load được, nhưng một lần Save workspace bằng binary cũ có thể làm mất Keyword Builder data vì phiên bản cũ không biết property này.
+Nếu Save đã hoàn thành nhưng library refresh lỗi, card hiển thị **Saved · Refresh needed**. Dùng **Retry refresh** để đồng bộ snapshot; nút này không Shuffle hoặc Save lần nữa. State v1–v3 vẫn load read-only; bấm Shuffle một lần để nâng output lên deterministic v4 trước khi Save/crawl.
 
 Sau khi Save Author, dùng card **Brand Assignment** để chọn một Brand có Author match rồi nhấn **Assign Brand**. Ứng dụng không auto-assign. Khi reassign hoặc unassign, template, cache và output cũ được giữ nguyên; chúng không tự chuyển sang Brand mới.
 
@@ -69,15 +70,14 @@ Với Book theo cấu trúc phẳng cũ, tiếp tục đặt `Book interior/`, `
 
 ### 3.2 ASIN Research
 
-ASIN Research nằm bên dưới Keyword Builder và chỉ tạo draft quảng cáo; nó không tự lưu Book.
+ASIN Research dùng Crawl Results đã gộp trong panel Build inputs và chỉ tạo preview/draft quảng cáo; nó không tự lưu Book.
 
-1. Search Keywords được seed một lần từ Book Keywords. Sau đó hai ô độc lập với nhau.
-2. Nhập các phrase cách nhau bằng dấu phẩy hoặc xuống dòng, tối đa 30 phrase và 200 ký tự mỗi phrase.
-3. Bấm **Open Browser** nếu cần đăng nhập hoặc xử lý thông báo Amazon. Nếu chưa mở, **Crawl ASINs** sẽ tự mở browser.
-4. Lần chạy đầu tải CloakBrowser Chromium vài trăm MB. Profile và binary cache nằm tại `.cloakbrowser/` cạnh app để các lần sau không tải lại. Để dùng binary mới nhất, lấy free access key từ `https://cloakbrowser.dev/free` rồi đặt vào biến môi trường `CLOAKBROWSER_LICENSE_KEY` trước khi mở app; Printable Book không đọc, lưu hoặc hiển thị key trong settings/bridge/log.
-5. Review từng row. App chỉ lấy title chứa `coloring book` hoặc `coloring books`, tối đa một ASIN unique cho mỗi phrase.
-6. Bấm **Copy ASINs** để copy, hoặc **Use in Ads ASIN** để thay Ads ASIN draft. Nếu draft đã có giá trị, app hỏi xác nhận trước khi thay.
-7. Bấm **Build & Save** trong Keyword Builder để lưu Ads ASIN cùng output keyword hiện tại.
+1. Nhập Book Keywords và bấm **Shuffle**. Ads Keyword read-only của preview (tối đa 30 phrase) là nguồn crawl duy nhất; không còn ô Search Keywords riêng.
+2. Bấm **Open Browser** nếu cần đăng nhập hoặc xử lý thông báo Amazon. Nếu chưa mở, **Crawl ASINs** sẽ tự mở browser.
+3. Lần chạy đầu tải CloakBrowser Chromium vài trăm MB. Profile và binary cache nằm tại `.cloakbrowser/` cạnh app để các lần sau không tải lại. Để dùng binary mới nhất, lấy free access key từ `https://cloakbrowser.dev/free` rồi đặt vào biến môi trường `CLOAKBROWSER_LICENSE_KEY` trước khi mở app; Printable Book không đọc, lưu hoặc hiển thị key trong settings/bridge/log.
+4. Review từng row. App chỉ lấy title chứa `coloring book` hoặc `coloring books`, tối đa một ASIN unique cho mỗi phrase; viewport desktop hiển thị năm row và scroll phần còn lại.
+5. Khi crawl kết thúc, app merge/dedupe ASIN hợp lệ vào **Ads ASIN** draft và cập nhật preview bằng cùng seed. Manual target hiện có được giữ. Nếu Book Keywords/Ads ASIN đã đổi trong lúc crawl, kết quả cũ không được apply.
+6. Review preview mới, sau đó bấm **Save**. Crawl không tự Save Book.
 
 Nếu Amazon báo CAPTCHA, robot check hoặc rate limit, crawl dừng và giữ các ASIN đã tìm được. Xử lý trong cửa sổ browser rồi chạy lại. Đóng Book Detail không hủy crawl; mở lại cùng Book sẽ nối lại trạng thái trong app session. App restart sẽ xóa draft/result research nhưng không xóa browser profile.
 
@@ -237,8 +237,9 @@ Phần advanced chứa normalized source size và BorderLine V3 pass 1/pass 2. �
 | Process/Copy Templates bị chặn do Brand | Assign Brand cho Book; nếu assignment invalid thì sửa Author và reassign. Nếu Brand chưa được chứng nhận, mở **Brands & templates** và Validate Brand. |
 | Book không xuất hiện dưới Book Brand | Chỉ Book đã explicit assign mới xuất hiện; cùng Author là chưa đủ. |
 | Keyword Builder báo word quá dài | Shorten hoặc tách token được nêu trong lỗi; một token không được vượt 50 ký tự. |
-| Keyword Builder báo bảy field đã đầy | Build đã được Save; các word còn dư bị bỏ theo thứ tự từ trên xuống. Rút gọn hoặc reorder Generic/Book Keywords nếu cần đưa chúng vào output. |
-| Keyword Builder đã Save nhưng cần refresh | Nhấn **Retry refresh**. Không nhấn Build & Save nếu chỉ cần đồng bộ snapshot, vì Build & Save sẽ shuffle và lưu một build mới. |
+| Keyword Builder chưa cho Save/Crawl | Nhấn **Shuffle** để tạo receipt cho preview hiện tại. Nếu input vừa đổi, preview cũ được vô hiệu hóa có chủ đích. |
+| Keyword Builder báo preview stale/invalid | Nhấn **Shuffle** lại. Receipt không được tái sử dụng sau khi Generic Keywords hoặc input liên quan thay đổi. |
+| Keyword Builder đã Save nhưng cần refresh | Nhấn **Retry refresh**. Không nhấn Shuffle nếu chỉ cần đồng bộ snapshot. |
 | CUSTOM Intro không chạy | Chọn ít nhất một Book Interior image và **Save changes**. |
 | Background lỗi | Kiểm tra Brand có `background.png` đúng Final Page size. |
 | Không thấy preview sau process | Kiểm tra session Completed và mở lại Book detail/Interior pages. |

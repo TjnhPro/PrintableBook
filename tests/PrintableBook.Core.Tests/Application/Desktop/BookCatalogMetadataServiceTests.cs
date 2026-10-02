@@ -304,7 +304,7 @@ public sealed class BookCatalogMetadataServiceTests
             ValueTask.CompletedTask;
     }
 
-    private sealed class NoOpKeywordShuffler : IKeywordWordShuffler
+    private sealed class NoOpKeywordShuffler : IKeywordOutputShuffler
     {
         public void Shuffle(IList<string> words) { }
     }

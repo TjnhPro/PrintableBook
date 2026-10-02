@@ -36,7 +36,7 @@ Re-run the local capture check with `./scripts/test-amazon-captured-html.ps1`.
 
 ## 4. Keyword Builder UI — PASS
 
-- Search draft is seeded once per Book and then independent. Crawl never saves Book data; `Use in Ads ASIN` only changes the Ads ASIN draft and `Build & Save` remains the persistence point.
+- Search draft is seeded once per Book and then independent. A terminal crawl automatically stages valid final targets in the Ads ASIN draft without saving Book data; `Build & Save` remains the persistence point.
 - Polling patches only ASIN Research and restores scroll/focus/selection. Stale results cannot be applied; a previous `NeedsAttention` result does not permanently disable retry.
 - Five-row input, ordered result rows, progress, partial/attention states, keyboard semantics and 1100/760 responsive layouts are covered by contract tests.
 - Node bridge tests and Production UI certification pass.
