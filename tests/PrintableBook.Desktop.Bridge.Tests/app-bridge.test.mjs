@@ -33,6 +33,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   let contentMarkup = "";
   let fullRenderCount = 0;
   let bookDrawerBodyRenderCount = 0;
+  let bookDetailPanelRenderCount = 0;
   let productionWorkspaceRenderCount = 0;
   let introWorkspaceRenderCount = 0;
   let artworkWorkspaceRenderCount = 0;
@@ -70,7 +71,13 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     querySelector: (selector) => selector === ".interior-artwork-grid-scroll" && contentMarkup.includes('class="interior-artwork-grid-scroll"') ? artworkGrid : null,
     set innerHTML(markup) {
       bookDrawerBodyRenderCount += 1;
-      contentMarkup = contentMarkup.replace(/(<div class="book-drawer-body">)[\s\S]*(<\/div><\/section><\/div>)$/, `$1${markup}$2`);
+      contentMarkup = contentMarkup.replace(/(<div class="book-detail-body book-drawer-body">)[\s\S]*(<\/div><\/section><\/div><\/section>)$/, `$1${markup}$2`);
+    }
+  };
+  const bookDetailPanel = {
+    set outerHTML(markup) {
+      bookDetailPanelRenderCount += 1;
+      contentMarkup = contentMarkup.replace(/<section class="panel book-detail-panel[\s\S]*<\/section><\/div><\/section>$/, `${markup}</div></section>`);
     }
   };
   const productionFinalButton = {
@@ -98,7 +105,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   const keywordBuilderCard = {
     contains: () => false,
     set outerHTML(markup) {
-      const start = contentMarkup.indexOf('<section class="catalog-card keyword-builder-card"');
+      const start = contentMarkup.indexOf('<section class="keyword-builder-workspace"');
       const end = contentMarkup.indexOf('\n  </div>', start);
       if (start >= 0 && end > start) contentMarkup = `${contentMarkup.slice(0, start)}${markup}${contentMarkup.slice(end)}`;
     }
@@ -165,7 +172,8 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
         if (selector === "[data-generic-keywords]") return genericKeywordsEditor;
         if (selector === ".intro-template-workspace" && contentMarkup.includes('class="intro-template-workspace"')) return introWorkspace;
         if (selector === ".interior-artwork-workspace" && contentMarkup.includes('class="interior-artwork-workspace"')) return artworkWorkspace;
-        if (selector === ".book-drawer-body" && contentMarkup.includes('class="book-drawer-body"')) return bookDrawerBody;
+        if (selector === ".book-drawer-body" && contentMarkup.includes('class="book-detail-body book-drawer-body"')) return bookDrawerBody;
+        if (selector === ".book-detail-panel" && contentMarkup.includes("book-detail-panel")) return bookDetailPanel;
         if (selector === "[data-book-keyword-builder-card]" && contentMarkup.includes("data-book-keyword-builder-card")) return keywordBuilderCard;
         if (selector === ".production-workspace" && contentMarkup.includes('class="production-workspace"')) return productionWorkspace;
         if (selector === ".interior-artwork-grid-scroll" && contentMarkup.includes('class="interior-artwork-grid-scroll"')) return artworkGrid;
@@ -180,7 +188,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, settingsSaveButton, settingsLoadButton, settingsFeedback, processQueueScroll, processFocusTarget, setDocumentActiveElement: (element) => { documentActiveElement = element; }, brandResultCount, brandSettingsEditor, genericKeywordsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, settingsSaveButton, settingsLoadButton, settingsFeedback, processQueueScroll, processFocusTarget, setDocumentActiveElement: (element) => { documentActiveElement = element; }, brandResultCount, brandSettingsEditor, genericKeywordsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getBookDetailPanelRenderCount: () => bookDetailPanelRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -552,7 +560,7 @@ test("update install posts once while pending and only retries after a host resp
   assert.equal(bridge.messages.filter((message) => message.command === "updates.install").length, beforeRetry + 1);
 });
 
-test("Books display the active Interior page count without local folder size", () => {
+test("Book list rows expose the Book name thumbnail fallback and production status", () => {
   const { messageHandler, content } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-size", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
@@ -560,38 +568,46 @@ test("Books display the active Interior page count without local folder size", (
     bookSummaries: [{ bookId: { value: "Book 001" }, interiorSourcePageCount: 22, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [] }]
   } } });
 
-  assert.match(content.innerHTML, /22 \/ 22 Interior active/);
-  assert.doesNotMatch(content.innerHTML, /Interior active ·/);
+  assert.match(content.innerHTML, /class="book-list-row/);
+  assert.match(content.innerHTML, /Preview unavailable/);
+  assert.match(content.innerHTML, /<strong title="Book 001">Book 001<\/strong>/);
+  assert.match(content.innerHTML, /Needs review/);
+  assert.doesNotMatch(content.innerHTML, /Interior active/);
 });
 
-test("Book card selection and detail entry do not redraw the Book Library", () => {
-  const { messageHandler, content, contentListeners, status, getFullRenderCount } = loadBridge("books");
+test("Book list rows open the inline detail panel without rerendering the list", () => {
+  const { messageHandler, content, contentListeners, getFullRenderCount, getBookDetailPanelRenderCount } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-card-actions", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
     bookSummaries: [{ bookId: { value: "Book 001" }, interiorSourcePageCount: 12, activeInteriorSourcePageCount: 12, validationStatus: "Ready", workspaceStatus: "Not started", assets: [] }]
   } } });
 
-  assert.match(content.innerHTML, /data-action="toggle-book-selection"/);
+  assert.doesNotMatch(content.innerHTML, /data-action="toggle-book-selection"/);
   assert.match(content.innerHTML, /data-action="open-book-detail"/);
-  assert.doesNotMatch(content.innerHTML, />Queue</);
-
-  const rendersBeforeSelection = getFullRenderCount();
-  const select = { dataset: { action: "toggle-book-selection", bookId: "Book 001" }, closest: () => select };
-  contentListeners.click({ target: select });
-  assert.match(status.textContent, /1 Book selected/);
-  assert.doesNotMatch(content.innerHTML, /role="dialog"/);
-  assert.equal(getFullRenderCount(), rendersBeforeSelection, "selecting a Book must preserve the grid and its scroll position");
+  assert.match(content.innerHTML, /Select a Book/);
 
   const rendersBeforeDetail = getFullRenderCount();
-  const edit = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => edit };
-  contentListeners.click({ target: edit });
-  assert.match(content.innerHTML, /Book detail/);
-  assert.equal(getFullRenderCount(), rendersBeforeDetail, "opening Book detail must preserve the grid and its scroll position");
+  const rowClasses = new Set(["book-list-row"]);
+  const rowAttributes = { "aria-current": "false" };
+  const row = {
+    dataset: { action: "open-book-detail", bookId: "Book 001" },
+    classList: { toggle(name, enabled) { enabled ? rowClasses.add(name) : rowClasses.delete(name); } },
+    setAttribute(name, value) { rowAttributes[name] = value; },
+    closest: () => row
+  };
+  contentListeners.click({ target: row });
+  assert.match(content.innerHTML, /id="book-detail-title"/);
+  assert.match(content.innerHTML, /class="panel book-detail-panel"/);
+  assert.equal(rowClasses.has("is-active"), true);
+  assert.equal(rowAttributes["aria-current"], "true");
+  assert.doesNotMatch(content.innerHTML, /role="dialog"/);
+  assert.equal(getFullRenderCount(), rendersBeforeDetail);
+  assert.equal(getBookDetailPanelRenderCount(), 1);
 });
 
-test("a corrupt workspace stays inspectable but cannot be selected, edited, or processed", () => {
-  const { messageHandler, content, contentListeners, messages, status } = loadBridge("books");
+test("a corrupt workspace stays inspectable but cannot be edited or processed", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "corrupt-book", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
@@ -602,11 +618,8 @@ test("a corrupt workspace stays inspectable but cannot be selected, edited, or p
     }]
   } } });
 
-  assert.match(content.innerHTML, /book-card[^>]*is-disabled/);
-  assert.match(content.innerHTML, /data-action="toggle-book-selection"[^>]*disabled/);
-  const select = { dataset: { action: "toggle-book-selection", bookId: "Book 001" }, closest: () => select };
-  contentListeners.click({ target: select });
-  assert.match(status.textContent, /workspace state is unavailable/i);
+  assert.match(content.innerHTML, /State unavailable/);
+  assert.match(content.innerHTML, /data-action="open-book-detail"/);
 
   const edit = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => edit };
   contentListeners.click({ target: edit });
@@ -630,6 +643,9 @@ test("legacy Auto migration is shown as a non-blocking No Frame review warning",
   const edit = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => edit };
   contentListeners.click({ target: edit });
 
+  assert.doesNotMatch(content.innerHTML, /3 Interior pages previously using Auto now use No Frame/);
+  const artworkTab = { dataset: { action: "book-tab", bookTab: "artwork" }, closest: () => artworkTab };
+  contentListeners.click({ target: artworkTab });
   assert.match(content.innerHTML, /3 Interior pages previously using Auto now use No Frame/);
   assert.match(content.innerHTML, /Review Interior artwork before reprocessing/);
   assert.match(content.innerHTML, /data-action="book-tab" data-book-tab="artwork">Review Interior artwork/);
@@ -646,10 +662,10 @@ test("Interior processing derives Brand from assignment and omits brandName from
     bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Ready", assignedBrand: "Brand One", assignmentStatus: "Valid", assets: [] }]
   } } });
 
-  const select = { dataset: { action: "toggle-book-selection", bookId: "Book 001" }, closest: () => select };
-  contentListeners.click({ target: select });
-  const goProcess = { dataset: { action: "go-process" }, closest: () => goProcess };
-  contentListeners.click({ target: goProcess });
+  const openBook = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const queueBook = { dataset: { action: "queue-selected-book" }, closest: () => queueBook };
+  contentListeners.click({ target: queueBook });
   const start = { dataset: { action: "start-process" }, closest: () => start };
   contentListeners.click({ target: start });
 
@@ -674,12 +690,16 @@ test("Interior processing blocks a mixed assigned-Brand queue before sending a r
     ]
   } } });
 
-  for (const id of ["Book A", "Book B"]) {
-    const select = { dataset: { action: "toggle-book-selection", bookId: id }, closest: () => select };
-    contentListeners.click({ target: select });
-  }
-  const goProcess = { dataset: { action: "go-process" }, closest: () => goProcess };
-  contentListeners.click({ target: goProcess });
+  const openA = { dataset: { action: "open-book-detail", bookId: "Book A" }, closest: () => openA };
+  contentListeners.click({ target: openA });
+  const queueA = { dataset: { action: "queue-selected-book" }, closest: () => queueA };
+  contentListeners.click({ target: queueA });
+  const goBooks = { dataset: { action: "go-books" }, closest: () => goBooks };
+  contentListeners.click({ target: goBooks });
+  const openB = { dataset: { action: "open-book-detail", bookId: "Book B" }, closest: () => openB };
+  contentListeners.click({ target: openB });
+  const queueB = { dataset: { action: "queue-selected-book" }, closest: () => queueB };
+  contentListeners.click({ target: queueB });
   assert.match(content.innerHTML, /Selected queue contains multiple Brands/);
   assert.match(content.innerHTML, /Brand A: 1; Brand B: 1/);
 
@@ -738,26 +758,20 @@ test("Book detail disables Brand template copy until both Book and Brand are val
   assert.match(content.innerHTML, /data-action="copy-brand-templates"[^>]*disabled/);
 });
 
-test("Book Library keeps page selection beside its compact search control", () => {
-  const { messageHandler, content, contentListeners, status, getFullRenderCount } = loadBridge("books");
+test("Book Library renders twelve master-list rows without bulk queue controls", () => {
+  const { messageHandler, content } = loadBridge("books");
   const books = Array.from({ length: 13 }, (_, index) => ({ id: { value: `Book ${index + 1}` }, name: `Book ${index + 1}` }));
   messageHandler({ data: { version: 1, id: "book-bulk-selection", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books }, globalSettings: {},
     bookSummaries: books.map((book) => ({ bookId: book.id, interiorSourcePageCount: 12, activeInteriorSourcePageCount: 12, validationStatus: "Ready", workspaceStatus: "Not started", assets: [] }))
   } } });
 
-  assert.match(content.innerHTML, /class="book-selection-page book-toolbar-selection"/);
-  assert.match(content.innerHTML, /Select page <span>\(12\)<\/span>/);
-  assert.doesNotMatch(content.innerHTML, /book-selection-toolbar/);
-  assert.doesNotMatch(content.innerHTML, /select-all-filtered-books/);
-  assert.doesNotMatch(content.innerHTML, /clear-book-selection/);
-
-  const rendersBeforeBulkSelection = getFullRenderCount();
-  const selectPage = { dataset: { action: "toggle-book-page-selection" }, checked: true, closest: () => selectPage };
-  contentListeners.click({ target: selectPage });
-  assert.match(status.textContent, /12 Books selected/);
-  assert.equal(getFullRenderCount(), rendersBeforeBulkSelection);
-
+  assert.equal((content.innerHTML.match(/class="book-list-row/g) ?? []).length, 12);
+  assert.match(content.innerHTML, /1–12 of 13/);
+  assert.match(content.innerHTML, /class="book-master-detail"/);
+  assert.doesNotMatch(content.innerHTML, /toggle-book-page-selection/);
+  assert.doesNotMatch(content.innerHTML, /toggle-book-selection/);
+  assert.doesNotMatch(content.innerHTML, /select-all-filtered-books|clear-book-selection/);
 });
 
 test("Book Library uses one compact status select with live counts and resets filtering to page one", () => {
@@ -912,7 +926,7 @@ test("an initial refresh failure shows a retryable load failure panel", () => {
 test("phase 4 page markup includes the interior-only processing workflow", () => {
   const script = readFileSync(appScriptPath, "utf8");
 
-  for (const state of ["Selected queue", "Process Interior", "Settings saved", "Interior processing", "Current stage", "Elapsed", "Interior settings"]) {
+  for (const state of ["Selected queue", "Process Interior", "Settings saved", "Interior processing", "Current stage", "Elapsed", "Brand background"]) {
     assert.match(script, new RegExp(state));
   }
   assert.match(script, /send\("settings\.save"/);
@@ -1206,15 +1220,17 @@ const productionSnapshot = () => ({
     validationStatus: "Ready",
     assignedBrand: "Brand One",
     assignmentStatus: "Valid",
-    validationChecks: [], sourceFolders: [], publishedArtifacts: [], outputSummaries: [], interiorPages: [], logs: [], assets: [],
+    validationChecks: [], sourceFolders: [], publishedArtifacts: [], outputSummaries: [
+      { artifactKind: "Cover", thumbnailImageUrl: "file:///cover_thumbnail.png", generatedAtUtc: "2026-09-22T07:00:00Z" }
+    ], interiorPages: [], logs: [], assets: [],
     production: {
       coverOutputStatus: "Ready to process",
       interiorOutputStatus: "Ready to process",
       interiorOutputKind: "Legacy",
       assets: [
         { assetKind: "final-cover", displayName: "Final Cover", fileName: "final_cover.png", sourceStatus: "Ready to process", sourceLocalImageUrl: "file:///final_cover.png", processedStatus: "Not applicable" },
-        { assetKind: "interior-cover", displayName: "Interior Cover", fileName: "interior_cover.png", sourceStatus: "Ready to process", sourceLocalImageUrl: "file:///interior_cover.png", processedStatus: "Ready to process" },
-        { assetKind: "book-owner", displayName: "Book Owner", fileName: "interior_book_owner.png", sourceStatus: "Ready to process", sourceLocalImageUrl: "file:///interior_book_owner.png", processedStatus: "Ready to process" }
+        { assetKind: "interior-cover", displayName: "Interior Cover", fileName: "interior_cover.png", sourceStatus: "Ready to process", sourceLocalImageUrl: "file:///interior_cover.png", processedLocalImageUrl: "file:///processed_interior_cover.png", processedStatus: "Ready to process" },
+        { assetKind: "book-owner", displayName: "Book Owner", fileName: "interior_book_owner.png", sourceStatus: "Ready to process", sourceLocalImageUrl: "file:///interior_book_owner.png", processedLocalImageUrl: "file:///processed_book_owner.png", processedStatus: "Ready to process" }
       ]
     }
   }]
@@ -1227,6 +1243,28 @@ const openProductionTab = (messageHandler, contentListeners) => {
   const productionTab = { dataset: { action: "book-tab", bookTab: "production" }, closest: () => productionTab };
   contentListeners.click({ target: productionTab });
 };
+
+test("Production removes redundant context and places Final Interior before grouped assets", () => {
+  const { messageHandler, contentListeners, content } = loadBridge("books");
+  openProductionTab(messageHandler, contentListeners);
+
+  assert.match(content.innerHTML, /<legend>Final Cover<\/legend>/);
+  assert.match(content.innerHTML, /<legend>Interior Cover<\/legend>/);
+  assert.match(content.innerHTML, /<legend>Book Owner<\/legend>/);
+  assert.match(content.innerHTML, /<legend>Final Interior<\/legend>/);
+  assert.match(content.innerHTML, /Source image/);
+  assert.match(content.innerHTML, /Preview image/);
+  assert.match(content.innerHTML, /class="production-asset-layout"/);
+  assert.match(content.innerHTML, /class="production-asset-controls"/);
+  assert.match(content.innerHTML, /file:\/\/\/cover_thumbnail\.png/);
+  assert.match(content.innerHTML, /file:\/\/\/processed_interior_cover\.png/);
+  assert.doesNotMatch(content.innerHTML, /Production Assets/);
+  assert.doesNotMatch(content.innerHTML, /Assigned Brand:/);
+  assert.doesNotMatch(content.innerHTML, /Background: <strong>/);
+  assert.ok(content.innerHTML.indexOf("<legend>Final Interior</legend>") < content.innerHTML.indexOf("<legend>Final Cover</legend>"));
+  assert.ok(content.innerHTML.indexOf("<legend>Final Cover</legend>") < content.innerHTML.indexOf("<legend>Interior Cover</legend>"));
+  assert.ok(content.innerHTML.indexOf("<legend>Interior Cover</legend>") < content.innerHTML.indexOf("<legend>Book Owner</legend>"));
+});
 
 test("Production import preserves the open drawer while refreshing its snapshot", () => {
   const { messageHandler, contentListeners, messages, getFullRenderCount, getBookDrawerBodyRenderCount, getProductionWorkspaceRenderCount } = loadBridge("books");
@@ -1372,16 +1410,21 @@ test("Book detail changes tabs without redrawing its drawer shell", () => {
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
   const fullRendersBeforeTabChange = getFullRenderCount();
-  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
-  contentListeners.click({ target: settingsTab });
-
-  assert.equal(getFullRenderCount(), fullRendersBeforeTabChange);
-  assert.equal(getBookDrawerBodyRenderCount(), 1);
-
-  assert.match(content.innerHTML, /Interior settings/);
   assert.match(content.innerHTML, /Use Brand background/);
-  assert.match(content.innerHTML, /Intro pages/);
-  assert.match(content.innerHTML, /data-intro-total-pages/);
+  assert.match(content.innerHTML, /data-book-tab="settings"[^>]*>Settings/);
+  assert.match(content.innerHTML, /class="book-settings-workspace"/);
+  assert.match(content.innerHTML, /book-settings-information/);
+  assert.match(content.innerHTML, /book-settings-assignment/);
+  assert.match(content.innerHTML, /book-settings-background/);
+  assert.match(content.innerHTML, /book-settings-templates/);
+  assert.match(content.innerHTML, /<legend>Book Information<\/legend>/);
+  assert.match(content.innerHTML, /<legend>Brand Assignment<\/legend>/);
+  assert.match(content.innerHTML, /<legend>Brand background<\/legend>/);
+  assert.match(content.innerHTML, /<legend>Brand PSD templates<\/legend>/);
+  assert.doesNotMatch(content.innerHTML, /class="summary-grid"/);
+  assert.doesNotMatch(content.innerHTML, /Review the summary and Brand background/);
+  assert.doesNotMatch(content.innerHTML, /data-book-tab="pages"/);
+  assert.doesNotMatch(content.innerHTML, /Intro pages/);
   assert.doesNotMatch(content.innerHTML, /data-action="set-interior-active"/);
   const messageCountBeforeEdit = messages.length;
   contentListeners.change({ target: { dataset: { action: "set-book-background", bookId: "Book 001" }, checked: false } });
@@ -1390,8 +1433,10 @@ test("Book detail changes tabs without redrawing its drawer shell", () => {
   const artworkTab = { dataset: { action: "book-tab", bookTab: "artwork" }, closest: () => artworkTab };
   contentListeners.click({ target: artworkTab });
   assert.equal(getFullRenderCount(), fullRendersBeforeTabChange);
-  assert.equal(getBookDrawerBodyRenderCount(), 2);
+  assert.equal(getBookDrawerBodyRenderCount(), 1);
   assert.match(content.innerHTML, /Interior artwork/);
+  assert.match(content.innerHTML, /<strong>0<\/strong> shown · <strong>1<\/strong> total · <strong>0<\/strong> active · <strong>1<\/strong> inactive/);
+  assert.doesNotMatch(content.innerHTML, /class="asset-result-count"/);
   assert.match(content.innerHTML, /interior-artwork-grid-scroll/);
   assert.match(content.innerHTML, /No artwork matches this view/);
   assert.match(content.innerHTML, /data-asset-status="Active" aria-pressed="true"/);
@@ -1755,7 +1800,7 @@ test("ASIN Research uses the signed Ads Keyword preview and merges completed tar
   const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
   contentListeners.click({ target: asinTab });
 
-  assert.match(content.innerHTML, /ASIN Research/);
+  assert.match(content.innerHTML, /data-book-tab="asin"[^>]*>Keyword/);
   assert.match(content.innerHTML, /cozy coloring\nadult coloring/);
   assert.match(content.innerHTML, /Uses generated Ads Keyword/);
   assert.doesNotMatch(content.innerHTML, /Search Keywords/);
@@ -1838,15 +1883,18 @@ test("Keyword Builder shuffles a preview before saving without redrawing Book de
   contentListeners.click({ target: openBook });
   const asinTab = { dataset: { action: "book-tab", bookTab: "asin" }, closest: () => asinTab };
   contentListeners.click({ target: asinTab });
-  assert.match(content.innerHTML, /Keyword Builder/);
+  assert.doesNotMatch(content.innerHTML, /catalog-card keyword-builder-card/);
   assert.match(content.innerHTML, /Book Keywords/);
   assert.match(content.innerHTML, /rows="5" data-action="book-keyword-source"/);
   assert.match(content.innerHTML, /Ads ASIN \(product targets\)/);
   assert.match(content.innerHTML, /type="text" data-action="book-keyword-ads-asin"/);
   assert.match(content.innerHTML, /Build inputs/);
+  assert.match(content.innerHTML, /<legend id="keyword-builder-inputs-title">Build inputs<\/legend>/);
+  assert.match(content.innerHTML, /<legend id="asin-research-results-title">Crawl Results<\/legend>/);
   assert.match(content.innerHTML, />2 Generic</);
   assert.match(content.innerHTML, /Generated output/);
-  const generatedOutputIndex = content.innerHTML.indexOf("keyword-builder-pane keyword-builder-outputs");
+  assert.match(content.innerHTML, /<legend id="keyword-builder-output-title">Generated output<\/legend>/);
+  const generatedOutputIndex = content.innerHTML.indexOf("keyword-builder-group keyword-builder-outputs");
   const adsAsinIndex = content.innerHTML.indexOf('for="book-keyword-ads-asin"');
   const actionsIndex = content.innerHTML.indexOf('class="keyword-builder-actions"');
   const shuffleActionIndex = content.innerHTML.indexOf('data-action="shuffle-book-keywords"');
@@ -2006,8 +2054,6 @@ test("Saving Book Interior settings accepts the refreshed snapshot without redra
   messageHandler({ data: { version: 1, id: "book-save-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
-  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
-  contentListeners.click({ target: settingsTab });
   contentListeners.change({ target: { dataset: { action: "set-book-background", bookId: "Book 001" }, checked: false } });
   const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
   contentListeners.click({ target: save });
@@ -2019,11 +2065,11 @@ test("Saving Book Interior settings accepts the refreshed snapshot without redra
 
   assert.equal(getFullRenderCount(), rendersBeforeRefreshResult);
   assert.equal(status.textContent, "Interior changes saved");
-  assert.match(content.innerHTML, /Book detail/);
+  assert.match(content.innerHTML, /id="book-detail-title"/);
 });
 
-test("Book detail configures an ordered custom Intro selection from Book interior", () => {
-  const { messageHandler, content, contentListeners, messages, getFullRenderCount, getIntroWorkspaceRenderCount } = loadBridge("books");
+test("Book Settings replaces legacy Intro controls with four grouped cards", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "intro-draft", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Demo", introTemplateAssets: [
       { key: "first.png", fileName: "first.png", sourceReference: "brand/IntroTemplate/first.png", localImageUrl: "file:///first.png" },
@@ -2037,29 +2083,18 @@ test("Book detail configures an ordered custom Intro selection from Book interio
   } } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
-  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
-  contentListeners.click({ target: settingsTab });
-  assert.match(content.innerHTML, /Intro pages/);
-  assert.match(content.innerHTML, /Automatic/);
-
-  const fullRendersBeforeModeChange = getFullRenderCount();
-  contentListeners.change({ target: { dataset: { action: "set-intro-mode", bookId: "Book 001" }, value: "custom" } });
-  assert.equal(getIntroWorkspaceRenderCount(), 1);
-  assert.equal(getFullRenderCount(), fullRendersBeforeModeChange);
-  const add = { dataset: { action: "intro-add-template", bookId: "Book 001", introSourceReference: "Book interior/page-003.png" }, closest: () => add };
-  const fullRendersBeforeAdd = getFullRenderCount();
-  contentListeners.click({ target: add });
-  assert.match(content.innerHTML, /Intro #1/);
-  assert.equal(getIntroWorkspaceRenderCount(), 2);
-  assert.equal(getFullRenderCount(), fullRendersBeforeAdd);
-  const save = { dataset: { action: "save-book-interior-settings", bookId: "Book 001" }, closest: () => save };
-  contentListeners.click({ target: save });
-
-  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", hasIntro: true, introSourceReferences: ["Book interior/page-003.png"], assets: [] });
+  assert.match(content.innerHTML, /data-book-tab="settings"[^>]*aria-selected="true"/);
+  assert.match(content.innerHTML, /book-settings-information/);
+  assert.match(content.innerHTML, /book-settings-assignment/);
+  assert.match(content.innerHTML, /book-settings-background/);
+  assert.match(content.innerHTML, /book-settings-templates/);
+  assert.doesNotMatch(content.innerHTML, /Intro pages/);
+  assert.doesNotMatch(content.innerHTML, /data-action="set-intro-mode"/);
+  assert.doesNotMatch(content.innerHTML, /data-action="intro-add-template"/);
 });
 
-test("Interior settings pages Intro templates without redrawing the Book drawer", () => {
-  const { messageHandler, content, contentListeners, getFullRenderCount, getIntroWorkspaceRenderCount, introPaginationFocus } = loadBridge("books");
+test("Book Settings does not render legacy Brand Intro template pagination", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("books");
   const templates = Array.from({ length: 7 }, (_, index) => ({ key: `intro-${index + 1}.png`, fileName: `intro-${index + 1}.png`, localImageUrl: `file:///intro-${index + 1}.png` }));
   messageHandler({ data: { version: 1, id: "intro-page", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Demo", introTemplateAssets: templates }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
@@ -2069,21 +2104,12 @@ test("Interior settings pages Intro templates without redrawing the Book drawer"
   } } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
-  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
-  contentListeners.click({ target: settingsTab });
-
-  assert.match(content.innerHTML, /intro-6\.png/);
+  assert.match(content.innerHTML, /Brand PSD templates/);
+  assert.match(content.innerHTML, /Copy Brand Templates/);
+  assert.doesNotMatch(content.innerHTML, /intro-1\.png/);
+  assert.doesNotMatch(content.innerHTML, /intro-6\.png/);
   assert.doesNotMatch(content.innerHTML, /intro-7\.png/);
-  assert.match(content.innerHTML, /1–6 of 7/);
-
-  const next = { dataset: { action: "intro-template-page", introTemplatePage: "next" }, closest: () => next };
-  const fullRendersBeforeNext = getFullRenderCount();
-  contentListeners.click({ target: next });
-  assert.match(content.innerHTML, /intro-7\.png/);
-  assert.match(content.innerHTML, /Page 2 of 2/);
-  assert.equal(getIntroWorkspaceRenderCount(), 1);
-  assert.equal(getFullRenderCount(), fullRendersBeforeNext);
-  assert.equal(introPaginationFocus.action, "focused");
+  assert.doesNotMatch(content.innerHTML, /data-action="intro-template-page"/);
 });
 
 test("Adding to a persisted custom Intro submits asset source references instead of stored source keys", () => {
@@ -2118,7 +2144,7 @@ test("Adding to a persisted custom Intro submits asset source references instead
   assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001", introSourceReferences: [firstReference, secondReference], assets: [] });
 });
 
-test("custom Book interior Intro selection has no global Brand override", () => {
+test("Book Settings keeps legacy Intro controls hidden and has no global Brand override", () => {
   const { messageHandler, content, contentListeners } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "brand-switch", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [
@@ -2131,17 +2157,13 @@ test("custom Book interior Intro selection has no global Brand override", () => 
   } } });
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
-  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
-  contentListeners.click({ target: settingsTab });
-  assert.match(content.innerHTML, /Custom Book interior/);
-  assert.match(content.innerHTML, /Intro #1/);
-
-  assert.match(content.innerHTML, /Custom Book interior/);
-  assert.match(content.innerHTML, /Intro #1/);
+  assert.match(content.innerHTML, /class="book-settings-workspace"/);
+  assert.doesNotMatch(content.innerHTML, /Custom Book interior/);
+  assert.doesNotMatch(content.innerHTML, /Intro #1/);
   assert.doesNotMatch(readFileSync(appScriptPath, "utf8"), /selectedBrand|activeBrand\(/);
 });
 
-test("Automatic Intro template preview dimensions gate the current Brand readiness without sending a bridge request", () => {
+test("Book Settings does not render legacy Automatic Intro template previews", () => {
   const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "intro-dimensions", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [{ name: "Demo", introTemplateAssets: [{ key: "intro.png", fileName: "intro.png", localImageUrl: "file:///intro.png" }] }], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
@@ -2151,19 +2173,10 @@ test("Automatic Intro template preview dimensions gate the current Brand readine
   } } });
   const open = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => open };
   contentListeners.click({ target: open });
-  const settings = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settings };
-  contentListeners.click({ target: settings });
   const messageCount = messages.length;
-
-  contentListeners.load({ target: { matches: (selector) => selector === "img[data-local-image]", dataset: { introTemplateId: "Demo%00intro.png" }, naturalWidth: 1000, naturalHeight: 1000 } });
-
-  assert.match(content.innerHTML, /must be 1024 × 1024, 2048 × 2048, or 2588 × 2625 pixels/);
-  assert.match(content.innerHTML, /Needs review/);
-  assert.equal(messages.length, messageCount);
-
-  contentListeners.load({ target: { matches: (selector) => selector === "img[data-local-image]", dataset: { introTemplateId: "Demo%00intro.png" }, naturalWidth: 2588, naturalHeight: 2625 } });
-
-  assert.match(content.innerHTML, /Ready for backend size validation during processing\./);
+  assert.match(content.innerHTML, /Brand PSD templates/);
+  assert.doesNotMatch(content.innerHTML, /data-intro-template-id/);
+  assert.doesNotMatch(content.innerHTML, /must be 1024 × 1024, 2048 × 2048, or 2588 × 2625 pixels/);
   assert.equal(messages.length, messageCount);
 });
 
@@ -2184,10 +2197,9 @@ test("Books render direct Cover and Interior local image URLs and replace a fail
   const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
   contentListeners.click({ target: openBook });
   assert.match(content.innerHTML, /src="file:\/\/\/D:\/Printable%20Book\/Cover%20%231%20%25\.png"/);
-  const settingsTab = { dataset: { action: "book-tab", bookTab: "settings" }, closest: () => settingsTab };
-  contentListeners.click({ target: settingsTab });
-  assert.match(content.innerHTML, /Interior settings/);
   assert.match(content.innerHTML, /Use Brand background/);
+  assert.match(content.innerHTML, /data-book-tab="settings"[^>]*>Settings/);
+  assert.doesNotMatch(content.innerHTML, /data-book-tab="pages"/);
   assert.equal(messages.some((message) => message.command.includes("preview")), false);
 
   let fallback;

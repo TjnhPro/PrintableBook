@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
   const bookStatuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
-  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "overview", bookDrawerOpen: false, drawerFocusTitle: false, restoreBookFocus: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, bookListRefreshPending: false, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), bookKeywordBuilderDrafts: new Map(), bookKeywordBuilderValidation: new Map(), keywordBuilderPreviews: new Map(), keywordBuilderRevisions: new Map(), keywordBuilderPending: new Map(), keywordBuilderConfirmed: new Map(), keywordBuilderSubmitted: null, keywordBuilderRefreshPending: false, keywordBuilderRefreshNeeded: false, keywordBuilderRefreshBookId: "", asinResearchDrafts: new Map(), asinResearchSessions: new Map(), asinResearchFeedback: new Map(), asinResearchActiveBookId: "", asinResearchPollTimer: null, amazonBrowserStatus: { state: "Closed", reasonCode: null }, amazonBrowserPending: false, settingsSavePending: false, settingsFeedback: "", settingsFeedbackError: false, brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookView: "grid", bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processQueuePage: 1, processQueueScrollTop: 0, processFocusIdentity: null, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "settings", bookDrawerOpen: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), bookKeywordBuilderDrafts: new Map(), bookKeywordBuilderValidation: new Map(), keywordBuilderPreviews: new Map(), keywordBuilderRevisions: new Map(), keywordBuilderPending: new Map(), keywordBuilderConfirmed: new Map(), keywordBuilderSubmitted: null, keywordBuilderRefreshPending: false, keywordBuilderRefreshNeeded: false, keywordBuilderRefreshBookId: "", asinResearchDrafts: new Map(), asinResearchSessions: new Map(), asinResearchFeedback: new Map(), asinResearchActiveBookId: "", asinResearchPollTimer: null, amazonBrowserStatus: { state: "Closed", reasonCode: null }, amazonBrowserPending: false, settingsSavePending: false, settingsFeedback: "", settingsFeedbackError: false, brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processQueuePage: 1, processQueueScrollTop: 0, processFocusIdentity: null, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -1164,12 +1164,15 @@
 
   const renderProductionWorkspace = (book, summary) => {
     const production = productionSummaryFor(summary);
-    const assets = valueFor(production, "assets", []);
+    const productionAssetOrder = { "final-cover": 0, "interior-cover": 1, "book-owner": 2 };
+    const assets = [...valueFor(production, "assets", [])].sort((left, right) => (productionAssetOrder[valueFor(left, "assetKind", "")] ?? 99) - (productionAssetOrder[valueFor(right, "assetKind", "")] ?? 99));
+    const coverOutput = pdfLibraryOutputs(summary).find((output) => valueFor(output, "artifactKind", "") === "Cover");
+    const coverPreviewUrl = valueFor(coverOutput, "thumbnailImageUrl", "");
     const taskBusy = productionActionActive();
     const controlsBusy = taskBusy || processIsActive() || state.cacheCleanupActive || applicationIsLoading();
     const actionFor = (kind) => kind === "final-cover" ? "build-cover-pdf" : kind === "interior-cover" ? "process-interior-cover" : "process-book-owner";
     const actionLabel = (kind) => kind === "final-cover" ? "Build Cover PDF" : kind === "interior-cover" ? "Process Interior Cover" : "Process Book Owner";
-    const card = (asset) => {
+    const group = (asset) => {
       const kind = valueFor(asset, "assetKind", "");
       const label = valueFor(asset, "displayName", "Production asset");
       const sourceStatus = valueFor(asset, "sourceStatus", "Missing");
@@ -1178,19 +1181,21 @@
       const importing = state.productionImportPending === kind;
       const activeAction = taskBusy && state.productionActionName === actionFor(kind);
       const sourcePreview = renderProductionImage(valueFor(asset, "sourceLocalImageUrl", ""), `${label} source`, `Upload ${label}`, "production-source-image");
-      const processedPreview = kind === "final-cover" ? "" : `<div class="production-processed-preview"><span>Processed</span>${renderProductionImage(valueFor(asset, "processedLocalImageUrl", ""), `Processed ${label}`, "Not processed", "production-processed-image")}</div>`;
+      const previewUrl = kind === "final-cover" ? coverPreviewUrl : valueFor(asset, "processedLocalImageUrl", "");
+      const previewFallback = kind === "final-cover" ? "Build Cover PDF to create a preview" : "Not processed";
+      const processedPreview = renderProductionImage(previewUrl, `${label} preview`, previewFallback, "production-processed-image");
       const actionStatus = kind === "final-cover" ? valueFor(production, "coverOutputStatus", "Missing") : processedStatus;
       const actionDisabled = !exists || controlsBusy || importing;
       const reason = !exists ? `Upload ${label} first.` : controlsBusy ? "Another processing action is active." : `${actionLabel(kind)} from the current canonical PNG.`;
-      return `<article class="production-asset-card production-asset-${kind}"><header><div><h3>${escapeHtml(label)}</h3><p>${escapeHtml(valueFor(asset, "fileName", ""))}</p></div>${badge(sourceStatus)}</header><div class="production-preview ${kind === "final-cover" ? "production-preview-cover" : ""}">${sourcePreview}</div>${processedPreview}<dl><div><dt>Derived output</dt><dd>${badge(actionStatus)}</dd></div><div><dt>Last processed</dt><dd>${dateTime(kind === "final-cover" ? valueFor(production, "coverBuiltAtUtc", null) : valueFor(asset, "processedAtUtc", null))}</dd></div></dl><div class="production-card-actions"><button class="button-secondary" data-action="upload-production-asset" data-production-asset="${kind}" data-production-idle-label="${exists ? "Replace" : "Upload"}" data-book-id="${escapeHtml(bookId(book))}" ${controlsBusy || importing ? "disabled" : ""}>${importing ? "Selecting…" : exists ? "Replace" : "Upload"}</button><button class="button-primary" data-action="start-production-action" data-production-action="${actionFor(kind)}" data-production-source-exists="${exists}" data-production-idle-label="${actionLabel(kind)}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-help-${kind}" aria-busy="${activeAction}" ${actionDisabled ? "disabled" : ""}>${activeAction ? "Working…" : actionLabel(kind)}</button></div><p class="production-action-help" id="production-help-${kind}">${escapeHtml(reason)}${kind === "final-cover" ? " Replaces the current Cover PDF only after a successful build." : " Final Interior remains unchanged."}</p></article>`;
+      return `<fieldset class="production-group production-asset-${kind}" data-production-asset-group="${kind}"><legend>${escapeHtml(label)}</legend><div class="production-asset-layout"><figure class="production-preview-item"><figcaption>Source image</figcaption><div class="production-preview ${kind === "final-cover" ? "production-preview-cover" : ""}">${sourcePreview}</div></figure><figure class="production-preview-item"><figcaption>Preview image</figcaption><div class="production-processed-preview ${kind === "final-cover" ? "production-preview-cover" : ""}">${processedPreview}</div></figure><aside class="production-asset-controls" aria-label="${escapeHtml(label)} controls"><div class="production-group-heading"><p title="${escapeHtml(valueFor(asset, "fileName", ""))}">${escapeHtml(valueFor(asset, "fileName", ""))}</p>${badge(sourceStatus)}</div><dl><div><dt>Output status</dt><dd>${badge(actionStatus)}</dd></div><div><dt>Last processed</dt><dd>${dateTime(kind === "final-cover" ? valueFor(production, "coverBuiltAtUtc", null) : valueFor(asset, "processedAtUtc", null))}</dd></div></dl><div class="production-card-actions"><button class="button-secondary" data-action="upload-production-asset" data-production-asset="${kind}" data-production-idle-label="${exists ? "Replace" : "Upload"}" data-book-id="${escapeHtml(bookId(book))}" ${controlsBusy || importing ? "disabled" : ""}>${importing ? "Selecting…" : exists ? "Replace" : "Upload"}</button><button class="button-primary" data-action="start-production-action" data-production-action="${actionFor(kind)}" data-production-source-exists="${exists}" data-production-idle-label="${actionLabel(kind)}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-help-${kind}" aria-busy="${activeAction}" ${actionDisabled ? "disabled" : ""}>${activeAction ? "Working…" : actionLabel(kind)}</button></div><p class="production-action-help" id="production-help-${kind}">${escapeHtml(reason)}${kind === "final-cover" ? " Replaces the current Cover PDF only after a successful build." : " Final Interior remains unchanged."}</p></aside></div></fieldset>`;
     };
     const readiness = productionFinalReadiness(book, summary);
     const feedbackTone = state.productionFeedbackError ? "is-error" : state.productionFeedbackWarning ? "is-warning" : "";
     const feedback = `<p class="production-feedback ${feedbackTone}" data-production-feedback role="${state.productionFeedbackError || state.productionFeedbackWarning ? "alert" : "status"}" aria-live="polite" aria-atomic="true" ${state.productionFeedback ? "" : "hidden"}>${escapeHtml(state.productionFeedback)}</p>`;
-    const background = effectiveBackground(book, summary) ? "Enabled" : "Disabled";
     const finalBusy = productionInteriorIsRunning();
     const finalBlocked = processIsActive() || state.processStartPending || applicationIsLoading();
-    return `<section class="production-workspace" aria-busy="${taskBusy || finalBusy}"><header class="production-summary"><div><h3>Production Assets</h3><p>Assigned Brand: <strong>${escapeHtml(assignedBrandName(summary) || "Unassigned")}</strong> · Background: <strong>${background}</strong></p></div><div>${badge(valueFor(production, "interiorOutputKind", "Legacy"))} ${badge(valueFor(production, "interiorOutputStatus", "Missing"))}</div></header>${feedback}<div class="production-asset-grid">${assets.length ? assets.map(card).join("") : "<p class=\"empty-copy\">Production workspace status is unavailable. Refresh the library.</p>"}</div><section class="production-final-action"><div><h3>Final Interior</h3><p>Order: Interior Cover → Book Owner → Intro → randomized Interior. Background pages follow the saved HasBackground setting.</p><p id="production-final-help">${escapeHtml(readiness.reason)} Only Build Final Interior replaces the current Interior PDF. Process Interior refreshes processed-page previews only.</p><small>Current output: ${escapeHtml(valueFor(production, "interiorOutputKind", "Legacy"))} · ${dateTime(valueFor(production, "interiorBuiltAtUtc", null))}</small></div><button class="button-primary" data-action="build-final-interior" data-production-ready="${readiness.ready}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-final-help" aria-busy="${finalBusy}" ${readiness.ready && !finalBlocked ? "" : "disabled"}>${finalBusy ? "Building…" : "Build Final Interior"}</button></section></section>`;
+    const finalInterior = `<fieldset class="production-group production-final-action"><legend>Final Interior</legend><div><p>Order: Interior Cover → Book Owner → Intro → randomized Interior. Background pages follow the saved HasBackground setting.</p><p id="production-final-help">${escapeHtml(readiness.reason)} Only Build Final Interior replaces the current Interior PDF. Process Interior refreshes processed-page previews only.</p><small>Current output: ${escapeHtml(valueFor(production, "interiorOutputKind", "Legacy"))} · ${dateTime(valueFor(production, "interiorBuiltAtUtc", null))}</small></div><button class="button-primary" data-action="build-final-interior" data-production-ready="${readiness.ready}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-final-help" aria-busy="${finalBusy}" ${readiness.ready && !finalBlocked ? "" : "disabled"}>${finalBusy ? "Building…" : "Build Final Interior"}</button></fieldset>`;
+    return `<section class="production-workspace" aria-busy="${taskBusy || finalBusy}">${feedback}<div class="production-group-grid">${finalInterior}${assets.length ? assets.map(group).join("") : "<p class=\"empty-copy production-assets-empty\">Production workspace status is unavailable. Refresh the library.</p>"}</div></section>`;
   };
 
   const renderBookInformation = (book, summary) => {
@@ -1204,7 +1209,7 @@
       const errorId = `book-${name}-errors`;
       return `<label class="field" for="book-${name}-input"><span>${label}</span><input id="book-${name}-input" class="control ${errors.length ? "control-invalid" : ""}" data-action="book-metadata-input" data-metadata-field="${name}" data-book-id="${escapeHtml(bookId(book))}" value="${escapeHtml(draft[name])}" placeholder="${placeholder}" aria-describedby="${errorId}" aria-invalid="${errors.length > 0}" autocomplete="off"><small id="${errorId}" class="field-error" ${errors.length ? "" : "hidden"}>${errors.map((error) => escapeHtml(error.message)).join("<br>")}</small></label>`;
     };
-    return `<section class="catalog-card" data-book-information-card aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save"}"><div class="catalog-card-heading"><div><h3>Book Information</h3><p>Paste production metadata from your ChatGPT Web analysis. Blank fields remain Unknown.</p></div>${dirty ? '<span class="status-badge status-warn">Unsaved</span>' : ""}</div><div class="catalog-form-grid">${field("Title", "title")}${field("Subtitle", "subtitle")}${field("Subcover", "subcover")}${field("ASIN", "asin")}${field("Author", "author", "Primary Author or Unknown")}<label class="field catalog-description-field"><span>Description</span><textarea class="control" rows="4" data-action="book-metadata-input" data-metadata-field="description" data-book-id="${escapeHtml(bookId(book))}" placeholder="Unknown">${escapeHtml(draft.description)}</textarea></label></div><p id="book-author-assignment-warning" class="catalog-warning" role="alert" ${assignmentWarning ? "" : "hidden"}>${escapeHtml(assignmentWarning)}</p><div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="metadata" role="${state.catalogFeedbackError ? "alert" : "status"}">${state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand === "book.metadata.save" ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-book-metadata" data-book-id="${escapeHtml(bookId(book))}" aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save"}" ${!dirty || disabled ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save" ? "Saving…" : "Save Book Information"}</button></div></section>`;
+    return `<fieldset class="catalog-card book-settings-card book-settings-information" data-book-information-card aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save"}"><legend>Book Information</legend><div class="catalog-card-heading"><p>Paste production metadata from your ChatGPT Web analysis. Blank fields remain Unknown.</p>${dirty ? '<span class="status-badge status-warn">Unsaved</span>' : ""}</div><div class="catalog-form-grid">${field("Title", "title")}${field("Subtitle", "subtitle")}${field("Subcover", "subcover")}${field("ASIN", "asin")}${field("Author", "author", "Primary Author or Unknown")}<label class="field catalog-description-field"><span>Description</span><textarea class="control" rows="4" data-action="book-metadata-input" data-metadata-field="description" data-book-id="${escapeHtml(bookId(book))}" placeholder="Unknown">${escapeHtml(draft.description)}</textarea></label></div><p id="book-author-assignment-warning" class="catalog-warning" role="alert" ${assignmentWarning ? "" : "hidden"}>${escapeHtml(assignmentWarning)}</p><div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="metadata" role="${state.catalogFeedbackError ? "alert" : "status"}">${state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand === "book.metadata.save" ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-book-metadata" data-book-id="${escapeHtml(bookId(book))}" aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save"}" ${!dirty || disabled ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save" ? "Saving…" : "Save Book Information"}</button></div></fieldset>`;
   };
 
   const renderBookBrandAssignment = (book, summary) => {
@@ -1219,7 +1224,7 @@
     const disabled = catalogMutationBusy() || processIsActive();
     const assignmentCommands = ["book.brand.assign", "book.brand.unassign"];
     const feedbackVisible = state.catalogMutationTarget === bookId(book) && assignmentCommands.includes(state.catalogMutationCommand);
-    return `<section class="catalog-card" data-book-assignment-card><div class="catalog-card-heading"><div><h3>Brand Assignment</h3><p>Only Brands whose Author matches this Book's saved Author are available.</p></div>${badge(assigned ? assignmentLabel(summary) : "Unassigned")}</div><dl class="catalog-assignment-summary"><div><dt>Book Author</dt><dd>${escapeHtml(author || "Unknown")}</dd></div><div><dt>Assigned Brand</dt><dd>${escapeHtml(assigned || "Unassigned")}</dd></div></dl>${reason ? `<p class="catalog-warning" role="alert">${escapeHtml(reason)} The existing assignment is preserved until you choose what to do.</p>` : ""}<label class="field"><span>Select Brand</span><select class="control" data-action="book-brand-select" data-book-id="${escapeHtml(bookId(book))}" ${!author || disabled ? "disabled" : ""}>${options}</select><small>${author ? candidates.length ? `${candidates.length} matching Brand${candidates.length === 1 ? "" : "s"}.` : "No Brand Author matches this Book Author." : "Save a Book Author before assigning a Brand."}</small></label><div class="catalog-actions"><p class="catalog-feedback ${feedbackVisible && state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="assignment" role="${feedbackVisible && state.catalogFeedbackError ? "alert" : "status"}">${feedbackVisible ? escapeHtml(state.catalogFeedback) : ""}</p><div><button class="button-secondary" data-action="unassign-book-brand" data-book-id="${escapeHtml(bookId(book))}" ${!assigned || disabled ? "disabled" : ""}>Unassign</button><button class="button-primary" data-action="assign-book-brand" data-book-id="${escapeHtml(bookId(book))}" disabled>${state.catalogMutationPending && state.catalogMutationCommand === "book.brand.assign" ? "Assigning…" : "Assign Brand"}</button></div></div></section>`;
+    return `<fieldset class="catalog-card book-settings-card book-settings-assignment" data-book-assignment-card><legend>Brand Assignment</legend><div class="catalog-card-heading"><p>Only Brands whose Author matches this Book's saved Author are available.</p>${badge(assigned ? assignmentLabel(summary) : "Unassigned")}</div><dl class="catalog-assignment-summary"><div><dt>Book Author</dt><dd>${escapeHtml(author || "Unknown")}</dd></div><div><dt>Assigned Brand</dt><dd>${escapeHtml(assigned || "Unassigned")}</dd></div></dl>${reason ? `<p class="catalog-warning" role="alert">${escapeHtml(reason)} The existing assignment is preserved until you choose what to do.</p>` : ""}<label class="field"><span>Select Brand</span><select class="control" data-action="book-brand-select" data-book-id="${escapeHtml(bookId(book))}" ${!author || disabled ? "disabled" : ""}>${options}</select><small>${author ? candidates.length ? `${candidates.length} matching Brand${candidates.length === 1 ? "" : "s"}.` : "No Brand Author matches this Book Author." : "Save a Book Author before assigning a Brand."}</small></label><div class="catalog-actions"><p class="catalog-feedback ${feedbackVisible && state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="assignment" role="${feedbackVisible && state.catalogFeedbackError ? "alert" : "status"}">${feedbackVisible ? escapeHtml(state.catalogFeedback) : ""}</p><div><button class="button-secondary" data-action="unassign-book-brand" data-book-id="${escapeHtml(bookId(book))}" ${!assigned || disabled ? "disabled" : ""}>Unassign</button><button class="button-primary" data-action="assign-book-brand" data-book-id="${escapeHtml(bookId(book))}" disabled>${state.catalogMutationPending && state.catalogMutationCommand === "book.brand.assign" ? "Assigning…" : "Assign Brand"}</button></div></div></fieldset>`;
   };
 
   const renderAsinResearch = (book, summary) => {
@@ -1261,15 +1266,16 @@
             : outcome === "Cancelled" ? "Crawl cancelled; available results were kept."
               : outcome === "Failed" ? "Crawl stopped. Review the result below."
                 : "Open Browser is optional; Crawl ASINs opens it automatically.";
-    return `<section class="keyword-builder-crawl" data-asin-research data-book-id="${escapeHtml(id)}" aria-labelledby="asin-research-results-title" aria-busy="${active || browserBusy}">
-      <div class="asin-research-pane-heading"><div><h4 id="asin-research-results-title">Crawl Results</h4><p class="asin-result-summary"><strong>${selectedCount} selected</strong><span>${noMatchCount} no match · ${failedCount} failed</span></p></div><span data-asin-status class="status-badge ${needsAttention || outcome === "Failed" ? "status-bad" : active || browserBusy ? "status-warn" : browserState === "Ready" ? "status-good" : "status-muted"}">${escapeHtml(active ? cancelling ? "Cancelling" : "Running" : outcome !== "Idle" ? outcome : browserState)}</span></div>
+    return `<fieldset class="keyword-builder-group keyword-builder-crawl" data-asin-research data-book-id="${escapeHtml(id)}" aria-labelledby="asin-research-results-title" aria-busy="${active || browserBusy}">
+      <legend id="asin-research-results-title">Crawl Results</legend>
+      <div class="asin-research-pane-heading"><p class="asin-result-summary"><strong>${selectedCount} selected</strong><span>${noMatchCount} no match · ${failedCount} failed</span></p><span data-asin-status class="status-badge ${needsAttention || outcome === "Failed" ? "status-bad" : active || browserBusy ? "status-warn" : browserState === "Ready" ? "status-good" : "status-muted"}">${escapeHtml(active ? cancelling ? "Cancelling" : "Running" : outcome !== "Idle" ? outcome : browserState)}</span></div>
       <p class="asin-keyword-source">Uses generated Ads Keyword · <span data-asin-keyword-count>${keywords.length} / 30</span></p>
       <div class="asin-progress-slot">${active && total ? `<div class="asin-progress" role="progressbar" aria-label="Amazon ASIN crawl progress" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${completed}"><span style="width:${Math.round(completed / total * 100)}%"></span></div>` : ""}</div>
       <ol class="asin-result-list">${rowMarkup || '<li class="asin-result-empty">No crawl results yet.</li>'}</ol>
       <div class="asin-stale-slot">${stale && finalAsins ? '<p class="catalog-warning" role="status">Previous results — shuffle again before applying.</p>' : ""}</div>
       <footer class="asin-research-pane-footer"><div class="asin-research-actions"><button class="button-secondary" data-action="open-amazon-browser" data-book-id="${escapeHtml(id)}" ${browserBusy ? "disabled" : ""}>${browserBusy ? "Opening Browser…" : "Open Browser"}</button><button class="button-secondary" data-action="crawl-amazon-asins" data-book-id="${escapeHtml(id)}" title="${validInput ? "Search with the generated Ads Keyword preview" : "Shuffle inputs before crawling"}" ${!validInput || active || browserBusy ? "disabled" : ""}>Crawl ASINs</button>${active ? `<button class="button-secondary" data-action="cancel-amazon-asins" data-book-id="${escapeHtml(id)}" ${cancelling ? "disabled" : ""}>${cancelling ? "Cancelling…" : "Cancel"}</button>` : ""}</div><p class="asin-research-state" role="${needsAttention ? "alert" : "status"}">${escapeHtml(stateCopy)}</p></footer>
       <p class="catalog-feedback ${feedback.error ? "is-error" : ""}" data-asin-feedback role="${feedback.error ? "alert" : "status"}" aria-live="polite" aria-atomic="true">${escapeHtml(feedback.message)}</p>
-    </section>`;
+    </fieldset>`;
   };
 
   const renderBookKeywordBuilder = (book, summary) => {
@@ -1298,28 +1304,29 @@
       return `<label class="keyword-builder-output-field" for="book-${name}-output"><span>Keyword ${index + 1}</span><input id="book-${name}-output" class="control" readonly value="${escapeHtml(value)}" aria-describedby="book-${name}-count"><small id="book-${name}-count">${counter}</small></label>`;
     }).join("");
     const errorMessage = validation?.message ?? "";
-    return `<section class="catalog-card keyword-builder-card" data-book-keyword-builder-card aria-busy="${pending}">
-      <div class="catalog-card-heading">
-        <div><h3>Keyword Builder</h3><p>Combine shared Generic Keywords with phrases for this Book.</p></div>
-        ${badge(stateLabel)}
-      </div>
+    return `<section class="keyword-builder-workspace" data-book-keyword-builder-card aria-label="Keyword workspace" aria-busy="${pending}">
       <div class="keyword-builder-grid">
-        <section class="keyword-builder-pane keyword-builder-inputs" aria-labelledby="keyword-builder-inputs-title">
-          <div class="keyword-builder-pane-heading">
-            <div><h4 id="keyword-builder-inputs-title">Build inputs</h4><p>Generic Keywords are applied first; Book Keywords fill the remaining space when shuffled.</p></div>
-            <span class="keyword-builder-source-badge">${genericKeywordCount} Generic</span>
-          </div>
-          <label class="field keyword-builder-source-field" for="book-keyword-source">
-            <span>Book Keywords</span>
-            <textarea id="book-keyword-source" class="control keyword-list-input ${validation ? "control-invalid" : ""}" rows="5" data-action="book-keyword-source" data-book-id="${escapeHtml(id)}" aria-describedby="book-keyword-source-help book-keyword-source-error" aria-invalid="${Boolean(validation)}" autocomplete="off" spellcheck="false" ${disabled ? "disabled" : ""}>${escapeHtml(draft.sourceText)}</textarea>
-            <small id="book-keyword-source-help">One phrase per line. Phrases matching Generic Keywords are excluded during Shuffle.</small>
-            <small id="book-keyword-source-error" class="field-error" ${errorMessage ? "" : "hidden"}>${escapeHtml(errorMessage)}</small>
-          </label>
+        <div class="keyword-builder-column">
+          <fieldset class="keyword-builder-group keyword-builder-inputs" aria-labelledby="keyword-builder-inputs-title">
+            <legend id="keyword-builder-inputs-title">Build inputs</legend>
+            <div class="keyword-builder-group-summary">
+              <p>Generic Keywords are applied first; Book Keywords fill the remaining space when shuffled.</p>
+              <span class="keyword-builder-source-badge">${genericKeywordCount} Generic</span>
+            </div>
+            <label class="field keyword-builder-source-field" for="book-keyword-source">
+              <span>Book Keywords</span>
+              <textarea id="book-keyword-source" class="control keyword-list-input ${validation ? "control-invalid" : ""}" rows="5" data-action="book-keyword-source" data-book-id="${escapeHtml(id)}" aria-describedby="book-keyword-source-help book-keyword-source-error" aria-invalid="${Boolean(validation)}" autocomplete="off" spellcheck="false" ${disabled ? "disabled" : ""}>${escapeHtml(draft.sourceText)}</textarea>
+              <small id="book-keyword-source-help">One phrase per line. Phrases matching Generic Keywords are excluded during Shuffle.</small>
+              <small id="book-keyword-source-error" class="field-error" ${errorMessage ? "" : "hidden"}>${escapeHtml(errorMessage)}</small>
+            </label>
+          </fieldset>
           ${renderAsinResearch(book, summary)}
-        </section>
-        <section class="keyword-builder-pane keyword-builder-outputs" aria-labelledby="keyword-builder-output-title">
+        </div>
+        <fieldset class="keyword-builder-group keyword-builder-outputs" aria-labelledby="keyword-builder-output-title">
+          <legend id="keyword-builder-output-title">Generated output</legend>
           <div class="keyword-builder-output-heading">
-            <div><h4 id="keyword-builder-output-title">Generated output</h4><p>${escapeHtml(outputMessage)}${output ? ` · ${escapeHtml(dateTime(valueFor(output, "builtAtUtc", null)))}` : ""}</p></div>
+            <p>${escapeHtml(outputMessage)}${output ? ` · ${escapeHtml(dateTime(valueFor(output, "builtAtUtc", null)))}` : ""}</p>
+            ${badge(stateLabel)}
           </div>
           <div class="keyword-builder-output-list">${keywordRows}</div>
           <label class="field" for="book-ads-keyword-output">
@@ -1336,9 +1343,9 @@
             <button class="button-primary" data-action="save-book-keywords" data-book-id="${escapeHtml(id)}" title="${previewState ? "Save this exact preview" : "Shuffle inputs before saving"}" ${disabled || pending || !valueFor(previewState, "receipt", "") ? "disabled" : ""}>${pendingAction === "save" ? "Saving…" : "Save"}</button>
             <button class="button-secondary" data-action="copy-book-keywords" data-book-id="${escapeHtml(id)}" ${output ? "" : "disabled"}>Copy to Clipboard</button>
           </div>
-        </section>
+          <div class="catalog-actions keyword-builder-status"><p class="catalog-feedback ${feedbackVisible && state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="keywords" role="${feedbackVisible && state.catalogFeedbackError ? "alert" : "status"}" aria-live="polite" aria-atomic="true">${feedbackVisible ? escapeHtml(state.catalogFeedback) : ""}</p>${refreshNeeded ? `<button class="button-secondary" data-action="retry-keyword-refresh" data-book-id="${escapeHtml(id)}" ${applicationIsLoading() ? "disabled" : ""}>Retry refresh</button>` : ""}</div>
+        </fieldset>
       </div>
-      <div class="catalog-actions keyword-builder-status"><p class="catalog-feedback ${feedbackVisible && state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="keywords" role="${feedbackVisible && state.catalogFeedbackError ? "alert" : "status"}" aria-live="polite" aria-atomic="true">${feedbackVisible ? escapeHtml(state.catalogFeedback) : ""}</p>${refreshNeeded ? `<button class="button-secondary" data-action="retry-keyword-refresh" data-book-id="${escapeHtml(id)}" ${applicationIsLoading() ? "disabled" : ""}>Retry refresh</button>` : ""}</div>
     </section>`;
   };
 
@@ -1349,7 +1356,7 @@
   const renderBrandTemplateCopyCard = (book, summary) => {
     const readiness = brandTemplateCopyReadiness(book, summary);
     const assigned = assignedBrandName(summary) || "Unassigned";
-    return `<section class="asset-background-setting" data-brand-template-copy-card><div><h3>Brand PSD templates</h3><p>Assigned Brand: <strong>${escapeHtml(assigned)}</strong>. Copy cover.psd, app_plus.psd, and book_owner.psd into this Book workspace.</p><small>${escapeHtml(readiness.reason)}</small></div><button class="button-secondary" data-action="copy-brand-templates" data-book-id="${escapeHtml(bookId(book))}" ${readiness.ready && !state.brandTemplateCopyPending ? "" : "disabled"} title="${escapeHtml(readiness.reason)}">${state.brandTemplateCopyPending ? "Copying…" : "Copy Brand Templates"}</button></section>`;
+    return `<fieldset class="asset-background-setting book-settings-card book-settings-templates" data-brand-template-copy-card><legend>Brand PSD templates</legend><div class="book-settings-inline"><div><p>Assigned Brand: <strong>${escapeHtml(assigned)}</strong>. Copy cover.psd, app_plus.psd, and book_owner.psd into this Book workspace.</p><small>${escapeHtml(readiness.reason)}</small></div><button class="button-secondary" data-action="copy-brand-templates" data-book-id="${escapeHtml(bookId(book))}" ${readiness.ready && !state.brandTemplateCopyPending ? "" : "disabled"} title="${escapeHtml(readiness.reason)}">${state.brandTemplateCopyPending ? "Copying…" : "Copy Brand Templates"}</button></div></fieldset>`;
   };
 
   const refreshProductionWorkspace = (focusSelector = "") => {
@@ -1365,28 +1372,32 @@
     if (focusSelector) document.querySelector(focusSelector)?.focus();
   };
 
+  const renderFrameModeMigrationWarning = (summary) => {
+    const migratedCount = Number(valueFor(summary, "legacyFrameModePageCount", 0)) || 0;
+    return migratedCount > 0
+      ? `<section class="catalog-warning artwork-migration-warning" role="status"><strong>Frame mode updated</strong><p>${migratedCount} Interior page${migratedCount === 1 ? "" : "s"} previously using Auto now use No Frame. Review Interior artwork before reprocessing.</p><button type="button" class="button-secondary" data-action="book-tab" data-book-tab="artwork">Review Interior artwork</button></section>`
+      : "";
+  };
+
   const renderBookTabs = (book, summary) => {
     if (!workspaceStateAvailable(summary)) {
       return `<div class="book-heading"><div><h2>${escapeHtml(bookDisplayTitle(book, summary))}</h2><p>Folder: ${escapeHtml(valueFor(book, "name", bookId(book)))}</p></div></div><section class="process-failure" role="alert"><strong>Workspace state unavailable</strong><p>${escapeHtml(valueFor(summary, "workspaceStateError", "Restore or repair the workspace state file, then refresh the library."))}</p><p>No Book settings or processing actions are available, and the original state file has not been changed.</p></section>`;
     }
     const tabButton = (id, label) => `<button type="button" id="book-tab-${id}" class="detail-tab ${state.selectedBookTab === id ? "active" : ""}" data-action="book-tab" data-book-tab="${id}" role="tab" aria-selected="${state.selectedBookTab === id}" aria-controls="book-panel-${id}" tabindex="${state.selectedBookTab === id ? "0" : "-1"}">${label}</button>`;
     const readiness = processingReadiness(book, summary);
-    const migratedCount = Number(valueFor(summary, "legacyFrameModePageCount", 0)) || 0;
-    const migrationWarning = migratedCount > 0
-      ? `<section class="catalog-warning" role="status"><strong>Frame mode updated</strong><p>${migratedCount} Interior page${migratedCount === 1 ? "" : "s"} previously using Auto now use No Frame. Review Interior artwork before reprocessing.</p><button type="button" class="button-secondary" data-action="book-tab" data-book-tab="artwork">Review Interior artwork</button></section>`
-      : "";
+    const backgroundSetting = `<fieldset class="asset-background-setting book-settings-card book-settings-background"><legend>Brand background</legend><div class="book-settings-inline"><p>Insert the assigned Brand background after every active Interior page.</p><label class="asset-background-toggle"><input type="checkbox" data-action="set-book-background" data-book-id="${escapeHtml(bookId(book))}" ${effectiveBackground(book, summary) ? "checked" : ""} ${processIsActive() || state.bookInteriorSavePending ? "disabled" : ""}> Use Brand background</label></div></fieldset>`;
     const body = state.selectedBookTab === "asin"
       ? renderAsinResearchWorkspace(book, summary)
       : state.selectedBookTab === "production"
       ? renderProductionWorkspace(book, summary)
       : state.selectedBookTab === "settings"
-      ? `<section class="interior-settings"><section class="asset-background-setting"><div><h3>Brand background</h3><p>Insert the assigned Brand background after every active Interior page.</p></div><label class="asset-background-toggle"><input type="checkbox" data-action="set-book-background" data-book-id="${escapeHtml(bookId(book))}" ${effectiveBackground(book, summary) ? "checked" : ""} ${processIsActive() || state.bookInteriorSavePending ? "disabled" : ""}> Use Brand background</label></section>${renderIntroTemplateWorkspace(book, summary)}</section>`
+      ? `<section class="book-settings-workspace" aria-label="Book settings">${renderBookInformation(book, summary)}${renderBookBrandAssignment(book, summary)}${backgroundSetting}${renderBrandTemplateCopyCard(book, summary)}</section>`
       : state.selectedBookTab === "artwork"
         ? renderFolderAssetWorkspace(book, summary)
         : state.selectedBookTab === "pages"
           ? renderProcessedInteriorPages(summary)
-        : `<section class="book-overview">${migrationWarning}<div class="summary-grid"><div><span>Status</span>${badge(workspaceStatus(summary))}</div><div><span>Interior preflight</span>${badge(valueFor(summary, "validationStatus", "Checking"))}</div><div><span>Last run</span><strong>${dateTime(valueFor(summary, "lastRunAt", null))}</strong></div><div><span>Pages (interior)</span><strong>${valueFor(summary, "interiorSourcePageCount", 0)}</strong></div></div>${renderBookInformation(book, summary)}${renderBookBrandAssignment(book, summary)}${renderBrandTemplateCopyCard(book, summary)}<p class="panel-note">Review the summary, then configure Brand background and Intro pages in Interior settings.</p></section>`;
-    return `<div class="book-heading"><div><h2>${escapeHtml(bookDisplayTitle(book, summary))}</h2><p>Folder: ${escapeHtml(valueFor(book, "name", bookId(book)))}</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}" aria-label="Process Interior. ${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs" role="tablist" aria-label="Book detail sections">${tabButton("overview", "Overview")}${tabButton("asin", "ASIN Research")}${tabButton("production", "Production")}${tabButton("settings", "Interior settings")}${tabButton("artwork", "Interior artwork")}${tabButton("pages", "Interior pages")}</nav><div id="book-panel-${state.selectedBookTab}" class="tab-body ${state.selectedBookTab === "asin" ? "tab-body-asin" : state.selectedBookTab === "artwork" ? "tab-body-artwork" : state.selectedBookTab === "pages" ? "tab-body-processed-pages" : ""}" role="tabpanel" aria-labelledby="book-tab-${state.selectedBookTab}" tabindex="0">${body}</div>`;
+        : `<section class="book-settings-workspace" aria-label="Book settings">${renderBookInformation(book, summary)}${renderBookBrandAssignment(book, summary)}${backgroundSetting}${renderBrandTemplateCopyCard(book, summary)}</section>`;
+    return `<div class="book-heading"><div><h2>${escapeHtml(bookDisplayTitle(book, summary))}</h2><p>Folder: ${escapeHtml(valueFor(book, "name", bookId(book)))}</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}" aria-label="Process Interior. ${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs" role="tablist" aria-label="Book detail sections">${tabButton("settings", "Settings")}${tabButton("asin", "Keyword")}${tabButton("production", "Production")}${tabButton("artwork", "Interior artwork")}</nav><div id="book-panel-${state.selectedBookTab}" class="tab-body ${state.selectedBookTab === "settings" ? "tab-body-settings" : state.selectedBookTab === "asin" ? "tab-body-asin" : state.selectedBookTab === "artwork" ? "tab-body-artwork" : state.selectedBookTab === "pages" ? "tab-body-processed-pages" : ""}" role="tabpanel" aria-labelledby="book-tab-${state.selectedBookTab}" tabindex="0">${body}</div>`;
   };
 
   const renderIntroTemplateWorkspace = (book, summary) => {
@@ -1468,7 +1479,7 @@
     const controlsDisabled = processIsActive() || state.bookInteriorSavePending;
     const allShownSelected = eligibleMatching.length > 0 && selectedVisibleCount === eligibleMatching.length;
     const bulkDisabled = !selectedCount || (state.assetBulkActive === "unchanged" && state.assetBulkFrameMode === "unchanged") || controlsDisabled;
-    return `<section class="interior-artwork-workspace"><header class="interior-artwork-heading"><div><h3>Interior artwork</h3><p>Review every available Book interior page, then control whether it is processed and which frame mode it uses.</p></div><p class="interior-artwork-count" role="status"><strong>${allAssets.length}</strong> artwork · <strong>${activeCount}</strong> active · <strong>${inactiveCount}</strong> inactive</p></header><div class="interior-artwork-filters"><label class="field asset-search-field"><span>Search artwork</span><input class="control" data-action="filter-assets" value="${escapeHtml(state.assetFilter)}" placeholder="File name or folder"></label><section class="asset-filter-controls" aria-label="Filter artwork"><span class="asset-filter-label">Filter artwork</span><div class="asset-filter-chip-groups"><div class="asset-status-filter" role="group" aria-label="Interior artwork status filters">${["Active", "Inactive"].map((name) => `<button type="button" class="${state.assetStatus === name ? "active" : ""}" data-action="asset-status" data-asset-status="${name}" aria-pressed="${state.assetStatus === name}">${name}</button>`).join("")}</div><div class="asset-frame-filter" role="group" aria-label="Interior artwork frame mode filters">${[["", "All"], ["enabled", "Frame"], ["disabled", "No Frame"]].map(([value, label]) => `<button type="button" class="${state.assetFrameMode === value ? "active" : ""}" data-action="asset-frame-mode" data-asset-frame-mode="${value}" aria-pressed="${state.assetFrameMode === value}">${label}</button>`).join("")}</div></div></section></div><div class="interior-artwork-bulk-toolbar"><label class="artwork-select-all"><input type="checkbox" data-action="toggle-all-artwork" ${allShownSelected ? "checked" : ""} ${!eligibleMatching.length || controlsDisabled ? "disabled" : ""}> Select all ${eligibleMatching.length} shown</label><label class="field artwork-bulk-field"><span>Status</span><select class="control h-8" data-action="set-artwork-bulk-active"><option value="unchanged" ${state.assetBulkActive === "unchanged" ? "selected" : ""}>No change</option><option value="active" ${state.assetBulkActive === "active" ? "selected" : ""}>Active</option><option value="inactive" ${state.assetBulkActive === "inactive" ? "selected" : ""}>Inactive</option></select></label><label class="field artwork-bulk-field"><span>Frame mode</span><select class="control h-8" data-action="set-artwork-bulk-frame-mode"><option value="unchanged" ${state.assetBulkFrameMode === "unchanged" ? "selected" : ""}>No change</option><option value="enabled" ${state.assetBulkFrameMode === "enabled" ? "selected" : ""}>Frame</option><option value="disabled" ${state.assetBulkFrameMode === "disabled" ? "selected" : ""}>No Frame</option></select></label><button class="button-primary" data-action="apply-artwork-bulk" ${bulkDisabled ? "disabled" : ""}>Apply to ${selectedCount} selected</button></div><p class="asset-result-count" role="status" aria-atomic="true">${matching.length} artwork shown</p><div class="interior-artwork-grid-scroll"><div class="interior-artwork-grid">${matching.length ? matching.map(tile).join("") : `<p class="empty-copy interior-artwork-empty">No artwork matches this view. <button type="button" class="button-link" data-action="clear-artwork-filters">Clear filters</button></p>`}</div></div></section>`;
+    return `<section class="interior-artwork-workspace">${renderFrameModeMigrationWarning(summary)}<header class="interior-artwork-heading"><div><h3>Interior artwork</h3><p>Review every available Book interior page, then control whether it is processed and which frame mode it uses.</p></div><p class="interior-artwork-count" role="status" aria-live="polite" aria-atomic="true"><strong>${matching.length}</strong> shown · <strong>${allAssets.length}</strong> total · <strong>${activeCount}</strong> active · <strong>${inactiveCount}</strong> inactive</p></header><div class="interior-artwork-filters"><label class="field asset-search-field"><span>Search artwork</span><input class="control" data-action="filter-assets" value="${escapeHtml(state.assetFilter)}" placeholder="File name or folder"></label><section class="asset-filter-controls" aria-label="Filter artwork"><span class="asset-filter-label">Filter artwork</span><div class="asset-filter-chip-groups"><div class="asset-status-filter" role="group" aria-label="Interior artwork status filters">${["Active", "Inactive"].map((name) => `<button type="button" class="${state.assetStatus === name ? "active" : ""}" data-action="asset-status" data-asset-status="${name}" aria-pressed="${state.assetStatus === name}">${name}</button>`).join("")}</div><div class="asset-frame-filter" role="group" aria-label="Interior artwork frame mode filters">${[["", "All"], ["enabled", "Frame"], ["disabled", "No Frame"]].map(([value, label]) => `<button type="button" class="${state.assetFrameMode === value ? "active" : ""}" data-action="asset-frame-mode" data-asset-frame-mode="${value}" aria-pressed="${state.assetFrameMode === value}">${label}</button>`).join("")}</div></div></section></div><div class="interior-artwork-bulk-toolbar"><label class="artwork-select-all"><input type="checkbox" data-action="toggle-all-artwork" ${allShownSelected ? "checked" : ""} ${!eligibleMatching.length || controlsDisabled ? "disabled" : ""}> Select all ${eligibleMatching.length} shown</label><label class="field artwork-bulk-field"><span>Status</span><select class="control h-8" data-action="set-artwork-bulk-active"><option value="unchanged" ${state.assetBulkActive === "unchanged" ? "selected" : ""}>No change</option><option value="active" ${state.assetBulkActive === "active" ? "selected" : ""}>Active</option><option value="inactive" ${state.assetBulkActive === "inactive" ? "selected" : ""}>Inactive</option></select></label><label class="field artwork-bulk-field"><span>Frame mode</span><select class="control h-8" data-action="set-artwork-bulk-frame-mode"><option value="unchanged" ${state.assetBulkFrameMode === "unchanged" ? "selected" : ""}>No change</option><option value="enabled" ${state.assetBulkFrameMode === "enabled" ? "selected" : ""}>Frame</option><option value="disabled" ${state.assetBulkFrameMode === "disabled" ? "selected" : ""}>No Frame</option></select></label><button class="button-primary" data-action="apply-artwork-bulk" ${bulkDisabled ? "disabled" : ""}>Apply to ${selectedCount} selected</button></div><div class="interior-artwork-grid-scroll"><div class="interior-artwork-grid">${matching.length ? matching.map(tile).join("") : `<p class="empty-copy interior-artwork-empty">No artwork matches this view. <button type="button" class="button-link" data-action="clear-artwork-filters">Clear filters</button></p>`}</div></div></section>`;
   };
 
   const refreshInteriorArtworkWorkspace = () => {
@@ -1508,14 +1519,18 @@
     if (focusTab) document.querySelector(`[data-action="book-tab"][data-book-tab="${focusTab}"]`)?.focus();
   };
 
-  const renderBookDrawer = (book, summary) => {
-    if (!state.bookDrawerOpen || !book || !summary) return "";
+  const renderBookDetail = (book, summary) => {
+    if (!state.bookDrawerOpen || !book || !summary) {
+      return `<section class="panel book-detail-panel book-detail-empty" aria-labelledby="book-detail-empty-title"><div><h2 id="book-detail-empty-title">Select a Book</h2><p>Choose a Book from the list to review its details and production settings.</p></div></section>`;
+    }
     const cover = assetForReference(summary, valueFor(summary, "representativeCoverReference", ""));
     const dirty = hasInteriorDraft(bookId(book));
     const saveDisabled = !workspaceStateAvailable(summary) || !dirty || processIsActive() || state.bookInteriorSavePending;
     const metadataDirty = hasMetadataDraft(book, summary);
     const keywordDirty = hasKeywordBuilderDraft(book, summary);
-    return `<div class="book-drawer-layer"><section class="book-drawer" role="dialog" aria-labelledby="book-drawer-title"><header class="book-drawer-header"><span class="book-drawer-preview">${localImageMarkup(cover, `Cover for ${bookDisplayTitle(book, summary)}`)}</span><div><p class="eyebrow">Book detail</p><h2 id="book-drawer-title" tabindex="-1">${escapeHtml(bookDisplayTitle(book, summary))}</h2><p class="book-folder-name">${escapeHtml(valueFor(book, "name", bookId(book)))}</p><div>${badge(productionStatus(summary, book))} ${badge(bookFrameState(summary))} <span data-book-assigned-brand-badge>${badge(assignedBrandName(summary) || "Unassigned")}</span></div></div><div class="book-drawer-actions"><span data-book-interior-unsaved role="status" ${dirty || metadataDirty || keywordDirty ? "" : "hidden"}>Unsaved changes</span><button class="button-primary" data-action="save-book-interior-settings" data-book-id="${escapeHtml(bookId(book))}" ${saveDisabled ? "disabled" : ""} aria-busy="${state.bookInteriorSavePending}">${state.bookInteriorSavePending ? "Saving…" : "Save Interior changes"}</button><button class="button-secondary" data-action="close-book-drawer" aria-label="Close Book detail">Close</button></div></header><div class="book-drawer-body">${renderBookTabs(book, summary)}</div></section></div>`;
+    const displayTitle = bookDisplayTitle(book, summary);
+    const folderName = valueFor(book, "name", bookId(book));
+    return `<section class="panel book-detail-panel" aria-labelledby="book-detail-title"><header class="book-detail-header"><span class="book-detail-preview">${localImageMarkup(cover, `Cover for ${displayTitle}`)}</span><div class="book-detail-heading"><div class="book-detail-title-line"><h2 id="book-detail-title" tabindex="-1" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</h2><p class="book-folder-name" title="${escapeHtml(folderName)}">${escapeHtml(folderName)}</p></div><div class="book-detail-badges">${badge(productionStatus(summary, book))} ${badge(bookFrameState(summary))} <span data-book-assigned-brand-badge>${badge(assignedBrandName(summary) || "Unassigned")}</span></div></div><div class="book-detail-actions"><span data-book-interior-unsaved role="status" ${dirty || metadataDirty || keywordDirty ? "" : "hidden"}>Unsaved changes</span><button class="button-primary" data-action="save-book-interior-settings" data-book-id="${escapeHtml(bookId(book))}" ${saveDisabled ? "disabled" : ""} aria-busy="${state.bookInteriorSavePending}">${state.bookInteriorSavePending ? "Saving…" : "Save Interior changes"}</button></div></header><div class="book-detail-body book-drawer-body">${renderBookTabs(book, summary)}</div></section>`;
   };
 
   const patchBookMetadataValidationUi = (book, summary, focusFirst = false) => {
@@ -1671,7 +1686,7 @@
   const refreshBookCatalogCards = (command) => {
     const book = selectedBook();
     const summary = book ? summaryFor(book) : null;
-    if (!book || !summary || !state.bookDrawerOpen || state.selectedBookTab !== "overview") return;
+    if (!book || !summary || !state.bookDrawerOpen || state.selectedBookTab !== "settings") return;
     const drawerBody = document.querySelector(".book-drawer-body");
     const scrollTop = drawerBody?.scrollTop ?? state.bookDrawerScrollTop;
     const syncAssignmentCard = () => {
@@ -1704,7 +1719,7 @@
       metadataCard?.querySelectorAll("[data-metadata-field]").forEach((control) => { control.value = persisted[control.dataset.metadataField] ?? ""; });
       metadataCard?.querySelector(".catalog-card-heading > .status-badge")?.remove();
       syncAssignmentCard();
-      const title = document.getElementById("book-drawer-title");
+      const title = document.getElementById("book-detail-title");
       if (title) title.textContent = bookDisplayTitle(book, summary);
     } else if (["book.brand.assign", "book.brand.unassign"].includes(command)) {
       syncAssignmentCard();
@@ -1729,12 +1744,10 @@
     const assignedBadge = document.querySelector("[data-book-assigned-brand-badge]");
     if (assignedBadge) assignedBadge.innerHTML = badge(assignedBrandName(summary) || "Unassigned");
 
-    if (state.selectedBookTab === "overview") {
+    if (state.selectedBookTab === "settings") {
       refreshBookCatalogCards(command);
       const copyCard = document.querySelector("[data-brand-template-copy-card]");
       if (copyCard) copyCard.outerHTML = renderBrandTemplateCopyCard(book, summary);
-    } else if (state.selectedBookTab === "settings") {
-      refreshIntroTemplateWorkspace();
     } else if (state.selectedBookTab === "production") {
       refreshProductionWorkspace();
     }
@@ -1755,45 +1768,19 @@
     return new Date(valueFor(rightSummary, "lastRunAt", 0)).getTime() - new Date(valueFor(leftSummary, "lastRunAt", 0)).getTime();
   });
 
-  const refreshBookSelectionUi = () => {
-    const filtered = filteredBooks();
-    const pageItems = filtered.slice((state.bookPage - 1) * 12, state.bookPage * 12);
-    const selectedCount = state.selectedBookIds.size;
-    const selectablePageItems = pageItems.filter((book) => workspaceStateAvailable(summaryFor(book)));
-    const selectableFiltered = filtered.filter((book) => workspaceStateAvailable(summaryFor(book)));
-    const pageSelectedCount = selectablePageItems.filter((book) => state.selectedBookIds.has(bookId(book))).length;
-    const allPageSelected = selectablePageItems.length > 0 && pageSelectedCount === selectablePageItems.length;
-    const allFilteredSelected = selectableFiltered.length > 0 && selectableFiltered.every((book) => state.selectedBookIds.has(bookId(book)));
+  const bookListRowMarkup = (item) => {
+    const itemSummary = summaryFor(item);
+    const id = bookId(item);
+    const name = bookDisplayTitle(item, itemSummary);
+    const stateAvailable = workspaceStateAvailable(itemSummary);
+    const active = state.bookDrawerOpen && state.selectedBookId === id;
+    return `<button type="button" class="book-list-row ${active ? "is-active" : ""}" data-book-card-id="${escapeHtml(id)}" data-action="open-book-detail" data-book-id="${escapeHtml(id)}" aria-current="${active ? "true" : "false"}" aria-label="View details for ${escapeHtml(name)}"><span class="book-list-thumbnail">${bookThumbnailMarkup(item, itemSummary)}</span><span class="book-list-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong><span class="book-list-status">${badge(productionStatus(itemSummary, item))}${stateAvailable ? "" : ` ${badge("State unavailable")}`}</span></span></button>`;
+  };
 
-    document.querySelectorAll("[data-book-card-id]").forEach((card) => {
-      const id = card.dataset.bookCardId;
-      const book = books().find((item) => bookId(item) === id);
-      const selected = state.selectedBookIds.has(id);
-      const name = valueFor(book, "name", id);
-      card.classList.toggle("selected", selected);
-      const toggle = card.querySelector('[data-action="toggle-book-selection"]');
-      if (toggle) {
-        toggle.disabled = !workspaceStateAvailable(summaryFor(book));
-        toggle.setAttribute("aria-pressed", String(selected));
-        toggle.setAttribute("aria-label", `${selected ? "Remove" : "Select"} ${name} ${selected ? "from" : "for"} Interior Processing`);
-      }
-      const icon = card.querySelector("[data-book-selection-icon]");
-      if (icon) icon.innerHTML = bookSelectIcon(selected);
-    });
-
-    const process = document.querySelector('[data-action="go-process"]');
-    if (process) process.textContent = selectedCount ? `Process Interior · ${selectedCount} selected` : "Process Interior";
-    const count = document.querySelector("[data-book-selection-count]");
-    if (count) count.textContent = `${selectedCount} selected`;
-    const pageSelection = document.querySelector('[data-action="toggle-book-page-selection"]');
-    if (pageSelection) {
-      pageSelection.checked = allPageSelected;
-      pageSelection.indeterminate = pageSelectedCount > 0 && !allPageSelected;
-    }
-    const selectAll = document.querySelector('[data-action="select-all-filtered-books"]');
-    if (selectAll) selectAll.disabled = !selectableFiltered.length || allFilteredSelected;
-    const clear = document.querySelector('[data-action="clear-book-selection"]');
-    if (clear) clear.disabled = !selectedCount;
+  const refreshBookListRow = (id) => {
+    const book = books().find((item) => bookId(item) === id);
+    const row = document.querySelector(`[data-book-card-id="${CSS.escape(id)}"]`);
+    if (book && row) row.outerHTML = bookListRowMarkup(book);
   };
 
   const renderBooks = () => {
@@ -1814,44 +1801,20 @@
     const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
     state.bookPage = Math.min(Math.max(1, state.bookPage), totalPages);
     const pageItems = filtered.slice((state.bookPage - 1) * pageSize, state.bookPage * pageSize);
-    if (!pageItems.some((item) => bookId(item) === state.selectedBookId)) state.selectedBookId = pageItems[0] ? bookId(pageItems[0]) : "";
-    const card = (item) => {
-      const itemSummary = summaryFor(item);
-      const id = bookId(item);
-      const thumbnail = bookThumbnailMarkup(item, itemSummary);
-      const total = valueFor(itemSummary, "interiorSourcePageCount", 0);
-      const interiorAssets = assetsFor(itemSummary).filter((asset) => valueFor(asset, "kind", "") === "Interior");
-      const active = interiorAssets.length ? interiorAssets.filter((asset) => effectiveInteriorAsset(item, asset).isActive).length : valueFor(itemSummary, "activeInteriorSourcePageCount", total);
-      const status = productionStatus(itemSummary, item);
-      const selected = state.selectedBookIds.has(id);
-      const stateAvailable = workspaceStateAvailable(itemSummary);
-      const name = bookDisplayTitle(item, itemSummary);
-      const folder = valueFor(item, "name", id);
-      const assignment = assignedBrandName(itemSummary);
-      const assignmentBadges = assignmentStatus(itemSummary) === "Valid" ? badge(assignment) : assignment ? `${badge(assignment)} ${badge(assignmentLabel(itemSummary))}` : badge("Unassigned");
-      return `<article class="book-card ${selected ? "selected" : ""} ${stateAvailable ? "" : "is-disabled"}" data-book-card-id="${escapeHtml(id)}"><button type="button" class="book-card-main" data-action="toggle-book-selection" data-book-id="${escapeHtml(id)}" aria-label="${stateAvailable ? `${selected ? "Remove" : "Select"} ${escapeHtml(name)} ${selected ? "from" : "for"} Interior Processing` : `${escapeHtml(name)} cannot be selected because its workspace state is unavailable`}" aria-pressed="${selected}" ${stateAvailable ? "" : "disabled"}><span class="book-card-preview"><span class="book-card-selection-icon" data-book-selection-icon aria-hidden="true">${bookSelectIcon(selected)}</span>${thumbnail}</span><span class="book-card-copy"><strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong><small title="${escapeHtml(folder)}">${escapeHtml(folder)} · ${escapeHtml(valueFor(metadataFor(itemSummary), "author", "") || "Unknown Author")} · ${active} / ${total} Interior active</small><span>${badge(status)} ${assignmentBadges}${stateAvailable ? "" : ` ${badge("State unavailable")}`}</span></span></button><button type="button" class="book-card-edit" data-action="open-book-detail" data-book-id="${escapeHtml(id)}" aria-label="Open Book detail for ${escapeHtml(name)}" title="Open Book detail">${bookEditIcon()}</button></article>`;
-    };
+    if (!pageItems.some((item) => bookId(item) === state.selectedBookId)) {
+      state.selectedBookId = "";
+      state.bookDrawerOpen = false;
+      state.bookDrawerScrollTop = 0;
+    }
     const start = filtered.length ? (state.bookPage - 1) * pageSize + 1 : 0;
     const end = Math.min(state.bookPage * pageSize, filtered.length);
     const selectedCount = state.selectedBookIds.size;
-    const selectablePageItems = pageItems.filter((item) => workspaceStateAvailable(summaryFor(item)));
-    const pageSelectedCount = selectablePageItems.filter((item) => state.selectedBookIds.has(bookId(item))).length;
-    const allPageSelected = selectablePageItems.length > 0 && pageSelectedCount === selectablePageItems.length;
     const processLabel = selectedCount ? `Process Interior · ${selectedCount} selected` : "Process Interior";
     const brandFilterOptions = [{ value: "All", label: "All", count: allBooks.length }, { value: "Unassigned", label: "Unassigned", count: allBooks.filter((book) => !assignedBrandName(summaryFor(book))).length }, ...[...brands()].sort((left, right) => valueFor(left, "name", "").localeCompare(valueFor(right, "name", ""), undefined, { sensitivity: "base" })).map((brand) => { const name = valueFor(brand, "name", ""); return { value: name, label: name, count: allBooks.filter((book) => assignedBrandName(summaryFor(book)) === name).length }; })];
-    content.innerHTML = `<section class="book-library-page"><div class="page-header"><div><h1>Books</h1><p>Filter local Books by their explicit Brand assignment before continuing production.</p></div><div class="page-actions">${refreshAction()}<button class="button-secondary" data-action="clear-cache" ${cacheCleanupBlocked() ? "disabled" : ""}>${state.cacheCleanupActive ? "Clearing…" : "Clear Cache"}</button><button class="button-secondary" data-action="validate-all">Validate all</button><button class="button-primary" data-action="go-process">${processLabel}</button></div></div><section class="book-toolbar"><label class="book-selection-page book-toolbar-selection"><input type="checkbox" data-action="toggle-book-page-selection" ${allPageSelected ? "checked" : ""} ${selectablePageItems.length ? "" : "disabled"}> Select page <span>(${selectablePageItems.length})</span></label><label class="field book-search-field"><span>Search books</span><input class="control" data-action="filter-books" value="${escapeHtml(state.bookFilter)}" placeholder="Title, folder or Author"></label><label class="field"><span>Book Brand</span><select class="control" data-action="book-brand-filter">${brandFilterOptions.map(({ value, label, count }) => `<option value="${escapeHtml(value)}" ${state.bookBrandFilter === value ? "selected" : ""}>${escapeHtml(label)} (${count})</option>`).join("")}</select></label><label class="field"><span>Sort</span><select class="control" data-action="book-sort"><option value="activity" ${state.bookSort === "activity" ? "selected" : ""}>Last activity</option><option value="name" ${state.bookSort === "name" ? "selected" : ""}>Book title</option></select></label><label class="field book-status-filter"><span>Status</span><select class="control" data-action="book-status">${statusCounts.map(({ name, count }) => `<option value="${escapeHtml(name)}" ${state.bookStatus === name ? "selected" : ""}>${escapeHtml(name)} (${count})</option>`).join("")}</select></label><div class="asset-view-toggle" aria-label="Book view"><button class="${state.bookView === "grid" ? "active" : ""}" data-action="book-view" data-book-view="grid" aria-pressed="${state.bookView === "grid"}">Grid</button><button class="${state.bookView === "list" ? "active" : ""}" data-action="book-view" data-book-view="list" aria-pressed="${state.bookView === "list"}">Compact list</button></div></section><section class="book-library-results"><div class="book-library-grid-scroll"><section class="${state.bookView === "grid" ? "book-grid" : "book-compact-list"}">${pageItems.length ? pageItems.map(card).join("") : `<div class="book-grid-empty"><strong>No Books match this view.</strong><span>Adjust the search, Book Brand or status filter.</span></div>`}</section></div><footer class="book-pagination" data-book-total-pages="${totalPages}"><span>${start}–${end} of ${filtered.length}</span><div><button class="button-secondary" data-action="book-page" data-book-page="first" ${state.bookPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="book-page" data-book-page="previous" ${state.bookPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.bookPage} of ${totalPages}</span><button class="button-secondary" data-action="book-page" data-book-page="next" ${state.bookPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="book-page" data-book-page="last" ${state.bookPage === totalPages ? "disabled" : ""}>Last</button></div></footer></section></section>`;
-    const pageSelection = document.querySelector('[data-action="toggle-book-page-selection"]');
-    if (pageSelection) pageSelection.indeterminate = pageSelectedCount > 0 && !allPageSelected;
     const selected = selectedBook();
-    if (selected) content.insertAdjacentHTML("beforeend", renderBookDrawer(selected, summaryFor(selected)));
-    if (state.drawerFocusTitle) {
-      state.drawerFocusTitle = false;
-      document.getElementById("book-drawer-title")?.focus();
-    }
-    if (state.restoreBookFocus) {
-      state.restoreBookFocus = false;
-      document.querySelector(`[data-action="open-book-detail"][data-book-id="${CSS.escape(state.selectedBookId)}"]`)?.focus();
-    }
+    const pagination = `<footer class="book-pagination" data-book-total-pages="${totalPages}"><span>${start}–${end} of ${filtered.length}</span><div><button class="button-secondary" data-action="book-page" data-book-page="first" ${state.bookPage === 1 ? "disabled" : ""}>First</button><button class="button-secondary" data-action="book-page" data-book-page="previous" ${state.bookPage === 1 ? "disabled" : ""}>Previous</button><span>Page ${state.bookPage} of ${totalPages}</span><button class="button-secondary" data-action="book-page" data-book-page="next" ${state.bookPage === totalPages ? "disabled" : ""}>Next</button><button class="button-secondary" data-action="book-page" data-book-page="last" ${state.bookPage === totalPages ? "disabled" : ""}>Last</button></div></footer>`;
+    const list = pageItems.length ? pageItems.map(bookListRowMarkup).join("") : `<div class="book-list-empty"><strong>No Books match this view.</strong><span>Adjust the search, Book Brand or status filter.</span></div>`;
+    content.innerHTML = `<section class="book-library-page"><div class="page-header"><div><h1>Books</h1><p>Filter local Books, then select one to review its production workspace.</p></div><div class="page-actions">${refreshAction()}<button class="button-secondary" data-action="clear-cache" ${cacheCleanupBlocked() ? "disabled" : ""}>${state.cacheCleanupActive ? "Clearing…" : "Clear Cache"}</button><button class="button-secondary" data-action="validate-all">Validate all</button><button class="button-primary" data-action="go-process">${processLabel}</button></div></div><section class="book-toolbar"><label class="field book-search-field"><span>Search books</span><input class="control" data-action="filter-books" value="${escapeHtml(state.bookFilter)}" placeholder="Title, folder or Author"></label><label class="field"><span>Book Brand</span><select class="control" data-action="book-brand-filter">${brandFilterOptions.map(({ value, label, count }) => `<option value="${escapeHtml(value)}" ${state.bookBrandFilter === value ? "selected" : ""}>${escapeHtml(label)} (${count})</option>`).join("")}</select></label><label class="field"><span>Sort</span><select class="control" data-action="book-sort"><option value="activity" ${state.bookSort === "activity" ? "selected" : ""}>Last activity</option><option value="name" ${state.bookSort === "name" ? "selected" : ""}>Book title</option></select></label><label class="field book-status-filter"><span>Status</span><select class="control" data-action="book-status">${statusCounts.map(({ name, count }) => `<option value="${escapeHtml(name)}" ${state.bookStatus === name ? "selected" : ""}>${escapeHtml(name)} (${count})</option>`).join("")}</select></label></section><div class="book-master-detail"><section class="panel book-list-panel" aria-labelledby="book-list-title"><header class="book-panel-header"><div><h2 id="book-list-title">Book list</h2><p>${filtered.length} matching Book${filtered.length === 1 ? "" : "s"}</p></div></header><div class="book-list-scroll">${list}</div>${pagination}</section>${renderBookDetail(selected, selected ? summaryFor(selected) : null)}</div></section>`;
     const drawerBody = document.querySelector(".book-drawer-body");
     if (drawerBody && Number.isFinite(state.bookDrawerScrollTop)) drawerBody.scrollTop = state.bookDrawerScrollTop;
     const artworkGrid = document.querySelector(".interior-artwork-grid-scroll");
@@ -2138,9 +2101,18 @@
   };
 
   document.querySelectorAll("[data-route]").forEach((button) => button.addEventListener("click", () => { render(button.dataset.route); if (button.dataset.route === "diagnostics") { send("diagnostics.get"); send("task.list"); } }));
-  const openBookDrawer = (id) => {
+  const setBookListRowActive = (row, active) => {
+    if (!row) return;
+    row.classList?.toggle("is-active", active);
+    row.setAttribute?.("aria-current", String(active));
+  };
+  const openBookDetail = (id, sourceRow = null) => {
+    if (state.bookDrawerOpen && state.selectedBookId === id) {
+      return;
+    }
+    const previousBookId = state.selectedBookId;
     state.selectedBookId = id;
-    state.selectedBookTab = "overview";
+    state.selectedBookTab = "settings";
     state.selectedAssetReference = "";
     clearArtworkBulkSelection();
     state.assetStatus = "Active";
@@ -2149,34 +2121,20 @@
     state.bookDrawerScrollTop = 0;
     state.artworkGridScrollTop = 0;
     state.bookDrawerOpen = true;
-    document.querySelector(".book-drawer-layer")?.remove();
     const book = selectedBook();
     if (!book) return;
-    content.insertAdjacentHTML("beforeend", renderBookDrawer(book, summaryFor(book)));
-    document.getElementById("book-drawer-title")?.focus();
+    const summary = summaryFor(book);
+    const previousRow = previousBookId && previousBookId !== id
+      ? document.querySelector(`[data-book-card-id="${CSS.escape(previousBookId)}"]`)
+      : null;
+    const selectedRow = sourceRow ?? document.querySelector(`[data-book-card-id="${CSS.escape(id)}"]`);
+    setBookListRowActive(previousRow, false);
+    setBookListRowActive(selectedRow, true);
+    const detailPanel = document.querySelector(".book-detail-panel");
+    if (detailPanel) detailPanel.outerHTML = renderBookDetail(book, summary);
+    else render("books", false);
     send("amazon.browser.status");
     send("book.keywords.asin-crawl.get", { bookId: id });
-  };
-  const closeBookDrawer = () => {
-    if (state.bookInteriorSavePending || state.catalogMutationPending) return;
-    const book = selectedBook();
-    const summary = book ? summaryFor(book) : null;
-    if ((hasInteriorDraft(state.selectedBookId) || (book && summary && (hasMetadataDraft(book, summary) || hasKeywordBuilderDraft(book, summary)))) && !window.confirm("Discard unsaved Book changes?")) return;
-    clearInteriorDraft(state.selectedBookId);
-    state.bookMetadataDrafts.delete(state.selectedBookId);
-    state.bookMetadataValidation.delete(state.selectedBookId);
-    state.bookKeywordBuilderDrafts.delete(state.selectedBookId);
-    state.bookKeywordBuilderValidation.delete(state.selectedBookId);
-    state.bookDrawerScrollTop = 0;
-    state.bookDrawerOpen = false;
-    document.querySelector(".book-drawer-layer")?.remove();
-    if (state.bookListRefreshPending) {
-      state.bookListRefreshPending = false;
-      state.restoreBookFocus = true;
-      render("books", false);
-      return;
-    }
-    document.querySelector(`[data-action="open-book-detail"][data-book-id="${CSS.escape(state.selectedBookId)}"]`)?.focus();
   };
   const beginCatalogMutation = (command, target, payload) => {
     if (state.catalogMutationPending || processIsActive()) return;
@@ -2203,9 +2161,6 @@
       }
       return;
     }
-    if (event.key !== "Escape" || !state.bookDrawerOpen) return;
-    event.preventDefault();
-    closeBookDrawer();
   });
   content.addEventListener("click", (event) => {
     const updateAction = event.target.closest("[data-update-action]")?.dataset.updateAction;
@@ -2318,7 +2273,7 @@
       const previewState = keywordPreviewFor(id);
       const previewReceipt = String(valueFor(previewState, "receipt", "") ?? "");
       if (!researchDraft || !previewReceipt) {
-        setAsinFeedback(id, "Shuffle the Keyword Builder before starting ASIN Research.", true);
+        setAsinFeedback(id, "Shuffle keywords before starting the ASIN crawl.", true);
         patchAsinResearch(id);
         return;
       }
@@ -2401,8 +2356,7 @@
       updateProductionInteractionUi();
       send("process.start", { bookIds: [target.dataset.bookId], mode: "production-interior" });
     }
-    if (action === "select-book" || action === "open-book-detail") openBookDrawer(target.dataset.bookId);
-    if (action === "close-book-drawer") closeBookDrawer();
+    if (action === "select-book" || action === "open-book-detail") openBookDetail(target.dataset.bookId, action === "open-book-detail" ? target : null);
     if (action === "save-book-interior-settings" && !state.bookInteriorSavePending) {
       const payload = interiorSavePayload(target.dataset.bookId);
       if (payload) {
@@ -2437,31 +2391,6 @@
       const last = Math.max(1, Math.ceil(itemCount / 6));
       state.introTemplatePage = Math.min(last, Math.max(1, state.introTemplatePage + (target.dataset.introTemplatePage === "next" ? 1 : -1)));
       refreshIntroTemplateWorkspace(target.dataset.introTemplatePage);
-    }
-    if (action === "toggle-book-selection") {
-      const id = target.dataset.bookId;
-      const book = books().find((item) => bookId(item) === id);
-      if (!book || !workspaceStateAvailable(summaryFor(book))) { status.textContent = "This Book cannot be selected because its workspace state is unavailable."; return; }
-      if (state.selectedBookIds.has(id)) state.selectedBookIds.delete(id); else state.selectedBookIds.add(id);
-      status.textContent = state.selectedBookIds.size ? `${state.selectedBookIds.size} Book${state.selectedBookIds.size === 1 ? "" : "s"} selected` : "Selection cleared";
-      refreshBookSelectionUi();
-    }
-    if (action === "toggle-book-page-selection") {
-      const pageSize = 12;
-      const pageItems = filteredBooks().slice((state.bookPage - 1) * pageSize, state.bookPage * pageSize);
-      pageItems.filter((book) => workspaceStateAvailable(summaryFor(book))).forEach((book) => { if (target.checked) state.selectedBookIds.add(bookId(book)); else state.selectedBookIds.delete(bookId(book)); });
-      status.textContent = state.selectedBookIds.size ? `${state.selectedBookIds.size} Book${state.selectedBookIds.size === 1 ? "" : "s"} selected` : "Selection cleared";
-      refreshBookSelectionUi();
-    }
-    if (action === "select-all-filtered-books") {
-      filteredBooks().filter((book) => workspaceStateAvailable(summaryFor(book))).forEach((book) => state.selectedBookIds.add(bookId(book)));
-      status.textContent = `${state.selectedBookIds.size} Book${state.selectedBookIds.size === 1 ? "" : "s"} selected`;
-      refreshBookSelectionUi();
-    }
-    if (action === "clear-book-selection") {
-      state.selectedBookIds.clear();
-      status.textContent = "Selection cleared";
-      refreshBookSelectionUi();
     }
     if (action === "queue-book") { const id = target.dataset.bookId; if (target.checked) state.selectedBookIds.add(id); else state.selectedBookIds.delete(id); }
     if (action === "queue-selected-book") {
@@ -2505,7 +2434,7 @@
       }
     }
     if (action === "book-tab") {
-      state.selectedBookTab = ["asin", "production", "settings", "artwork", "pages"].includes(target.dataset.bookTab) ? target.dataset.bookTab : "overview";
+      state.selectedBookTab = ["settings", "asin", "production", "artwork", "pages"].includes(target.dataset.bookTab) ? target.dataset.bookTab : "settings";
       refreshBookDrawerBody(state.selectedBookTab);
       if (state.selectedBookTab === "asin") {
         const book = selectedBook();
@@ -2525,7 +2454,6 @@
     if (action === "asset-status") { const status = ["Active", "Inactive"].includes(target.dataset.assetStatus) ? target.dataset.assetStatus : ""; state.assetStatus = state.assetStatus === status ? "" : status; state.artworkGridScrollTop = 0; refreshInteriorArtworkWorkspace(); }
     if (action === "asset-frame-mode") { const mode = ["", "enabled", "disabled"].includes(target.dataset.assetFrameMode) ? target.dataset.assetFrameMode : ""; state.assetFrameMode = mode; state.artworkGridScrollTop = 0; refreshInteriorArtworkWorkspace(); }
     if (action === "clear-artwork-filters") { state.assetFilter = ""; state.assetStatus = "Active"; state.assetFrameMode = ""; state.artworkGridScrollTop = 0; refreshInteriorArtworkWorkspace(); }
-    if (action === "book-view") { state.bookView = target.dataset.bookView; render("books", false); }
     if (action === "clear-cache" && !cacheCleanupBlocked()) {
       if (window.confirm("Clear processed image cache for completed Books?")) {
         state.cacheCleanupResultRequested = false;
@@ -2859,21 +2787,23 @@
       if (preserveBookDrawer) {
         if (state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();
         else updateInteriorSaveUi();
+        refreshBookListRow(state.selectedBookId);
         status.textContent = "Interior changes saved";
       } else if (preserveProductionDrawer) {
         state.productionFeedback = state.productionFeedback.replace(" Refreshing status…", "");
         refreshProductionWorkspace(state.productionFocusSelector);
         state.productionFocusSelector = "";
+        refreshBookListRow(state.selectedBookId);
         updateGlobalRefreshControl();
         status.textContent = catalogWasAwaiting ? "Catalog changes saved" : "Connected";
       } else if (preserveCatalogDrawer) {
         refreshBrandDependentBookUi(catalogCommand);
-        state.bookListRefreshPending = true;
+        refreshBookListRow(state.selectedBookId);
         updateGlobalRefreshControl();
         status.textContent = "Catalog changes saved";
       } else if (preserveKeywordDrawer) {
         refreshBookKeywordBuilderCard();
-        state.bookListRefreshPending = true;
+        refreshBookListRow(state.selectedBookId);
         updateGlobalRefreshControl();
         status.textContent = state.keywordBuilderRefreshNeeded ? "Keyword Builder saved; refresh needed" : "Keyword Builder saved";
       } else {

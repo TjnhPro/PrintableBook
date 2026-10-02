@@ -2,9 +2,8 @@ import { readFileSync } from "node:fs";
 
 const app = readFileSync(new URL("./js/app.js", import.meta.url), "utf8");
 const expected = [
-  "Overview",
-  "Interior settings",
-  "Interior pages",
+  'tabButton("settings", "Settings")',
+  'tabButton("asin", "Keyword")',
   "No processed pages",
   "book.interior.settings.save",
   "Save changes",
@@ -43,7 +42,9 @@ const expected = [
   ,"Fix these Brand assets"
   ,"Required image size"
   ,"Current size"
-  ,"Production Assets"
+  ,"production-group-grid"
+  ,"Source image"
+  ,"Preview image"
   ,"Build Cover PDF"
   ,"Process Interior Cover"
   ,"Process Book Owner"
@@ -63,6 +64,14 @@ for (const value of expected) {
 
 if (app.includes("Advanced JSON settings") || app.includes("brand.settings")) {
   throw new Error("Removed Brand settings UI must not remain in the bridge contract.");
+}
+
+if (app.includes('tabButton("settings", "Interior settings")') || app.includes('tabButton("asin", "ASIN Research")') || app.includes('tabButton("pages", "Interior pages")')) {
+  throw new Error("Hidden Book detail tabs must not remain in the visible tablist.");
+}
+
+if (app.includes('tabButton("overview"') || app.includes("Review the summary and Brand background before processing")) {
+  throw new Error("The legacy Book Overview summary must not remain in the visible Book detail UI.");
 }
 
 console.log(`UI contract passed (${expected.length} checks).`);
