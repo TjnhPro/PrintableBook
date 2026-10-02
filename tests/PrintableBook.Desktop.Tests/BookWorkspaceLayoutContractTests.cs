@@ -311,6 +311,31 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
+    public void ConfigurationUsesOneScrollablePanelWithPurposeBuiltGroups()
+    {
+        var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
+        var script = File.ReadAllText(Path.Combine(frontend, "js", "app.js"));
+        var layout = File.ReadAllText(Path.Combine(frontend, "css", "book-workspace.css"));
+
+        Assert.Contains("class=\"configuration-page\"", script, StringComparison.Ordinal);
+        Assert.Contains("class=\"panel configuration-panel\" data-form=\"configuration\"", script, StringComparison.Ordinal);
+        Assert.Contains("Processing capacity", script, StringComparison.Ordinal);
+        Assert.Contains("Keyword Builder defaults", script, StringComparison.Ordinal);
+        Assert.Contains("Artwork preparation", script, StringComparison.Ordinal);
+        Assert.Contains("Working canvas", script, StringComparison.Ordinal);
+        Assert.Contains("Final Interior output", script, StringComparison.Ordinal);
+        Assert.Contains("Border search range", script, StringComparison.Ordinal);
+        Assert.Contains("Border tolerances", script, StringComparison.Ordinal);
+        Assert.Contains("Border acceptance rules", script, StringComparison.Ordinal);
+        Assert.Contains("content.addEventListener(\"submit\"", script, StringComparison.Ordinal);
+        Assert.Contains("state.settingsSavePending", script, StringComparison.Ordinal);
+        Assert.Contains(".configuration-page { display:grid; grid-template-rows:auto minmax(0,1fr);", layout, StringComparison.Ordinal);
+        Assert.Contains(".configuration-panel-scroll { min-height:0;", layout, StringComparison.Ordinal);
+        Assert.Contains(".configuration-group-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr));", layout, StringComparison.Ordinal);
+        Assert.Contains("@media (max-width:900px)", layout, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void KeywordBuilderUsesFixedKeywordInputsAndTabSeparatedClipboardContract()
     {
         var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");

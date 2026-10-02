@@ -18,6 +18,9 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   const contentListeners = {};
   const documentListeners = {};
   const searchInput = { focused: false, selection: null, focus() { this.focused = true; }, setSelectionRange(start, end) { this.selection = [start, end]; } };
+  const settingsSaveButton = { disabled: false, textContent: "Save", attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } };
+  const settingsLoadButton = { disabled: false };
+  const settingsFeedback = { textContent: "Ready", dataset: { state: "ready" }, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } };
   const brandResultCount = { textContent: "" };
   const brandList = {
     set innerHTML(markup) {
@@ -44,7 +47,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     set innerHTML(markup) { fullRenderCount += 1; contentMarkup = markup; },
     addEventListener: (eventName, handler) => { contentListeners[eventName] = handler; },
     insertAdjacentHTML: (_position, markup) => { contentMarkup += markup; },
-    querySelector: (selector) => selector === '[data-action="pdf-library-search"]' ? searchInput : selector === "[data-brand-list]" ? brandList : selector === "[data-brand-result-count]" ? brandResultCount : selector === "[data-pdf-library-feedback]" ? pdfLibraryFeedback : null
+    querySelector: (selector) => selector === '[data-action="pdf-library-search"]' ? searchInput : selector === "[data-settings-save]" ? settingsSaveButton : selector === '[data-action="refresh"]' ? settingsLoadButton : selector === "[data-settings-feedback]" ? settingsFeedback : selector === "[data-brand-list]" ? brandList : selector === "[data-brand-result-count]" ? brandResultCount : selector === "[data-pdf-library-feedback]" ? pdfLibraryFeedback : null
   };
   const introWorkspace = {
     set outerHTML(markup) {
@@ -100,10 +103,12 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   const brandSettingsEditor = { dataset: { brandSettings: "" }, value: "{}" };
   const genericKeywordsEditor = { dataset: { genericKeywords: "" }, value: "" };
   const settingsInputs = [
-    ["maximumPageConcurrency", "4"], ["artworkDetectionThreshold", "20"], ["artworkMaximumSide", "2270"],
-    ["workingPageWidth", "2550"], ["workingPageHeight", "2550"], ["finalPageWidth", "2588"],
-    ["finalPageHeight", "2625"], ["dpi", "300"]
+    ["maximumPageConcurrency", "4"], ["artworkDetectionThreshold", "20"], ["artworkMaximumSide", "2270"], ["workingPageWidth", "2550"], ["workingPageHeight", "2550"], ["finalPageWidth", "2588"], ["finalPageHeight", "2625"], ["dpi", "300"]
   ].map(([setting, value]) => ({ dataset: { setting }, value }));
+  settingsInputs.push({ dataset: { settingGroup: "artworkSourceNormalization", setting: "normalizedSourceSize" }, value: "2048" });
+  [
+    ["pass1SearchDepth", "200"], ["pass2SearchDepth", "320"], ["cornerSearchPadding", "40"], ["trackDepthTolerance", "6"], ["cornerLineTolerance", "16"], ["maximumDepthSpread", "24"], ["segmentCount", "8"], ["cornerExclusionRatio", "0.10"], ["minimumCompatibleCorners", "3"], ["minimumSegmentSupportRatio", "0.35"], ["minimumSideSupportRatio", "0.55"], ["minimumSpanRatio", "0.70"], ["minimumSupportedSegments", "6"], ["maximumMissingSegmentRun", "2"]
+  ].forEach(([setting, value]) => settingsInputs.push({ dataset: { settingGroup: "borderLineDetection", setting }, value }));
   const refreshButton = {
     disabled: false,
     textContent: "Refresh",
@@ -150,7 +155,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     document: {
       getElementById: (id) => ({ "bridge-status": status, "app-content": content, "refresh-button": refreshButton, "update-dialog-root": updateDialog }[id]),
       createElement: (tagName) => ({ tagName, className: "", textContent: "", attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } }),
-      querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : selector === "[data-setting]" ? settingsInputs : [],
+      querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : selector === "[data-setting]" ? settingsInputs : selector === '[data-setting], [data-generic-keywords]' ? [...settingsInputs, genericKeywordsEditor] : [],
       querySelector: (selector) => {
         if (selector === "[data-brand-settings]") return brandSettingsEditor;
         if (selector === "[data-generic-keywords]") return genericKeywordsEditor;
@@ -171,7 +176,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, brandResultCount, brandSettingsEditor, genericKeywordsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, settingsSaveButton, settingsLoadButton, settingsFeedback, brandResultCount, brandSettingsEditor, genericKeywordsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -299,21 +304,54 @@ test("webview shell exposes every top-level desktop route", () => {
 });
 
 test("Configuration saves reusable Generic Keywords from a fixed five-line input", () => {
-  const { messageHandler, content, contentListeners, genericKeywordsEditor, messages } = loadBridge("configuration");
+  const { messageHandler, content, contentListeners, settingsSaveButton, settingsLoadButton, settingsFeedback, genericKeywordsEditor, messages } = loadBridge("configuration");
   messageHandler({ data: { version: 1, id: "settings-snapshot", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [] },
     globalSettings: { maximumPageConcurrency: 4, artworkDetectionThreshold: 20, artworkMaximumSide: 2270, workingPageWidth: 2550, workingPageHeight: 2550, finalPageWidth: 2588, finalPageHeight: 2625, dpi: 300, genericKeywords: ["coloring books"] },
     bookSummaries: []
   } } });
 
+  assert.match(content.innerHTML, /class="configuration-page"/);
+  assert.match(content.innerHTML, /class="panel configuration-panel" data-form="configuration"/);
+  assert.match(content.innerHTML, /Processing capacity/);
+  assert.match(content.innerHTML, /Artwork preparation/);
+  assert.match(content.innerHTML, /Working canvas/);
+  assert.match(content.innerHTML, /Final Interior output/);
+  assert.match(content.innerHTML, /Border search range/);
+  assert.match(content.innerHTML, /Border tolerances/);
+  assert.match(content.innerHTML, /Border acceptance rules/);
   assert.match(content.innerHTML, /Generic Keywords/);
   assert.match(content.innerHTML, /class="control keyword-list-input" rows="5" data-generic-keywords/);
   genericKeywordsEditor.value = " coloring\tbooks \n\n books for adults ";
-  const save = { dataset: { action: "save-settings" }, closest: () => save };
-  contentListeners.click({ target: save });
+  const form = { dataset: { form: "configuration" } };
+  let prevented = false;
+  contentListeners.submit({ target: form, preventDefault: () => { prevented = true; } });
 
+  assert.equal(prevented, true);
   assert.equal(messages.at(-1).command, "settings.save");
   assert.deepEqual(messages.at(-1).payload.genericKeywords, ["coloring books", "books for adults"]);
+  assert.deepEqual(messages.at(-1).payload.artworkSourceNormalization, { normalizedSourceSize: 2048 });
+  assert.equal(messages.at(-1).payload.borderLineDetection.pass1SearchDepth, 200);
+  assert.equal(messages.at(-1).payload.borderLineDetection.minimumSpanRatio, 0.7);
+  assert.equal(settingsSaveButton.disabled, true);
+  assert.equal(settingsLoadButton.disabled, true);
+  assert.equal(settingsSaveButton.textContent, "Saving…");
+  assert.equal(settingsFeedback.textContent, "Saving…");
+  assert.equal(genericKeywordsEditor.disabled, true);
+  contentListeners.submit({ target: form, preventDefault: () => { } });
+  assert.equal(messages.filter(message => message.command === "settings.save").length, 1, "Configuration must suppress duplicate saves while pending");
+
+  messageHandler({ data: { version: 1, id: messages.at(-1).id, ok: true, command: "settings.saved", payload: messages.at(-1).payload } });
+  assert.match(content.innerHTML, /data-state="saved"[^>]*>Saved<\/span>/);
+  assert.match(content.innerHTML, /data-settings-save aria-busy="false"[^>]*>Save<\/button>/);
+
+  contentListeners.submit({ target: form, preventDefault: () => { } });
+  messageHandler({ data: { version: 1, id: messages.at(-1).id, ok: false, error: "invalid_settings" } });
+  assert.equal(settingsSaveButton.disabled, false);
+  assert.equal(genericKeywordsEditor.disabled, false);
+  assert.equal(settingsFeedback.dataset.state, "error");
+  assert.equal(settingsFeedback.attributes.role, "alert");
+  assert.match(settingsFeedback.textContent, /Review the configuration values/);
 });
 
 test("desktop shell ships the Printable Book logo for its sidebar and window icon", () => {
