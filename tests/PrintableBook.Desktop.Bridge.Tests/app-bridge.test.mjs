@@ -70,7 +70,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     querySelector: (selector) => selector === ".interior-artwork-grid-scroll" && contentMarkup.includes('class="interior-artwork-grid-scroll"') ? artworkGrid : null,
     set innerHTML(markup) {
       bookDrawerBodyRenderCount += 1;
-      contentMarkup = contentMarkup.replace(/(<div class="book-drawer-body">)[\s\S]*(<\/div><\/section><\/div>)$/, `$1${markup}$2`);
+      contentMarkup = contentMarkup.replace(/(<div class="book-detail-body book-drawer-body">)[\s\S]*(<\/div><\/section><\/div><\/section>)$/, `$1${markup}$2`);
     }
   };
   const productionFinalButton = {
@@ -165,7 +165,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
         if (selector === "[data-generic-keywords]") return genericKeywordsEditor;
         if (selector === ".intro-template-workspace" && contentMarkup.includes('class="intro-template-workspace"')) return introWorkspace;
         if (selector === ".interior-artwork-workspace" && contentMarkup.includes('class="interior-artwork-workspace"')) return artworkWorkspace;
-        if (selector === ".book-drawer-body" && contentMarkup.includes('class="book-drawer-body"')) return bookDrawerBody;
+        if (selector === ".book-drawer-body" && contentMarkup.includes('class="book-detail-body book-drawer-body"')) return bookDrawerBody;
         if (selector === "[data-book-keyword-builder-card]" && contentMarkup.includes("data-book-keyword-builder-card")) return keywordBuilderCard;
         if (selector === ".production-workspace" && contentMarkup.includes('class="production-workspace"')) return productionWorkspace;
         if (selector === ".interior-artwork-grid-scroll" && contentMarkup.includes('class="interior-artwork-grid-scroll"')) return artworkGrid;
@@ -552,7 +552,7 @@ test("update install posts once while pending and only retries after a host resp
   assert.equal(bridge.messages.filter((message) => message.command === "updates.install").length, beforeRetry + 1);
 });
 
-test("Books display the active Interior page count without local folder size", () => {
+test("Book list rows expose the Book name thumbnail fallback and production status", () => {
   const { messageHandler, content } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-size", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
@@ -560,38 +560,37 @@ test("Books display the active Interior page count without local folder size", (
     bookSummaries: [{ bookId: { value: "Book 001" }, interiorSourcePageCount: 22, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [] }]
   } } });
 
-  assert.match(content.innerHTML, /22 \/ 22 Interior active/);
-  assert.doesNotMatch(content.innerHTML, /Interior active ·/);
+  assert.match(content.innerHTML, /class="book-list-row/);
+  assert.match(content.innerHTML, /Preview unavailable/);
+  assert.match(content.innerHTML, /<strong title="Book 001">Book 001<\/strong>/);
+  assert.match(content.innerHTML, /Needs review/);
+  assert.doesNotMatch(content.innerHTML, /Interior active/);
 });
 
-test("Book card selection and detail entry do not redraw the Book Library", () => {
-  const { messageHandler, content, contentListeners, status, getFullRenderCount } = loadBridge("books");
+test("Book list rows open the inline detail panel without queue selection controls", () => {
+  const { messageHandler, content, contentListeners, getFullRenderCount } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "book-card-actions", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
     bookSummaries: [{ bookId: { value: "Book 001" }, interiorSourcePageCount: 12, activeInteriorSourcePageCount: 12, validationStatus: "Ready", workspaceStatus: "Not started", assets: [] }]
   } } });
 
-  assert.match(content.innerHTML, /data-action="toggle-book-selection"/);
+  assert.doesNotMatch(content.innerHTML, /data-action="toggle-book-selection"/);
   assert.match(content.innerHTML, /data-action="open-book-detail"/);
-  assert.doesNotMatch(content.innerHTML, />Queue</);
-
-  const rendersBeforeSelection = getFullRenderCount();
-  const select = { dataset: { action: "toggle-book-selection", bookId: "Book 001" }, closest: () => select };
-  contentListeners.click({ target: select });
-  assert.match(status.textContent, /1 Book selected/);
-  assert.doesNotMatch(content.innerHTML, /role="dialog"/);
-  assert.equal(getFullRenderCount(), rendersBeforeSelection, "selecting a Book must preserve the grid and its scroll position");
+  assert.match(content.innerHTML, /Select a Book/);
 
   const rendersBeforeDetail = getFullRenderCount();
-  const edit = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => edit };
-  contentListeners.click({ target: edit });
+  const row = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => row };
+  contentListeners.click({ target: row });
   assert.match(content.innerHTML, /Book detail/);
-  assert.equal(getFullRenderCount(), rendersBeforeDetail, "opening Book detail must preserve the grid and its scroll position");
+  assert.match(content.innerHTML, /class="panel book-detail-panel"/);
+  assert.match(content.innerHTML, /aria-current="true"/);
+  assert.doesNotMatch(content.innerHTML, /role="dialog"/);
+  assert.equal(getFullRenderCount(), rendersBeforeDetail + 1);
 });
 
-test("a corrupt workspace stays inspectable but cannot be selected, edited, or processed", () => {
-  const { messageHandler, content, contentListeners, messages, status } = loadBridge("books");
+test("a corrupt workspace stays inspectable but cannot be edited or processed", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "corrupt-book", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
     globalSettings: {},
@@ -602,11 +601,8 @@ test("a corrupt workspace stays inspectable but cannot be selected, edited, or p
     }]
   } } });
 
-  assert.match(content.innerHTML, /book-card[^>]*is-disabled/);
-  assert.match(content.innerHTML, /data-action="toggle-book-selection"[^>]*disabled/);
-  const select = { dataset: { action: "toggle-book-selection", bookId: "Book 001" }, closest: () => select };
-  contentListeners.click({ target: select });
-  assert.match(status.textContent, /workspace state is unavailable/i);
+  assert.match(content.innerHTML, /State unavailable/);
+  assert.match(content.innerHTML, /data-action="open-book-detail"/);
 
   const edit = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => edit };
   contentListeners.click({ target: edit });
@@ -646,10 +642,10 @@ test("Interior processing derives Brand from assignment and omits brandName from
     bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Ready", assignedBrand: "Brand One", assignmentStatus: "Valid", assets: [] }]
   } } });
 
-  const select = { dataset: { action: "toggle-book-selection", bookId: "Book 001" }, closest: () => select };
-  contentListeners.click({ target: select });
-  const goProcess = { dataset: { action: "go-process" }, closest: () => goProcess };
-  contentListeners.click({ target: goProcess });
+  const openBook = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const queueBook = { dataset: { action: "queue-selected-book" }, closest: () => queueBook };
+  contentListeners.click({ target: queueBook });
   const start = { dataset: { action: "start-process" }, closest: () => start };
   contentListeners.click({ target: start });
 
@@ -674,12 +670,16 @@ test("Interior processing blocks a mixed assigned-Brand queue before sending a r
     ]
   } } });
 
-  for (const id of ["Book A", "Book B"]) {
-    const select = { dataset: { action: "toggle-book-selection", bookId: id }, closest: () => select };
-    contentListeners.click({ target: select });
-  }
-  const goProcess = { dataset: { action: "go-process" }, closest: () => goProcess };
-  contentListeners.click({ target: goProcess });
+  const openA = { dataset: { action: "open-book-detail", bookId: "Book A" }, closest: () => openA };
+  contentListeners.click({ target: openA });
+  const queueA = { dataset: { action: "queue-selected-book" }, closest: () => queueA };
+  contentListeners.click({ target: queueA });
+  const goBooks = { dataset: { action: "go-books" }, closest: () => goBooks };
+  contentListeners.click({ target: goBooks });
+  const openB = { dataset: { action: "open-book-detail", bookId: "Book B" }, closest: () => openB };
+  contentListeners.click({ target: openB });
+  const queueB = { dataset: { action: "queue-selected-book" }, closest: () => queueB };
+  contentListeners.click({ target: queueB });
   assert.match(content.innerHTML, /Selected queue contains multiple Brands/);
   assert.match(content.innerHTML, /Brand A: 1; Brand B: 1/);
 
@@ -738,26 +738,20 @@ test("Book detail disables Brand template copy until both Book and Brand are val
   assert.match(content.innerHTML, /data-action="copy-brand-templates"[^>]*disabled/);
 });
 
-test("Book Library keeps page selection beside its compact search control", () => {
-  const { messageHandler, content, contentListeners, status, getFullRenderCount } = loadBridge("books");
+test("Book Library renders twelve master-list rows without bulk queue controls", () => {
+  const { messageHandler, content } = loadBridge("books");
   const books = Array.from({ length: 13 }, (_, index) => ({ id: { value: `Book ${index + 1}` }, name: `Book ${index + 1}` }));
   messageHandler({ data: { version: 1, id: "book-bulk-selection", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books }, globalSettings: {},
     bookSummaries: books.map((book) => ({ bookId: book.id, interiorSourcePageCount: 12, activeInteriorSourcePageCount: 12, validationStatus: "Ready", workspaceStatus: "Not started", assets: [] }))
   } } });
 
-  assert.match(content.innerHTML, /class="book-selection-page book-toolbar-selection"/);
-  assert.match(content.innerHTML, /Select page <span>\(12\)<\/span>/);
-  assert.doesNotMatch(content.innerHTML, /book-selection-toolbar/);
-  assert.doesNotMatch(content.innerHTML, /select-all-filtered-books/);
-  assert.doesNotMatch(content.innerHTML, /clear-book-selection/);
-
-  const rendersBeforeBulkSelection = getFullRenderCount();
-  const selectPage = { dataset: { action: "toggle-book-page-selection" }, checked: true, closest: () => selectPage };
-  contentListeners.click({ target: selectPage });
-  assert.match(status.textContent, /12 Books selected/);
-  assert.equal(getFullRenderCount(), rendersBeforeBulkSelection);
-
+  assert.equal((content.innerHTML.match(/class="book-list-row/g) ?? []).length, 12);
+  assert.match(content.innerHTML, /1–12 of 13/);
+  assert.match(content.innerHTML, /class="book-master-detail"/);
+  assert.doesNotMatch(content.innerHTML, /toggle-book-page-selection/);
+  assert.doesNotMatch(content.innerHTML, /toggle-book-selection/);
+  assert.doesNotMatch(content.innerHTML, /select-all-filtered-books|clear-book-selection/);
 });
 
 test("Book Library uses one compact status select with live counts and resets filtering to page one", () => {

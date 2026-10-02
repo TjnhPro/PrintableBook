@@ -28,16 +28,17 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
-    public void BookLibraryContractIncludesPaginatedGridAndCompactStatusSelect()
+    public void BookLibraryContractUsesPaginatedMasterDetailAndCompactStatusSelect()
     {
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
 
         Assert.Contains("const pageSize = 12", script, StringComparison.Ordinal);
         Assert.Contains("Needs review", script, StringComparison.Ordinal);
         Assert.Contains("PDF ready", script, StringComparison.Ordinal);
-        Assert.Contains("book-grid", script, StringComparison.Ordinal);
+        Assert.Contains("book-master-detail", script, StringComparison.Ordinal);
+        Assert.Contains("book-list-row", script, StringComparison.Ordinal);
         Assert.Contains("const bookThumbnailMarkup", script, StringComparison.Ordinal);
-        Assert.Contains("const thumbnail = bookThumbnailMarkup(item, itemSummary)", script, StringComparison.Ordinal);
+        Assert.Contains("bookThumbnailMarkup(item, itemSummary)", script, StringComparison.Ordinal);
         Assert.Contains("role=\"status\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain("book-frame-filter", script, StringComparison.Ordinal);
         Assert.DoesNotContain("bookFrameFilter", script, StringComparison.Ordinal);
@@ -46,30 +47,31 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("book-status-filter", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"book-status\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain("book-status-filters", script, StringComparison.Ordinal);
-        Assert.Contains("book-library-grid-scroll", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("toggle-book-selection", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("toggle-book-page-selection", script, StringComparison.Ordinal);
 
         var layout = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css"));
         Assert.Contains(".book-library-page { display:grid", layout, StringComparison.Ordinal);
-        Assert.Contains(".book-library-grid-scroll { min-height:0; overflow-y:auto", layout, StringComparison.Ordinal);
-        Assert.Contains(".book-status-filter { min-width:180px; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-master-detail { display:grid; grid-template-columns:minmax(250px,3fr) minmax(0,9fr)", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-list-scroll { display:grid; align-content:start; min-height:0", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-status-filter { min-width:0; }", layout, StringComparison.Ordinal);
         Assert.DoesNotContain(".book-status-filters", layout, StringComparison.Ordinal);
-        Assert.Contains(".book-pagination { position:static", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-pagination { display:flex", layout, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void BookDetailUsesAnAccessibleDismissibleBottomSheet()
+    public void BookDetailUsesAnAccessibleInlinePanel()
     {
         var script = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "js", "app.js"));
         var layout = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css"));
 
-        Assert.Contains("book-drawer", script, StringComparison.Ordinal);
-        Assert.Contains("role=\"dialog\"", script, StringComparison.Ordinal);
-        Assert.Contains("close-book-drawer", script, StringComparison.Ordinal);
-        Assert.Contains("event.key !== \"Escape\"", script, StringComparison.Ordinal);
-        Assert.Contains("align-items:flex-end", layout, StringComparison.Ordinal);
-        Assert.Contains("height:100dvh", layout, StringComparison.Ordinal);
-        Assert.Contains("@keyframes pb-bottom-sheet-in", layout, StringComparison.Ordinal);
-        Assert.DoesNotContain("width:75vw", layout, StringComparison.Ordinal);
+        Assert.Contains("book-detail-panel", script, StringComparison.Ordinal);
+        Assert.Contains("aria-labelledby=\"book-detail-title\"", script, StringComparison.Ordinal);
+        Assert.Contains("book-detail-empty", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("book-drawer-layer", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("close-book-drawer", script, StringComparison.Ordinal);
+        Assert.Contains(".book-detail-panel { display:grid", layout, StringComparison.Ordinal);
+        Assert.DoesNotContain("@keyframes pb-bottom-sheet-in", layout, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -78,11 +80,11 @@ public sealed class BookWorkspaceLayoutContractTests
         var layout = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Frontend", "css", "book-workspace.css"));
 
         Assert.Contains("--pb-representative-preview: 1 / 1", layout, StringComparison.Ordinal);
-        Assert.Contains(".book-card-preview { position:relative; display:grid; width:100%; aspect-ratio:var(--pb-representative-preview)", layout, StringComparison.Ordinal);
-        Assert.Contains(".book-card-preview img { width: 100%;aspect-ratio: 1 / 1;object-fit: cover;object-position: center;display: block; }", layout, StringComparison.Ordinal);
-        Assert.Contains(".book-drawer-preview img { width:100%; height:100%; object-fit:cover; object-position:center center; }", layout, StringComparison.Ordinal);
-        Assert.Contains(".book-drawer-preview { display:grid; width:64px; height:64px", layout, StringComparison.Ordinal);
-        Assert.Contains(".book-drawer-preview { width:48px; height:48px; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-list-thumbnail { display:grid; width:68px; aspect-ratio:1", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-list-thumbnail img { width:100%; height:100%; object-fit:cover; object-position:center center; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-detail-preview img { width:100%; height:100%; object-fit:cover; object-position:center center; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-detail-preview { display:grid; width:64px; height:64px", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-detail-preview { width:48px; height:48px; }", layout, StringComparison.Ordinal);
         Assert.Contains("--pb-book-card-preview: 4 / 3", layout, StringComparison.Ordinal);
         Assert.Contains(".pdf-library-book-grid .pdf-library-book-preview { aspect-ratio:2 / 1; }", layout, StringComparison.Ordinal);
         Assert.Contains(".pdf-library-book-preview img { width:100%; height:100%; object-fit:contain;", layout, StringComparison.Ordinal);
@@ -205,7 +207,7 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.DoesNotContain("data-action=\"set-interior-active\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain("data-action=\"set-interior-frame-mode\"", script, StringComparison.Ordinal);
         Assert.Contains("--pb-asset-preview: 1 / 1", layout, StringComparison.Ordinal);
-        Assert.Contains(".book-drawer-body:has(.tab-body-artwork)", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-detail-body:has(.tab-body-artwork)", layout, StringComparison.Ordinal);
         Assert.Contains("overflow-y:auto", layout, StringComparison.Ordinal);
         Assert.Contains("grid-template-columns:repeat(6,minmax(0,1fr))", layout, StringComparison.Ordinal);
         Assert.Contains(".interior-artwork-card.is-selected", layout, StringComparison.Ordinal);
@@ -283,7 +285,7 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.DoesNotContain("subcoverTouchedBooks", script, StringComparison.Ordinal);
         Assert.Contains("const refreshBookCatalogCards", script, StringComparison.Ordinal);
         Assert.Contains("const preserveCatalogDrawer", script, StringComparison.Ordinal);
-        Assert.Contains("state.bookListRefreshPending = true", script, StringComparison.Ordinal);
+        Assert.Contains("refreshBookListRow(state.selectedBookId)", script, StringComparison.Ordinal);
         Assert.DoesNotContain("card.replaceWith", script, StringComparison.Ordinal);
     }
 
@@ -442,7 +444,7 @@ public sealed class BookWorkspaceLayoutContractTests
         var workspaceStyles = File.ReadAllText(Path.Combine(frontend, "css", "book-workspace.css"));
 
         Assert.Contains("localImageMarkup", script, StringComparison.Ordinal);
-        Assert.Contains("book-drawer-title", script, StringComparison.Ordinal);
+        Assert.Contains("book-detail-title", script, StringComparison.Ordinal);
         Assert.Contains("Preview unavailable", script, StringComparison.Ordinal);
         Assert.Contains("prefers-reduced-motion", baseStyles, StringComparison.Ordinal);
         Assert.Contains("overflow-x: hidden", workspaceStyles, StringComparison.Ordinal);
