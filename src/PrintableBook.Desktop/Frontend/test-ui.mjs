@@ -61,6 +61,7 @@ const expected = [
   ,"book.s3.check"
   ,"book.s3.upload"
   ,"data-book-s3"
+  ,'asset-background-setting book-settings-card book-settings-s3 storage-book-card'
   ,"Replace credentials"
   ,"seven-file publication package"
   ,"storage-open-url"

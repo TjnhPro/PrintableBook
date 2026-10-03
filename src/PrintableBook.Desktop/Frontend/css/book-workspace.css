@@ -156,6 +156,7 @@ button.process-queue-card-main:hover { background:var(--pb-surface-muted); }
 .book-settings-information { grid-column:span 8; }
 .book-settings-assignment { grid-column:span 4; }
 .book-settings-background,.book-settings-templates { grid-column:span 6; }
+.book-settings-s3 { grid-column:1/-1; }
 .book-settings-information .catalog-actions,.book-settings-assignment .catalog-actions { margin-top:auto; }
 .book-settings-background>div,.book-settings-templates>div { min-width:0; }
 .book-settings-background p,.book-settings-templates p { max-width:64ch; }
