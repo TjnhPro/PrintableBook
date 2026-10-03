@@ -1,6 +1,7 @@
 using System.Net;
 using Amazon.Runtime;
 using Amazon.S3;
+using Amazon.S3.Model;
 using PrintableBook.Infrastructure.S3Storage;
 
 namespace PrintableBook.Infrastructure.Tests.S3Storage;
@@ -17,6 +18,15 @@ public sealed class AwsS3ObjectSessionFactoryTests
         Assert.True(configuration.UseDualstackEndpoint);
         Assert.Equal(3, configuration.MaxErrorRetry);
         Assert.Equal(RequestRetryMode.Standard, configuration.RetryMode);
+    }
+
+    [Fact]
+    public void Empty_list_response_is_treated_as_an_empty_prefix()
+    {
+        var response = new ListObjectsV2Response();
+
+        Assert.Null(response.S3Objects);
+        Assert.Empty(AwsS3ObjectSessionFactory.EnumerateObjects(response));
     }
 
     [Theory]

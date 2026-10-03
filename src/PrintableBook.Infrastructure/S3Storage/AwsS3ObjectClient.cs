@@ -43,7 +43,7 @@ public sealed class AwsS3ObjectSessionFactory(IHttpClientFactory httpClientFacto
                         Prefix = prefix,
                         ContinuationToken = continuationToken
                     }, cancellationToken);
-                    foreach (var item in response.S3Objects) keys.Add(item.Key);
+                    foreach (var item in EnumerateObjects(response)) keys.Add(item.Key);
                     continuationToken = response.IsTruncated == true ? response.NextContinuationToken : null;
                 }
                 while (!string.IsNullOrEmpty(continuationToken));
@@ -117,6 +117,8 @@ public sealed class AwsS3ObjectSessionFactory(IHttpClientFactory httpClientFacto
             return key is null ? null : metadata[key];
         }
     }
+
+    internal static IEnumerable<S3Object> EnumerateObjects(ListObjectsV2Response response) => response.S3Objects ?? [];
 
     internal static S3StorageRemoteException Map(AmazonS3Exception exception) => exception.ErrorCode switch
     {
