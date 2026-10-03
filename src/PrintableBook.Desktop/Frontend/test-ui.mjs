@@ -65,6 +65,11 @@ const expected = [
   ,"seven-file publication package"
   ,"storage-open-url"
   ,"storage-copy-url"
+  ,"storage-file-facts"
+  ,"storage-active-owner"
+  ,"missingArtifacts"
+  ,"uploadCompletedCount"
+  ,'aria-live="polite"'
 ];
 
 for (const value of expected) {

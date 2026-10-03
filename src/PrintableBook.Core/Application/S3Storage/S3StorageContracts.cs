@@ -165,7 +165,8 @@ public sealed record S3StorageBookView(string BookId, string Asin, S3StorageActi
 
 public sealed record S3StorageTaskRequest(string BookId, S3StorageAction Action, Guid OperationContextId);
 public sealed record S3StorageSessionSnapshot(string? TaskId, string BookId, bool IsActive, bool IsCancelling, S3StorageBookView? View, string? ErrorCode = null, string? ActiveBookId = null);
-public sealed record S3StorageBookOverview(string BookId, string Title, string? Asin, bool IsAsinValid, IReadOnlyList<string> MissingFiles, S3StorageSessionSnapshot? Session) { public bool IsEligible => IsAsinValid && MissingFiles.Count == 0; }
+public sealed record S3StorageMissingArtifact(string FileName, string RecoveryAction);
+public sealed record S3StorageBookOverview(string BookId, string Title, string? Asin, bool IsAsinValid, IReadOnlyList<string> MissingFiles, S3StorageSessionSnapshot? Session, IReadOnlyList<S3StorageMissingArtifact>? MissingArtifacts = null) { public bool IsEligible => IsAsinValid && MissingFiles.Count == 0; }
 public sealed record S3StorageOverview(S3StorageConfigurationStatus Configuration, IReadOnlyList<S3StorageBookOverview> Books, string? ActiveBookId = null);
 
 public sealed record S3StorageOperationContext(Guid Id, S3StorageSettings Settings, Guid CredentialGeneration, string ConfigurationRevision);
@@ -238,7 +239,11 @@ public sealed class S3StorageService(IApplicationSnapshotProvider snapshotProvid
             var summary = snapshot.BookSummaries.First(item => item.BookId == book.Id);
             var asin = S3StoragePolicy.NormalizeAsin(summary.Metadata?.Asin);
             var output = Path.Combine(book.Directory.Value, "Output");
-            var missing = S3StoragePolicy.FileNames(book.Id.Value).Where(file => !File.Exists(Path.Combine(output, file))).ToArray();
+            var missingArtifacts = BookOutputArtifactContract.ForBook(book.Id.Value)
+                .Where(artifact => !File.Exists(Path.Combine(output, artifact.FileName)))
+                .Select(artifact => new S3StorageMissingArtifact(artifact.FileName, artifact.RecoveryAction))
+                .ToArray();
+            var missing = missingArtifacts.Select(artifact => artifact.FileName).ToArray();
             var task = tasks.FirstOrDefault(item => item.Subject == book.Id.Value && IsActive(item.State)) ?? tasks.FirstOrDefault(item => item.Subject == book.Id.Value);
             S3StorageSessionSnapshot? session = task is null ? null : ToSession(task, active?.Subject);
             if (session is null)
@@ -247,7 +252,7 @@ public sealed class S3StorageService(IApplicationSnapshotProvider snapshotProvid
                 if (receipt.Receipt is not null) session = new(null, book.Id.Value, false, false, HydratePublicUrls(receipt.Receipt), null, active?.Subject);
                 else if (receipt.ErrorCode is not null) session = new(null, book.Id.Value, false, false, null, receipt.ErrorCode, active?.Subject);
             }
-            books.Add(new(book.Id.Value, summary.Metadata?.Title ?? book.Name, asin.Length == 0 ? summary.Metadata?.Asin : asin, asin.Length > 0, missing, session));
+            books.Add(new(book.Id.Value, summary.Metadata?.Title ?? book.Name, asin.Length == 0 ? summary.Metadata?.Asin : asin, asin.Length > 0, missing, session, missingArtifacts));
         }
         return new(configuration, books, active?.Subject);
     }

@@ -1069,6 +1069,17 @@
   const storageFileStateName = (value) => typeof value === "number" ? ["Pending", "MissingLocal", "MissingRemote", "Synced", "SyncedButNotPublic", "Changed", "Uploaded", "Skipped", "Failed", "Unknown"][value] ?? "Pending" : String(value ?? "Pending");
   const storageOutcomeName = (value) => typeof value === "number" ? ["Pending", "Running", "Completed", "CompletedWithErrors", "Cancelled", "Interrupted"][value] ?? "Pending" : String(value ?? "Pending");
   const storageActionName = (value) => typeof value === "number" ? ["Check", "Upload"][value] ?? "Check" : String(value ?? "Check");
+  const storageSize = (value) => {
+    const bytes = Number(value);
+    if (!Number.isFinite(bytes) || bytes < 0) return "—";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+  const storageHash = (value) => {
+    const hash = String(value ?? "");
+    return hash ? `${hash.slice(0, 10)}…` : "—";
+  };
   const storageErrorMessage = (code) => ({
     s3_credentials_required: "Enter both Access Key and Secret Key before saving.",
     s3_credentials_incomplete: "Enter both Access Key and Secret Key together.",
@@ -1087,12 +1098,17 @@
     s3_upload_preflight_failed: "Upload did not start because the complete seven-file package is not available.",
     s3_publication_interrupted: "The previous S3 operation was interrupted. Run Check before retrying Upload.",
     s3_public_acl_unsupported: "This bucket rejects public-read ACLs. Choose a compatible bucket or update Object Ownership settings.",
-    s3_bucket_missing: "The configured bucket does not exist.",
+    s3_bucket_not_found: "The configured bucket does not exist.",
     s3_region_mismatch: "The bucket is in a different AWS region.",
     s3_access_denied: "S3 denied access. Check credentials, bucket policy, and public-read permissions.",
     s3_credentials_invalid: "S3 rejected the saved credentials.",
-    s3_service_unavailable: "S3 could not be reached. Check the network and endpoint URL.",
+    s3_service_unavailable: "S3 could not be reached. Check the network and configured region.",
     s3_request_failed: "The S3 request failed. Review the bucket and endpoint settings.",
+    s3_receipt_unavailable: "The previous S3 receipt cannot be read. Run Check to create a fresh receipt.",
+    s3_remote_verification_failed: "The uploaded object did not match the local file. Retry Upload.",
+    s3_public_verification_failed: "The object exists but is not publicly reachable. Review bucket public-access settings.",
+    s3_local_file_missing: "This required output file is missing. Run the named Production action.",
+    s3_local_file_unavailable: "This output file could not be copied. Close programs using it and retry.",
     book_not_found: "This Book is no longer available. Refresh the library."
   })[String(code)] ?? "The S3 request failed. Review the settings and retry.";
   const storageTone = (value) => {
@@ -1117,7 +1133,11 @@
     if (currentRoute() !== "books" || !state.bookDrawerOpen || state.selectedBookTab !== "settings" || state.selectedBookId !== id) return;
     const book = selectedBook();
     const group = document.querySelector("[data-book-s3]");
-    if (book && group) group.outerHTML = renderBookS3Storage(book);
+    if (book && group) {
+      const focusedAction = group.contains(document.activeElement) ? document.activeElement?.dataset?.action ?? "" : "";
+      group.outerHTML = renderBookS3Storage(book);
+      if (focusedAction) document.querySelector(`[data-book-s3] [data-action="${focusedAction}"]`)?.focus();
+    }
   };
   const stopStoragePoll = (bookIdValue) => {
     const timer = state.storagePollTimers.get(bookIdValue);
@@ -1154,7 +1174,13 @@
       const error = String(valueFor(file, "errorCode", "") ?? "");
       const name = String(valueFor(file, "fileName", ""));
       const actions = url ? `<span class="storage-file-actions"><button class="button-secondary" type="button" data-action="storage-open-url" data-storage-url="${escapeHtml(url)}" aria-label="Open public S3 URL for ${escapeHtml(name)}">Open</button><button class="button-secondary" type="button" data-action="storage-copy-url" data-storage-url="${escapeHtml(url)}" aria-label="Copy public S3 URL for ${escapeHtml(name)}">Copy URL</button></span>` : "";
-      return `<div class="storage-file-row"><div><strong>${escapeHtml(name)}</strong>${error ? `<small>${escapeHtml(storageErrorMessage(error))}</small>` : ""}</div><div class="storage-file-state"><span class="status-badge ${storageTone(fileState)}">${escapeHtml(fileState)}</span>${actions}</div></div>`;
+      const localExists = valueFor(file, "localExists", null);
+      const remoteExists = valueFor(file, "remoteExists", null);
+      const publicState = valueFor(file, "isPublic", null);
+      const localFact = localExists === false ? "Missing" : localExists === true ? `${storageSize(valueFor(file, "localLength", null))} · ${storageHash(valueFor(file, "localSha256", ""))}` : "Not checked";
+      const remoteFact = remoteExists === false ? "Missing" : remoteExists === true ? `${storageSize(valueFor(file, "remoteLength", null))} · ${storageHash(valueFor(file, "remoteSha256", ""))}` : "Not checked";
+      const publicFact = publicState === true ? "Reachable" : publicState === false ? "Not public" : "Not checked";
+      return `<div class="storage-file-row"><div class="storage-file-name"><strong>${escapeHtml(name)}</strong>${error ? `<small>${escapeHtml(storageErrorMessage(error))}</small>` : ""}</div><dl class="storage-file-facts"><div><dt>Local</dt><dd>${escapeHtml(localFact)}</dd></div><div><dt>Remote</dt><dd>${escapeHtml(remoteFact)}</dd></div><div><dt>Public</dt><dd>${escapeHtml(publicFact)}</dd></div></dl><div class="storage-file-state"><span class="status-badge ${storageTone(fileState)}">${escapeHtml(fileState)}</span>${actions}</div></div>`;
     }).join("")}</div>`;
   };
   const renderStorageBook = (book, configured) => {
@@ -1170,14 +1196,24 @@
     const action = storageActionName(valueFor(view, "action", "Check"));
     const phase = String(valueFor(view, "phase", "idle") ?? "idle");
     const missing = valueFor(book, "missingFiles", []);
+    const missingArtifacts = valueFor(book, "missingArtifacts", []).length
+      ? valueFor(book, "missingArtifacts", [])
+      : missing.map((fileName) => ({ fileName, recoveryAction: "Run the matching Production action" }));
     const asinValid = Boolean(valueFor(book, "isAsinValid", false));
     const checkDisabled = !configured || !asinValid || active || blockedByOtherBook || pending;
     const uploadDisabled = checkDisabled || missing.length > 0;
     const sessionError = String(valueFor(valueFor(book, "session", {}), "errorCode", "") ?? "");
     const warningCode = String(valueFor(view, "warningCode", "") ?? "");
     const reason = !configured ? "Save S3 configuration and replace credentials in Configuration." : !asinValid ? "Save a valid 10-character ASIN in Book Information." : blockedByOtherBook ? `${activeBookId} currently owns the S3 operation.` : missing.length ? `${missing.length} required output file${missing.length === 1 ? " is" : "s are"} missing. Check remains available; Upload is blocked.` : "Ready to check or upload the seven-file publication package.";
-    const progress = Math.round((completed / total) * 100);
-    return `<fieldset class="book-settings-card book-settings-s3 storage-book-card" data-book-s3 data-storage-book="${escapeHtml(id)}"><legend>S3 Storage</legend><div class="storage-settings-heading"><p>${escapeHtml(valueFor(book, "title", id))} · ASIN ${escapeHtml(valueFor(book, "asin", "Not set") || "Not set")}</p>${badge(active ? `${action} · ${phase}` : blockedByOtherBook ? "Blocked" : missing.length ? "Check available" : "Ready")}</div><p class="storage-book-reason">${escapeHtml(reason)}</p>${sessionError ? `<p class="storage-book-error" role="alert">${escapeHtml(storageErrorMessage(sessionError))}</p>` : ""}${warningCode ? `<p class="storage-book-error" role="alert">${escapeHtml(storageErrorMessage(warningCode))}</p>` : ""}${view ? `<div class="storage-progress-copy"><span>${escapeHtml(action)} · ${escapeHtml(outcome)} · ${escapeHtml(phase)}</span><strong>${completed}/${total}</strong></div><div class="storage-progress" role="progressbar" aria-label="${escapeHtml(action)} progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div><div class="storage-time-row"><span>Checked ${dateTime(valueFor(view, "lastCheckedAtUtc", null))}</span><span>Uploaded ${dateTime(valueFor(view, "lastUploadedAtUtc", null))}</span></div>` : ""}${renderStorageFileRows(book)}<footer><button class="button-secondary" type="button" data-action="storage-check" data-book-id="${escapeHtml(id)}" ${checkDisabled ? "disabled" : ""} title="${escapeHtml(reason)}">Check</button><button class="button-primary" type="button" data-action="storage-upload" data-book-id="${escapeHtml(id)}" ${uploadDisabled ? "disabled" : ""} title="${escapeHtml(reason)}">Upload</button>${active ? `<button class="button-danger" type="button" data-action="storage-cancel" data-book-id="${escapeHtml(id)}">Stop publishing</button>` : ""}</footer></fieldset>`;
+    const isPublishing = phase === "publishing";
+    const phaseCompleted = isPublishing ? Number(valueFor(view, "uploadCompletedCount", 0)) : completed;
+    const phaseTotal = isPublishing ? Number(valueFor(view, "uploadTotalCount", 0)) : total;
+    const progress = phaseTotal > 0 ? Math.round((phaseCompleted / phaseTotal) * 100) : 0;
+    const missingRecovery = missingArtifacts.length ? `<ul class="storage-missing-list" aria-label="Missing publication files">${missingArtifacts.map((artifact) => `<li><strong>${escapeHtml(valueFor(artifact, "fileName", "Required output"))}</strong><span>${escapeHtml(valueFor(artifact, "recoveryAction", "Run Production"))}</span></li>`).join("")}</ul>` : "";
+    const blockedOwner = blockedByOtherBook ? `<div class="storage-active-owner" role="status"><strong>${escapeHtml(activeBookId)} owns the active S3 operation</strong><span>Open that Book's Settings to view live progress or stop the operation.</span></div>` : "";
+    const progressMarkup = !blockedByOtherBook && view ? `<div class="storage-progress-copy" role="status" aria-live="polite"><span>${escapeHtml(action)} · ${escapeHtml(outcome)} · ${escapeHtml(phase)}</span><strong>${phaseCompleted}/${phaseTotal}</strong></div><div class="storage-progress" role="progressbar" aria-label="${escapeHtml(action)} progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div><div class="storage-time-row"><span>Checked ${dateTime(valueFor(view, "lastCheckedAtUtc", null))}</span><span>Uploaded ${dateTime(valueFor(view, "lastUploadedAtUtc", null))}</span></div>` : "";
+    const filesMarkup = blockedByOtherBook ? blockedOwner : `${missingRecovery}${renderStorageFileRows(book)}`;
+    return `<fieldset class="book-settings-card book-settings-s3 storage-book-card" data-book-s3 data-storage-book="${escapeHtml(id)}"><legend>S3 Storage</legend><div class="storage-settings-heading"><p>${escapeHtml(valueFor(book, "title", id))} · ASIN ${escapeHtml(valueFor(book, "asin", "Not set") || "Not set")}</p>${badge(active ? `${action} · ${phase}` : blockedByOtherBook ? "Blocked" : missing.length ? "Check available" : "Ready")}</div><p class="storage-book-reason">${escapeHtml(reason)}</p>${sessionError && !blockedByOtherBook ? `<p class="storage-book-error" role="alert">${escapeHtml(storageErrorMessage(sessionError))}</p>` : ""}${warningCode && !blockedByOtherBook ? `<p class="storage-book-error" role="alert">${escapeHtml(storageErrorMessage(warningCode))}</p>` : ""}${progressMarkup}${filesMarkup}<footer><button class="button-secondary" type="button" data-action="storage-check" data-book-id="${escapeHtml(id)}" ${checkDisabled ? "disabled" : ""} title="${escapeHtml(reason)}">Check</button><button class="button-primary" type="button" data-action="storage-upload" data-book-id="${escapeHtml(id)}" ${uploadDisabled ? "disabled" : ""} title="${escapeHtml(reason)}">Upload</button>${active ? `<button class="button-danger" type="button" data-action="storage-cancel" data-book-id="${escapeHtml(id)}">Stop publishing</button>` : ""}</footer></fieldset>`;
   };
 
   const renderBookS3Storage = (book) => {
