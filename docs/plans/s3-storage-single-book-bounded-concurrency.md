@@ -3,7 +3,9 @@
 
 ## Status
 
-- Planning only. No source implementation belongs to this phase.
+- Implemented on `feat/s3-storage-mvp` through phase-scoped commits for bounded publishing, contract/receipt hardening, graceful shutdown, Book-scoped status/recovery UX, worker cancellation safety, and operational documentation.
+- Automated verification completed on 2026-10-03: full solution tests passed (1,149 passed, 10 opt-in/local integration tests skipped), Release build completed with zero warnings/errors, and frontend CSS/UI contracts passed.
+- The external sandbox-bucket smoke matrix remains an operator validation step because this implementation run was not given authorized AWS test credentials or a disposable bucket. It is not replaced by a production network call.
 - Autoplan review complete: CEO, Design, and Engineering findings are incorporated; the DX applicability gate was executed and correctly marked not applicable because this is an end-user desktop workflow, not a public developer product.
 - Baseline: commit `71b00a4` on `feat/s3-storage-mvp`, compared with `origin/main` at `46468d0`.
 - Original product plan: the user-provided “MVP S3 Storage cho Book” specification.

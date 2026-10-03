@@ -213,7 +213,20 @@ Phần advanced chứa normalized source size và BorderLine V3 pass 1/pass 2. �
 
 ![Advanced detection](assets/screenshots/0.1/14-settings-advanced-detection.png)
 
-## 16. Diagnostics
+## 16. S3 Storage
+
+Trong **Settings → Configuration → S3 Storage**, lưu Region, Bucket và Folder bằng nút Save chung; dùng **Replace credentials** để lưu riêng Access Key + Secret Key đã mã hóa cho Windows user hiện tại.
+
+Sau khi Book có ASIN hợp lệ, mở **Book detail → Settings → S3 Storage**:
+
+- **Check** so sánh bảy output local với S3 và không upload. Check vẫn dùng được khi local thiếu file để user thấy chính xác file/action cần bổ sung.
+- **Upload** chỉ bật khi đủ bảy output. Mỗi lần chỉ một Book được chạy; bên trong Book có tối đa bốn file operation đồng thời.
+- Row kết quả cho biết Local, Remote, Public và có nút Open/Copy URL.
+- **Stop publishing** cancel cooperative. Nếu một PUT đã hoàn tất, S3 có thể tạm thời chứa bộ file partial; chạy Check rồi Upload lại để reconcile.
+
+Đóng app hoặc cài update khi S3 đang chạy sẽ yêu cầu xác nhận và chờ task dừng tối đa 5 giây. Xem IAM, manifest và mã lỗi tại [S3 Storage MVP](s3-storage.md).
+
+## 17. Diagnostics
 
 **Diagnostics** là nơi xem snapshot, task history, log và số liệu hiệu năng để hỗ trợ điều tra local.
 
@@ -221,13 +234,13 @@ Phần advanced chứa normalized source size và BorderLine V3 pass 1/pass 2. �
 ![Diagnostics tasks](assets/screenshots/0.1/17-diagnostics-tasks.png)
 ![Diagnostics performance](assets/screenshots/0.1/18-diagnostics-performance.png)
 
-## 17. Các trạng thái Needs review / Invalid
+## 18. Các trạng thái Needs review / Invalid
 
 **Needs review** nghĩa là Book cần quyết định của user, ví dụ CUSTOM Intro đã bật nhưng chưa chọn ảnh. **Invalid** nghĩa là dữ liệu source/setting hoặc Brand assignment không đạt điều kiện. Assignment có thể invalid khi Book/Brand Author đổi, Brand thiếu Author, Brand bị rename/xóa hoặc metadata Brand không đọc được. Ứng dụng giữ nguyên tên Brand cũ và không tự reassign; mở Book detail để sửa Author rồi reassign, hoặc chọn **Unassign**.
 
 ![Needs review](assets/screenshots/0.1/15-needs-review.png)
 
-## 18. Troubleshooting
+## 19. Troubleshooting
 
 | Triệu chứng | Cách xử lý |
 | --- | --- |
@@ -244,5 +257,8 @@ Phần advanced chứa normalized source size và BorderLine V3 pass 1/pass 2. �
 | Background lỗi | Kiểm tra Brand có `background.png` đúng Final Page size. |
 | Không thấy preview sau process | Kiểm tra session Completed và mở lại Book detail/Interior pages. |
 | Cover PDF đã build nhưng báo panel preview unavailable | Đóng ứng dụng đang mở `back_cover.jpg`/`front_cover.jpg`, kiểm tra quyền ghi thư mục `Output`, rồi chạy **Build Cover PDF** lại. PDF chính vẫn hợp lệ. |
+| S3 Upload bị khóa | Kiểm tra ASIN, config/credential và tạo đủ bảy file theo danh sách trong Book Settings. Nếu Book khác đang chạy S3, chờ hoặc dừng operation đó. |
+| S3 báo partial/interrupted | Chạy Check để đọc trạng thái remote hiện tại, sau đó Upload lại; không cần upload tay từng file. |
+| S3 báo ACL/public access | Bucket phải hỗ trợ `public-read` và anonymous HEAD/GET; xem `docs/s3-storage.md`. |
 | Cần tiết kiệm dung lượng | Dùng **Clear Cache** sau khi xác nhận PDF trong **PDF Library**. |
 | Cần log chi tiết | Mở **Diagnostics** và cung cấp log/task state khi báo lỗi. |

@@ -222,6 +222,30 @@ Profile nằm ở `<AppRoot>/.cloakbrowser/profile-v1`, downloaded Chromium ở 
 
 Crawler có lane riêng, concurrency 1, input tối đa 30 phrase, fetch 20 giây, toàn task 10 phút và response HTML tối đa 5 MiB. Raw keyword arrays từ WebView bị từ chối. Session trả source fingerprint/receipt digest; frontend chỉ merge stable-dedupe ASIN hợp lệ khi source receipt và per-Book target revision vẫn current, sau đó gọi same-seed Ads ASIN preview update. Crawl không tự Save. URL/final redirect chỉ chấp nhận HTTPS `amazon.com`/`www.amazon.com`. Receipt, seed, signature, raw HTML, cookie, license và profile path không đi qua diagnostics.
 
+## S3 publication boundary
+
+S3 là workflow publish theo Book, không phải thư viện upload hàng loạt. Configuration thường (`Region`, `Bucket`, `Folder`) nằm trong `GlobalSettings`; Access Key và Secret Key nằm riêng trong `s3.credentials.dat`, được DPAPI `CurrentUser` bảo vệ và thay atomically. Snapshot, bridge, diagnostics, background-task history và receipt không chứa credential. Mỗi operation capture một revision cấu hình/credential bất biến; thay credential khi task đang chạy chỉ có hiệu lực với operation kế tiếp.
+
+Desktop chỉ cho phép một `S3Storage` task active trong một process. Exact duplicate Book + action join task hiện tại; Book/action khác bị reject. Worker tạo sparse immutable package ở `<AppRoot>/.printablebook/s3-staging/<operation-id>`, giữ cùng output lease mà Production dùng trong lúc copy, rồi release lease trước network I/O. Production của Book khác vẫn được phép chạy.
+
+Manifest có đúng bảy artifact do `BookOutputArtifactContract` sở hữu. Cả staging, compare và upload dùng một `SemaphoreSlim(4, 4)` duy nhất. Upload luôn chạy đủ barrier `stage/hash → LIST prefix + HEAD/public verify` trước PUT đầu tiên; thiếu bất kỳ local artifact nào thì toàn operation có zero PUT. Object đã sync được skip. Object thiếu/thay đổi được PUT với SHA-256 và length metadata, sau đó signed HEAD và anonymous HTTP HEAD xác nhận cả nội dung lẫn public reachability.
+
+```text
+Settings + encrypted credentials
+        ↓ immutable operation context
+one active Book S3 task
+        ↓ same-Book Output snapshot lease
+seven staged artifacts
+        ↓ max four file operations
+LIST/HEAD/public preflight → full barrier → PUT/HEAD/public verification
+        ↓
+Book/.workspace/s3-publication.json
+```
+
+Receipt chỉ lưu destination, object key, file facts và trạng thái; public URL được dựng lại khi đọc. Running receipt còn sót sau crash chuyển thành `Interrupted`, pending row thành `Unknown`. Stable object key khiến bảy PUT không atomic như một transaction: cancel/failure sau PUT đầu tiên có thể để remote ở trạng thái partial; recovery luôn là chạy **Check**, rồi **Upload** lại. App close/update sẽ yêu cầu xác nhận, cancel task và drain tối đa 5 giây trước khi cho phép force exit. Multi-instance/cross-process exclusion, remote deletion, multipart resume và private/CDN delivery nằm ngoài MVP.
+
+Chi tiết vận hành và IAM: [S3 Storage](s3-storage.md).
+
 ## Kiểm thử
 
 CI chỉ chạy fixture repository-owned, deterministic và redistributable. Corpus ảnh thật do user cung cấp nằm trong `TestResults/`, được đánh dấu `TestScope=LocalCorpus`, chỉ chạy explicit local opt-in và không được yêu cầu trên clean checkout/CI. Real-output certification phải kiểm tra file/raster/PDF thật thay vì chỉ mock.
