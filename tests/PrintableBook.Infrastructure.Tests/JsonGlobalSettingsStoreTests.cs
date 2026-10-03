@@ -66,6 +66,29 @@ public sealed class JsonGlobalSettingsStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SaveAsync_round_trips_s3_configuration_without_changing_unrelated_settings()
+    {
+        var paths = CreatePaths();
+        var store = CreateStore(paths);
+        var settings = GlobalSettings.Default with
+        {
+            MaximumPageConcurrency = 7,
+            GenericKeywords = ["calm coloring"],
+            S3Storage = new("US-EAST-1", "VXGROUP.TINH", "/coloring/books/")
+        };
+
+        await store.SaveAsync(settings);
+        var loaded = await store.LoadAsync(paths);
+
+        Assert.Equal(7, loaded.MaximumPageConcurrency);
+        Assert.Equal(["calm coloring"], loaded.GenericKeywords);
+        Assert.Equal(new("us-east-1", "vxgroup.tinh", "coloring/books"), loaded.S3Storage);
+        var persisted = await File.ReadAllTextAsync(paths.SettingsFile.Value);
+        Assert.DoesNotContain("accessKey", persisted, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secretKey", persisted, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task LoadAsync_legacy_settings_default_generic_keywords_to_empty()
     {
         var paths = CreatePaths();

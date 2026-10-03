@@ -50,6 +50,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAmazonCrawlDelay, AmazonCrawlJitterDelay>();
         services.AddSingleton<IProcessSessionService, ProcessSessionService>();
         services.AddSingleton<IAmazonAsinCrawlSessionService, AmazonAsinCrawlSessionService>();
+        services.AddSingleton<IS3StorageOperationContextStore, S3StorageOperationContextStore>();
+        services.AddSingleton<IBookOutputLeaseCoordinator, BookOutputLeaseCoordinator>();
         services.AddSingleton<IS3StorageService, S3StorageService>();
         services.AddSingleton<IBookProcessingPipeline, BookProcessingPipeline>();
         services.AddSingleton<IBookProcessingQueueBookProcessor, WorkspaceBookProcessingQueueBookProcessor>();

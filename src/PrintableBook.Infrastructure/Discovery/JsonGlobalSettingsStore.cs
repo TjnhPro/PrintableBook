@@ -60,7 +60,8 @@ public sealed class JsonGlobalSettingsStore(IApplicationRootDiscovery discovery,
     {
         ArtworkSourceNormalization = settings.EffectiveArtworkSourceNormalization,
         BorderLineDetection = settings.EffectiveBorderLineDetection,
-        GenericKeywords = BookTextPolicy.NormalizePhrases(settings.EffectiveGenericKeywords, distinct: true)
+        GenericKeywords = BookTextPolicy.NormalizePhrases(settings.EffectiveGenericKeywords, distinct: true),
+        S3Storage = settings.EffectiveS3Storage
     };
 
     private static bool IsRatio(double value) => value is >= 0 and <= 1;

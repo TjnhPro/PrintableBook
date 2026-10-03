@@ -57,10 +57,14 @@ const expected = [
   ,'role="tabpanel"'
   ,'aria-controls="book-panel-'
   ,"S3 Storage"
-  ,"storage.settings.save"
-  ,"storage.book.check"
-  ,"storage.book.upload"
-  ,"Compare local Book outputs by SHA-256"
+  ,"s3.credentials.replace"
+  ,"book.s3.check"
+  ,"book.s3.upload"
+  ,"data-book-s3"
+  ,"Replace credentials"
+  ,"seven-file publication package"
+  ,"storage-open-url"
+  ,"storage-copy-url"
 ];
 
 for (const value of expected) {
@@ -77,6 +81,10 @@ if (app.includes('tabButton("settings", "Interior settings")') || app.includes('
 
 if (app.includes('tabButton("overview"') || app.includes("Review the summary and Brand background before processing")) {
   throw new Error("The legacy Book Overview summary must not remain in the visible Book detail UI.");
+}
+
+if (app.includes("storage.settings.save") || app.includes("storage.book.check") || app.includes("storage.book.upload")) {
+  throw new Error("Legacy standalone Storage bridge commands must not remain in the UI.");
 }
 
 console.log(`UI contract passed (${expected.length} checks).`);

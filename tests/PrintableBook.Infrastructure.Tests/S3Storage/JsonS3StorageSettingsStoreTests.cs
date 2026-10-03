@@ -1,4 +1,5 @@
 using PrintableBook.Core.Abstractions;
+using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.S3Storage;
 using PrintableBook.Infrastructure.FileSystem;
@@ -11,27 +12,42 @@ public sealed class JsonS3StorageSettingsStoreTests : IAsyncLifetime
     private readonly string root = Path.Combine(Path.GetTempPath(), $"PrintableBook.S3Storage.{Guid.NewGuid():N}");
 
     [Fact]
-    public async Task SaveAsync_encrypts_credentials_and_blank_credentials_preserve_them()
+    public async Task ReplaceCredentials_encrypts_secrets_and_load_combines_them_with_global_configuration()
     {
         if (!OperatingSystem.IsWindows()) return;
         Directory.CreateDirectory(root);
-        var store = new JsonS3StorageSettingsStore(new Discovery(CreatePaths()), new PhysicalFileSystem());
+        var settings = GlobalSettings.Default with { S3Storage = new("us-west-2", "valid-bucket", "coloring/books") };
+        var store = new JsonS3StorageSettingsStore(new Discovery(CreatePaths()), new GlobalStore(settings), new PhysicalFileSystem());
 
-        var saved = await store.SaveAsync(new("example-access", "example-secret", "valid-bucket", "us-east-1", null));
-        var persisted = await File.ReadAllTextAsync(Path.Combine(root, "storage.json"));
+        var status = await store.ReplaceCredentialsAsync(new("example-access", "example-secret"));
+        var persisted = await File.ReadAllTextAsync(Path.Combine(root, "s3.credentials.dat"));
         var loaded = await store.LoadAsync();
 
-        Assert.True(saved.HasCredentials);
+        Assert.Equal(S3CredentialStatus.Configured, status.CredentialStatus);
         Assert.DoesNotContain("example-access", persisted, StringComparison.Ordinal);
         Assert.DoesNotContain("example-secret", persisted, StringComparison.Ordinal);
         Assert.Equal("example-access", loaded!.AccessKey);
         Assert.Equal("example-secret", loaded.SecretKey);
+        Assert.Equal("valid-bucket", loaded.Bucket);
+        Assert.Equal("us-west-2", loaded.Region);
+        Assert.Equal("coloring/books", loaded.Folder);
+    }
 
-        await store.SaveAsync(new("", "", "next-bucket", "us-west-2", "https://s3.us-west-2.amazonaws.com"));
-        loaded = await store.LoadAsync();
-        Assert.Equal("example-access", loaded!.AccessKey);
-        Assert.Equal("example-secret", loaded.SecretKey);
-        Assert.Equal("next-bucket", loaded.Bucket);
+    [Fact]
+    public async Task ReplaceCredentials_requires_both_fields_and_preserves_the_existing_envelope_on_failure()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Directory.CreateDirectory(root);
+        var store = new JsonS3StorageSettingsStore(new Discovery(CreatePaths()), new GlobalStore(GlobalSettings.Default with { S3Storage = new("us-east-1", "valid-bucket", "coloring") }), new PhysicalFileSystem());
+        await store.ReplaceCredentialsAsync(new("first-access", "first-secret"));
+        var before = await File.ReadAllTextAsync(Path.Combine(root, "s3.credentials.dat"));
+
+        var failure = await Assert.ThrowsAsync<S3StorageValidationException>(() => store.ReplaceCredentialsAsync(new("", "replacement-secret")).AsTask());
+        var after = await File.ReadAllTextAsync(Path.Combine(root, "s3.credentials.dat"));
+
+        Assert.Equal("s3_credentials_incomplete", failure.Code);
+        Assert.Equal(before, after);
+        Assert.Equal("first-access", (await store.LoadAsync())!.AccessKey);
     }
 
     public Task InitializeAsync() => Task.CompletedTask;
@@ -52,5 +68,12 @@ public sealed class JsonS3StorageSettingsStoreTests : IAsyncLifetime
     {
         public ValueTask<ApplicationDiscovery> DiscoverAsync(CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(new ApplicationDiscovery(paths, [], []));
+    }
+
+    private sealed class GlobalStore(GlobalSettings settings) : IGlobalSettingsStore
+    {
+        public ValueTask<GlobalSettings> LoadAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(settings);
+        public ValueTask<GlobalSettings> LoadAsync(ApplicationPaths paths, CancellationToken cancellationToken = default) => ValueTask.FromResult(settings);
+        public ValueTask SaveAsync(GlobalSettings value, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 }

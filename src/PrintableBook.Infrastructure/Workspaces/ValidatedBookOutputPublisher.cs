@@ -1,13 +1,14 @@
 using ImageMagick;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Processing;
+using PrintableBook.Core.Application.S3Storage;
 
 namespace PrintableBook.Infrastructure.Workspaces;
 
 /// <summary>
 /// Publishes validated PDFs as the current Book-local output files.
 /// </summary>
-public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocumentInspector) : IBookOutputPublisher
+public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocumentInspector, IBookOutputLeaseCoordinator? outputLeases = null) : IBookOutputPublisher
 {
     public async ValueTask<PublishedBookOutputs> PublishAsync(
         BookOutputPublicationRequest request,
@@ -16,6 +17,8 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         ArgumentNullException.ThrowIfNull(request);
         await ValidateAsync(request.TemporaryOutput.CoverPdf, request.Validation.ExpectedCoverPageCount, request.Validation.ExpectedCoverPageSize, cancellationToken);
         await ValidateAsync(request.TemporaryOutput.InteriorPdf, request.Validation.ExpectedInteriorPageCount, request.Validation.ExpectedInteriorPageSize, cancellationToken);
+
+        await using var outputLease = await AcquireOutputLeaseAsync(request.BookId.Value, cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(request.FinalOutputRoot.Value);
@@ -61,6 +64,8 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         ArgumentNullException.ThrowIfNull(request);
         await ValidateAsync(request.TemporaryOutput.InteriorPdf, request.ExpectedInteriorPageCount, request.ExpectedInteriorPageSize, cancellationToken);
 
+        await using var outputLease = await AcquireOutputLeaseAsync(request.BookId.Value, cancellationToken);
+
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(request.FinalOutputRoot.Value);
         var publishedDirectory = request.FinalOutputRoot;
@@ -90,6 +95,8 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
     {
         ArgumentNullException.ThrowIfNull(request);
         await ValidateAsync(request.TemporaryOutput.CoverPdf, request.ExpectedCoverPageCount, request.ExpectedCoverPageSize, cancellationToken);
+
+        await using var outputLease = await AcquireOutputLeaseAsync(request.BookId.Value, cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(request.FinalOutputRoot.Value);
@@ -148,6 +155,19 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
             TryDeleteFile(outcome.Pair.FrontCover.Value);
             return null;
         }
+    }
+
+    private async ValueTask<IAsyncDisposable> AcquireOutputLeaseAsync(string bookId, CancellationToken cancellationToken)
+    {
+        if (outputLeases is null) return NoOpAsyncDisposable.Instance;
+        return await outputLeases.TryAcquireAsync(bookId, cancellationToken)
+            ?? throw new IOException("Book output is being snapshotted for S3 publishing. Try the production action again shortly.");
+    }
+
+    private sealed class NoOpAsyncDisposable : IAsyncDisposable
+    {
+        public static NoOpAsyncDisposable Instance { get; } = new();
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private static void ValidateCoverPanelPreview(FileReference preview)

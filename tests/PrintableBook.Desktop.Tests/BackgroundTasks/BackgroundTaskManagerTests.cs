@@ -18,27 +18,30 @@ public sealed class BackgroundTaskManagerTests
         AssertPolicy(BackgroundTaskKind.CacheCleanup, BackgroundTaskLaneKind.Cleanup, BackgroundTaskDuplicatePolicy.ReturnExisting, [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.ProductionAction]);
         AssertPolicy(BackgroundTaskKind.ProductionAction, BackgroundTaskLaneKind.Production, BackgroundTaskDuplicatePolicy.ReturnExistingByKey, [BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup]);
         AssertPolicy(BackgroundTaskKind.AmazonAsinCrawl, BackgroundTaskLaneKind.Amazon, BackgroundTaskDuplicatePolicy.ReturnExistingByKey, []);
-        AssertPolicy(BackgroundTaskKind.S3Storage, BackgroundTaskLaneKind.Storage, BackgroundTaskDuplicatePolicy.JoinByKey, [], 2);
+        AssertPolicy(BackgroundTaskKind.S3Storage, BackgroundTaskLaneKind.Storage, BackgroundTaskDuplicatePolicy.ReturnExistingByKey, []);
     }
 
     [Fact]
-    public async Task S3_storage_joins_duplicate_books_and_runs_two_distinct_books_concurrently()
+    public async Task S3_storage_joins_an_exact_duplicate_and_rejects_a_second_book()
     {
         var storage = new BlockingWorker(BackgroundTaskKind.S3Storage);
         using var manager = CreateManager(storage);
 
         var first = await manager.StartAsync(BackgroundTaskKind.S3Storage, "book-one", "book-one", new TaskRequest("first"));
+        await storage.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
         var duplicate = await manager.StartAsync(BackgroundTaskKind.S3Storage, "book-one", "book-one", new TaskRequest("duplicate"));
-        var second = await manager.StartAsync(BackgroundTaskKind.S3Storage, "book-two", "book-two", new TaskRequest("second"));
-        await storage.TwoStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var conflict = await Assert.ThrowsAsync<BackgroundTaskConflictException>(() => manager.StartAsync(
+            BackgroundTaskKind.S3Storage,
+            "book-two",
+            "book-two",
+            new TaskRequest("second")).AsTask());
 
         Assert.Equal(first.TaskId, duplicate.TaskId);
-        Assert.NotEqual(first.TaskId, second.TaskId);
-        Assert.Equal(2, storage.MaximumActive);
+        Assert.Equal(BackgroundTaskKind.S3Storage, conflict.ActiveKind);
+        Assert.Equal(1, storage.MaximumActive);
 
         storage.Release.TrySetResult();
         Assert.True(await manager.WaitAsync(first.TaskId, TimeSpan.FromSeconds(2)));
-        Assert.True(await manager.WaitAsync(second.TaskId, TimeSpan.FromSeconds(2)));
     }
 
     [Fact]

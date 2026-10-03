@@ -52,7 +52,7 @@ public sealed class InfrastructureArchitectureTests
             descriptor.KeyedImplementationType == typeof(ProductionActionWorker));
         Assert.IsType<PhysicalBookStorageMaintenance>(provider.GetRequiredService<IBookStorageMaintenance>());
         Assert.IsType<JsonS3StorageSettingsStore>(provider.GetRequiredService<IS3StorageSettingsStore>());
-        Assert.IsType<AwsS3ObjectClient>(provider.GetRequiredService<IS3ObjectClient>());
+        Assert.IsType<AwsS3ObjectSessionFactory>(provider.GetRequiredService<IS3ObjectSessionFactory>());
         Assert.Contains(services, descriptor =>
             Equals(descriptor.ServiceKey, BackgroundTaskKind.S3Storage) &&
             descriptor.KeyedImplementationType == typeof(S3StorageWorker));

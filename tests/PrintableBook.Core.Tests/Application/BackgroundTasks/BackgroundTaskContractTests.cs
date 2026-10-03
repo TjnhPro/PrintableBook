@@ -10,7 +10,7 @@ public sealed class BackgroundTaskContractTests
         var methods = typeof(IBackgroundTaskManager).GetMethods().Select(method => method.Name).ToArray();
 
         Assert.Equal(
-            ["StartAsync", "GetAsync", "ListAsync", "CancelAsync", "WaitAsync", "TryGetResult", "TryGetView"],
+            ["StartWithStatusAsync", "StartAsync", "GetAsync", "ListAsync", "CancelAsync", "WaitAsync", "TryGetResult", "TryGetView"],
             methods);
     }
 

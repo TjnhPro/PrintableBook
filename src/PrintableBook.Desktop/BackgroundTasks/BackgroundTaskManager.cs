@@ -18,7 +18,10 @@ public sealed class BackgroundTaskManager(
     private long nextSequence;
     private bool disposed;
 
-    public ValueTask<BackgroundTaskSnapshot> StartAsync<TRequest>(BackgroundTaskKind kind, string key, string? subject, TRequest request, object? initialView = null, CancellationToken cancellationToken = default)
+    public async ValueTask<BackgroundTaskSnapshot> StartAsync<TRequest>(BackgroundTaskKind kind, string key, string? subject, TRequest request, object? initialView = null, CancellationToken cancellationToken = default) =>
+        (await StartWithStatusAsync(kind, key, subject, request, initialView, cancellationToken)).Snapshot;
+
+    public ValueTask<BackgroundTaskStartResult> StartWithStatusAsync<TRequest>(BackgroundTaskKind kind, string key, string? subject, TRequest request, object? initialView = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
@@ -31,7 +34,7 @@ public sealed class BackgroundTaskManager(
             ThrowIfDisposed();
             var policy = BackgroundTaskPolicies.For(kind);
             var duplicate = FindActiveDuplicateLocked(kind, key, policy.DuplicatePolicy);
-            if (duplicate is not null) return ValueTask.FromResult(SnapshotLocked(duplicate));
+            if (duplicate is not null) return ValueTask.FromResult(new BackgroundTaskStartResult(SnapshotLocked(duplicate), false));
 
             if (policy.DuplicatePolicy == BackgroundTaskDuplicatePolicy.ReturnExistingByKey &&
                 registry.Values.Any(candidate => candidate.Kind == kind && !IsTerminal(candidate.State)))
@@ -64,7 +67,7 @@ public sealed class BackgroundTaskManager(
 
         diagnostics.Record("task.queued", subject, kind.ToString());
         TryDispatch(laneKind);
-        return ValueTask.FromResult(GetSnapshot(entry.TaskId)!);
+        return ValueTask.FromResult(new BackgroundTaskStartResult(GetSnapshot(entry.TaskId)!, true));
     }
 
     public ValueTask<BackgroundTaskSnapshot?> GetAsync(BackgroundTaskId taskId, CancellationToken cancellationToken = default)

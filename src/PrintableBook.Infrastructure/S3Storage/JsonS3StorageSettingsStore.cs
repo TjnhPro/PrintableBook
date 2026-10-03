@@ -2,84 +2,81 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using PrintableBook.Core.Abstractions;
+using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.S3Storage;
 
 namespace PrintableBook.Infrastructure.S3Storage;
 
-public sealed class JsonS3StorageSettingsStore(IApplicationRootDiscovery discovery, IFileSystem fileSystem) : IS3StorageSettingsStore
+public sealed class JsonS3StorageSettingsStore(IApplicationRootDiscovery discovery, IGlobalSettingsStore globalSettingsStore, IFileSystem fileSystem) : IS3StorageSettingsStore
 {
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web) { WriteIndented = true };
-    private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("PrintableBook.S3Storage.v1");
+    private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("PrintableBook.S3Storage.Credentials.v1");
 
-    public async ValueTask<S3StorageSettings?> LoadAsync(CancellationToken cancellationToken = default)
+    public async ValueTask<S3StorageSettings?> LoadAsync(CancellationToken cancellationToken = default) =>
+        (await LoadOperationAsync(cancellationToken))?.Settings;
+
+    public async ValueTask<S3StorageOperationSettings?> LoadOperationAsync(CancellationToken cancellationToken = default)
+    {
+        var configuration = S3StoragePolicy.ValidateConfiguration((await globalSettingsStore.LoadAsync(cancellationToken)).EffectiveS3Storage);
+        var envelope = await LoadEnvelopeAsync(cancellationToken);
+        return envelope is null
+            ? null
+            : new(S3StoragePolicy.Validate(new(Unprotect(envelope.EncryptedAccessKey), Unprotect(envelope.EncryptedSecretKey), configuration)), envelope.Generation);
+    }
+
+    public async ValueTask<S3StorageConfigurationStatus> GetStatusAsync(CancellationToken cancellationToken = default)
+    {
+        var configuration = (await globalSettingsStore.LoadAsync(cancellationToken)).EffectiveS3Storage;
+        try
+        {
+            var envelope = await LoadEnvelopeAsync(cancellationToken);
+            return envelope is null
+                ? new(configuration, S3CredentialStatus.NotConfigured)
+                : new(configuration, S3CredentialStatus.Configured, Mask(Unprotect(envelope.EncryptedAccessKey)));
+        }
+        catch (S3StorageValidationException exception)
+        {
+            return new(configuration, S3CredentialStatus.Unavailable, null, exception.Code);
+        }
+    }
+
+    public async ValueTask<S3StorageConfigurationStatus> ReplaceCredentialsAsync(S3StorageCredentialInput input, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var accessKey = input.AccessKey?.Trim() ?? string.Empty;
+        var secretKey = input.SecretKey?.Trim() ?? string.Empty;
+        if (accessKey.Length == 0 || secretKey.Length == 0) throw new S3StorageValidationException("s3_credentials_incomplete", "Enter both Access Key and Secret Key.");
+        var envelope = new CredentialEnvelope(1, Guid.NewGuid(), Protect(accessKey), Protect(secretKey));
+        await fileSystem.WriteTextAtomicallyAsync(await GetFileAsync(cancellationToken), JsonSerializer.Serialize(envelope, Options), cancellationToken);
+        return new((await globalSettingsStore.LoadAsync(cancellationToken)).EffectiveS3Storage, S3CredentialStatus.Configured, Mask(accessKey));
+    }
+
+    private async ValueTask<CredentialEnvelope?> LoadEnvelopeAsync(CancellationToken cancellationToken)
     {
         var file = await GetFileAsync(cancellationToken);
         if (!await fileSystem.FileExistsAsync(file, cancellationToken)) return null;
         try
         {
-            var persisted = JsonSerializer.Deserialize<PersistedSettings>(await fileSystem.ReadTextAsync(file, cancellationToken), Options);
-            if (persisted is null) return null;
-            if (persisted.Version != 1) throw new S3StorageValidationException("s3_settings_version_unsupported", "Stored S3 settings use an unsupported version.");
-            return S3StoragePolicy.Validate(new(
-                Unprotect(persisted.EncryptedAccessKey),
-                Unprotect(persisted.EncryptedSecretKey),
-                persisted.Bucket,
-                persisted.Region,
-                persisted.PublicBaseUrl));
+            var value = JsonSerializer.Deserialize<CredentialEnvelope>(await fileSystem.ReadTextAsync(file, cancellationToken), Options);
+            if (value is null || value.Version != 1 || value.Generation == Guid.Empty) throw new S3StorageValidationException("s3_credentials_version_unsupported", "Stored S3 credentials use an unsupported format.");
+            return value;
         }
+        catch (S3StorageValidationException) { throw; }
         catch (Exception exception) when (exception is JsonException or FormatException or CryptographicException or ArgumentException)
         {
-            throw new S3StorageValidationException("s3_settings_unavailable", "Stored S3 settings could not be read. Save the settings again.");
+            throw new S3StorageValidationException("s3_credentials_unavailable", "Stored S3 credentials could not be read. Replace the credentials.");
         }
     }
 
-    public async ValueTask<S3StorageConfiguration> SaveAsync(S3StorageSettingsInput input, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(input);
-        var accessKey = input.AccessKey?.Trim() ?? string.Empty;
-        var secretKey = input.SecretKey?.Trim() ?? string.Empty;
-        if ((accessKey.Length == 0) != (secretKey.Length == 0))
-        {
-            throw new S3StorageValidationException("s3_credentials_incomplete", "Enter both Access Key and Secret Key.");
-        }
-        if (accessKey.Length == 0)
-        {
-            var current = await LoadAsync(cancellationToken)
-                ?? throw new S3StorageValidationException("s3_credentials_required", "Access Key and Secret Key are required.");
-            accessKey = current.AccessKey;
-            secretKey = current.SecretKey;
-        }
+    private async ValueTask<FileReference> GetFileAsync(CancellationToken token) => new(Path.Combine((await discovery.DiscoverAsync(token)).Paths.Root.Value, "s3.credentials.dat"));
+    private static string Mask(string value) => value.Length <= 4 ? "••••" : $"{value[..Math.Min(4, value.Length)]}••••{value[^Math.Min(4, value.Length)..]}";
+    private static string Protect(string value) => OperatingSystem.IsWindows()
+        ? Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(value), Entropy, DataProtectionScope.CurrentUser))
+        : throw new PlatformNotSupportedException("S3 credential protection requires Windows.");
+    private static string Unprotect(string value) => OperatingSystem.IsWindows()
+        ? Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(value), Entropy, DataProtectionScope.CurrentUser))
+        : throw new PlatformNotSupportedException("S3 credential protection requires Windows.");
 
-        var settings = S3StoragePolicy.Validate(new(accessKey, secretKey, input.Bucket, input.Region, input.PublicBaseUrl));
-        var persisted = new PersistedSettings(
-            1,
-            settings.Bucket,
-            settings.Region,
-            settings.PublicBaseUrl,
-            Protect(settings.AccessKey),
-            Protect(settings.SecretKey));
-        await fileSystem.WriteTextAtomicallyAsync(await GetFileAsync(cancellationToken), JsonSerializer.Serialize(persisted, Options), cancellationToken);
-        return new(settings.Bucket, settings.Region, settings.PublicBaseUrl, true);
-    }
-
-    private async ValueTask<FileReference> GetFileAsync(CancellationToken cancellationToken)
-    {
-        var paths = (await discovery.DiscoverAsync(cancellationToken)).Paths;
-        return new FileReference(Path.Combine(paths.Root.Value, "storage.json"));
-    }
-
-    private static string Protect(string value)
-    {
-        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("S3 credential protection requires Windows.");
-        return Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(value), Entropy, DataProtectionScope.CurrentUser));
-    }
-
-    private static string Unprotect(string value)
-    {
-        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("S3 credential protection requires Windows.");
-        return Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(value), Entropy, DataProtectionScope.CurrentUser));
-    }
-
-    private sealed record PersistedSettings(int Version, string Bucket, string Region, string? PublicBaseUrl, string EncryptedAccessKey, string EncryptedSecretKey);
+    private sealed record CredentialEnvelope(int Version, Guid Generation, string EncryptedAccessKey, string EncryptedSecretKey);
 }

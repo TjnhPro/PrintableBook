@@ -58,8 +58,8 @@ internal static class BackgroundTaskPolicies
                 []),
             [BackgroundTaskKind.S3Storage] = new(
                 BackgroundTaskLaneKind.Storage,
-                2,
-                BackgroundTaskDuplicatePolicy.JoinByKey,
+                1,
+                BackgroundTaskDuplicatePolicy.ReturnExistingByKey,
                 [])
         };
 
