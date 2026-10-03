@@ -5,6 +5,8 @@ using PrintableBook.Core.Application.Storage;
 using PrintableBook.Core.DependencyInjection;
 using PrintableBook.Infrastructure.DependencyInjection;
 using PrintableBook.Infrastructure.Workspaces;
+using PrintableBook.Core.Application.S3Storage;
+using PrintableBook.Infrastructure.S3Storage;
 
 namespace PrintableBook.Infrastructure.Tests;
 
@@ -49,5 +51,12 @@ public sealed class InfrastructureArchitectureTests
             Equals(descriptor.ServiceKey, BackgroundTaskKind.ProductionAction) &&
             descriptor.KeyedImplementationType == typeof(ProductionActionWorker));
         Assert.IsType<PhysicalBookStorageMaintenance>(provider.GetRequiredService<IBookStorageMaintenance>());
+        Assert.IsType<JsonS3StorageSettingsStore>(provider.GetRequiredService<IS3StorageSettingsStore>());
+        Assert.IsType<JsonBookPublicationPackageStore>(provider.GetRequiredService<IBookPublicationPackageStore>());
+        Assert.IsType<JsonS3PublicationReceiptStore>(provider.GetRequiredService<IS3PublicationReceiptStore>());
+        Assert.IsType<AwsS3ObjectSessionFactory>(provider.GetRequiredService<IS3ObjectSessionFactory>());
+        Assert.Contains(services, descriptor =>
+            Equals(descriptor.ServiceKey, BackgroundTaskKind.S3Storage) &&
+            descriptor.KeyedImplementationType == typeof(S3StorageWorker));
     }
 }

@@ -1,13 +1,17 @@
 using ImageMagick;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Processing;
+using PrintableBook.Core.Application.S3Storage;
 
 namespace PrintableBook.Infrastructure.Workspaces;
 
 /// <summary>
 /// Publishes validated PDFs as the current Book-local output files.
 /// </summary>
-public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocumentInspector) : IBookOutputPublisher
+public sealed class ValidatedBookOutputPublisher(
+    IPdfDocumentInspector pdfDocumentInspector,
+    IBookOutputLeaseCoordinator? outputLeases = null,
+    IBookPublicationPackageStore? publicationPackages = null) : IBookOutputPublisher
 {
     public async ValueTask<PublishedBookOutputs> PublishAsync(
         BookOutputPublicationRequest request,
@@ -17,14 +21,17 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         await ValidateAsync(request.TemporaryOutput.CoverPdf, request.Validation.ExpectedCoverPageCount, request.Validation.ExpectedCoverPageSize, cancellationToken);
         await ValidateAsync(request.TemporaryOutput.InteriorPdf, request.Validation.ExpectedInteriorPageCount, request.Validation.ExpectedInteriorPageSize, cancellationToken);
 
+        await using var outputLease = await AcquireOutputLeaseAsync(request.FinalOutputRoot.Value, cancellationToken);
+
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(request.FinalOutputRoot.Value);
         var publishedDirectory = request.FinalOutputRoot;
-        var coverPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Cover.pdf"));
-        var interiorPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Interior.pdf"));
-        var coverPreviewPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Cover_thumbnail.pdf"));
-        var coverThumbnailImage = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Cover_thumbnail.png"));
-        var interiorPreviewPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Interior_thumbnail.pdf"));
+        var artifacts = BookOutputArtifactContract.ForBook(request.BookId.Value);
+        var coverPdf = OutputFile(publishedDirectory, artifacts[0]);
+        var interiorPdf = OutputFile(publishedDirectory, artifacts[1]);
+        var coverPreviewPdf = OutputFile(publishedDirectory, artifacts[2]);
+        var coverThumbnailImage = OutputFile(publishedDirectory, artifacts[3]);
+        var interiorPreviewPdf = OutputFile(publishedDirectory, artifacts[4]);
         var validatedCoverPreview = await TryValidatePreviewAsync(
             request.TemporaryOutput.CoverPreviewPdf,
             request.TemporaryOutput.CoverPdf,
@@ -44,6 +51,7 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         var publishedCoverPreview = TryPublishValidatedPreview(validatedCoverPreview, coverPreviewPdf);
         TryPublishCoverThumbnailImage(request.TemporaryOutput.CoverPdf, coverThumbnailImage);
         var publishedInteriorPreview = TryPublishValidatedPreview(validatedInteriorPreview, interiorPreviewPdf);
+        await RefreshPublicationPackageAsync(request.BookId.Value, publishedDirectory, cancellationToken);
         DeleteTemporaryDirectory(request.TemporaryOutput.CoverPdf);
 
         return new PublishedBookOutputs(
@@ -61,11 +69,14 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         ArgumentNullException.ThrowIfNull(request);
         await ValidateAsync(request.TemporaryOutput.InteriorPdf, request.ExpectedInteriorPageCount, request.ExpectedInteriorPageSize, cancellationToken);
 
+        await using var outputLease = await AcquireOutputLeaseAsync(request.FinalOutputRoot.Value, cancellationToken);
+
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(request.FinalOutputRoot.Value);
         var publishedDirectory = request.FinalOutputRoot;
-        var interiorPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Interior.pdf"));
-        var previewPdf = new FileReference(Path.Combine(publishedDirectory.Value, $"{request.BookId.Value} - Interior_thumbnail.pdf"));
+        var artifacts = BookOutputArtifactContract.ForBook(request.BookId.Value);
+        var interiorPdf = OutputFile(publishedDirectory, artifacts[1]);
+        var previewPdf = OutputFile(publishedDirectory, artifacts[4]);
         var validatedPreview = await TryValidatePreviewAsync(
             request.TemporaryOutput.PreviewPdf,
             request.TemporaryOutput.InteriorPdf,
@@ -76,6 +87,7 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         cancellationToken.ThrowIfCancellationRequested();
         ReplaceFile(request.TemporaryOutput.InteriorPdf, interiorPdf);
         var publishedPreview = TryPublishValidatedPreview(validatedPreview, previewPdf);
+        await RefreshPublicationPackageAsync(request.BookId.Value, publishedDirectory, cancellationToken);
         DeleteTemporaryDirectory(request.TemporaryOutput.InteriorPdf);
 
         return new PublishedInteriorOutput(
@@ -91,11 +103,14 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         ArgumentNullException.ThrowIfNull(request);
         await ValidateAsync(request.TemporaryOutput.CoverPdf, request.ExpectedCoverPageCount, request.ExpectedCoverPageSize, cancellationToken);
 
+        await using var outputLease = await AcquireOutputLeaseAsync(request.FinalOutputRoot.Value, cancellationToken);
+
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(request.FinalOutputRoot.Value);
-        var coverPdf = new FileReference(Path.Combine(request.FinalOutputRoot.Value, $"{request.BookId.Value} - Cover.pdf"));
-        var previewPdf = new FileReference(Path.Combine(request.FinalOutputRoot.Value, $"{request.BookId.Value} - Cover_thumbnail.pdf"));
-        var thumbnailImage = new FileReference(Path.Combine(request.FinalOutputRoot.Value, $"{request.BookId.Value} - Cover_thumbnail.png"));
+        var artifacts = BookOutputArtifactContract.ForBook(request.BookId.Value);
+        var coverPdf = OutputFile(request.FinalOutputRoot, artifacts[0]);
+        var previewPdf = OutputFile(request.FinalOutputRoot, artifacts[2]);
+        var thumbnailImage = OutputFile(request.FinalOutputRoot, artifacts[3]);
         var validatedPreview = await TryValidatePreviewAsync(
             request.TemporaryOutput.PreviewPdf,
             request.TemporaryOutput.CoverPdf,
@@ -113,6 +128,7 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
         var publishedPanelPreviews = TryPublishCoverPanelPreviews(
             validatedPanelPreviews,
             request.FinalOutputRoot);
+        await RefreshPublicationPackageAsync(request.BookId.Value, request.FinalOutputRoot, cancellationToken);
         TryDeleteTemporaryDirectory(request.TemporaryOutput.CoverPdf);
         return new PublishedCoverOutput(
             request.FinalOutputRoot,
@@ -148,6 +164,30 @@ public sealed class ValidatedBookOutputPublisher(IPdfDocumentInspector pdfDocume
             TryDeleteFile(outcome.Pair.FrontCover.Value);
             return null;
         }
+    }
+
+    private async ValueTask<IAsyncDisposable> AcquireOutputLeaseAsync(string outputPath, CancellationToken cancellationToken)
+    {
+        if (outputLeases is null) return NoOpAsyncDisposable.Instance;
+        return await outputLeases.TryAcquireAsync(outputPath, cancellationToken)
+            ?? throw new IOException("Book output is being snapshotted for S3 publishing. Try the production action again shortly.");
+    }
+
+    private async ValueTask RefreshPublicationPackageAsync(string bookId, DirectoryReference outputRoot, CancellationToken cancellationToken)
+    {
+        if (publicationPackages is null) return;
+        var bookRoot = Directory.GetParent(Path.GetFullPath(outputRoot.Value))?.FullName
+            ?? throw new InvalidOperationException("Book Output must have a parent Book directory.");
+        await publicationPackages.RefreshAsync(bookId, new DirectoryReference(bookRoot), outputRoot, cancellationToken);
+    }
+
+    private static FileReference OutputFile(DirectoryReference outputRoot, BookOutputArtifact artifact) =>
+        new(Path.Combine(outputRoot.Value, artifact.FileName));
+
+    private sealed class NoOpAsyncDisposable : IAsyncDisposable
+    {
+        public static NoOpAsyncDisposable Instance { get; } = new();
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private static void ValidateCoverPanelPreview(FileReference preview)

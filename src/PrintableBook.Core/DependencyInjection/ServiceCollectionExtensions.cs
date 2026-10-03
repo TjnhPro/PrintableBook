@@ -11,6 +11,7 @@ using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Application.Updates;
 using PrintableBook.Core.Application.Production;
 using PrintableBook.Core.Application.AmazonCrawl;
+using PrintableBook.Core.Application.S3Storage;
 
 namespace PrintableBook.Core.DependencyInjection;
 
@@ -45,9 +46,13 @@ public static class ServiceCollectionExtensions
         services.AddKeyedSingleton<IBackgroundTaskWorker, CacheCleanupWorker>(BackgroundTaskKind.CacheCleanup);
         services.AddKeyedSingleton<IBackgroundTaskWorker, ProductionActionWorker>(BackgroundTaskKind.ProductionAction);
         services.AddKeyedSingleton<IBackgroundTaskWorker, AmazonAsinCrawlWorker>(BackgroundTaskKind.AmazonAsinCrawl);
+        services.AddKeyedSingleton<IBackgroundTaskWorker, S3StorageWorker>(BackgroundTaskKind.S3Storage);
         services.AddSingleton<IAmazonCrawlDelay, AmazonCrawlJitterDelay>();
         services.AddSingleton<IProcessSessionService, ProcessSessionService>();
         services.AddSingleton<IAmazonAsinCrawlSessionService, AmazonAsinCrawlSessionService>();
+        services.AddSingleton<IS3StorageOperationContextStore, S3StorageOperationContextStore>();
+        services.AddSingleton<IBookOutputLeaseCoordinator, BookOutputLeaseCoordinator>();
+        services.AddSingleton<IS3StorageService, S3StorageService>();
         services.AddSingleton<IBookProcessingPipeline, BookProcessingPipeline>();
         services.AddSingleton<IBookProcessingQueueBookProcessor, WorkspaceBookProcessingQueueBookProcessor>();
         services.AddSingleton<BookProcessingQueueProcessor>();

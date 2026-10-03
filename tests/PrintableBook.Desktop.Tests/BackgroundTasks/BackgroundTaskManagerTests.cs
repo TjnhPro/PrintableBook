@@ -11,13 +11,37 @@ public sealed class BackgroundTaskManagerTests
     public void Policies_define_library_processing_and_cleanup_with_locked_conflicts()
     {
         Assert.Equal(
-            [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup, BackgroundTaskKind.ProductionAction, BackgroundTaskKind.AmazonAsinCrawl],
+            [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup, BackgroundTaskKind.ProductionAction, BackgroundTaskKind.AmazonAsinCrawl, BackgroundTaskKind.S3Storage],
             BackgroundTaskPolicies.All.Keys.Order());
         AssertPolicy(BackgroundTaskKind.LibraryRefresh, BackgroundTaskLaneKind.Library, BackgroundTaskDuplicatePolicy.JoinByKind, [BackgroundTaskKind.CacheCleanup]);
         AssertPolicy(BackgroundTaskKind.ProcessingSession, BackgroundTaskLaneKind.Processing, BackgroundTaskDuplicatePolicy.ReturnExisting, [BackgroundTaskKind.CacheCleanup, BackgroundTaskKind.ProductionAction]);
         AssertPolicy(BackgroundTaskKind.CacheCleanup, BackgroundTaskLaneKind.Cleanup, BackgroundTaskDuplicatePolicy.ReturnExisting, [BackgroundTaskKind.LibraryRefresh, BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.ProductionAction]);
         AssertPolicy(BackgroundTaskKind.ProductionAction, BackgroundTaskLaneKind.Production, BackgroundTaskDuplicatePolicy.ReturnExistingByKey, [BackgroundTaskKind.ProcessingSession, BackgroundTaskKind.CacheCleanup]);
         AssertPolicy(BackgroundTaskKind.AmazonAsinCrawl, BackgroundTaskLaneKind.Amazon, BackgroundTaskDuplicatePolicy.ReturnExistingByKey, []);
+        AssertPolicy(BackgroundTaskKind.S3Storage, BackgroundTaskLaneKind.Storage, BackgroundTaskDuplicatePolicy.ReturnExistingByKey, []);
+    }
+
+    [Fact]
+    public async Task S3_storage_joins_an_exact_duplicate_and_rejects_a_second_book()
+    {
+        var storage = new BlockingWorker(BackgroundTaskKind.S3Storage);
+        using var manager = CreateManager(storage);
+
+        var first = await manager.StartAsync(BackgroundTaskKind.S3Storage, "book-one", "book-one", new TaskRequest("first"));
+        await storage.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var duplicate = await manager.StartAsync(BackgroundTaskKind.S3Storage, "book-one", "book-one", new TaskRequest("duplicate"));
+        var conflict = await Assert.ThrowsAsync<BackgroundTaskConflictException>(() => manager.StartAsync(
+            BackgroundTaskKind.S3Storage,
+            "book-two",
+            "book-two",
+            new TaskRequest("second")).AsTask());
+
+        Assert.Equal(first.TaskId, duplicate.TaskId);
+        Assert.Equal(BackgroundTaskKind.S3Storage, conflict.ActiveKind);
+        Assert.Equal(1, storage.MaximumActive);
+
+        storage.Release.TrySetResult();
+        Assert.True(await manager.WaitAsync(first.TaskId, TimeSpan.FromSeconds(2)));
     }
 
     [Fact]
@@ -280,12 +304,13 @@ public sealed class BackgroundTaskManagerTests
         BackgroundTaskKind kind,
         BackgroundTaskLaneKind lane,
         BackgroundTaskDuplicatePolicy duplicatePolicy,
-        IReadOnlyList<BackgroundTaskKind> conflicts)
+        IReadOnlyList<BackgroundTaskKind> conflicts,
+        int maximumConcurrency = 1)
     {
         var policy = BackgroundTaskPolicies.For(kind);
 
         Assert.Equal(lane, policy.Lane);
-        Assert.Equal(1, policy.MaximumConcurrency);
+        Assert.Equal(maximumConcurrency, policy.MaximumConcurrency);
         Assert.Equal(duplicatePolicy, policy.DuplicatePolicy);
         Assert.Equal(conflicts, policy.Conflicts);
     }
@@ -298,12 +323,14 @@ public sealed class BackgroundTaskManagerTests
         private int active;
         public override BackgroundTaskKind Kind => kind;
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource TwoStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int MaximumActive { get; private set; }
 
         protected override async ValueTask<string> ExecuteTypedAsync(TaskRequest request, IBackgroundTaskContext context, CancellationToken cancellationToken)
         {
             MaximumActive = Math.Max(MaximumActive, Interlocked.Increment(ref active));
+            if (MaximumActive >= 2) TwoStarted.TrySetResult();
             Started.TrySetResult();
             try
             {

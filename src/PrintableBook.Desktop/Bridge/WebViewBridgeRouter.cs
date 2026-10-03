@@ -18,6 +18,7 @@ using PrintableBook.Desktop.Updates;
 using PrintableBook.Core.Application.Production;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Application.AmazonCrawl;
+using PrintableBook.Core.Application.S3Storage;
 
 namespace PrintableBook.Desktop.Bridge;
 
@@ -44,7 +45,8 @@ internal sealed class WebViewBridgeRouter(
     IBookCatalogMetadataService? bookCatalogMetadataService = null,
     IBookKeywordPreviewService? bookKeywordPreviewService = null,
     IAmazonAsinCrawlSessionService? amazonAsinCrawlSessionService = null,
-    IAmazonSearchPageClient? amazonSearchPageClient = null)
+    IAmazonSearchPageClient? amazonSearchPageClient = null,
+    IS3StorageService? s3StorageService = null)
 {
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
     private readonly ProcessingMutationGate processingMutationGate = processingMutationGate ?? new ProcessingMutationGate();
@@ -1040,6 +1042,53 @@ internal sealed class WebViewBridgeRouter(
                 }
             }
 
+            if (request.Command is "s3.get" or "s3.credentials.replace" or "book.s3.check" or "book.s3.upload" or "book.s3.get" or "book.s3.cancel")
+            {
+                if (s3StorageService is null) return BridgeResponse.UnsupportedCommand(request.Id);
+                try
+                {
+                    if (request.Command == "s3.get")
+                    {
+                        return BridgeResponse.Succeeded(request.Id, "s3.snapshot", await s3StorageService.GetOverviewAsync(cancellationToken));
+                    }
+                    if (request.Command == "s3.credentials.replace")
+                    {
+                        if (request.Payload is not { } storagePayload)
+                        {
+                            return new BridgeResponse(Version, request.Id, false, null, "invalid_s3_credentials");
+                        }
+                        var input = storagePayload.Deserialize<S3StorageCredentialInput>(JsonOptions);
+                        return input is null
+                            ? new BridgeResponse(Version, request.Id, false, null, "invalid_s3_credentials")
+                            : BridgeResponse.Succeeded(request.Id, "s3.credentials.status", await s3StorageService.ReplaceCredentialsAsync(input, cancellationToken));
+                    }
+                    if (request.Payload is not { } bookPayload || !TryGetRequiredString(bookPayload, "bookId", out var storageBookId))
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+                    }
+                    var session = request.Command switch
+                    {
+                        "book.s3.check" => await s3StorageService.StartAsync(storageBookId, S3StorageAction.Check, cancellationToken),
+                        "book.s3.upload" => await s3StorageService.StartAsync(storageBookId, S3StorageAction.Upload, cancellationToken),
+                        "book.s3.cancel" => await s3StorageService.CancelAsync(storageBookId, cancellationToken),
+                        _ => await s3StorageService.GetAsync(storageBookId, cancellationToken)
+                    };
+                    return BridgeResponse.Succeeded(request.Id, "book.s3.session", session);
+                }
+                catch (JsonException)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_s3_credentials");
+                }
+                catch (S3StorageValidationException exception)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, exception.Code);
+                }
+                catch (BackgroundTaskConflictException exception) when (exception.ActiveKind == BackgroundTaskKind.S3Storage)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "s3_operation_active");
+                }
+            }
+
             if (request.Command != "settings.save" || settingsStore is null || request.Payload is not { } payload)
             {
                 return BridgeResponse.UnsupportedCommand(request.Id);
@@ -1063,6 +1112,10 @@ internal sealed class WebViewBridgeRouter(
             catch (ArgumentOutOfRangeException)
             {
                 return new BridgeResponse(Version, request.Id, false, null, "invalid_settings");
+            }
+            catch (S3StorageValidationException exception)
+            {
+                return new BridgeResponse(Version, request.Id, false, null, exception.Code);
             }
         }
         catch (OperationCanceledException)
@@ -1095,7 +1148,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" or "s3.get" or "s3.credentials.replace" or "book.s3.check" or "book.s3.upload" or "book.s3.get" or "book.s3.cancel" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

@@ -22,6 +22,8 @@ using PrintableBook.Infrastructure.Production;
 using PrintableBook.Core.Application.AmazonCrawl;
 using PrintableBook.Infrastructure.AmazonCrawl;
 using PrintableBook.Infrastructure.CloakBrowser;
+using PrintableBook.Core.Application.S3Storage;
+using PrintableBook.Infrastructure.S3Storage;
 
 namespace PrintableBook.Infrastructure.DependencyInjection;
 
@@ -73,6 +75,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAmazonBrowserLifetime>(provider => provider.GetRequiredService<CloakBrowserAmazonPageClient>());
         services.AddSingleton<IBookStorageMaintenance, PhysicalBookStorageMaintenance>();
         services.AddSingleton<IInteriorShuffleStore, JsonInteriorShuffleStore>();
+        services.AddSingleton<IS3StorageSettingsStore, JsonS3StorageSettingsStore>();
+        services.AddSingleton<IBookPublicationPackageStore, JsonBookPublicationPackageStore>();
+        services.AddSingleton<IS3PublicationReceiptStore, JsonS3PublicationReceiptStore>();
+        services.AddSingleton<IS3ObjectSessionFactory, AwsS3ObjectSessionFactory>();
+        services.AddHttpClient("S3PublicVerification", client => client.Timeout = TimeSpan.FromSeconds(10));
         services.AddHttpClient(GitHubReleaseUpdateFeed.HttpClientName, client =>
         {
             client.BaseAddress = new Uri("https://api.github.com/");

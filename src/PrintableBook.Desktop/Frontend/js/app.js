@@ -3,7 +3,11 @@
   const content = document.getElementById("app-content");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
   const bookStatuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
-  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "settings", bookDrawerOpen: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), bookKeywordBuilderDrafts: new Map(), bookKeywordBuilderValidation: new Map(), keywordBuilderPreviews: new Map(), keywordBuilderRevisions: new Map(), keywordBuilderPending: new Map(), keywordBuilderConfirmed: new Map(), keywordBuilderSubmitted: null, keywordBuilderRefreshPending: false, keywordBuilderRefreshNeeded: false, keywordBuilderRefreshBookId: "", asinResearchDrafts: new Map(), asinResearchSessions: new Map(), asinResearchFeedback: new Map(), asinResearchActiveBookId: "", asinResearchPollTimer: null, amazonBrowserStatus: { state: "Closed", reasonCode: null }, amazonBrowserPending: false, settingsSavePending: false, settingsFeedback: "", settingsFeedbackError: false, brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processQueuePage: 1, processQueueScrollTop: 0, processFocusIdentity: null, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "settings", bookDrawerOpen: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), keywordBuilderPreviews: new Map(), keywordBuilderRevisions: new Map(), keywordBuilderPending: new Map(), keywordBuilderConfirmed: new Map(), keywordBuilderSubmitted: null, keywordBuilderRefreshPending: false, keywordBuilderRefreshNeeded: false, keywordBuilderRefreshBookId: "", asinResearchDrafts: new Map(), asinResearchSessions: new Map(), asinResearchFeedback: new Map(), asinResearchActiveBookId: "", asinResearchPollTimer: null, amazonBrowserStatus: { state: "Closed", reasonCode: null }, amazonBrowserPending: false, settingsSavePending: false, settingsFeedback: "", settingsFeedbackError: false, storageSnapshot: null, storageLoading: false, storageSettingsPending: false, storagePendingBooks: new Set(), storagePollTimers: new Map(), storageFeedback: "", storageFeedbackError: false, brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetFilter: "", assetStatus: "Active", assetFrameMode: "", assetSearchFocused: false, assetSearchCaret: 0, pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processQueuePage: 1, processQueueScrollTop: 0, processFocusIdentity: null, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+
+  state.bookKeywordBuilderDrafts = new Map();
+  state.bookKeywordBuilderValidation = new Map();
+  state.storageRequestBooks = new Map();
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -985,11 +989,20 @@
     const snapshot = window.processSnapshot;
     const active = valueFor(snapshot, "isActive", false);
     const cancelling = valueFor(snapshot, "isCancelling", false);
+    const storageBookId = String(valueFor(state.storageSnapshot, "activeBookId", "") ?? "");
+    const storageBook = valueFor(state.storageSnapshot, "books", []).find((book) => String(valueFor(book, "bookId", "")) === storageBookId);
+    const storageSession = valueFor(storageBook, "session", null);
+    const storageActive = Boolean(storageBookId && valueFor(storageSession, "isActive", false));
+    const storageView = valueFor(storageSession, "view", {});
+    const storageCancelling = Boolean(valueFor(storageSession, "isCancelling", false));
     const step = processStepLabel(processMode(snapshot), valueFor(snapshot, "currentStep", "Preparing"));
     const activeLabel = processMode(snapshot) === "production-interior" ? `Building Final Interior · ${step}` : `Process Interior · ${step}`;
-    control.classList?.toggle("is-active", active && !cancelling);
-    control.classList?.toggle("is-cancelling", cancelling);
-    control.innerHTML = `<span class="status-dot"></span><span>${escapeHtml(cancelling ? "Stopping processing" : active ? activeLabel : "Nothing processing")}</span>`;
+    control.classList?.toggle("is-active", (active && !cancelling) || (storageActive && !storageCancelling));
+    control.classList?.toggle("is-cancelling", cancelling || storageCancelling);
+    const storageLabel = storageCancelling
+      ? `Stopping S3 · ${storageBookId}`
+      : `${storageActionName(valueFor(storageView, "action", "Check"))} S3 · ${storageBookId}`;
+    control.innerHTML = `<span class="status-dot"></span><span>${escapeHtml(cancelling ? "Stopping processing" : active ? activeLabel : storageActive ? storageLabel : "Nothing processing")}</span>`;
   };
 
   const renderConfiguration = () => {
@@ -1009,7 +1022,13 @@
     const borderRange = `<div class="configuration-field-grid three">${detectionInput("Pass 1 depth", "pass1SearchDepth", 200, "min=1")}${detectionInput("Pass 2 depth", "pass2SearchDepth", 320, "min=1")}${detectionInput("Corner padding", "cornerSearchPadding", 40, "min=0")}</div>`;
     const borderTolerances = `<div class="configuration-field-grid three">${detectionInput("Track depth tolerance", "trackDepthTolerance", 6, "min=0")}${detectionInput("Corner-line tolerance", "cornerLineTolerance", 16, "min=0")}${detectionInput("Maximum depth spread", "maximumDepthSpread", 24, "min=0")}</div>`;
     const borderAcceptance = `<div class="configuration-field-grid four">${detectionInput("Segment count", "segmentCount", 8, "min=1")}${detectionInput("Corner exclusion ratio", "cornerExclusionRatio", .10, "min=0 max=1 step=0.01")}${detectionInput("Compatible corners", "minimumCompatibleCorners", 3, "min=1 max=4")}${detectionInput("Minimum segment support", "minimumSegmentSupportRatio", .35, "min=0 max=1 step=0.01")}${detectionInput("Minimum side support", "minimumSideSupportRatio", .55, "min=0 max=1 step=0.01")}${detectionInput("Minimum span", "minimumSpanRatio", .70, "min=0 max=1 step=0.01")}${detectionInput("Supported segments", "minimumSupportedSegments", 6, "min=1")}${detectionInput("Missing segment run", "maximumMissingSegmentRun", 2, "min=0")}</div>`;
-    content.innerHTML = `<section class="configuration-page"><div class="page-header"><div><h1>Configuration</h1><p>Manage global application settings.</p></div></div><form class="panel configuration-panel" data-form="configuration"><header class="configuration-panel-header"><div><p class="eyebrow">Settings</p><h2>Application configuration</h2><p>Shared defaults for keyword building, artwork preparation, and final Interior output.</p></div><div class="configuration-panel-actions"><span class="configuration-save-status" data-settings-feedback data-state="${feedbackState}" role="${state.settingsFeedbackError ? "alert" : "status"}" aria-live="polite">${escapeHtml(feedback)}</span>${refreshAction("Load", state.settingsSavePending)}<button class="button-primary" type="submit" data-settings-save aria-busy="${state.settingsSavePending}" ${state.settingsSavePending ? "disabled" : ""}>${state.settingsSavePending ? "Saving…" : "Save"}</button></div></header><div class="configuration-panel-scroll"><div class="configuration-group-grid">${group("configuration-runtime", "Processing capacity", "Controls the number of pages processed in parallel.", runtime)}${group("configuration-artwork-preparation", "Artwork preparation", "Normalizes source artwork before border detection and page composition.", artworkPreparation)}${group("configuration-keywords", "Keyword Builder defaults", "Shared phrases applied before each Book's own keywords.", keywordDefaults, true)}${group("configuration-working-canvas", "Working canvas", "The processing canvas must be at least as large as the maximum artwork side.", workingCanvas)}${group("configuration-final-output", "Final Interior output", "The exported raster must be at least as large as the working canvas.", finalOutput)}${group("configuration-border-range", "Border search range", "Pass 2 must include Pass 1 and remain within half of the normalized source.", borderRange)}${group("configuration-border-tolerances", "Border tolerances", "Controls how much depth and corner variation a detected frame may contain.", borderTolerances)}${group("configuration-border-acceptance", "Border acceptance rules", "Defines the segment, corner, support, and span evidence required to accept a frame.", borderAcceptance, true)}</div></div></form></section>`;
+    const s3 = valueFor(settings, "s3Storage", {});
+    const storageConfiguration = valueFor(state.storageSnapshot, "configuration", {});
+    const credentialStateValue = valueFor(storageConfiguration, "credentialStatus", "NotConfigured");
+    const credentialState = typeof credentialStateValue === "number" ? ["NotConfigured", "Configured", "Unavailable"][credentialStateValue] : String(credentialStateValue);
+    const credentialHint = String(valueFor(storageConfiguration, "maskedAccessKey", "") ?? "").split("|")[0];
+    const s3Storage = `<div class="configuration-field-grid three"><label class="field"><span>Region</span><input class="control" data-setting-text-group="s3Storage" data-setting="region" value="${escapeHtml(valueFor(s3, "region", "us-east-1"))}" autocomplete="off"></label><label class="field"><span>Bucket</span><input class="control" data-setting-text-group="s3Storage" data-setting="bucket" value="${escapeHtml(valueFor(s3, "bucket", ""))}" autocomplete="off"></label><label class="field"><span>Folder</span><input class="control" data-setting-text-group="s3Storage" data-setting="folder" value="${escapeHtml(valueFor(s3, "folder", "coloring"))}" autocomplete="off"></label></div><div class="configuration-field-grid two s3-credential-row"><label class="field"><span>Access Key</span><input class="control" data-s3-access-key type="password" autocomplete="off" placeholder="${credentialState === "Configured" ? credentialHint || "Saved" : "Required"}"></label><label class="field"><span>Secret Key</span><input class="control" data-s3-secret-key type="password" autocomplete="new-password" placeholder="${credentialState === "Configured" ? "Saved" : "Required"}"></label></div><div class="book-settings-inline"><small data-s3-credential-status>${escapeHtml(credentialState === "Configured" ? `Credentials configured${credentialHint ? ` · ${credentialHint}` : ""}` : credentialState === "Unavailable" ? "Saved credentials cannot be read. Replace them." : "Credentials are not configured.")}</small><button class="button-secondary" type="button" data-action="replace-s3-credentials" ${state.storageSettingsPending ? "disabled" : ""}>${state.storageSettingsPending ? "Replacing…" : "Replace credentials"}</button></div>`;
+    content.innerHTML = `<section class="configuration-page"><div class="page-header"><div><h1>Configuration</h1><p>Manage global application settings.</p></div></div><form class="panel configuration-panel" data-form="configuration"><header class="configuration-panel-header"><div><p class="eyebrow">Settings</p><h2>Application configuration</h2><p>Shared defaults for keyword building, artwork preparation, final Interior output, and S3 publishing.</p></div><div class="configuration-panel-actions"><span class="configuration-save-status" data-settings-feedback data-state="${feedbackState}" role="${state.settingsFeedbackError ? "alert" : "status"}" aria-live="polite">${escapeHtml(feedback)}</span>${refreshAction("Load", state.settingsSavePending)}<button class="button-primary" type="submit" data-settings-save aria-busy="${state.settingsSavePending}" ${state.settingsSavePending ? "disabled" : ""}>${state.settingsSavePending ? "Saving…" : "Save"}</button></div></header><div class="configuration-panel-scroll"><div class="configuration-group-grid">${group("configuration-s3", "S3 Storage", "Configuration is saved with the app. Credentials are encrypted for the current Windows user and replaced separately.", s3Storage, true)}${group("configuration-runtime", "Processing capacity", "Controls the number of pages processed in parallel.", runtime)}${group("configuration-artwork-preparation", "Artwork preparation", "Normalizes source artwork before border detection and page composition.", artworkPreparation)}${group("configuration-keywords", "Keyword Builder defaults", "Shared phrases applied before each Book's own keywords.", keywordDefaults, true)}${group("configuration-working-canvas", "Working canvas", "The processing canvas must be at least as large as the maximum artwork side.", workingCanvas)}${group("configuration-final-output", "Final Interior output", "The exported raster must be at least as large as the working canvas.", finalOutput)}${group("configuration-border-range", "Border search range", "Pass 2 must include Pass 1 and remain within half of the normalized source.", borderRange)}${group("configuration-border-tolerances", "Border tolerances", "Controls how much depth and corner variation a detected frame may contain.", borderTolerances)}${group("configuration-border-acceptance", "Border acceptance rules", "Defines the segment, corner, support, and span evidence required to accept a frame.", borderAcceptance, true)}</div></div></form></section>`;
   };
   const updateSettingsSaveUi = () => {
     document.querySelectorAll('[data-setting], [data-generic-keywords]').forEach((input) => { input.disabled = state.settingsSavePending; });
@@ -1034,7 +1053,9 @@
     const payload = {};
     document.querySelectorAll("[data-setting]").forEach((input) => {
       const group = input.dataset.settingGroup;
-      if (group) { payload[group] ??= {}; payload[group][input.dataset.setting] = Number(input.value); }
+      const textGroup = input.dataset.settingTextGroup;
+      if (textGroup) { payload[textGroup] ??= {}; payload[textGroup][input.dataset.setting] = String(input.value).trim(); }
+      else if (group) { payload[group] ??= {}; payload[group][input.dataset.setting] = Number(input.value); }
       else payload[input.dataset.setting] = Number(input.value);
     });
     payload.genericKeywords = normalizeKeywordPhrases(document.querySelector("[data-generic-keywords]")?.value);
@@ -1045,6 +1066,166 @@
     send("settings.save", payload);
   };
 
+  const storageFileStateName = (value) => typeof value === "number" ? ["Pending", "MissingLocal", "MissingRemote", "Synced", "SyncedButNotPublic", "Changed", "Uploaded", "Skipped", "Failed", "Unknown"][value] ?? "Pending" : String(value ?? "Pending");
+  const storageOutcomeName = (value) => typeof value === "number" ? ["Pending", "Running", "Completed", "CompletedWithErrors", "Cancelled", "Interrupted"][value] ?? "Pending" : String(value ?? "Pending");
+  const storageActionName = (value) => typeof value === "number" ? ["Check", "Upload"][value] ?? "Check" : String(value ?? "Check");
+  const storageSize = (value) => {
+    const bytes = Number(value);
+    if (!Number.isFinite(bytes) || bytes < 0) return "—";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+  const storageHash = (value) => {
+    const hash = String(value ?? "");
+    return hash ? `${hash.slice(0, 10)}…` : "—";
+  };
+  const storageErrorMessage = (code) => ({
+    s3_credentials_required: "Enter both Access Key and Secret Key before saving.",
+    s3_credentials_incomplete: "Enter both Access Key and Secret Key together.",
+    s3_bucket_invalid: "Enter a valid S3 bucket name.",
+    s3_region_invalid: "Enter a valid AWS region.",
+    s3_folder_invalid: "Enter a valid non-empty S3 folder without dot segments.",
+    s3_settings_required: "Save S3 configuration and credentials before checking or uploading.",
+    s3_credentials_unavailable: "Stored S3 credentials cannot be read. Replace them.",
+    s3_asin_invalid: "This Book needs a 10-character alphanumeric ASIN.",
+    s3_asin_duplicate: "Another Book uses the same ASIN. Assign a unique ASIN before publishing.",
+    s3_operation_active: "Another Book is already checking or publishing to S3.",
+    book_output_busy: "Production is replacing this Book's output. Retry shortly.",
+    s3_staging_insufficient_space: "There is not enough disk space to prepare the upload package.",
+    s3_operation_cancelled: "The S3 operation was cancelled before publication changed.",
+    s3_partial_publication: "Publication stopped after uploads began. Retry Upload to reconcile all seven files.",
+    s3_upload_preflight_failed: "Upload did not start because the complete seven-file package is not available.",
+    s3_publication_interrupted: "The previous S3 operation was interrupted. Run Check before retrying Upload.",
+    s3_public_acl_unsupported: "This bucket rejects public-read ACLs. Choose a compatible bucket or update Object Ownership settings.",
+    s3_bucket_not_found: "The configured bucket does not exist.",
+    s3_region_mismatch: "The bucket is in a different AWS region.",
+    s3_access_denied: "S3 denied access. Check credentials, bucket policy, and public-read permissions.",
+    s3_credentials_invalid: "S3 rejected the saved credentials.",
+    s3_service_unavailable: "S3 could not be reached. Check the network and configured region.",
+    s3_request_failed: "The S3 request failed. Review the bucket and endpoint settings.",
+    s3_receipt_unavailable: "The previous S3 receipt cannot be read. Run Check to create a fresh receipt.",
+    s3_remote_verification_failed: "The uploaded object did not match the local file. Retry Upload.",
+    s3_public_verification_failed: "The object exists but is not publicly reachable. Review bucket public-access settings.",
+    s3_local_file_missing: "This required output file is missing. Run the named Production action.",
+    s3_local_file_unavailable: "This output file could not be copied. Close programs using it and retry.",
+    book_not_found: "This Book is no longer available. Refresh the library."
+  })[String(code)] ?? "The S3 request failed. Review the settings and retry.";
+  const storageTone = (value) => {
+    const name = storageFileStateName(value);
+    if (["Synced", "Uploaded", "Skipped"].includes(name)) return "status-good";
+    if (["MissingLocal", "MissingRemote", "SyncedButNotPublic", "Changed", "Unknown"].includes(name)) return "status-warn";
+    if (name === "Failed") return "status-bad";
+    return "status-muted";
+  };
+  const storageSessionView = (book) => valueFor(valueFor(book, "session", {}), "view", null);
+  const storageSessionActive = (book) => Boolean(valueFor(valueFor(book, "session", {}), "isActive", false));
+  const storageReplaceSession = (session) => {
+    const booksValue = valueFor(state.storageSnapshot, "books", []);
+    const id = String(valueFor(session, "bookId", ""));
+    const book = booksValue.find((item) => String(valueFor(item, "bookId", "")) === id);
+    if (book) {
+      if (Object.hasOwn(book, "Session") && !Object.hasOwn(book, "session")) book.Session = session;
+      else book.session = session;
+    }
+  };
+  const patchBookS3 = (id) => {
+    if (currentRoute() !== "books" || !state.bookDrawerOpen || state.selectedBookTab !== "settings" || state.selectedBookId !== id) return;
+    const book = selectedBook();
+    const group = document.querySelector("[data-book-s3]");
+    if (book && group) {
+      const focusedAction = group.contains(document.activeElement) ? document.activeElement?.dataset?.action ?? "" : "";
+      group.outerHTML = renderBookS3Storage(book);
+      if (focusedAction) document.querySelector(`[data-book-s3] [data-action="${focusedAction}"]`)?.focus();
+    }
+  };
+  const stopStoragePoll = (bookIdValue) => {
+    const timer = state.storagePollTimers.get(bookIdValue);
+    if (timer) window.clearTimeout(timer);
+    state.storagePollTimers.delete(bookIdValue);
+  };
+  const observeStorageSession = (session) => {
+    const id = String(valueFor(session, "bookId", ""));
+    if (!id) return;
+    storageReplaceSession(session);
+    state.storagePendingBooks.delete(id);
+    stopStoragePoll(id);
+    if (valueFor(session, "isActive", false)) {
+      state.storagePollTimers.set(id, window.setTimeout(() => send("book.s3.get", { bookId: id }), 600));
+    } else {
+      state.storageLoading = false;
+      window.setTimeout(loadStorage, 0);
+    }
+    patchBookS3(id);
+  };
+  const loadStorage = () => {
+    if (state.storageLoading) return;
+    state.storageLoading = true;
+    send("s3.get");
+  };
+  const renderStorageFileRows = (book) => {
+    const view = storageSessionView(book);
+    const sessionError = String(valueFor(valueFor(book, "session", {}), "errorCode", "") ?? "");
+    const files = valueFor(view, "files", []);
+    if (!files.length) return `<div class="storage-file-empty">Run Check or Upload to inspect the seven required output files.</div>`;
+    return `<div class="storage-file-list">${files.map((file) => {
+      const fileState = storageFileStateName(valueFor(file, "state", "Pending"));
+      const url = String(valueFor(file, "publicUrl", ""));
+      const error = String(valueFor(file, "errorCode", "") ?? "");
+      const name = String(valueFor(file, "fileName", ""));
+      const actions = url ? `<span class="storage-file-actions"><button class="button-secondary" type="button" data-action="storage-open-url" data-storage-url="${escapeHtml(url)}" aria-label="Open public S3 URL for ${escapeHtml(name)}">Open</button><button class="button-secondary" type="button" data-action="storage-copy-url" data-storage-url="${escapeHtml(url)}" aria-label="Copy public S3 URL for ${escapeHtml(name)}">Copy URL</button></span>` : "";
+      const localExists = valueFor(file, "localExists", null);
+      const remoteExists = valueFor(file, "remoteExists", null);
+      const publicState = valueFor(file, "isPublic", null);
+      const localFact = localExists === false ? "Missing" : localExists === true ? `${storageSize(valueFor(file, "localLength", null))} · ${storageHash(valueFor(file, "localSha256", ""))}` : "Not checked";
+      const remoteFact = remoteExists === false ? "Missing" : remoteExists === true ? `${storageSize(valueFor(file, "remoteLength", null))} · ${storageHash(valueFor(file, "remoteSha256", ""))}` : "Not checked";
+      const publicFact = publicState === true ? "Reachable" : publicState === false ? "Not public" : "Not checked";
+      return `<div class="storage-file-row"><div class="storage-file-name"><strong>${escapeHtml(name)}</strong>${error ? `<small>${escapeHtml(storageErrorMessage(error))}</small>` : ""}</div><dl class="storage-file-facts"><div><dt>Local</dt><dd>${escapeHtml(localFact)}</dd></div><div><dt>Remote</dt><dd>${escapeHtml(remoteFact)}</dd></div><div><dt>Public</dt><dd>${escapeHtml(publicFact)}</dd></div></dl><div class="storage-file-state"><span class="status-badge ${storageTone(fileState)}">${escapeHtml(fileState)}</span>${actions}</div></div>`;
+    }).join("")}</div>`;
+  };
+  const renderStorageBook = (book, configured) => {
+    const id = String(valueFor(book, "bookId", ""));
+    const active = storageSessionActive(book);
+    const activeBookId = String(valueFor(state.storageSnapshot, "activeBookId", "") ?? "");
+    const blockedByOtherBook = Boolean(activeBookId && activeBookId !== id);
+    const pending = state.storagePendingBooks.has(id);
+    const view = storageSessionView(book);
+    const completed = Number(valueFor(view, "completedCount", 0));
+    const total = Number(valueFor(view, "totalCount", 7)) || 7;
+    const outcome = storageOutcomeName(valueFor(view, "outcome", "Pending"));
+    const action = storageActionName(valueFor(view, "action", "Check"));
+    const phase = String(valueFor(view, "phase", "idle") ?? "idle");
+    const missing = valueFor(book, "missingFiles", []);
+    const missingArtifacts = valueFor(book, "missingArtifacts", []).length
+      ? valueFor(book, "missingArtifacts", [])
+      : missing.map((fileName) => ({ fileName, recoveryAction: "Run the matching Production action" }));
+    const asinValid = Boolean(valueFor(book, "isAsinValid", false));
+    const checkDisabled = !configured || !asinValid || active || blockedByOtherBook || pending;
+    const uploadDisabled = checkDisabled || missing.length > 0;
+    const sessionError = String(valueFor(valueFor(book, "session", {}), "errorCode", "") ?? "");
+    const warningCode = String(valueFor(view, "warningCode", "") ?? "");
+    const reason = !configured ? "Save S3 configuration and replace credentials in Configuration." : !asinValid ? "Save a valid 10-character ASIN in Book Information." : blockedByOtherBook ? `${activeBookId} currently owns the S3 operation.` : missing.length ? `${missing.length} required output file${missing.length === 1 ? " is" : "s are"} missing. Check remains available; Upload is blocked.` : "Ready to check or upload the seven-file publication package.";
+    const isPublishing = phase === "publishing";
+    const phaseCompleted = isPublishing ? Number(valueFor(view, "uploadCompletedCount", 0)) : completed;
+    const phaseTotal = isPublishing ? Number(valueFor(view, "uploadTotalCount", 0)) : total;
+    const progress = phaseTotal > 0 ? Math.round((phaseCompleted / phaseTotal) * 100) : 0;
+    const missingRecovery = missingArtifacts.length ? `<ul class="storage-missing-list" aria-label="Missing publication files">${missingArtifacts.map((artifact) => `<li><strong>${escapeHtml(valueFor(artifact, "fileName", "Required output"))}</strong><span>${escapeHtml(valueFor(artifact, "recoveryAction", "Run Production"))}</span></li>`).join("")}</ul>` : "";
+    const blockedOwner = blockedByOtherBook ? `<div class="storage-active-owner" role="status"><strong>${escapeHtml(activeBookId)} owns the active S3 operation</strong><span>Open that Book's Settings to view live progress or stop the operation.</span></div>` : "";
+    const progressMarkup = !blockedByOtherBook && view ? `<div class="storage-progress-copy" role="status" aria-live="polite"><span>${escapeHtml(action)} · ${escapeHtml(outcome)} · ${escapeHtml(phase)}</span><strong>${phaseCompleted}/${phaseTotal}</strong></div><div class="storage-progress" role="progressbar" aria-label="${escapeHtml(action)} progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div><div class="storage-time-row"><span>Checked ${dateTime(valueFor(view, "lastCheckedAtUtc", null))}</span><span>Uploaded ${dateTime(valueFor(view, "lastUploadedAtUtc", null))}</span></div>` : "";
+    const filesMarkup = blockedByOtherBook ? blockedOwner : `${missingRecovery}${renderStorageFileRows(book)}`;
+    return `<fieldset class="asset-background-setting book-settings-card book-settings-s3 storage-book-card" data-book-s3 data-storage-book="${escapeHtml(id)}"><legend>S3 Storage</legend><div class="storage-settings-heading"><p>${escapeHtml(valueFor(book, "title", id))} · ASIN ${escapeHtml(valueFor(book, "asin", "Not set") || "Not set")}</p>${badge(active ? `${action} · ${phase}` : blockedByOtherBook ? "Blocked" : missing.length ? "Check available" : "Ready")}</div><p class="storage-book-reason">${escapeHtml(reason)}</p>${sessionError && !blockedByOtherBook ? `<p class="storage-book-error" role="alert">${escapeHtml(storageErrorMessage(sessionError))}</p>` : ""}${warningCode && !blockedByOtherBook ? `<p class="storage-book-error" role="alert">${escapeHtml(storageErrorMessage(warningCode))}</p>` : ""}${progressMarkup}${filesMarkup}<footer><button class="button-secondary" type="button" data-action="storage-check" data-book-id="${escapeHtml(id)}" ${checkDisabled ? "disabled" : ""} title="${escapeHtml(reason)}">Check</button><button class="button-primary" type="button" data-action="storage-upload" data-book-id="${escapeHtml(id)}" ${uploadDisabled ? "disabled" : ""} title="${escapeHtml(reason)}">Upload</button>${active ? `<button class="button-danger" type="button" data-action="storage-cancel" data-book-id="${escapeHtml(id)}">Stop publishing</button>` : ""}</footer></fieldset>`;
+  };
+
+  const renderBookS3Storage = (book) => {
+    const overview = valueFor(state.storageSnapshot, "books", []).find((item) => String(valueFor(item, "bookId", "")) === bookId(book));
+    if (!overview) return `<fieldset class="asset-background-setting book-settings-card book-settings-s3 storage-book-card" data-book-s3><legend>S3 Storage</legend><p class="storage-book-reason" role="status">Loading S3 readiness…</p></fieldset>`;
+    const configuration = valueFor(state.storageSnapshot, "configuration", {});
+    const credentialState = valueFor(configuration, "credentialStatus", "NotConfigured");
+    const destination = valueFor(configuration, "configuration", {});
+    const destinationReady = ["region", "bucket", "folder"].every((name) => String(valueFor(destination, name, "") ?? "").trim().length > 0);
+    const configured = (credentialState === "Configured" || credentialState === 1) && destinationReady;
+    return renderStorageBook(overview, configured);
+  };
   const brandMetadataPresentation = (brand) => {
     const summary = brandSummaryFor(brand);
     const metadataStatus = valueFor(summary, "metadataStatus", "Missing");
@@ -1391,12 +1572,12 @@
       : state.selectedBookTab === "production"
       ? renderProductionWorkspace(book, summary)
       : state.selectedBookTab === "settings"
-      ? `<section class="book-settings-workspace" aria-label="Book settings">${renderBookInformation(book, summary)}${renderBookBrandAssignment(book, summary)}${backgroundSetting}${renderBrandTemplateCopyCard(book, summary)}</section>`
+      ? `<section class="book-settings-workspace" aria-label="Book settings">${renderBookInformation(book, summary)}${renderBookBrandAssignment(book, summary)}${backgroundSetting}${renderBrandTemplateCopyCard(book, summary)}${renderBookS3Storage(book)}</section>`
       : state.selectedBookTab === "artwork"
         ? renderFolderAssetWorkspace(book, summary)
         : state.selectedBookTab === "pages"
           ? renderProcessedInteriorPages(summary)
-        : `<section class="book-settings-workspace" aria-label="Book settings">${renderBookInformation(book, summary)}${renderBookBrandAssignment(book, summary)}${backgroundSetting}${renderBrandTemplateCopyCard(book, summary)}</section>`;
+        : `<section class="book-settings-workspace" aria-label="Book settings">${renderBookInformation(book, summary)}${renderBookBrandAssignment(book, summary)}${backgroundSetting}${renderBrandTemplateCopyCard(book, summary)}${renderBookS3Storage(book)}</section>`;
     return `<div class="book-heading"><div><h2>${escapeHtml(bookDisplayTitle(book, summary))}</h2><p>Folder: ${escapeHtml(valueFor(book, "name", bookId(book)))}</p></div><div class="page-actions"><button class="button-secondary" data-action="validate-book" data-book-id="${escapeHtml(bookId(book))}">Run Interior preflight</button><button class="button-primary" data-action="queue-selected-book" ${readiness.ready ? "" : "disabled"} title="${escapeHtml(readiness.reason)}" aria-label="Process Interior. ${escapeHtml(readiness.reason)}">Process Interior</button></div></div><nav class="detail-tabs" role="tablist" aria-label="Book detail sections">${tabButton("settings", "Settings")}${tabButton("asin", "Keyword")}${tabButton("production", "Production")}${tabButton("artwork", "Interior artwork")}</nav><div id="book-panel-${state.selectedBookTab}" class="tab-body ${state.selectedBookTab === "settings" ? "tab-body-settings" : state.selectedBookTab === "asin" ? "tab-body-asin" : state.selectedBookTab === "artwork" ? "tab-body-artwork" : state.selectedBookTab === "pages" ? "tab-body-processed-pages" : ""}" role="tabpanel" aria-labelledby="book-tab-${state.selectedBookTab}" tabindex="0">${body}</div>`;
   };
 
@@ -2100,7 +2281,7 @@
     if (state.applicationLoadState === "failed") content.insertAdjacentHTML("afterbegin", renderRefreshFailure());
   };
 
-  document.querySelectorAll("[data-route]").forEach((button) => button.addEventListener("click", () => { render(button.dataset.route); if (button.dataset.route === "diagnostics") { send("diagnostics.get"); send("task.list"); } }));
+  document.querySelectorAll("[data-route]").forEach((button) => button.addEventListener("click", () => { render(button.dataset.route); if (button.dataset.route === "configuration") loadStorage(); if (button.dataset.route === "diagnostics") { send("diagnostics.get"); send("task.list"); } }));
   const setBookListRowActive = (row, active) => {
     if (!row) return;
     row.classList?.toggle("is-active", active);
@@ -2135,6 +2316,7 @@
     else render("books", false);
     send("amazon.browser.status");
     send("book.keywords.asin-crawl.get", { bookId: id });
+    loadStorage();
   };
   const beginCatalogMutation = (command, target, payload) => {
     if (state.catalogMutationPending || processIsActive()) return;
@@ -2168,6 +2350,35 @@
     const target = event.target.closest("[data-action]");
     if (!target) return;
     const action = target.dataset.action;
+    if (action === "storage-open-url") {
+      const url = String(target.dataset.storageUrl ?? "");
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (action === "storage-copy-url") {
+      const url = String(target.dataset.storageUrl ?? "");
+      if (url && navigator.clipboard?.writeText) navigator.clipboard.writeText(url).then(() => { status.textContent = "S3 URL copied"; }, () => { status.textContent = "S3 URL could not be copied"; });
+      return;
+    }
+    if (["storage-check", "storage-upload", "storage-cancel"].includes(action)) {
+      const id = target.dataset.bookId;
+      state.storagePendingBooks.add(id);
+      const command = action === "storage-check" ? "book.s3.check" : action === "storage-upload" ? "book.s3.upload" : "book.s3.cancel";
+      const requestId = send(command, { bookId: id });
+      state.storageRequestBooks.set(requestId, id);
+      patchBookS3(id);
+      return;
+    }
+    if (action === "replace-s3-credentials") {
+      const accessKey = String(document.querySelector("[data-s3-access-key]")?.value ?? "").trim();
+      const secretKey = String(document.querySelector("[data-s3-secret-key]")?.value ?? "").trim();
+      state.storageSettingsPending = true;
+      state.storageFeedback = "Replacing credentials…";
+      state.storageFeedbackError = false;
+      send("s3.credentials.replace", { accessKey, secretKey });
+      renderConfiguration();
+      return;
+    }
     if (action === "diagnostics-tab") {
       state.diagnosticsTab = diagnosticsTabValue(target.dataset.diagnosticsTab);
       render("diagnostics", false);
@@ -2616,9 +2827,11 @@
     const response = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
     const responseId = valueFor(response, "id", "");
     const requestCommand = state.pendingCommands.get(responseId) ?? "";
+    const storageRequestBookId = state.storageRequestBooks.get(responseId) ?? "";
     const validationRequestBrand = state.brandValidationRequestBrands.get(responseId) ?? "";
     const pdfLibraryAction = finishPdfLibraryAction(responseId);
     state.pendingCommands.delete(responseId);
+    state.storageRequestBooks.delete(responseId);
     state.brandValidationRequestBrands.delete(responseId);
     const ok = valueFor(response, "ok", false);
     const command = valueFor(response, "command", "");
@@ -2626,6 +2839,35 @@
       applyUpdateSnapshot(valueFor(response, "payload", {}));
     } else if (ok && command === "app.pong") {
       status.textContent = "Connected";
+    } else if (ok && command === "s3.snapshot") {
+      state.storageSnapshot = valueFor(response, "payload", {});
+      state.storageLoading = false;
+      state.storageSettingsPending = false;
+      state.storageFeedbackError = false;
+      for (const book of valueFor(state.storageSnapshot, "books", [])) {
+        const session = valueFor(book, "session", null);
+        if (session && valueFor(session, "isActive", false)) observeStorageSession(session);
+      }
+      updateGlobalProcessStatus();
+      if (currentRoute() === "configuration") renderConfiguration();
+      if (state.selectedBookId) patchBookS3(state.selectedBookId);
+      status.textContent = "S3 status refreshed";
+    } else if (ok && command === "s3.credentials.status") {
+      state.storageSettingsPending = false;
+      state.storageFeedback = "Credentials replaced";
+      state.storageFeedbackError = false;
+      state.storageLoading = false;
+      loadStorage();
+      if (currentRoute() === "configuration") renderConfiguration();
+      status.textContent = "S3 credentials replaced";
+    } else if (ok && command === "book.s3.session") {
+      const session = valueFor(response, "payload", {});
+      observeStorageSession(session);
+      updateGlobalProcessStatus();
+      const view = valueFor(session, "view", {});
+      const active = valueFor(session, "isActive", false);
+      const outcome = storageOutcomeName(valueFor(view, "outcome", "Pending"));
+      status.textContent = active ? `${storageActionName(valueFor(view, "action", "Check"))} in progress` : outcome === "CompletedWithErrors" ? "Storage completed with errors" : "Storage action completed";
     } else if (ok && command === "amazon.browser.status") {
       state.amazonBrowserPending = false;
       state.amazonBrowserStatus = valueFor(response, "payload", { state: "Closed" });
@@ -2760,6 +3002,7 @@
         }
       }
       window.appSnapshot = incomingSnapshot;
+      loadStorage();
       if (state.keywordBuilderRefreshNeeded && !state.keywordBuilderConfirmed.has(state.keywordBuilderRefreshBookId)) {
         state.keywordBuilderRefreshNeeded = false;
         state.catalogFeedback = "Saved";
@@ -2902,6 +3145,19 @@
       state.backgroundTasks = valueFor(response, "payload", []);
       if (currentRoute() === "diagnostics") render("diagnostics", false);
     } else {
+      if (requestCommand.startsWith("s3.") || requestCommand.startsWith("book.s3.")) {
+        state.storageLoading = false;
+        state.storageSettingsPending = false;
+        if (storageRequestBookId) state.storagePendingBooks.delete(storageRequestBookId);
+        const error = String(valueFor(response, "error", "storage_request_failed")).split(":", 1)[0];
+        const message = storageErrorMessage(error);
+        state.storageFeedback = message;
+        state.storageFeedbackError = true;
+        if (currentRoute() === "configuration") renderConfiguration();
+        if (state.selectedBookId) patchBookS3(state.selectedBookId);
+        status.textContent = "S3 Storage needs attention";
+        return;
+      }
       if (requestCommand.startsWith("updates.")) {
         state.updateCommandPending = "";
         updateUpdateControls();
@@ -3113,7 +3369,14 @@
     if (event.key === "Escape" && !updateIsBusy() && !document.getElementById("update-dialog-root")?.hidden) dismissUpdateDialog();
   });
   const globalProcessStatus = document.getElementById("global-process-status");
-  if (globalProcessStatus) globalProcessStatus.addEventListener("click", () => render("process"));
+  if (globalProcessStatus) globalProcessStatus.addEventListener("click", () => {
+    const activeBookId = String(valueFor(state.storageSnapshot, "activeBookId", "") ?? "");
+    if (!activeBookId) { render("process"); return; }
+    state.selectedBookId = activeBookId;
+    state.selectedBookTab = "settings";
+    state.bookDrawerOpen = true;
+    render("books");
+  });
   updateGlobalProcessStatus();
   window.setInterval(() => { if (valueFor(window.processSnapshot, "isActive", false) || valueFor(window.processSnapshot, "isCancelling", false)) send("process.get"); }, 1000);
   send("app.ping");

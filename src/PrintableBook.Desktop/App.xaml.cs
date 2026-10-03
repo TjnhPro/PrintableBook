@@ -79,6 +79,12 @@ public partial class App : Application
                 .GetAwaiter()
                 .GetResult();
             serviceProvider?
+                .GetService<ProcessWindowShutdownCoordinator>()?
+                .StopStorageAndWaitAsync(ProcessWindowShutdownCoordinator.StopTimeout)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+            serviceProvider?
                 .GetService<IAmazonBrowserLifetime>()?
                 .ShutdownAsync()
                 .AsTask()

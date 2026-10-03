@@ -200,3 +200,43 @@
   @media (max-width: 900px) { .master-detail { @apply grid-cols-1; } .brand-file-grid { @apply grid-cols-1; } }
 }
 @keyframes pb-pulse { 50% { opacity: .45; } }
+
+.storage-settings-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px; color:var(--pb-muted); font-size:12px; }
+.s3-credential-row { margin-top:12px; }
+.storage-book-card { display:grid; grid-column:1/-1; align-content:start; min-width:0; gap:12px; }
+.storage-book-card > header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+.storage-book-card h2 { color:var(--pb-ink); font-size:15px; font-weight:700; }
+.storage-book-card header p,.storage-book-reason,.storage-time-row { margin-top:3px; color:var(--pb-muted); font-size:11px; line-height:1.45; }
+.storage-progress-copy,.storage-time-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.storage-progress-copy { color:var(--pb-muted); font-size:12px; }
+.storage-progress-copy strong { color:var(--pb-ink); }
+.storage-progress { height:7px; overflow:hidden; border-radius:999px; background:var(--pb-border); }
+.storage-progress > span { display:block; height:100%; border-radius:inherit; background:var(--pb-primary); transition:width .18s ease; }
+.storage-file-list { display:grid; border:1px solid var(--pb-border); border-radius:8px; }
+.storage-file-row { display:grid; grid-template-columns:minmax(160px,1.15fr) minmax(300px,2fr) auto; align-items:center; gap:14px; padding:10px; border-bottom:1px solid var(--pb-border); }
+.storage-file-row:last-child { border-bottom:0; }
+.storage-file-row > div { min-width:0; }
+.storage-file-name { display:grid; gap:3px; }
+.storage-file-row strong { overflow-wrap:anywhere; color:var(--pb-ink); font-size:12px; font-weight:650; }
+.storage-file-row small { color:var(--pb-danger); font-size:10px; }
+.storage-file-facts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; min-width:0; margin:0; }
+.storage-file-facts > div { display:grid; gap:2px; min-width:0; }
+.storage-file-facts dt { color:var(--pb-muted); font-size:9px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+.storage-file-facts dd { min-width:0; margin:0; overflow:hidden; color:var(--pb-ink); font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+.storage-file-state { display:flex!important; align-items:center; justify-content:flex-end; gap:8px; }
+.storage-file-actions { display:flex; gap:6px; }
+.storage-file-actions .button-secondary { min-height:28px; padding:4px 9px; font-size:11px; }
+.storage-book-error { padding:9px 10px; border:1px solid #fecaca; border-radius:7px; background:#fff1f2; color:var(--pb-danger); font-size:11px; overflow-wrap:anywhere; }
+.storage-file-empty { padding:24px; border:1px dashed var(--pb-border); border-radius:8px; color:var(--pb-muted); font-size:12px; text-align:center; }
+.storage-missing-list { display:grid; gap:6px; margin:0; padding:10px 12px 10px 28px; border:1px solid #fed7aa; border-radius:8px; background:#fffaf0; color:var(--pb-ink); font-size:11px; }
+.storage-missing-list li { padding-left:2px; }
+.storage-missing-list strong { margin-right:6px; }
+.storage-missing-list span { color:var(--pb-muted); }
+.storage-active-owner { display:grid; gap:4px; padding:14px; border:1px solid var(--pb-border); border-radius:8px; background:var(--pb-soft); }
+.storage-active-owner strong { color:var(--pb-ink); font-size:12px; }
+.storage-active-owner span { color:var(--pb-muted); font-size:11px; }
+.storage-book-card > footer { display:flex; align-items:center; justify-content:flex-end; gap:8px; }
+@media (max-width:900px) { .storage-file-row { grid-template-columns:1fr; align-items:start; }.storage-file-state { justify-content:flex-start; } }
+@media (max-width:680px) { .storage-file-facts { grid-template-columns:1fr; }.storage-file-facts dd { white-space:normal; } }
+@media (max-width:720px) { .storage-settings-heading,.storage-time-row { align-items:flex-start; flex-direction:column; }.storage-book-card > footer { display:grid; grid-template-columns:1fr; }.storage-book-card > footer button { width:100%; } }
+@media (prefers-reduced-motion:reduce) { .storage-progress > span { transition:none; } }
