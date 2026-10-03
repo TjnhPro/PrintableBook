@@ -241,6 +241,7 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains(".book-settings-information { grid-column:span 8; }", layout, StringComparison.Ordinal);
         Assert.Contains(".book-settings-assignment { grid-column:span 4; }", layout, StringComparison.Ordinal);
         Assert.Contains(".book-settings-background,.book-settings-templates { grid-column:span 6; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-settings-card.book-settings-s3 { grid-column:1/-1; width:100%; align-items:stretch; justify-content:stretch; }", layout, StringComparison.Ordinal);
         Assert.Contains("const renderProcessedInteriorPages", script, StringComparison.Ordinal);
         Assert.Contains("const introPageSize = 6", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"intro-template-page\"", script, StringComparison.Ordinal);
