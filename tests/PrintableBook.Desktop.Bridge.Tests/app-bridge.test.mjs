@@ -1438,6 +1438,11 @@ test("Book detail changes tabs without redrawing its drawer shell", () => {
   assert.match(content.innerHTML, /<strong>0<\/strong> shown · <strong>1<\/strong> total · <strong>0<\/strong> active · <strong>1<\/strong> inactive/);
   assert.doesNotMatch(content.innerHTML, /class="asset-result-count"/);
   assert.match(content.innerHTML, /interior-artwork-grid-scroll/);
+  assert.match(content.innerHTML, /<legend>Artwork controls<\/legend>/);
+  assert.doesNotMatch(content.innerHTML, /Search artwork/);
+  assert.doesNotMatch(content.innerHTML, /data-action="filter-assets"/);
+  assert.doesNotMatch(content.innerHTML, /interior-artwork-filters/);
+  assert.doesNotMatch(content.innerHTML, /interior-artwork-bulk-toolbar/);
   assert.match(content.innerHTML, /No artwork matches this view/);
   assert.match(content.innerHTML, /data-asset-status="Active" aria-pressed="true"/);
   assert.match(content.innerHTML, /data-asset-frame-mode="" aria-pressed="true">All/);
