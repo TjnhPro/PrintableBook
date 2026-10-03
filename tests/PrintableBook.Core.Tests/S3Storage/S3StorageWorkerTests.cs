@@ -77,11 +77,68 @@ public sealed class S3StorageWorkerTests : IAsyncLifetime
         const string bookId = "Book Four";
         await CreateOutputAsync(bookId);
         var session = new FakeObjectSession(TimeSpan.FromMilliseconds(40));
+        foreach (var fileName in S3StoragePolicy.FileNames(bookId))
+            session.Remote[Key(fileName)] = new("outdated", 1, true, 1);
         var (worker, request) = CreateWorker(bookId, session, S3StorageAction.Check);
 
         await ((IBackgroundTaskWorker)worker).ExecuteAsync(request, new Context(), CancellationToken.None);
 
         Assert.Equal(S3StoragePolicy.MaximumFileConcurrency, session.MaximumActive);
+    }
+
+    [Fact]
+    public async Task Check_lists_once_and_preserves_remote_facts_for_a_missing_local_file()
+    {
+        const string bookId = "Book Five";
+        var output = await CreateOutputAsync(bookId);
+        var fileName = S3StoragePolicy.FileNames(bookId)[0];
+        var path = Path.Combine(output, fileName);
+        var remote = await RemoteAsync(path);
+        File.Delete(path);
+        var session = new FakeObjectSession();
+        session.Remote[Key(fileName)] = remote;
+        var (worker, request) = CreateWorker(bookId, session, S3StorageAction.Check);
+
+        var result = Assert.IsType<S3StorageBookView>(await ((IBackgroundTaskWorker)worker).ExecuteAsync(request, new Context(), CancellationToken.None));
+
+        Assert.Equal(1, session.ListCount);
+        Assert.Equal(1, session.HeadCount);
+        Assert.Equal(S3StorageFileState.MissingLocal, result.Files[0].State);
+        Assert.False(result.Files[0].LocalExists);
+        Assert.True(result.Files[0].RemoteExists);
+        Assert.Equal(remote.Length, result.Files[0].RemoteLength);
+        Assert.Equal(remote.Sha256, result.Files[0].RemoteSha256);
+    }
+
+    [Fact]
+    public async Task Check_treats_missing_remote_length_metadata_as_changed()
+    {
+        const string bookId = "Book Six";
+        var output = await CreateOutputAsync(bookId);
+        var fileName = S3StoragePolicy.FileNames(bookId)[0];
+        var remote = await RemoteAsync(Path.Combine(output, fileName));
+        var session = new FakeObjectSession();
+        session.Remote[Key(fileName)] = remote with { MetadataLength = null };
+        var (worker, request) = CreateWorker(bookId, session, S3StorageAction.Check);
+
+        var result = Assert.IsType<S3StorageBookView>(await ((IBackgroundTaskWorker)worker).ExecuteAsync(request, new Context(), CancellationToken.None));
+
+        Assert.Equal(S3StorageFileState.Changed, result.Files[0].State);
+    }
+
+    [Fact]
+    public async Task Receipt_checkpoints_are_secret_free_and_do_not_persist_derived_public_urls()
+    {
+        const string bookId = "Book Seven";
+        await CreateOutputAsync(bookId);
+        var session = new FakeObjectSession();
+        var receipts = new ReceiptStore();
+        var (worker, request) = CreateWorker(bookId, session, S3StorageAction.Check, receipts);
+
+        await ((IBackgroundTaskWorker)worker).ExecuteAsync(request, new Context(), CancellationToken.None);
+
+        Assert.True(receipts.Saved.Count >= 9);
+        Assert.All(receipts.Saved, receipt => Assert.All(receipt.View.Files, row => Assert.Empty(row.PublicUrl)));
     }
 
     public Task InitializeAsync() => Task.CompletedTask;
@@ -92,7 +149,7 @@ public sealed class S3StorageWorkerTests : IAsyncLifetime
         return Task.CompletedTask;
     }
 
-    private (S3StorageWorker Worker, S3StorageTaskRequest Request) CreateWorker(string bookId, FakeObjectSession session, S3StorageAction action)
+    private (S3StorageWorker Worker, S3StorageTaskRequest Request) CreateWorker(string bookId, FakeObjectSession session, S3StorageAction action, ReceiptStore? receiptStore = null)
     {
         var contexts = new S3StorageOperationContextStore();
         var settings = new S3StorageSettings("access", "secret", new("us-east-1", "valid-bucket", "coloring"));
@@ -102,7 +159,7 @@ public sealed class S3StorageWorkerTests : IAsyncLifetime
             contexts,
             new FakeObjectSessionFactory(session),
             new BookOutputLeaseCoordinator(),
-            new ReceiptStore());
+            receiptStore ?? new ReceiptStore());
         return (worker, new(bookId, action, operation.Id));
     }
 
@@ -119,7 +176,7 @@ public sealed class S3StorageWorkerTests : IAsyncLifetime
     private static async Task<S3RemoteObject> RemoteAsync(string path)
     {
         await using var stream = File.OpenRead(path);
-        return new(Convert.ToHexString(await SHA256.HashDataAsync(stream)).ToLowerInvariant(), stream.Length, true);
+        return new(Convert.ToHexString(await SHA256.HashDataAsync(stream)).ToLowerInvariant(), stream.Length, true, stream.Length);
     }
 
     private ApplicationSnapshot CreateSnapshot(string bookId, string asin)
@@ -154,12 +211,25 @@ public sealed class S3StorageWorkerTests : IAsyncLifetime
         public Dictionary<string, S3RemoteObject> Remote { get; } = new(StringComparer.Ordinal);
         public List<string> Uploaded { get; } = [];
         public int MaximumActive { get; private set; }
+        public int ListCount { get; private set; }
+        public int HeadCount => Volatile.Read(ref headCount);
+
+        public ValueTask<S3RemotePrefix> ListPrefixAsync(string prefix, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ListCount++;
+            IReadOnlySet<string> keys = Remote.Keys
+                .Where(key => key.StartsWith(prefix, StringComparison.Ordinal))
+                .ToHashSet(StringComparer.Ordinal);
+            return ValueTask.FromResult(new S3RemotePrefix(keys));
+        }
 
         public async ValueTask<S3RemoteObject?> HeadAsync(string objectKey, CancellationToken cancellationToken = default)
         {
             Enter();
             try
             {
+                Interlocked.Increment(ref headCount);
                 if (delay is { } latency) await Task.Delay(latency, cancellationToken);
                 return Remote.TryGetValue(objectKey, out var value) ? value : null;
             }
@@ -173,7 +243,7 @@ public sealed class S3StorageWorkerTests : IAsyncLifetime
             {
                 if (delay is { } latency) await Task.Delay(latency, cancellationToken);
                 lock (Uploaded) Uploaded.Add(objectKey);
-                Remote[objectKey] = new(sha256, length, true);
+                Remote[objectKey] = new(sha256, length, true, length);
             }
             finally { Interlocked.Decrement(ref active); }
         }
@@ -185,12 +255,19 @@ public sealed class S3StorageWorkerTests : IAsyncLifetime
             var current = Interlocked.Increment(ref active);
             lock (this) MaximumActive = Math.Max(MaximumActive, current);
         }
+
+        private int headCount;
     }
 
     private sealed class ReceiptStore : IS3PublicationReceiptStore
     {
-        public ValueTask<S3PublicationReceipt?> LoadAsync(DirectoryReference bookDirectory, CancellationToken cancellationToken = default) => ValueTask.FromResult<S3PublicationReceipt?>(null);
-        public ValueTask SaveAsync(DirectoryReference bookDirectory, S3PublicationReceipt receipt, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public List<S3PublicationReceipt> Saved { get; } = [];
+        public ValueTask<S3PublicationReceiptLoadResult> LoadAsync(DirectoryReference bookDirectory, CancellationToken cancellationToken = default) => ValueTask.FromResult(new S3PublicationReceiptLoadResult(null));
+        public ValueTask SaveAsync(DirectoryReference bookDirectory, S3PublicationReceipt receipt, CancellationToken cancellationToken = default)
+        {
+            Saved.Add(receipt);
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed class Context : IBackgroundTaskContext

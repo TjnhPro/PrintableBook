@@ -8,14 +8,14 @@ public sealed class JsonS3PublicationReceiptStore(IFileSystem fileSystem) : IS3P
 {
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web) { WriteIndented = true, Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 
-    public async ValueTask<S3PublicationReceipt?> LoadAsync(DirectoryReference bookDirectory, CancellationToken cancellationToken = default)
+    public async ValueTask<S3PublicationReceiptLoadResult> LoadAsync(DirectoryReference bookDirectory, CancellationToken cancellationToken = default)
     {
         var file = FileFor(bookDirectory);
-        if (!await fileSystem.FileExistsAsync(file, cancellationToken)) return null;
+        if (!await fileSystem.FileExistsAsync(file, cancellationToken)) return new(null);
         try
         {
             var receipt = JsonSerializer.Deserialize<S3PublicationReceipt>(await fileSystem.ReadTextAsync(file, cancellationToken), Options);
-            if (receipt is null || receipt.Version != 1) return null;
+            if (receipt is null || receipt.Version != 1) return new(null, "s3_receipt_unavailable");
             if (receipt.Outcome == S3StorageOutcome.Running)
             {
                 var interrupted = receipt with
@@ -32,11 +32,11 @@ public sealed class JsonS3PublicationReceiptStore(IFileSystem fileSystem) : IS3P
                     FinishedAtUtc = DateTimeOffset.UtcNow
                 };
                 await SaveAsync(bookDirectory, interrupted, cancellationToken);
-                return interrupted;
+                return new(interrupted);
             }
-            return receipt;
+            return new(receipt);
         }
-        catch (JsonException) { return null; }
+        catch (JsonException) { return new(null, "s3_receipt_unavailable"); }
     }
 
     public ValueTask SaveAsync(DirectoryReference bookDirectory, S3PublicationReceipt receipt, CancellationToken cancellationToken = default) =>

@@ -48,4 +48,33 @@ public sealed class S3StoragePolicyTests
 
         Assert.Equal("s3_folder_invalid", exception.Code);
     }
+
+    [Theory]
+    [InlineData("coloring//private")]
+    [InlineData("coloring/./private")]
+    [InlineData("coloring/../private")]
+    public void Validate_rejects_ambiguous_folder_segments(string folder)
+    {
+        var exception = Assert.Throws<S3StorageValidationException>(() =>
+            S3StoragePolicy.ValidateConfiguration(new("us-east-1", "valid-bucket", folder)));
+
+        Assert.Equal("s3_folder_invalid", exception.Code);
+    }
+
+    [Theory]
+    [InlineData("../cover.pdf")]
+    [InlineData("nested/cover.pdf")]
+    [InlineData("nested\\cover.pdf")]
+    [InlineData("cover\n.pdf")]
+    public void ObjectKey_rejects_file_names_that_are_not_one_safe_segment(string fileName)
+    {
+        var exception = Assert.Throws<S3StorageValidationException>(() =>
+            S3StoragePolicy.ObjectKey("coloring", "B0FCC8Q6JP", fileName));
+
+        Assert.Equal("s3_file_name_invalid", exception.Code);
+    }
+
+    [Fact]
+    public void DestinationPrefix_is_canonical_and_always_ends_with_a_separator() =>
+        Assert.Equal("coloring/adults/B0FCC8Q6JP/", S3StoragePolicy.DestinationPrefix("/coloring/adults/", "b0fcc8q6jp"));
 }

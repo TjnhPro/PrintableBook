@@ -52,13 +52,26 @@ public static partial class S3StoragePolicy
         if (normalizedAsin.Length == 0) throw new S3StorageValidationException("s3_asin_invalid", "A 10-character alphanumeric ASIN is required.");
         var normalizedFolder = NormalizeFolder(folder);
         if (normalizedFolder.Length == 0) throw new S3StorageValidationException("s3_folder_invalid", "Enter a non-empty S3 destination folder.");
+        if (string.IsNullOrWhiteSpace(fileName) || fileName is "." or ".." || fileName.IndexOfAny(['/', '\\']) >= 0 || fileName.Any(char.IsControl))
+            throw new S3StorageValidationException("s3_file_name_invalid", "S3 publication file names must be a single safe path segment.");
         return $"{normalizedFolder}/{normalizedAsin}/{fileName}";
     }
 
-    public static string PublicUrl(S3StorageSettings settings, string objectKey)
+    public static string DestinationPrefix(string folder, string asin)
+    {
+        var normalizedFolder = NormalizeFolder(folder);
+        var normalizedAsin = NormalizeAsin(asin);
+        if (normalizedFolder.Length == 0) throw new S3StorageValidationException("s3_folder_invalid", "Enter a non-empty S3 destination folder.");
+        if (normalizedAsin.Length == 0) throw new S3StorageValidationException("s3_asin_invalid", "A 10-character alphanumeric ASIN is required.");
+        return $"{normalizedFolder}/{normalizedAsin}/";
+    }
+
+    public static string PublicUrl(S3StorageSettings settings, string objectKey) => PublicUrl(settings.Configuration, objectKey);
+
+    public static string PublicUrl(S3StorageConfiguration configuration, string objectKey)
     {
         var encodedKey = string.Join('/', objectKey.Split('/').Select(Uri.EscapeDataString));
-        return $"https://s3.dualstack.{settings.Region}.amazonaws.com/{Uri.EscapeDataString(settings.Bucket)}/{encodedKey}";
+        return $"https://s3.dualstack.{configuration.Region}.amazonaws.com/{Uri.EscapeDataString(configuration.Bucket)}/{encodedKey}";
     }
 
     public static string ConfigurationRevision(S3StorageSettings settings, Guid generation)
@@ -69,8 +82,11 @@ public static partial class S3StoragePolicy
 
     private static string NormalizeFolder(string? value)
     {
-        var parts = (value ?? string.Empty).Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Any(part => part is "." or "..")) throw new S3StorageValidationException("s3_folder_invalid", "S3 folder cannot contain '.' or '..' segments.");
+        var normalized = (value ?? string.Empty).Replace('\\', '/').Trim().Trim('/');
+        if (normalized.Length == 0) return string.Empty;
+        var parts = normalized.Split('/', StringSplitOptions.TrimEntries);
+        if (parts.Any(part => part.Length == 0 || part is "." or ".." || part.Any(char.IsControl)))
+            throw new S3StorageValidationException("s3_folder_invalid", "S3 folder cannot contain empty, dot, or control-character segments.");
         return string.Join('/', parts);
     }
 
@@ -107,9 +123,11 @@ public interface IS3StorageSettingsStore
     ValueTask<S3StorageConfigurationStatus> ReplaceCredentialsAsync(S3StorageCredentialInput input, CancellationToken cancellationToken = default);
 }
 
-public sealed record S3RemoteObject(string Sha256, long Length, bool IsPublic);
+public sealed record S3RemotePrefix(IReadOnlySet<string> ObjectKeys);
+public sealed record S3RemoteObject(string Sha256, long Length, bool IsPublic, long? MetadataLength = null);
 public interface IS3ObjectSession : IAsyncDisposable
 {
+    ValueTask<S3RemotePrefix> ListPrefixAsync(string prefix, CancellationToken cancellationToken = default);
     ValueTask<S3RemoteObject?> HeadAsync(string objectKey, CancellationToken cancellationToken = default);
     ValueTask PutAsync(string objectKey, FileReference source, string contentType, string sha256, long length, CancellationToken cancellationToken = default);
 }
@@ -119,7 +137,21 @@ public enum S3StorageAction { Check, Upload }
 public enum S3StorageOutcome { Pending, Running, Completed, CompletedWithErrors, Cancelled, Interrupted }
 public enum S3StorageFileState { Pending, MissingLocal, MissingRemote, Synced, SyncedButNotPublic, Changed, Uploaded, Skipped, Failed, Unknown }
 
-public sealed record S3StorageFileView(int Index, string FileName, string ObjectKey, string PublicUrl, string ContentType, S3StorageFileState State, long? LocalLength = null, string? LocalSha256 = null, string? ErrorCode = null);
+public sealed record S3StorageFileView(
+    int Index,
+    string FileName,
+    string ObjectKey,
+    string PublicUrl,
+    string ContentType,
+    S3StorageFileState State,
+    bool? LocalExists = null,
+    long? LocalLength = null,
+    string? LocalSha256 = null,
+    bool? RemoteExists = null,
+    long? RemoteLength = null,
+    string? RemoteSha256 = null,
+    bool? IsPublic = null,
+    string? ErrorCode = null);
 public sealed record S3StorageBookView(string BookId, string Asin, S3StorageAction Action, S3StorageOutcome Outcome, string Phase, IReadOnlyList<S3StorageFileView> Files, int CompletedCount, int TotalCount, int UploadCompletedCount = 0, int UploadTotalCount = 0, DateTimeOffset? LastCheckedAtUtc = null, DateTimeOffset? LastUploadedAtUtc = null, string? WarningCode = null)
 {
     public static S3StorageBookView Pending(string bookId, string asin, S3StorageAction action, S3StorageSettings settings) => new(
@@ -157,13 +189,15 @@ public sealed class S3StorageOperationContextStore : IS3StorageOperationContextS
     public void Remove(Guid id) => contexts.TryRemove(id, out _);
 }
 
-public interface IBookOutputLeaseCoordinator { ValueTask<IAsyncDisposable?> TryAcquireAsync(string bookId, CancellationToken cancellationToken = default); }
+public interface IBookOutputLeaseCoordinator { ValueTask<IAsyncDisposable?> TryAcquireAsync(string outputPath, CancellationToken cancellationToken = default); }
 public sealed class BookOutputLeaseCoordinator : IBookOutputLeaseCoordinator
 {
     private readonly ConcurrentDictionary<string, SemaphoreSlim> leases = new(StringComparer.OrdinalIgnoreCase);
-    public async ValueTask<IAsyncDisposable?> TryAcquireAsync(string bookId, CancellationToken cancellationToken = default)
+    public async ValueTask<IAsyncDisposable?> TryAcquireAsync(string outputPath, CancellationToken cancellationToken = default)
     {
-        var gate = leases.GetOrAdd(bookId, _ => new SemaphoreSlim(1, 1));
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
+        var key = Path.TrimEndingDirectorySeparator(Path.GetFullPath(outputPath));
+        var gate = leases.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
         return await gate.WaitAsync(TimeSpan.Zero, cancellationToken) ? new Releaser(gate) : null;
     }
     private sealed class Releaser(SemaphoreSlim gate) : IAsyncDisposable
@@ -173,10 +207,11 @@ public sealed class BookOutputLeaseCoordinator : IBookOutputLeaseCoordinator
     }
 }
 
-public sealed record S3PublicationReceipt(int Version, string BookId, string Asin, S3StorageAction Action, S3StorageOutcome Outcome, string ConfigurationRevision, S3StorageBookView View, DateTimeOffset StartedAtUtc, DateTimeOffset UpdatedAtUtc, DateTimeOffset? FinishedAtUtc = null);
+public sealed record S3PublicationReceipt(int Version, string BookId, string Asin, S3StorageConfiguration Destination, S3StorageAction Action, S3StorageOutcome Outcome, string ConfigurationRevision, S3StorageBookView View, DateTimeOffset StartedAtUtc, DateTimeOffset UpdatedAtUtc, DateTimeOffset? FinishedAtUtc = null);
+public sealed record S3PublicationReceiptLoadResult(S3PublicationReceipt? Receipt, string? ErrorCode = null);
 public interface IS3PublicationReceiptStore
 {
-    ValueTask<S3PublicationReceipt?> LoadAsync(DirectoryReference bookDirectory, CancellationToken cancellationToken = default);
+    ValueTask<S3PublicationReceiptLoadResult> LoadAsync(DirectoryReference bookDirectory, CancellationToken cancellationToken = default);
     ValueTask SaveAsync(DirectoryReference bookDirectory, S3PublicationReceipt receipt, CancellationToken cancellationToken = default);
 }
 
@@ -209,7 +244,8 @@ public sealed class S3StorageService(IApplicationSnapshotProvider snapshotProvid
             if (session is null)
             {
                 var receipt = await receiptStore.LoadAsync(book.Directory, cancellationToken);
-                if (receipt is not null) session = new(null, book.Id.Value, false, false, receipt.View, null, active?.Subject);
+                if (receipt.Receipt is not null) session = new(null, book.Id.Value, false, false, HydratePublicUrls(receipt.Receipt), null, active?.Subject);
+                else if (receipt.ErrorCode is not null) session = new(null, book.Id.Value, false, false, null, receipt.ErrorCode, active?.Subject);
             }
             books.Add(new(book.Id.Value, summary.Metadata?.Title ?? book.Name, asin.Length == 0 ? summary.Metadata?.Asin : asin, asin.Length > 0, missing, session));
         }
@@ -264,5 +300,13 @@ public sealed class S3StorageService(IApplicationSnapshotProvider snapshotProvid
         else if (view is not null && task.State == BackgroundTaskState.Failed) view = view with { Outcome = S3StorageOutcome.CompletedWithErrors };
         return new(task.TaskId.Value, task.Subject ?? string.Empty, IsActive(task.State), task.State == BackgroundTaskState.Cancelling, view, task.ErrorCode, activeBookId);
     }
+
+    private static S3StorageBookView HydratePublicUrls(S3PublicationReceipt receipt) => receipt.View with
+    {
+        Files = receipt.View.Files
+            .Select(row => row with { PublicUrl = S3StoragePolicy.PublicUrl(receipt.Destination, row.ObjectKey) })
+            .ToArray()
+    };
+
     private static bool IsActive(BackgroundTaskState state) => state is BackgroundTaskState.Queued or BackgroundTaskState.Running or BackgroundTaskState.Cancelling;
 }

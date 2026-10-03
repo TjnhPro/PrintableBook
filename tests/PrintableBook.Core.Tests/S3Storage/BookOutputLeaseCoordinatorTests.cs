@@ -29,4 +29,15 @@ public sealed class BookOutputLeaseCoordinatorTests
         Assert.NotNull(first);
         Assert.NotNull(second);
     }
+
+    [Fact]
+    public async Task Lease_normalizes_equivalent_output_paths()
+    {
+        var coordinator = new BookOutputLeaseCoordinator();
+        var output = Path.Combine(Path.GetTempPath(), "PrintableBook", "Book One", "Output");
+        await using var first = await coordinator.TryAcquireAsync(output + Path.DirectorySeparatorChar);
+
+        var equivalent = Path.Combine(output, ".");
+        Assert.Null(await coordinator.TryAcquireAsync(equivalent));
+    }
 }

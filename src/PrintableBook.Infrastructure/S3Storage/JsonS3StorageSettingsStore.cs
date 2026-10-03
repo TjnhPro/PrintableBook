@@ -31,9 +31,12 @@ public sealed class JsonS3StorageSettingsStore(IApplicationRootDiscovery discove
         try
         {
             var envelope = await LoadEnvelopeAsync(cancellationToken);
-            return envelope is null
-                ? new(configuration, S3CredentialStatus.NotConfigured)
-                : new(configuration, S3CredentialStatus.Configured, Mask(Unprotect(envelope.EncryptedAccessKey)));
+            if (envelope is null) return new(configuration, S3CredentialStatus.NotConfigured);
+            var accessKey = Unprotect(envelope.EncryptedAccessKey);
+            var secretKey = Unprotect(envelope.EncryptedSecretKey);
+            if (string.IsNullOrWhiteSpace(accessKey) || string.IsNullOrWhiteSpace(secretKey))
+                throw new S3StorageValidationException("s3_credentials_unavailable", "Stored S3 credentials are incomplete. Replace the credentials.");
+            return new(configuration, S3CredentialStatus.Configured, Mask(accessKey));
         }
         catch (S3StorageValidationException exception)
         {
@@ -71,12 +74,39 @@ public sealed class JsonS3StorageSettingsStore(IApplicationRootDiscovery discove
 
     private async ValueTask<FileReference> GetFileAsync(CancellationToken token) => new(Path.Combine((await discovery.DiscoverAsync(token)).Paths.Root.Value, "s3.credentials.dat"));
     private static string Mask(string value) => value.Length <= 4 ? "••••" : $"{value[..Math.Min(4, value.Length)]}••••{value[^Math.Min(4, value.Length)..]}";
-    private static string Protect(string value) => OperatingSystem.IsWindows()
-        ? Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(value), Entropy, DataProtectionScope.CurrentUser))
-        : throw new PlatformNotSupportedException("S3 credential protection requires Windows.");
-    private static string Unprotect(string value) => OperatingSystem.IsWindows()
-        ? Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(value), Entropy, DataProtectionScope.CurrentUser))
-        : throw new PlatformNotSupportedException("S3 credential protection requires Windows.");
+    private static string Protect(string value)
+    {
+        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("S3 credential protection requires Windows.");
+        var plainBytes = Encoding.UTF8.GetBytes(value);
+        byte[]? protectedBytes = null;
+        try
+        {
+            protectedBytes = ProtectedData.Protect(plainBytes, Entropy, DataProtectionScope.CurrentUser);
+            return Convert.ToBase64String(protectedBytes);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(plainBytes);
+            if (protectedBytes is not null) CryptographicOperations.ZeroMemory(protectedBytes);
+        }
+    }
+
+    private static string Unprotect(string value)
+    {
+        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("S3 credential protection requires Windows.");
+        var protectedBytes = Convert.FromBase64String(value);
+        byte[]? plainBytes = null;
+        try
+        {
+            plainBytes = ProtectedData.Unprotect(protectedBytes, Entropy, DataProtectionScope.CurrentUser);
+            return Encoding.UTF8.GetString(plainBytes);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(protectedBytes);
+            if (plainBytes is not null) CryptographicOperations.ZeroMemory(plainBytes);
+        }
+    }
 
     private sealed record CredentialEnvelope(int Version, Guid Generation, string EncryptedAccessKey, string EncryptedSecretKey);
 }

@@ -76,6 +76,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBookStorageMaintenance, PhysicalBookStorageMaintenance>();
         services.AddSingleton<IInteriorShuffleStore, JsonInteriorShuffleStore>();
         services.AddSingleton<IS3StorageSettingsStore, JsonS3StorageSettingsStore>();
+        services.AddSingleton<IBookPublicationPackageStore, JsonBookPublicationPackageStore>();
         services.AddSingleton<IS3PublicationReceiptStore, JsonS3PublicationReceiptStore>();
         services.AddSingleton<IS3ObjectSessionFactory, AwsS3ObjectSessionFactory>();
         services.AddHttpClient("S3PublicVerification", client => client.Timeout = TimeSpan.FromSeconds(10));

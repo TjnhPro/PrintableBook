@@ -12,6 +12,8 @@ public sealed class S3StorageWorker(
     IBookOutputLeaseCoordinator outputLeases,
     IS3PublicationReceiptStore receiptStore) : BackgroundTaskWorker<S3StorageTaskRequest, S3StorageBookView>
 {
+    private static readonly TimeSpan StaleStagingAge = TimeSpan.FromDays(1);
+
     public override BackgroundTaskKind Kind => BackgroundTaskKind.S3Storage;
 
     protected override async ValueTask<S3StorageBookView> ExecuteTypedAsync(S3StorageTaskRequest request, IBackgroundTaskContext context, CancellationToken cancellationToken)
@@ -39,8 +41,10 @@ public sealed class S3StorageWorker(
             try
             {
                 EnsureContained(snapshot.Discovery.Paths.Root.Value, stagingRoot);
+                CleanupStaleStaging(snapshot.Discovery.Paths.Root.Value, stagingRoot);
                 Directory.CreateDirectory(stagingRoot);
-                var lease = await outputLeases.TryAcquireAsync(book.Id.Value, cancellationToken)
+                EnsureNoReparsePoints(snapshot.Discovery.Paths.Root.Value, stagingRoot);
+                var lease = await outputLeases.TryAcquireAsync(outputRoot, cancellationToken)
                     ?? throw new BackgroundTaskFailureException("book_output_busy", "Book output is being replaced. Try again when production finishes.");
                 S3StorageFileView[] staged;
                 await using (lease)
@@ -52,20 +56,24 @@ public sealed class S3StorageWorker(
                 view = view with { Files = staged.OrderBy(row => row.Index).ToArray(), Phase = "comparing", CompletedCount = 0 };
                 context.SetView(view);
                 await using var session = await objectSessions.OpenAsync(operation.Settings, cancellationToken);
+                var prefix = S3StoragePolicy.DestinationPrefix(operation.Settings.Folder, asin);
+                var remotePrefix = await session.ListPrefixAsync(prefix, cancellationToken);
                 var compared = new S3StorageFileView[staged.Length];
                 var compareCompleted = 0;
-                var sync = new object();
-                await Task.WhenAll(staged.Select(async row =>
+                var compareTasks = staged
+                    .Select(row => CompareAsync(row, remotePrefix.ObjectKeys, session, gate, cancellationToken))
+                    .ToList();
+                while (compareTasks.Count > 0)
                 {
-                    var result = await CompareAsync(row, session, gate, cancellationToken);
-                    lock (sync)
-                    {
-                        compared[result.Index] = result;
-                        compareCompleted++;
-                        view = view with { Files = MergeRows(staged, compared), CompletedCount = compareCompleted };
-                        context.SetView(view);
-                    }
-                }));
+                    var completedTask = await Task.WhenAny(compareTasks);
+                    compareTasks.Remove(completedTask);
+                    var result = await completedTask;
+                    compared[result.Index] = result;
+                    compareCompleted++;
+                    view = view with { Files = MergeRows(staged, compared), CompletedCount = compareCompleted };
+                    context.SetView(view);
+                    await SaveReceiptAsync(book.Directory, operation, view, startedAt, null, cancellationToken);
+                }
 
                 view = view with { Files = compared, CompletedCount = compared.Length, LastCheckedAtUtc = DateTimeOffset.UtcNow };
                 context.SetView(view);
@@ -91,19 +99,27 @@ public sealed class S3StorageWorker(
                 context.SetView(view);
                 var uploadedRows = compared.ToArray();
                 var uploadCompleted = 0;
-                await Task.WhenAll(compared.Select(async row =>
-                {
-                    var result = uploadIndexes.Contains(row.Index)
-                        ? await UploadAsync(row, stagingRoot, session, gate, cancellationToken)
-                        : row with { State = S3StorageFileState.Skipped };
-                    lock (sync)
+                var uploadTasks = compared
+                    .Select(async row =>
                     {
-                        uploadedRows[result.Index] = result;
-                        if (uploadIndexes.Contains(result.Index)) uploadCompleted++;
-                        view = view with { Files = uploadedRows.OrderBy(item => item.Index).ToArray(), UploadCompletedCount = uploadCompleted };
-                        context.SetView(view);
-                    }
-                }));
+                        var shouldUpload = uploadIndexes.Contains(row.Index);
+                        var result = shouldUpload
+                            ? await UploadAsync(row, stagingRoot, session, gate, cancellationToken)
+                            : row with { State = S3StorageFileState.Skipped };
+                        return (Result: result, WasUploaded: shouldUpload);
+                    })
+                    .ToList();
+                while (uploadTasks.Count > 0)
+                {
+                    var completedTask = await Task.WhenAny(uploadTasks);
+                    uploadTasks.Remove(completedTask);
+                    var completed = await completedTask;
+                    uploadedRows[completed.Result.Index] = completed.Result;
+                    if (completed.WasUploaded) uploadCompleted++;
+                    view = view with { Files = uploadedRows.OrderBy(item => item.Index).ToArray(), UploadCompletedCount = uploadCompleted };
+                    context.SetView(view);
+                    await SaveReceiptAsync(book.Directory, operation, view, startedAt, null, cancellationToken);
+                }
 
                 var failed = uploadedRows.Any(IsFailure);
                 view = view with
@@ -158,7 +174,7 @@ public sealed class S3StorageWorker(
     private static async Task<S3StorageFileView> StageAsync(S3StorageFileView row, string outputRoot, string stagingRoot, SemaphoreSlim gate, CancellationToken cancellationToken)
     {
         var source = Path.Combine(outputRoot, row.FileName);
-        if (!File.Exists(source)) return row with { State = S3StorageFileState.MissingLocal, ErrorCode = "s3_local_file_missing" };
+        if (!File.Exists(source)) return row with { State = S3StorageFileState.MissingLocal, LocalExists = false, ErrorCode = "s3_local_file_missing" };
         await gate.WaitAsync(cancellationToken);
         try
         {
@@ -169,25 +185,44 @@ public sealed class S3StorageWorker(
             var info = new FileInfo(destination);
             await using var hashStream = new FileStream(destination, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
             var hash = Convert.ToHexString(await SHA256.HashDataAsync(hashStream, cancellationToken)).ToLowerInvariant();
-            return row with { LocalLength = info.Length, LocalSha256 = hash, ErrorCode = null };
+            return row with { LocalExists = true, LocalLength = info.Length, LocalSha256 = hash, ErrorCode = null };
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            return row with { State = S3StorageFileState.Failed, ErrorCode = "s3_local_file_unavailable" };
+            return row with { State = S3StorageFileState.Failed, LocalExists = null, ErrorCode = "s3_local_file_unavailable" };
         }
         finally { gate.Release(); }
     }
 
-    private static async Task<S3StorageFileView> CompareAsync(S3StorageFileView row, IS3ObjectSession session, SemaphoreSlim gate, CancellationToken cancellationToken)
+    private static async Task<S3StorageFileView> CompareAsync(S3StorageFileView row, IReadOnlySet<string> listedKeys, IS3ObjectSession session, SemaphoreSlim gate, CancellationToken cancellationToken)
     {
-        if (row.State is S3StorageFileState.MissingLocal or S3StorageFileState.Failed) return row;
+        if (!listedKeys.Contains(row.ObjectKey))
+        {
+            return row with
+            {
+                State = row.LocalExists == false ? S3StorageFileState.MissingLocal : row.State == S3StorageFileState.Failed ? S3StorageFileState.Failed : S3StorageFileState.MissingRemote,
+                RemoteExists = false,
+                IsPublic = false
+            };
+        }
         await gate.WaitAsync(cancellationToken);
         try
         {
             var remote = await session.HeadAsync(row.ObjectKey, cancellationToken);
-            if (remote is null) return row with { State = S3StorageFileState.MissingRemote };
-            if (remote.Length != row.LocalLength || !string.Equals(remote.Sha256, row.LocalSha256, StringComparison.OrdinalIgnoreCase)) return row with { State = S3StorageFileState.Changed };
-            return row with { State = remote.IsPublic ? S3StorageFileState.Synced : S3StorageFileState.SyncedButNotPublic };
+            if (remote is null)
+                return row with { State = row.LocalExists == false ? S3StorageFileState.MissingLocal : S3StorageFileState.MissingRemote, RemoteExists = false, IsPublic = false };
+            var remoteValues = row with
+            {
+                RemoteExists = true,
+                RemoteLength = remote.Length,
+                RemoteSha256 = remote.Sha256,
+                IsPublic = remote.IsPublic
+            };
+            if (row.LocalExists == false) return remoteValues with { State = S3StorageFileState.MissingLocal };
+            if (row.State == S3StorageFileState.Failed) return remoteValues;
+            if (remote.Length != row.LocalLength || remote.MetadataLength != row.LocalLength || !string.Equals(remote.Sha256, row.LocalSha256, StringComparison.OrdinalIgnoreCase))
+                return remoteValues with { State = S3StorageFileState.Changed };
+            return remoteValues with { State = remote.IsPublic ? S3StorageFileState.Synced : S3StorageFileState.SyncedButNotPublic };
         }
         catch (S3StorageRemoteException exception) { return row with { State = S3StorageFileState.Failed, ErrorCode = exception.Code }; }
         finally { gate.Release(); }
@@ -200,16 +235,24 @@ public sealed class S3StorageWorker(
         {
             await session.PutAsync(row.ObjectKey, new FileReference(Path.Combine(stagingRoot, row.FileName)), row.ContentType, row.LocalSha256!, row.LocalLength!.Value, cancellationToken);
             var verified = await session.HeadAsync(row.ObjectKey, cancellationToken);
-            return verified is not null && verified.IsPublic && verified.Length == row.LocalLength && string.Equals(verified.Sha256, row.LocalSha256, StringComparison.OrdinalIgnoreCase)
-                ? row with { State = S3StorageFileState.Uploaded, ErrorCode = null }
-                : row with { State = S3StorageFileState.Failed, ErrorCode = "s3_upload_verification_failed" };
+            if (verified is null || verified.Length != row.LocalLength || verified.MetadataLength != row.LocalLength || !string.Equals(verified.Sha256, row.LocalSha256, StringComparison.OrdinalIgnoreCase))
+                return row with { State = S3StorageFileState.Failed, RemoteExists = verified is not null, RemoteLength = verified?.Length, RemoteSha256 = verified?.Sha256, IsPublic = verified?.IsPublic, ErrorCode = "s3_remote_verification_failed" };
+            if (!verified.IsPublic)
+                return row with { State = S3StorageFileState.Failed, RemoteExists = true, RemoteLength = verified.Length, RemoteSha256 = verified.Sha256, IsPublic = false, ErrorCode = "s3_public_verification_failed" };
+            return row with { State = S3StorageFileState.Uploaded, RemoteExists = true, RemoteLength = verified.Length, RemoteSha256 = verified.Sha256, IsPublic = true, ErrorCode = null };
         }
         catch (S3StorageRemoteException exception) { return row with { State = S3StorageFileState.Failed, ErrorCode = exception.Code }; }
         finally { gate.Release(); }
     }
 
-    private ValueTask SaveReceiptAsync(DirectoryReference directory, S3StorageOperationContext operation, S3StorageBookView view, DateTimeOffset started, DateTimeOffset? finished, CancellationToken token) =>
-        receiptStore.SaveAsync(directory, new(1, view.BookId, view.Asin, view.Action, view.Outcome, operation.ConfigurationRevision, view, started, DateTimeOffset.UtcNow, finished), token);
+    private ValueTask SaveReceiptAsync(DirectoryReference directory, S3StorageOperationContext operation, S3StorageBookView view, DateTimeOffset started, DateTimeOffset? finished, CancellationToken token)
+    {
+        var persistedView = view with
+        {
+            Files = view.Files.Select(row => row with { PublicUrl = string.Empty }).ToArray()
+        };
+        return receiptStore.SaveAsync(directory, new(1, view.BookId, view.Asin, operation.Settings.Configuration, view.Action, view.Outcome, operation.ConfigurationRevision, persistedView, started, DateTimeOffset.UtcNow, finished), token);
+    }
 
     private async ValueTask SaveReceiptBestEffortAsync(DirectoryReference directory, S3StorageOperationContext operation, S3StorageBookView view, DateTimeOffset started, DateTimeOffset? finished)
     {
@@ -233,9 +276,39 @@ public sealed class S3StorageWorker(
         if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase)) throw new BackgroundTaskFailureException("s3_staging_path_invalid", "The S3 staging path escaped its application-owned root.");
     }
 
+    private static void EnsureNoReparsePoints(string appRoot, string stagingRoot)
+    {
+        var trustedRoot = Path.GetFullPath(appRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var current = Path.GetFullPath(stagingRoot);
+        while (!string.Equals(current, trustedRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            if (Directory.Exists(current) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                throw new BackgroundTaskFailureException("s3_staging_path_invalid", "The S3 staging path contains a reparse point.");
+            current = Directory.GetParent(current)?.FullName
+                ?? throw new BackgroundTaskFailureException("s3_staging_path_invalid", "The S3 staging path is invalid.");
+        }
+    }
+
+    private static void CleanupStaleStaging(string appRoot, string currentStagingRoot)
+    {
+        var stagingRoot = Path.GetFullPath(Path.Combine(appRoot, ".printablebook", "s3-staging"));
+        if (!Directory.Exists(stagingRoot)) return;
+        foreach (var directory in Directory.EnumerateDirectories(stagingRoot))
+        {
+            if (string.Equals(Path.GetFullPath(directory), Path.GetFullPath(currentStagingRoot), StringComparison.OrdinalIgnoreCase)) continue;
+            if (Directory.GetLastWriteTimeUtc(directory) > DateTime.UtcNow - StaleStagingAge) continue;
+            TryDeleteStaging(directory);
+        }
+    }
+
     private static void TryDeleteStaging(string path)
     {
-        try { if (Directory.Exists(path)) Directory.Delete(path, true); }
+        try
+        {
+            if (!Directory.Exists(path)) return;
+            if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) return;
+            Directory.Delete(path, true);
+        }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
     }
 }

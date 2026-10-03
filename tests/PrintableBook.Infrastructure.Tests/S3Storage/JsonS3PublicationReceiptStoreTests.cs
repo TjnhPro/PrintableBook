@@ -22,11 +22,13 @@ public sealed class JsonS3PublicationReceiptStoreTests : IAsyncLifetime
             Phase = "publishing"
         };
         var started = DateTimeOffset.UtcNow.AddMinutes(-1);
-        await store.SaveAsync(directory, new(1, "Book One", "B0FCC8Q6JP", S3StorageAction.Upload, S3StorageOutcome.Running, "revision", view, started, started));
+        await store.SaveAsync(directory, new(1, "Book One", "B0FCC8Q6JP", settings.Configuration, S3StorageAction.Upload, S3StorageOutcome.Running, "revision", view, started, started));
 
-        var loaded = await store.LoadAsync(directory);
+        var loadResult = await store.LoadAsync(directory);
+        var loaded = loadResult.Receipt;
 
         Assert.NotNull(loaded);
+        Assert.Null(loadResult.ErrorCode);
         Assert.Equal(S3StorageOutcome.Interrupted, loaded!.Outcome);
         Assert.Equal(S3StorageOutcome.Interrupted, loaded.View.Outcome);
         Assert.Equal("s3_publication_interrupted", loaded.View.WarningCode);
@@ -42,7 +44,10 @@ public sealed class JsonS3PublicationReceiptStoreTests : IAsyncLifetime
         await File.WriteAllTextAsync(Path.Combine(workspace, "s3-publication.json"), "not-json");
         var store = new JsonS3PublicationReceiptStore(new PhysicalFileSystem());
 
-        Assert.Null(await store.LoadAsync(new DirectoryReference(root)));
+        var loaded = await store.LoadAsync(new DirectoryReference(root));
+
+        Assert.Null(loaded.Receipt);
+        Assert.Equal("s3_receipt_unavailable", loaded.ErrorCode);
     }
 
     public Task InitializeAsync() => Task.CompletedTask;
