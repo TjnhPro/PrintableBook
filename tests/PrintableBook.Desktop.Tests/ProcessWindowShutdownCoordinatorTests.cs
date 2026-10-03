@@ -1,4 +1,5 @@
 using PrintableBook.Core.Application.Desktop;
+using PrintableBook.Core.Application.BackgroundTasks;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
@@ -106,6 +107,47 @@ public sealed class ProcessWindowShutdownCoordinatorTests
         Assert.All(prompt.TimeoutIntents, intent => Assert.Equal(ProcessShutdownIntent.RestartForUpdate, intent));
     }
 
+    [Fact]
+    public async Task RequestCloseAsync_prompts_cancels_and_drains_an_active_s3_publication()
+    {
+        var prompt = new StubPrompt(ActiveProcessCloseDecision.StopAndExit);
+        var session = new StubSession(false, []);
+        var storage = new StubBackgroundTaskManager([true]);
+
+        var outcome = await new ProcessWindowShutdownCoordinator(session, prompt, backgroundTaskManager: storage).RequestCloseAsync();
+
+        Assert.Equal(ProcessWindowCloseOutcome.Close, outcome);
+        Assert.Equal(1, prompt.ActivePromptCount);
+        Assert.Equal(1, storage.CancelCalls);
+        Assert.Equal(1, storage.WaitCalls);
+        Assert.Equal(ProcessWindowShutdownCoordinator.StopTimeout, storage.Timeouts.Single());
+    }
+
+    [Fact]
+    public async Task RequestCloseAsync_keeps_active_s3_running_when_the_user_continues_using_the_app()
+    {
+        var prompt = new StubPrompt(ActiveProcessCloseDecision.ContinueUsingApp);
+        var storage = new StubBackgroundTaskManager([true]);
+
+        var outcome = await new ProcessWindowShutdownCoordinator(new StubSession(false, []), prompt, backgroundTaskManager: storage).RequestCloseAsync();
+
+        Assert.Equal(ProcessWindowCloseOutcome.KeepOpen, outcome);
+        Assert.Equal(0, storage.CancelCalls);
+        Assert.Equal(0, storage.WaitCalls);
+    }
+
+    [Fact]
+    public async Task RequestCloseAsync_can_force_exit_when_s3_does_not_drain_within_the_timeout()
+    {
+        var prompt = new StubPrompt(ActiveProcessCloseDecision.StopAndExit, ProcessStopTimeoutDecision.ForceExit);
+        var storage = new StubBackgroundTaskManager([false]);
+
+        var outcome = await new ProcessWindowShutdownCoordinator(new StubSession(false, []), prompt, backgroundTaskManager: storage).RequestCloseAsync();
+
+        Assert.Equal(ProcessWindowCloseOutcome.ForceExit, outcome);
+        Assert.Equal(1, prompt.TimeoutPromptCount);
+    }
+
     private sealed class StubPrompt(ActiveProcessCloseDecision activeDecision = ActiveProcessCloseDecision.StopAndExit, ProcessStopTimeoutDecision timeoutDecision = ProcessStopTimeoutDecision.ForceExit) : IProcessShutdownPrompt
     {
         public int ActivePromptCount { get; private set; }
@@ -151,5 +193,53 @@ public sealed class ProcessWindowShutdownCoordinatorTests
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             return false;
         }
+    }
+
+    private sealed class StubBackgroundTaskManager(IReadOnlyList<bool> waitResults) : IBackgroundTaskManager
+    {
+        private readonly BackgroundTaskId taskId = new("task-s3-shutdown");
+        private readonly Queue<bool> waits = new(waitResults);
+        private bool active = true;
+        public int CancelCalls { get; private set; }
+        public int WaitCalls { get; private set; }
+        public List<TimeSpan> Timeouts { get; } = [];
+
+        public ValueTask<BackgroundTaskSnapshot> StartAsync<TRequest>(BackgroundTaskKind kind, string key, string? subject, TRequest request, object? initialView = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public ValueTask<BackgroundTaskSnapshot?> GetAsync(BackgroundTaskId requestedTaskId, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<BackgroundTaskSnapshot?>(requestedTaskId == taskId ? Snapshot() : null);
+
+        public ValueTask<IReadOnlyList<BackgroundTaskSnapshot>> ListAsync(BackgroundTaskKind? kind = null, CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IReadOnlyList<BackgroundTaskSnapshot>>(active && (kind is null or BackgroundTaskKind.S3Storage) ? [Snapshot()] : []);
+
+        public ValueTask<BackgroundTaskSnapshot?> CancelAsync(BackgroundTaskId requestedTaskId, CancellationToken cancellationToken = default)
+        {
+            CancelCalls++;
+            return ValueTask.FromResult<BackgroundTaskSnapshot?>(Snapshot(BackgroundTaskState.Cancelling));
+        }
+
+        public ValueTask<bool> WaitAsync(BackgroundTaskId requestedTaskId, TimeSpan timeout, CancellationToken cancellationToken = default)
+        {
+            WaitCalls++;
+            Timeouts.Add(timeout);
+            var completed = waits.Dequeue();
+            if (completed) active = false;
+            return ValueTask.FromResult(completed);
+        }
+
+        public bool TryGetResult<TResult>(BackgroundTaskId requestedTaskId, out TResult? result)
+        {
+            result = default;
+            return false;
+        }
+
+        public bool TryGetView<TView>(BackgroundTaskId requestedTaskId, out TView? view) where TView : class
+        {
+            view = default;
+            return false;
+        }
+
+        private BackgroundTaskSnapshot Snapshot(BackgroundTaskState state = BackgroundTaskState.Running) =>
+            new(taskId, BackgroundTaskKind.S3Storage, state, "s3:book:Upload", "Book One", "publishing", 2, 7, null, DateTimeOffset.UtcNow, null, null, null);
     }
 }
