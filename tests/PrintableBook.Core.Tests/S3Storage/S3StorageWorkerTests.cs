@@ -141,6 +141,41 @@ public sealed class S3StorageWorkerTests : IAsyncLifetime
         Assert.All(receipts.Saved, receipt => Assert.All(receipt.View.Files, row => Assert.Empty(row.PublicUrl)));
     }
 
+    [Fact]
+    public async Task Upload_waits_for_every_remote_comparison_before_the_first_put()
+    {
+        const string bookId = "Book Eight";
+        await CreateOutputAsync(bookId);
+        var session = new FakeObjectSession { ExpectedHeadCountBeforePut = 7 };
+        foreach (var fileName in S3StoragePolicy.FileNames(bookId))
+            session.Remote[Key(fileName)] = new("outdated", 1, true, 1);
+        var (worker, request) = CreateWorker(bookId, session, S3StorageAction.Upload);
+
+        await ((IBackgroundTaskWorker)worker).ExecuteAsync(request, new Context(), CancellationToken.None);
+
+        Assert.False(session.PutStartedBeforePreflightCompleted);
+        Assert.Equal(7, session.Uploaded.Count);
+    }
+
+    [Fact]
+    public async Task Cancellation_drains_in_flight_file_workers_before_the_operation_unwinds()
+    {
+        const string bookId = "Book Nine";
+        await CreateOutputAsync(bookId);
+        var session = new FakeObjectSession(TimeSpan.FromSeconds(10));
+        foreach (var fileName in S3StoragePolicy.FileNames(bookId))
+            session.Remote[Key(fileName)] = new("outdated", 1, true, 1);
+        var (worker, request) = CreateWorker(bookId, session, S3StorageAction.Check);
+        using var cancellation = new CancellationTokenSource();
+
+        var execution = ((IBackgroundTaskWorker)worker).ExecuteAsync(request, new Context(), cancellation.Token).AsTask();
+        await session.FourWorkersActive.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => execution);
+        Assert.Equal(0, session.CurrentActive);
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
 
     public Task DisposeAsync()
@@ -213,6 +248,10 @@ public sealed class S3StorageWorkerTests : IAsyncLifetime
         public int MaximumActive { get; private set; }
         public int ListCount { get; private set; }
         public int HeadCount => Volatile.Read(ref headCount);
+        public int CurrentActive => Volatile.Read(ref active);
+        public int ExpectedHeadCountBeforePut { get; init; }
+        public bool PutStartedBeforePreflightCompleted => Volatile.Read(ref putStartedBeforePreflightCompleted) != 0;
+        public TaskCompletionSource FourWorkersActive { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public ValueTask<S3RemotePrefix> ListPrefixAsync(string prefix, CancellationToken cancellationToken = default)
         {
@@ -238,6 +277,8 @@ public sealed class S3StorageWorkerTests : IAsyncLifetime
 
         public async ValueTask PutAsync(string objectKey, FileReference source, string contentType, string sha256, long length, CancellationToken cancellationToken = default)
         {
+            if (ExpectedHeadCountBeforePut > 0 && HeadCount < ExpectedHeadCountBeforePut)
+                Interlocked.Exchange(ref putStartedBeforePreflightCompleted, 1);
             Enter();
             try
             {
@@ -254,9 +295,11 @@ public sealed class S3StorageWorkerTests : IAsyncLifetime
         {
             var current = Interlocked.Increment(ref active);
             lock (this) MaximumActive = Math.Max(MaximumActive, current);
+            if (current >= S3StoragePolicy.MaximumFileConcurrency) FourWorkersActive.TrySetResult();
         }
 
         private int headCount;
+        private int putStartedBeforePreflightCompleted;
     }
 
     private sealed class ReceiptStore : IS3PublicationReceiptStore

@@ -94,16 +94,21 @@ public sealed class JsonS3StorageSettingsStore(IApplicationRootDiscovery discove
     private static string Unprotect(string value)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("S3 credential protection requires Windows.");
-        var protectedBytes = Convert.FromBase64String(value);
+        byte[]? protectedBytes = null;
         byte[]? plainBytes = null;
         try
         {
+            protectedBytes = Convert.FromBase64String(value);
             plainBytes = ProtectedData.Unprotect(protectedBytes, Entropy, DataProtectionScope.CurrentUser);
             return Encoding.UTF8.GetString(plainBytes);
         }
+        catch (Exception exception) when (exception is FormatException or CryptographicException or ArgumentException)
+        {
+            throw new S3StorageValidationException("s3_credentials_unavailable", "Stored S3 credentials could not be decrypted. Replace the credentials.");
+        }
         finally
         {
-            CryptographicOperations.ZeroMemory(protectedBytes);
+            if (protectedBytes is not null) CryptographicOperations.ZeroMemory(protectedBytes);
             if (plainBytes is not null) CryptographicOperations.ZeroMemory(plainBytes);
         }
     }

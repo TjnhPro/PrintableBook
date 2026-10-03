@@ -63,17 +63,21 @@ public sealed class S3StorageWorker(
                 var compareTasks = staged
                     .Select(row => CompareAsync(row, remotePrefix.ObjectKeys, session, gate, cancellationToken))
                     .ToList();
-                while (compareTasks.Count > 0)
+                try
                 {
-                    var completedTask = await Task.WhenAny(compareTasks);
-                    compareTasks.Remove(completedTask);
-                    var result = await completedTask;
-                    compared[result.Index] = result;
-                    compareCompleted++;
-                    view = view with { Files = MergeRows(staged, compared), CompletedCount = compareCompleted };
-                    context.SetView(view);
-                    await SaveReceiptAsync(book.Directory, operation, view, startedAt, null, cancellationToken);
+                    while (compareTasks.Count > 0)
+                    {
+                        var completedTask = await Task.WhenAny(compareTasks);
+                        compareTasks.Remove(completedTask);
+                        var result = await completedTask;
+                        compared[result.Index] = result;
+                        compareCompleted++;
+                        view = view with { Files = MergeRows(staged, compared), CompletedCount = compareCompleted };
+                        context.SetView(view);
+                        await SaveReceiptBestEffortAsync(book.Directory, operation, view, startedAt, null);
+                    }
                 }
+                catch { await ObserveRemainingAsync(compareTasks); throw; }
 
                 view = view with { Files = compared, CompletedCount = compared.Length, LastCheckedAtUtc = DateTimeOffset.UtcNow };
                 context.SetView(view);
@@ -109,17 +113,21 @@ public sealed class S3StorageWorker(
                         return (Result: result, WasUploaded: shouldUpload);
                     })
                     .ToList();
-                while (uploadTasks.Count > 0)
+                try
                 {
-                    var completedTask = await Task.WhenAny(uploadTasks);
-                    uploadTasks.Remove(completedTask);
-                    var completed = await completedTask;
-                    uploadedRows[completed.Result.Index] = completed.Result;
-                    if (completed.WasUploaded) uploadCompleted++;
-                    view = view with { Files = uploadedRows.OrderBy(item => item.Index).ToArray(), UploadCompletedCount = uploadCompleted };
-                    context.SetView(view);
-                    await SaveReceiptAsync(book.Directory, operation, view, startedAt, null, cancellationToken);
+                    while (uploadTasks.Count > 0)
+                    {
+                        var completedTask = await Task.WhenAny(uploadTasks);
+                        uploadTasks.Remove(completedTask);
+                        var completed = await completedTask;
+                        uploadedRows[completed.Result.Index] = completed.Result;
+                        if (completed.WasUploaded) uploadCompleted++;
+                        view = view with { Files = uploadedRows.OrderBy(item => item.Index).ToArray(), UploadCompletedCount = uploadCompleted };
+                        context.SetView(view);
+                        await SaveReceiptBestEffortAsync(book.Directory, operation, view, startedAt, null);
+                    }
                 }
+                catch { await ObserveRemainingAsync(uploadTasks); throw; }
 
                 var failed = uploadedRows.Any(IsFailure);
                 view = view with
@@ -257,6 +265,12 @@ public sealed class S3StorageWorker(
     private async ValueTask SaveReceiptBestEffortAsync(DirectoryReference directory, S3StorageOperationContext operation, S3StorageBookView view, DateTimeOffset started, DateTimeOffset? finished)
     {
         try { await SaveReceiptAsync(directory, operation, view, started, finished, CancellationToken.None); } catch { }
+    }
+
+    private static async Task ObserveRemainingAsync(IEnumerable<Task> tasks)
+    {
+        try { await Task.WhenAll(tasks); }
+        catch { }
     }
 
     private static IReadOnlyList<S3StorageFileView> MergeRows(IReadOnlyList<S3StorageFileView> baseline, IReadOnlyList<S3StorageFileView?> updates) => baseline.Select((row, index) => updates[index] ?? row).ToArray();

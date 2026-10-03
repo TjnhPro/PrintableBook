@@ -50,6 +50,26 @@ public sealed class JsonS3StorageSettingsStoreTests : IAsyncLifetime
         Assert.Equal("first-access", (await store.LoadAsync())!.AccessKey);
     }
 
+    [Fact]
+    public async Task Corrupt_encrypted_secret_reports_unavailable_without_exposing_ciphertext()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Directory.CreateDirectory(root);
+        var store = new JsonS3StorageSettingsStore(new Discovery(CreatePaths()), new GlobalStore(GlobalSettings.Default with { S3Storage = new("us-east-1", "valid-bucket", "coloring") }), new PhysicalFileSystem());
+        await File.WriteAllTextAsync(
+            Path.Combine(root, "s3.credentials.dat"),
+            $$"""{"version":1,"generation":"{{Guid.NewGuid()}}","encryptedAccessKey":"not-base64","encryptedSecretKey":"also-not-base64"}""");
+
+        var status = await store.GetStatusAsync();
+        var failure = await Assert.ThrowsAsync<S3StorageValidationException>(() => store.LoadAsync().AsTask());
+
+        Assert.Equal(S3CredentialStatus.Unavailable, status.CredentialStatus);
+        Assert.Equal("s3_credentials_unavailable", status.ErrorCode);
+        Assert.Null(status.MaskedAccessKey);
+        Assert.Equal("s3_credentials_unavailable", failure.Code);
+        Assert.DoesNotContain("not-base64", failure.Message, StringComparison.Ordinal);
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
 
     public Task DisposeAsync()
