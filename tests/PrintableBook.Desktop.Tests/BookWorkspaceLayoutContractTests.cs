@@ -200,8 +200,9 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("asset-status", script, StringComparison.Ordinal);
         Assert.Contains("asset-frame-mode", script, StringComparison.Ordinal);
         Assert.Contains("artworkGridScrollTop", script, StringComparison.Ordinal);
-        Assert.Contains("assetSearchFocused", script, StringComparison.Ordinal);
-        Assert.Contains("search.setSelectionRange", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Search artwork", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("filter-assets", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("assetSearchFocused", script, StringComparison.Ordinal);
         Assert.Contains("selectedArtworkReferences", script, StringComparison.Ordinal);
         Assert.Contains("toggle-all-artwork", script, StringComparison.Ordinal);
         Assert.Contains("apply-artwork-bulk", script, StringComparison.Ordinal);
@@ -212,7 +213,9 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("--pb-asset-preview: 1 / 1", layout, StringComparison.Ordinal);
         Assert.Contains(".book-detail-body:has(.tab-body-artwork)", layout, StringComparison.Ordinal);
         Assert.Contains("overflow-y:auto", layout, StringComparison.Ordinal);
-        Assert.Contains("grid-template-columns:repeat(6,minmax(0,1fr))", layout, StringComparison.Ordinal);
+        Assert.Contains("<legend>Artwork controls</legend>", script, StringComparison.Ordinal);
+        Assert.Contains(".interior-artwork-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr))", layout, StringComparison.Ordinal);
+        Assert.DoesNotContain("@media (min-width:1450px) { .interior-artwork-grid", layout, StringComparison.Ordinal);
         Assert.Contains(".interior-artwork-card.is-selected", layout, StringComparison.Ordinal);
         Assert.Contains("button.interior-artwork-card:focus-visible", layout, StringComparison.Ordinal);
     }
