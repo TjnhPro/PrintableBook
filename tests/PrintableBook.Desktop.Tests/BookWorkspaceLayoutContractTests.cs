@@ -214,6 +214,15 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains(".book-detail-body:has(.tab-body-artwork)", layout, StringComparison.Ordinal);
         Assert.Contains("overflow-y:auto", layout, StringComparison.Ordinal);
         Assert.Contains("<legend>Artwork controls</legend>", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"random-interior\"", script, StringComparison.Ordinal);
+        Assert.Contains("send(\"book.interior.shuffle\"", script, StringComparison.Ordinal);
+        Assert.Contains("Save Interior changes first", script, StringComparison.Ordinal);
+        Assert.Contains("Random Interior using the current active artwork before processing.", script, StringComparison.Ordinal);
+        Assert.Contains("interior-shuffle-status", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Random order ready", script, StringComparison.Ordinal);
+        Assert.Contains(".interior-shuffle-button", layout, StringComparison.Ordinal);
+        Assert.Contains("class=\"interior-artwork-actions\"", script, StringComparison.Ordinal);
+        Assert.Contains(".interior-artwork-actions { display:flex", layout, StringComparison.Ordinal);
         Assert.Contains(".interior-artwork-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr))", layout, StringComparison.Ordinal);
         Assert.DoesNotContain("@media (min-width:1450px) { .interior-artwork-grid", layout, StringComparison.Ordinal);
         Assert.Contains(".interior-artwork-card.is-selected", layout, StringComparison.Ordinal);

@@ -20,8 +20,15 @@ public sealed class JsonInteriorShuffleStore(IFileSystem fileSystem) : IInterior
         }
 
         var content = await fileSystem.ReadTextAsync(shuffleFile, cancellationToken);
-        return JsonSerializer.Deserialize<InteriorShuffleMap>(content, JsonOptions)
-            ?? throw new InvalidDataException("The interior shuffle file is empty or invalid.");
+        try
+        {
+            return JsonSerializer.Deserialize<InteriorShuffleMap>(content, JsonOptions)
+                ?? throw new InvalidDataException("The interior shuffle file is empty or invalid.");
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("The interior shuffle file is invalid.", exception);
+        }
     }
 
     public ValueTask SaveAsync(BookWorkspace workspace, InteriorShuffleMap shuffleMap, CancellationToken cancellationToken = default)

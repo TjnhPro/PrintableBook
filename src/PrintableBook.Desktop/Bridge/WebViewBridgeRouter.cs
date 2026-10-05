@@ -47,7 +47,8 @@ internal sealed class WebViewBridgeRouter(
     IAmazonAsinCrawlSessionService? amazonAsinCrawlSessionService = null,
     IAmazonSearchPageClient? amazonSearchPageClient = null,
     IS3StorageService? s3StorageService = null,
-    IProductionPdfNameSuggestionService? productionPdfNameSuggestionService = null)
+    IProductionPdfNameSuggestionService? productionPdfNameSuggestionService = null,
+    IInteriorShuffleService? interiorShuffleService = null)
 {
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
     private readonly ProcessingMutationGate processingMutationGate = processingMutationGate ?? new ProcessingMutationGate();
@@ -716,6 +717,42 @@ internal sealed class WebViewBridgeRouter(
                 return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
             }
 
+            if (request.Command == "book.interior.shuffle")
+            {
+                if (applicationLoadCoordinator is null || interiorShuffleService is null || request.Payload is not { } shufflePayload ||
+                    !shufflePayload.TryGetProperty("bookId", out var bookIdElement) || string.IsNullOrWhiteSpace(bookIdElement.GetString()))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_interior_shuffle");
+                }
+
+                await using (await processingMutationGate.EnterAsync(cancellationToken))
+                {
+                    if (await IsProcessingActiveAsync(cancellationToken)) return new BridgeResponse(Version, request.Id, false, null, "processing_active");
+                    if (await GetActiveStateWriterErrorAsync(cancellationToken) is { } activityError)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, activityError);
+                    }
+
+                    var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                    if (snapshot is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+                    var book = snapshot.Discovery.Books.FirstOrDefault(item => string.Equals(item.Id.Value, bookIdElement.GetString(), StringComparison.Ordinal));
+                    var summary = book is null ? null : snapshot.BookSummaries.FirstOrDefault(item => item.BookId == book.Id);
+                    if (book is null || summary is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+                    if (!summary.WorkspaceStateAvailable) return new BridgeResponse(Version, request.Id, false, null, "workspace_state_unavailable");
+
+                    try
+                    {
+                        await interiorShuffleService.RandomizeAsync(book, cancellationToken);
+                    }
+                    catch (InteriorShuffleException exception)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, exception.Code);
+                    }
+                }
+
+                return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
+            }
+
             if (request.Command is "book.background.set" or "book.interior.active.set")
             {
                 if (applicationLoadCoordinator is null || bookInteriorSettingsService is null || request.Payload is not { } settingsPayload ||
@@ -1185,7 +1222,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.pdf-name-suggestions.get" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" or "s3.get" or "s3.credentials.replace" or "book.s3.check" or "book.s3.upload" or "book.s3.get" or "book.s3.cancel" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.interior.shuffle" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.pdf-name-suggestions.get" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" or "s3.get" or "s3.credentials.replace" or "book.s3.check" or "book.s3.upload" or "book.s3.get" or "book.s3.cancel" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

@@ -660,7 +660,7 @@ test("Interior processing derives Brand from assignment and omits brandName from
       books: [{ id: { value: "Book 001" }, name: "Book 001" }]
     },
     brandSummaries: [{ brandName: "Brand One", validationStatus: "Validated" }],
-    bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Ready", assignedBrand: "Brand One", assignmentStatus: "Valid", assets: [] }]
+    bookSummaries: [{ bookId: { value: "Book 001" }, validationStatus: "Ready", assignedBrand: "Brand One", assignmentStatus: "Valid", interiorShuffle: { status: "Current", canRandomize: true, eligiblePageCount: 40 }, assets: [] }]
   } } });
 
   const openBook = { dataset: { action: "open-book-detail", bookId: "Book 001" }, closest: () => openBook };
@@ -686,8 +686,8 @@ test("Interior processing blocks a mixed assigned-Brand queue before sending a r
     },
     brandSummaries: [{ brandName: "Brand A", validationStatus: "Validated" }, { brandName: "Brand B", validationStatus: "Validated" }],
     bookSummaries: [
-      { bookId: { value: "Book A" }, validationStatus: "Ready", assignedBrand: "Brand A", assignmentStatus: "Valid", assets: [] },
-      { bookId: { value: "Book B" }, validationStatus: "Ready", assignedBrand: "Brand B", assignmentStatus: "Valid", assets: [] }
+      { bookId: { value: "Book A" }, validationStatus: "Ready", assignedBrand: "Brand A", assignmentStatus: "Valid", interiorShuffle: { status: "Current", canRandomize: true, eligiblePageCount: 40 }, assets: [] },
+      { bookId: { value: "Book B" }, validationStatus: "Ready", assignedBrand: "Brand B", assignmentStatus: "Valid", interiorShuffle: { status: "Current", canRandomize: true, eligiblePageCount: 40 }, assets: [] }
     ]
   } } });
 
@@ -1221,6 +1221,7 @@ const productionSnapshot = () => ({
     validationStatus: "Ready",
     assignedBrand: "Brand One",
     assignmentStatus: "Valid",
+    interiorShuffle: { status: "Current", canRandomize: true, eligiblePageCount: 40 },
     validationChecks: [], sourceFolders: [], publishedArtifacts: [], outputSummaries: [
       { artifactKind: "Cover", thumbnailImageUrl: "file:///cover_thumbnail.png", generatedAtUtc: "2026-09-22T07:00:00Z" }
     ], interiorPages: [], logs: [], assets: [],
@@ -1565,6 +1566,50 @@ test("Interior artwork clears saved bulk selection without redrawing the Book dr
   assert.match(content.innerHTML, /class="interior-artwork-card is-active " data-action="toggle-artwork-selection" data-source-reference="Book interior\/page-002\.png" aria-pressed="false"/);
   assert.match(content.innerHTML, /Apply to 0 selected/);
   assert.match(content.innerHTML, /<option value="unchanged" selected>No change<\/option>/);
+});
+
+test("Interior artwork starts an explicit random order and reports its saved refresh", () => {
+  const { messageHandler, content, contentListeners, messages, status } = loadBridge("books");
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [],
+      interiorSourcePageCount: 2, activeInteriorSourcePageCount: 2,
+      interiorShuffle: { status: "Missing", canRandomize: true, eligiblePageCount: 2 },
+      assets: [
+        { sourceReference: "Book interior/page-001.png", relativePath: "Book interior/page-001.png", fileName: "page-001.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "disabled", isActive: true },
+        { sourceReference: "Book interior/page-002.png", relativePath: "Book interior/page-002.png", fileName: "page-002.png", folder: "Book interior", kind: "Interior", width: 2550, height: 2550, frameMode: "disabled", isActive: true }
+      ]
+    }]
+  };
+
+  messageHandler({ data: { version: 1, id: "artwork-shuffle", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  const artworkTab = { dataset: { action: "book-tab", bookTab: "artwork" }, closest: () => artworkTab };
+  contentListeners.click({ target: artworkTab });
+
+  const randomButton = content.innerHTML.match(/<button[^>]*data-action="random-interior"[^>]*>/)?.[0] ?? "";
+  assert.notEqual(randomButton, "");
+  assert.doesNotMatch(randomButton, /\sdisabled(?:\s|>)/);
+  assert.match(content.innerHTML, /class="interior-artwork-actions"><button[^>]*data-action="random-interior"[\s\S]*?<button[^>]*data-action="apply-artwork-bulk"/);
+  assert.match(content.innerHTML, /Random order is required before processing/);
+
+  const random = { dataset: { action: "random-interior", bookId: "Book 001" }, closest: () => random };
+  contentListeners.click({ target: random });
+  assert.equal(messages.at(-1).command, "book.interior.shuffle");
+  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001" });
+  assert.match(content.innerHTML, /Creating a new random Interior order/);
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { kind: "LibraryRefresh", taskId: "shuffle-refresh" } } });
+  assert.equal(status.textContent, "Interior order randomized");
+  assert.match(content.innerHTML, /Random order saved\. Refreshing Interior status/);
+
+  snapshot.bookSummaries[0].interiorShuffle = { status: "Current", canRandomize: true, eligiblePageCount: 2 };
+  messageHandler({ data: { version: 1, id: "shuffle-current", ok: true, command: "app.snapshot", payload: snapshot } });
+  assert.doesNotMatch(content.innerHTML, /Random order ready/);
+  assert.doesNotMatch(content.innerHTML, /id="interior-shuffle-status"/);
 });
 
 test("Interior pages shows read-only processed previews and an empty state before processing", () => {

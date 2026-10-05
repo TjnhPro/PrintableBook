@@ -7,6 +7,7 @@ using PrintableBook.Core.Application.Execution;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Services;
 using PrintableBook.Core.Application.Production;
+using PrintableBook.Core.Application.Scanning;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 using PrintableBook.Infrastructure.FileSystem;
@@ -67,9 +68,11 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             bookDirectory,
             new FileReference(Path.Combine(bookDirectory.Value, "Book interior", "page-01.png")));
         await stateStore.SaveAsync(workspace, BookProcessingState.NotStarted(workspace.BookId).SetInteriorFrameMode(sourceKey, FrameMode.Enabled));
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
+        await SaveCurrentShuffleAsync(workspace.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(),
-            new JsonInteriorShuffleStore(fileSystem), CreatePagePipeline(),
+            shuffleStore, CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new PdfSharpPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
@@ -92,13 +95,14 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var fileSystem = new PhysicalFileSystem();
         var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
         var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
         var pagePipeline = CreatePagePipeline();
         var queueBookProcessor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem),
             workspaceFactory,
             stateStore,
             new MagickCoverValidator(),
-            new JsonInteriorShuffleStore(fileSystem),
+            shuffleStore,
             pagePipeline,
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new PdfSharpPrintableBookPdfExporter(),
@@ -122,6 +126,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new ArtworkDetectionThreshold(20),
             null,
             123);
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
         var result = await application.ProcessBooksAsync(new BookProcessingQueueRequest([command]));
 
         var bookResult = Assert.Single(result.Books);
@@ -161,7 +166,8 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var processedPageHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(processedPage)));
         var processedPageTimestamp = File.GetLastWriteTimeUtc(processedPage);
 
-        var reshuffled = await application.ProcessBooksAsync(new BookProcessingQueueRequest([command with { ShuffleSeed = 456 }]));
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore, seed: 456);
+        var reshuffled = await application.ProcessBooksAsync(new BookProcessingQueueRequest([command]));
         var reshuffledBook = Assert.Single(reshuffled.Books);
         Assert.Equal(BookProcessingStatus.Completed, reshuffledBook.Status);
         Assert.Equal(456, (await new JsonInteriorShuffleStore(fileSystem).LoadAsync(workspace))!.Seed);
@@ -203,12 +209,13 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var fileSystem = new PhysicalFileSystem();
         var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
         var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem),
             workspaceFactory,
             stateStore,
             new MagickCoverValidator(),
-            new JsonInteriorShuffleStore(fileSystem),
+            shuffleStore,
             CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new PdfSharpPrintableBookPdfExporter(),
@@ -217,6 +224,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new BookProcessingPipeline(Array.Empty<IBookProcessingStage>()),
             new BookProcessingQueueProcessor(new ProcessingSessionGate(), processor));
         var command = CreateCommand("interior-only-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
 
         var result = await application.ProcessBooksAsync(new BookProcessingQueueRequest([command]));
 
@@ -247,12 +255,14 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         await stateStore.SaveAsync(workspace, BookProcessingState.NotStarted(command.BookId)
             .RecordPublishedInterior("existing - Interior.pdf", InteriorOutputKind.Production, publishedAt, "existing - Interior_thumbnail.pdf")
             .RecordProcessedInteriorPreviews([new PublishedInteriorPreview("page-0001", "old-preview.png")]));
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem),
             workspaceFactory,
             stateStore,
             new MagickCoverValidator(),
-            new JsonInteriorShuffleStore(fileSystem),
+            shuffleStore,
             new RejectingInteriorPagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new RejectingPdfExporter(),
@@ -283,13 +293,15 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         await stateStore.SaveAsync(workspace, BookProcessingState.NotStarted(command.BookId)
             .RecordPublishedInterior("existing - Interior.pdf", InteriorOutputKind.Production, publishedAt, "existing - Interior_thumbnail.pdf")
             .RecordProcessedInteriorPreviews([new PublishedInteriorPreview("page-0001", "old-preview.png")]));
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
         var blockingPipeline = new BlockingInteriorPagePipeline(CreatePagePipeline());
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem),
             workspaceFactory,
             stateStore,
             new MagickCoverValidator(),
-            new JsonInteriorShuffleStore(fileSystem),
+            shuffleStore,
             blockingPipeline,
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new RejectingPdfExporter(),
@@ -397,6 +409,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new PdfSharpPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("nested-interior-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
 
         var result = await processor.ProcessBookAsync(command);
 
@@ -472,13 +485,15 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var fileSystem = new PhysicalFileSystem();
         var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
         var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(),
-            new JsonInteriorShuffleStore(fileSystem), CreatePagePipeline(),
+            shuffleStore, CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new PdfSharpPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("inactive-interior-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
         var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
 
         Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
         var secondCache = Path.Combine(workspace.WorkingDirectory.Value, "cache", "page-0002", "prepared.png");
@@ -489,18 +504,20 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var secondSource = new FileReference(Path.Combine(bookDirectory.Value, "Book interior", "page-02.png"));
         var state = (await stateStore.LoadAsync(workspace))!;
         await stateStore.SaveAsync(workspace, state.SetInteriorActive(InteriorSourceKey.FromBookRoot(bookDirectory, secondSource), false));
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
 
         var inactiveRun = await processor.ProcessBookAsync(command);
         Assert.Equal(BookProcessingStatus.Completed, inactiveRun.Status);
         Assert.True(File.Exists(Path.Combine(workspace.WorkingDirectory.Value, "processed", "interior", "page-0001.png")));
         Assert.Equal(secondProcessedTimestamp, File.GetLastWriteTimeUtc(secondProcessed));
         Assert.True(File.Exists(secondCache));
-        var inactiveMap = (await new JsonInteriorShuffleStore(fileSystem).LoadAsync(workspace))!;
+        var inactiveMap = (await shuffleStore.LoadAsync(workspace))!;
         Assert.Equal([Path.Combine(bookDirectory.Value, "Book interior", "page-01.png")], inactiveMap.Entries.Select(entry => entry.Page.Value));
         Assert.Equal(["page-0001"], (await stateStore.LoadAsync(workspace))!.PublishedInteriorPreviews!.Select(preview => preview.PageId));
 
         state = (await stateStore.LoadAsync(workspace))!;
         await stateStore.SaveAsync(workspace, state.SetInteriorActive(InteriorSourceKey.FromBookRoot(bookDirectory, secondSource), true));
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
         Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
         Assert.True(File.Exists(secondProcessed));
     }
@@ -515,13 +532,15 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var fileSystem = new PhysicalFileSystem();
         var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
         var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(),
-            new JsonInteriorShuffleStore(fileSystem), CreatePagePipeline(),
+            shuffleStore, CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new PdfSharpPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("custom-intro-preview-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
         var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
 
         Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
         Assert.Equal(["page-0001", "page-0002"], (await stateStore.LoadAsync(workspace))!.PublishedInteriorPreviews!.Select(preview => preview.PageId));
@@ -530,6 +549,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             .SetHasIntro(true)
             .SetIntroInteriorSourceKeys([InteriorSourceKey.FromBookRoot(bookDirectory, firstSource)]);
         await stateStore.SaveAsync(workspace, state);
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
 
         var customIntroRun = await processor.ProcessBookAsync(command with
         {
@@ -571,7 +591,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ProcessBookAsync_keeps_a_concrete_shuffle_seed_when_active_pages_change_or_a_legacy_map_is_upgraded()
+    public async Task ProcessBookAsync_requires_a_current_explicit_shuffle_map()
     {
         var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "StableShuffleSeedBook"));
         await CreateInteriorOnlyBookFixtureAsync(bookDirectory);
@@ -583,38 +603,26 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(), shuffleStore,
             CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new PdfSharpPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
-        var command = CreateCommand("stable-shuffle-seed-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly, ShuffleSeed = null };
+        var command = CreateCommand("stable-shuffle-seed-book", bookDirectory) with { Mode = BookProcessingMode.InteriorOnly };
         var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
 
-        Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
-        var initial = (await shuffleStore.LoadAsync(workspace))!;
-        Assert.NotNull(initial.Seed);
+        var missing = await processor.ProcessBookAsync(command);
+        Assert.Equal(BookProcessingStatus.Failed, missing.Status);
+        Assert.Equal("interior.shuffle_required", missing.Failure!.Code);
 
-        await shuffleStore.SaveAsync(workspace, initial with { Seed = null });
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
         Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
-        var legacyUpgraded = (await shuffleStore.LoadAsync(workspace))!;
-        Assert.NotNull(legacyUpgraded.Seed);
-        Assert.Equal(initial.Entries, legacyUpgraded.Entries);
 
         var secondSource = new FileReference(Path.Combine(bookDirectory.Value, "Book interior", "page-02.png"));
         var state = (await stateStore.LoadAsync(workspace))!;
         await stateStore.SaveAsync(workspace, state.SetInteriorActive(InteriorSourceKey.FromBookRoot(bookDirectory, secondSource), false));
-        Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
-        var reduced = (await shuffleStore.LoadAsync(workspace))!;
-        Assert.Equal(legacyUpgraded.Seed, reduced.Seed);
-        Assert.Single(reduced.Entries);
+        var stale = await processor.ProcessBookAsync(command);
+        Assert.Equal(BookProcessingStatus.Failed, stale.Status);
+        Assert.Equal("interior.shuffle_required", stale.Failure!.Code);
 
-        state = (await stateStore.LoadAsync(workspace))!;
-        await stateStore.SaveAsync(workspace, state.SetInteriorActive(InteriorSourceKey.FromBookRoot(bookDirectory, secondSource), true));
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore, seed: 456);
         Assert.Equal(BookProcessingStatus.Completed, (await processor.ProcessBookAsync(command)).Status);
-        var restored = (await shuffleStore.LoadAsync(workspace))!;
-        Assert.Equal(legacyUpgraded.Seed, restored.Seed);
-        var sources = new[]
-        {
-            new FileReference(Path.Combine(bookDirectory.Value, "Book interior", "page-01.png")),
-            secondSource
-        };
-        Assert.Equal(InteriorShuffleIndexGenerator.Generate(sources, restored.Seed).Entries, restored.Entries);
+        Assert.Single((await shuffleStore.LoadAsync(workspace))!.Entries);
     }
 
     [Fact]
@@ -633,6 +641,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new PdfSharpPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("background-book", bookDirectory) with { ShuffleSeed = 73, BackgroundPage = background };
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore, seed: 73);
 
         var first = await processor.ProcessBookAsync(command);
 
@@ -685,6 +694,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             BackgroundPage = background,
             IntroTemplatePages = [introTwo, introOne]
         };
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore, seed: 73);
 
         var result = await processor.ProcessBookAsync(command);
 
@@ -728,12 +738,13 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
 
         var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
         var productionStateStore = new JsonProductionWorkspaceStateStore(fileSystem);
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem),
             workspaceFactory,
             stateStore,
             new MagickCoverValidator(),
-            new JsonInteriorShuffleStore(fileSystem),
+            shuffleStore,
             CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new PdfSharpPrintableBookPdfExporter(),
@@ -750,6 +761,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
                 new ProductionPrefixSource(ProductionAssetKind.BookOwner, productionOwner, ProductionAssets.Get(ProductionAssetKind.BookOwner).StablePageId)
             ]
         };
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
 
         var productionResult = await processor.ProcessBookAsync(command);
 
@@ -801,9 +813,11 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
 
         var fileSystem = new PhysicalFileSystem();
         var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
-            new BookSourceScanner(fileSystem), workspaceFactory, new JsonBookWorkspaceStateStore(fileSystem), new MagickCoverValidator(),
-            new JsonInteriorShuffleStore(fileSystem), CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
+            new BookSourceScanner(fileSystem), workspaceFactory, stateStore, new MagickCoverValidator(),
+            shuffleStore, CreatePagePipeline(), new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new PdfSharpPrintableBookPdfExporter(), new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("final-brand-intro-book", bookDirectory) with
         {
@@ -814,6 +828,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             InteriorPdfPageSize = new PhysicalPageSize(2588d / 300d, 2625d / 300d),
             IntroTemplatePages = [finalIntro]
         };
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
 
         var result = await processor.ProcessBookAsync(command);
 
@@ -832,18 +847,20 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var fileSystem = new PhysicalFileSystem();
         var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
         var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
         var blockingPipeline = new BlockingInteriorPagePipeline(CreatePagePipeline());
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem),
             workspaceFactory,
             stateStore,
             new MagickCoverValidator(),
-            new JsonInteriorShuffleStore(fileSystem),
+            shuffleStore,
             blockingPipeline,
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new PdfSharpPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = CreateCommand("interrupted-book", bookDirectory);
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
 
         var processing = processor.ProcessBookAsync(command).AsTask();
         await blockingPipeline.WaitUntilStartedAsync();
@@ -852,7 +869,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var stateWhileRunning = await stateStore.LoadAsync(workspace);
         Assert.Equal(BookProcessingStatus.Running, stateWhileRunning!.Status);
         Assert.Equal("interior-pages", stateWhileRunning.CurrentStep);
-        Assert.Equal("cover-validation", stateWhileRunning.LastCompletedStep);
+        Assert.Equal("shuffle", stateWhileRunning.LastCompletedStep);
 
         blockingPipeline.Release();
         Assert.Equal(BookProcessingStatus.Completed, (await processing).Status);
@@ -866,13 +883,14 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var fileSystem = new PhysicalFileSystem();
         var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
         var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
         using var cancellation = new CancellationTokenSource();
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
             new BookSourceScanner(fileSystem),
             workspaceFactory,
             stateStore,
             new MagickCoverValidator(),
-            new JsonInteriorShuffleStore(fileSystem),
+            shuffleStore,
             CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new PdfSharpPrintableBookPdfExporter(),
@@ -880,6 +898,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
                 new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()),
                 cancellation));
         var command = CreateCommand("committed-book", bookDirectory);
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
 
         var result = await processor.ProcessBookAsync(command, cancellationToken: cancellation.Token);
 
@@ -900,6 +919,7 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         var fileSystem = new PhysicalFileSystem();
         var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
         var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
         using var cancellation = new CancellationTokenSource();
         var blockingPublisher = new BlockingBeforePublishOutputPublisher();
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
@@ -907,12 +927,13 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
             workspaceFactory,
             stateStore,
             new MagickCoverValidator(),
-            new JsonInteriorShuffleStore(fileSystem),
+            shuffleStore,
             CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()),
             new PdfSharpPrintableBookPdfExporter(),
             blockingPublisher);
         var command = CreateCommand("cancelled-book", bookDirectory);
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspaceFactory, stateStore, shuffleStore);
 
         var processing = processor.ProcessBookAsync(command, cancellationToken: cancellation.Token).AsTask();
         await blockingPublisher.WaitUntilStartedAsync();
@@ -962,6 +983,22 @@ public sealed class PrintableBookApplicationEndToEndTests : IAsyncLifetime
         new ArtworkDetectionThreshold(20),
         null,
         123);
+
+    private static async Task SaveCurrentShuffleAsync(
+        BookId bookId,
+        DirectoryReference bookDirectory,
+        IBookWorkspaceFactory workspaceFactory,
+        IBookWorkspaceStateStore stateStore,
+        IInteriorShuffleStore shuffleStore,
+        int seed = 123)
+    {
+        var workspace = await workspaceFactory.CreateAsync(bookId, bookDirectory);
+        var scan = await new BookSourceScanner(new PhysicalFileSystem()).ScanAsync(bookId, bookDirectory);
+        var source = BookSourceValidator.Validate(scan.Source!).Source;
+        var state = await stateStore.LoadAsync(workspace) ?? BookProcessingState.NotStarted(bookId);
+        var pages = InteriorShufflePolicy.EligiblePages(source, bookDirectory, state);
+        await shuffleStore.SaveAsync(workspace, InteriorShuffleIndexGenerator.Generate(pages, seed));
+    }
 
     private async Task CreateBookFixtureAsync(DirectoryReference bookDirectory)
     {
