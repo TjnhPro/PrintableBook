@@ -7,6 +7,8 @@
 
   state.bookKeywordBuilderDrafts = new Map();
   state.bookKeywordBuilderValidation = new Map();
+  state.interiorFolderOpenPending = false;
+  state.interiorFolderOpenBookId = "";
   state.storageRequestBooks = new Map();
   state.productionPdfNames = new Map();
   state.productionPdfNamePending = new Set();
@@ -1719,7 +1721,8 @@
     const allShownSelected = eligibleMatching.length > 0 && selectedVisibleCount === eligibleMatching.length;
     const bulkDisabled = !selectedCount || (state.assetBulkActive === "unchanged" && state.assetBulkFrameMode === "unchanged") || controlsDisabled;
     const filterControls = `<div class="asset-filter-controls"><span class="asset-filter-label">Filter artwork</span><div class="asset-filter-row"><div class="asset-filter-chip-groups"><div class="asset-status-filter" role="group" aria-label="Interior artwork status filters">${["Active", "Inactive"].map((name) => `<button type="button" class="${state.assetStatus === name ? "active" : ""}" data-action="asset-status" data-asset-status="${name}" aria-pressed="${state.assetStatus === name}">${name}</button>`).join("")}</div><div class="asset-frame-filter" role="group" aria-label="Interior artwork frame mode filters">${[["", "All"], ["enabled", "Frame"], ["disabled", "No Frame"]].map(([value, label]) => `<button type="button" class="${state.assetFrameMode === value ? "active" : ""}" data-action="asset-frame-mode" data-asset-frame-mode="${value}" aria-pressed="${state.assetFrameMode === value}">${label}</button>`).join("")}</div></div></div>${shuffleStatus}</div>`;
-    const bulkControls = `<div class="interior-artwork-bulk-controls"><label class="artwork-select-all"><input type="checkbox" data-action="toggle-all-artwork" ${allShownSelected ? "checked" : ""} ${!eligibleMatching.length || controlsDisabled ? "disabled" : ""}> Select all ${eligibleMatching.length} shown</label><label class="field artwork-bulk-field"><span>Status</span><select class="control h-8" data-action="set-artwork-bulk-active"><option value="unchanged" ${state.assetBulkActive === "unchanged" ? "selected" : ""}>No change</option><option value="active" ${state.assetBulkActive === "active" ? "selected" : ""}>Active</option><option value="inactive" ${state.assetBulkActive === "inactive" ? "selected" : ""}>Inactive</option></select></label><label class="field artwork-bulk-field"><span>Frame mode</span><select class="control h-8" data-action="set-artwork-bulk-frame-mode"><option value="unchanged" ${state.assetBulkFrameMode === "unchanged" ? "selected" : ""}>No change</option><option value="enabled" ${state.assetBulkFrameMode === "enabled" ? "selected" : ""}>Frame</option><option value="disabled" ${state.assetBulkFrameMode === "disabled" ? "selected" : ""}>No Frame</option></select></label><div class="interior-artwork-actions"><button type="button" class="button-secondary interior-shuffle-button" data-action="random-interior" data-book-id="${escapeHtml(bookId(book))}" title="${escapeHtml(shuffleTitle)}" ${shuffleDescription} aria-busy="${state.interiorShufflePending}" ${shuffleDisabled ? "disabled" : ""}>${state.interiorShufflePending ? "Randomizing…" : "Random Interior"}</button><button class="button-primary" data-action="apply-artwork-bulk" ${bulkDisabled ? "disabled" : ""}>Apply to ${selectedCount} selected</button></div></div>`;
+    const folderOpenPending = state.interiorFolderOpenPending && state.interiorFolderOpenBookId === bookId(book);
+    const bulkControls = `<div class="interior-artwork-bulk-controls"><label class="artwork-select-all"><input type="checkbox" data-action="toggle-all-artwork" ${allShownSelected ? "checked" : ""} ${!eligibleMatching.length || controlsDisabled ? "disabled" : ""}> Select all ${eligibleMatching.length} shown</label><label class="field artwork-bulk-field"><span>Status</span><select class="control h-8" data-action="set-artwork-bulk-active"><option value="unchanged" ${state.assetBulkActive === "unchanged" ? "selected" : ""}>No change</option><option value="active" ${state.assetBulkActive === "active" ? "selected" : ""}>Active</option><option value="inactive" ${state.assetBulkActive === "inactive" ? "selected" : ""}>Inactive</option></select></label><label class="field artwork-bulk-field"><span>Frame mode</span><select class="control h-8" data-action="set-artwork-bulk-frame-mode"><option value="unchanged" ${state.assetBulkFrameMode === "unchanged" ? "selected" : ""}>No change</option><option value="enabled" ${state.assetBulkFrameMode === "enabled" ? "selected" : ""}>Frame</option><option value="disabled" ${state.assetBulkFrameMode === "disabled" ? "selected" : ""}>No Frame</option></select></label><div class="interior-artwork-actions"><button type="button" class="button-secondary interior-folder-button" data-action="open-interior-folder" data-book-id="${escapeHtml(bookId(book))}" title="Open the Book interior source folder" aria-busy="${folderOpenPending}" ${state.interiorFolderOpenPending ? "disabled" : ""}>${folderOpenPending ? "Opening…" : "Open Folder"}</button><button type="button" class="button-secondary interior-shuffle-button" data-action="random-interior" data-book-id="${escapeHtml(bookId(book))}" title="${escapeHtml(shuffleTitle)}" ${shuffleDescription} aria-busy="${state.interiorShufflePending}" ${shuffleDisabled ? "disabled" : ""}>${state.interiorShufflePending ? "Randomizing…" : "Random Interior"}</button><button class="button-primary" data-action="apply-artwork-bulk" ${bulkDisabled ? "disabled" : ""}>Apply to ${selectedCount} selected</button></div></div>`;
     return `<section class="interior-artwork-workspace">${renderFrameModeMigrationWarning(summary)}<header class="interior-artwork-heading"><div><h3>Interior artwork</h3><p>Review every available Book interior page, then control whether it is processed and which frame mode it uses.</p></div><p class="interior-artwork-count" role="status" aria-live="polite" aria-atomic="true"><strong>${matching.length}</strong> shown · <strong>${allAssets.length}</strong> total · <strong>${activeCount}</strong> active · <strong>${inactiveCount}</strong> inactive</p></header><fieldset class="interior-artwork-toolbar"><legend>Artwork controls</legend>${filterControls}${bulkControls}</fieldset><div class="interior-artwork-grid-scroll"><div class="interior-artwork-grid">${matching.length ? matching.map(tile).join("") : `<p class="empty-copy interior-artwork-empty">No artwork matches this view. <button type="button" class="button-link" data-action="clear-artwork-filters">Clear filters</button></p>`}</div></div></section>`;
   };
 
@@ -2633,6 +2636,12 @@
       refreshInteriorArtworkWorkspace();
       send("book.interior.shuffle", { bookId: targetBookId });
     }
+    if (action === "open-interior-folder" && !state.interiorFolderOpenPending) {
+      state.interiorFolderOpenPending = true;
+      state.interiorFolderOpenBookId = target.dataset.bookId;
+      refreshInteriorArtworkWorkspace();
+      send("book.interior.open-folder", { bookId: target.dataset.bookId });
+    }
     if (action === "intro-add-template" || action === "intro-remove-template" || action === "intro-move-template") {
       const book = books().find((item) => bookId(item) === target.dataset.bookId);
       if (book) {
@@ -3228,6 +3237,11 @@
           : "Opened the PDF preview.";
       setPdfLibraryFeedback(message);
       status.textContent = message;
+    } else if (ok && command === "book.interior.folder.opened") {
+      state.interiorFolderOpenPending = false;
+      state.interiorFolderOpenBookId = "";
+      if (state.bookDrawerOpen && state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();
+      status.textContent = "Opened the Book interior folder.";
     } else if (ok && command === "diagnostics.snapshot") {
       window.uiDiagnostics = valueFor(response, "payload", []);
       if (currentRoute() === "diagnostics") render("diagnostics", false);
@@ -3337,6 +3351,17 @@
         state.interiorShuffleFeedbackError = true;
         if (state.bookDrawerOpen && state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();
         status.textContent = "Random Interior needs attention";
+        return;
+      }
+      if (requestCommand === "book.interior.open-folder") {
+        state.interiorFolderOpenPending = false;
+        state.interiorFolderOpenBookId = "";
+        if (state.bookDrawerOpen && state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();
+        status.textContent = ({
+          invalid_interior_folder_action: "The Interior folder action was invalid. Refresh and try again.",
+          interior_folder_not_found: "The Book interior folder does not exist.",
+          interior_folder_launch_failed: "Windows could not open the Book interior folder. Check folder permissions and try again."
+        })[String(error)] ?? "The Book interior folder could not be opened.";
         return;
       }
       if (requestCommand === "settings.save") {

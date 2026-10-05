@@ -854,6 +854,39 @@ internal sealed class WebViewBridgeRouter(
                 return BridgeResponse.Succeeded(request.Id, "book.output.action.completed", new { bookId });
             }
 
+            if (request.Command == "book.interior.open-folder")
+            {
+                if (applicationLoadCoordinator is null || outputActionService is null || request.Payload is not { } interiorFolderPayload ||
+                    !interiorFolderPayload.TryGetProperty("bookId", out var interiorFolderBookIdElement) || string.IsNullOrWhiteSpace(interiorFolderBookIdElement.GetString()))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_interior_folder_action");
+                }
+
+                var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                var bookId = interiorFolderBookIdElement.GetString()!;
+                var discoveredBook = snapshot?.Discovery.Books.FirstOrDefault(item => item.Id.Value == bookId);
+                if (discoveredBook is null)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "interior_folder_not_found");
+                }
+
+                var interiorDirectoryPath = Path.GetFullPath(Path.Combine(discoveredBook.Directory.Value, "Book interior"));
+                if (!Directory.Exists(interiorDirectoryPath))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "interior_folder_not_found");
+                }
+
+                try
+                {
+                    await outputActionService.OpenFolderAsync(new DirectoryReference(interiorDirectoryPath), cancellationToken);
+                }
+                catch (Exception exception) when (exception is Win32Exception or InvalidOperationException or UnauthorizedAccessException or IOException)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "interior_folder_launch_failed");
+                }
+                return BridgeResponse.Succeeded(request.Id, "book.interior.folder.opened", new { bookId });
+            }
+
             if (request.Command is "book.output.preview" or "book.output.open" or "book.output.reveal" or "book.output.copy-path")
             {
                 if (applicationLoadCoordinator is null || outputActionService is null || request.Payload is not { } outputPayload ||
@@ -1222,7 +1255,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.interior.shuffle" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.pdf-name-suggestions.get" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" or "s3.get" or "s3.credentials.replace" or "book.s3.check" or "book.s3.upload" or "book.s3.get" or "book.s3.cancel" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.interior.shuffle" or "book.interior.open-folder" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.pdf-name-suggestions.get" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" or "s3.get" or "s3.credentials.replace" or "book.s3.check" or "book.s3.upload" or "book.s3.get" or "book.s3.cancel" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 
