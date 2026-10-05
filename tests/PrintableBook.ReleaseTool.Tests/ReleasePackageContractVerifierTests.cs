@@ -71,7 +71,7 @@ public sealed class ReleasePackageContractVerifierTests : IDisposable
         return path;
     }
 
-    private static readonly string[] ValidFiles = ["PrintableBook.exe", "PrintableBook.Updater.exe", "Frontend/index.html", "Frontend/js/app.js", "Frontend/assets/printable-book-logo.png", ".playwright/package/package.json", ".playwright/node/win32_x64/node.exe"];
+    private static readonly string[] ValidFiles = ["PrintableBook.exe", "PrintableBook.Updater.exe", "Frontend/index.html", "Frontend/js/app.js", "Frontend/assets/printable-book-logo.png", "Metadata/cover_key.txt", "Metadata/interior_key.txt", ".playwright/package/package.json", ".playwright/node/win32_x64/node.exe"];
 
     public void Dispose()
     {

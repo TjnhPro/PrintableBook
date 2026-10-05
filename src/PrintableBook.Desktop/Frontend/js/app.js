@@ -8,6 +8,10 @@
   state.bookKeywordBuilderDrafts = new Map();
   state.bookKeywordBuilderValidation = new Map();
   state.storageRequestBooks = new Map();
+  state.productionPdfNames = new Map();
+  state.productionPdfNamePending = new Set();
+  state.productionPdfNameErrors = new Map();
+  state.productionPdfNameRequests = new Map();
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -1343,6 +1347,22 @@
     ? `<img class="${className}" src="${escapeHtml(url)}" alt="${escapeHtml(alt)}" loading="lazy" decoding="async" data-local-image data-image-fallback="${escapeHtml(fallback)}">`
     : `<span class="book-preview-fallback" aria-label="${escapeHtml(fallback)}">${escapeHtml(fallback)}</span>`;
 
+  const productionPdfNameErrorMessage = (code) => ({
+    pdf_name_source_missing: "PDF filename sources are missing. Restore Metadata/cover_key.txt and Metadata/interior_key.txt, then restart the app.",
+    pdf_name_source_unreadable: "PDF filename sources could not be read. Check file permissions, then restart the app.",
+    pdf_name_source_empty: "PDF filename sources do not contain valid Windows filenames. Update them, then restart the app.",
+    book_not_found: "This Book is no longer available. Refresh the library.",
+    snapshot_unavailable: "The library snapshot is unavailable. Refresh the library and retry."
+  })[String(code)] ?? "PDF filename suggestions are unavailable. Check the Metadata files and retry.";
+
+  const requestProductionPdfNames = (id, regenerate = false) => {
+    if (!id || state.productionPdfNamePending.has(id) || (!regenerate && state.productionPdfNames.has(id))) return;
+    state.productionPdfNamePending.add(id);
+    state.productionPdfNameErrors.delete(id);
+    const requestId = send("book.production.pdf-name-suggestions.get", { bookId: id, regenerate });
+    state.productionPdfNameRequests.set(requestId, { bookId: id, regenerate });
+  };
+
   const renderProductionWorkspace = (book, summary) => {
     const production = productionSummaryFor(summary);
     const productionAssetOrder = { "final-cover": 0, "interior-cover": 1, "book-owner": 2 };
@@ -1373,10 +1393,16 @@
     const readiness = productionFinalReadiness(book, summary);
     const feedbackTone = state.productionFeedbackError ? "is-error" : state.productionFeedbackWarning ? "is-warning" : "";
     const feedback = `<p class="production-feedback ${feedbackTone}" data-production-feedback role="${state.productionFeedbackError || state.productionFeedbackWarning ? "alert" : "status"}" aria-live="polite" aria-atomic="true" ${state.productionFeedback ? "" : "hidden"}>${escapeHtml(state.productionFeedback)}</p>`;
+    const id = bookId(book);
+    const suggestedNames = state.productionPdfNames.get(id);
+    const namesPending = state.productionPdfNamePending.has(id);
+    const namesError = state.productionPdfNameErrors.get(id) ?? "";
+    const suggestedName = (label, inputId, value) => `<label class="field production-pdf-name-field" for="${inputId}"><span>${label}</span><input id="${inputId}" class="control" type="text" value="${escapeHtml(value)}" placeholder="${namesPending ? "Generating…" : "Unavailable"}" readonly aria-describedby="production-pdf-name-help production-pdf-name-error"></label>`;
+    const nameSuggestions = `<fieldset class="production-group production-pdf-names" aria-busy="${namesPending}"><legend>Suggested PDF filenames</legend><div class="production-pdf-name-grid">${suggestedName("Cover PDF filename", "production-cover-pdf-name", valueFor(suggestedNames, "coverFileName", ""))}${suggestedName("Interior PDF filename", "production-interior-pdf-name", valueFor(suggestedNames, "interiorFileName", ""))}<button class="button-secondary" data-action="randomize-pdf-names" data-book-id="${escapeHtml(id)}" ${namesPending ? "disabled" : ""}>${namesPending ? suggestedNames ? "Randomizing…" : "Generating…" : namesError ? "Retry" : "Randomize"}</button></div><p id="production-pdf-name-help" class="production-action-help">Suggestions only. Production keeps the canonical Cover and Interior filenames; rename downloaded files when needed.</p><p id="production-pdf-name-error" class="production-pdf-name-error" role="${namesError ? "alert" : "status"}" aria-live="polite" ${namesError ? "" : "hidden"}>${escapeHtml(namesError)}</p></fieldset>`;
     const finalBusy = productionInteriorIsRunning();
     const finalBlocked = processIsActive() || state.processStartPending || applicationIsLoading();
     const finalInterior = `<fieldset class="production-group production-final-action"><legend>Final Interior</legend><div><p>Order: Interior Cover → Book Owner → Intro → randomized Interior. Background pages follow the saved HasBackground setting.</p><p id="production-final-help">${escapeHtml(readiness.reason)} Only Build Final Interior replaces the current Interior PDF. Process Interior refreshes processed-page previews only.</p><small>Current output: ${escapeHtml(valueFor(production, "interiorOutputKind", "Legacy"))} · ${dateTime(valueFor(production, "interiorBuiltAtUtc", null))}</small></div><button class="button-primary" data-action="build-final-interior" data-production-ready="${readiness.ready}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-final-help" aria-busy="${finalBusy}" ${readiness.ready && !finalBlocked ? "" : "disabled"}>${finalBusy ? "Building…" : "Build Final Interior"}</button></fieldset>`;
-    return `<section class="production-workspace" aria-busy="${taskBusy || finalBusy}">${feedback}<div class="production-group-grid">${finalInterior}${assets.length ? assets.map(group).join("") : "<p class=\"empty-copy production-assets-empty\">Production workspace status is unavailable. Refresh the library.</p>"}</div></section>`;
+    return `<section class="production-workspace" aria-busy="${taskBusy || finalBusy}">${feedback}<div class="production-group-grid">${nameSuggestions}${finalInterior}${assets.length ? assets.map(group).join("") : "<p class=\"empty-copy production-assets-empty\">Production workspace status is unavailable. Refresh the library.</p>"}</div></section>`;
   };
 
   const renderBookInformation = (book, summary) => {
@@ -2535,6 +2561,10 @@
       updateProductionInteractionUi();
       send("book.production.action.start", { bookId: target.dataset.bookId, action: target.dataset.productionAction });
     }
+    if (action === "randomize-pdf-names") {
+      requestProductionPdfNames(target.dataset.bookId, true);
+      refreshProductionWorkspace();
+    }
     if (action === "build-final-interior" && !state.processStartPending) {
       const book = books().find((item) => bookId(item) === target.dataset.bookId);
       const readiness = book ? productionFinalReadiness(book, summaryFor(book)) : { ready: false, reason: "Choose a Book first." };
@@ -2625,6 +2655,7 @@
     }
     if (action === "book-tab") {
       state.selectedBookTab = ["settings", "asin", "production", "artwork", "pages"].includes(target.dataset.bookTab) ? target.dataset.bookTab : "settings";
+      if (state.selectedBookTab === "production") requestProductionPdfNames(state.selectedBookId);
       refreshBookDrawerBody(state.selectedBookTab);
       if (state.selectedBookTab === "asin") {
         const book = selectedBook();
@@ -2807,10 +2838,12 @@
     const requestCommand = state.pendingCommands.get(responseId) ?? "";
     const storageRequestBookId = state.storageRequestBooks.get(responseId) ?? "";
     const validationRequestBrand = state.brandValidationRequestBrands.get(responseId) ?? "";
+    const productionPdfNameRequest = state.productionPdfNameRequests.get(responseId) ?? null;
     const pdfLibraryAction = finishPdfLibraryAction(responseId);
     state.pendingCommands.delete(responseId);
     state.storageRequestBooks.delete(responseId);
     state.brandValidationRequestBrands.delete(responseId);
+    state.productionPdfNameRequests.delete(responseId);
     const ok = valueFor(response, "ok", false);
     const command = valueFor(response, "command", "");
     if (ok && command === "updates.state") {
@@ -3087,6 +3120,18 @@
       state.brandTemplateCopyPending = false;
       if (state.bookDrawerOpen && currentRoute() === "books") refreshBookDrawerBody();
       status.textContent = "Brand templates copied";
+    } else if (ok && command === "book.production.pdf-name-suggestions") {
+      const names = valueFor(response, "payload", {});
+      const nameBookId = String(valueFor(names, "bookId", valueFor(productionPdfNameRequest, "bookId", "")) ?? "");
+      if (nameBookId) {
+        state.productionPdfNames.set(nameBookId, names);
+        state.productionPdfNamePending.delete(nameBookId);
+        state.productionPdfNameErrors.delete(nameBookId);
+        if (state.bookDrawerOpen && state.selectedBookTab === "production" && state.selectedBookId === nameBookId) {
+          refreshProductionWorkspace(valueFor(productionPdfNameRequest, "regenerate", false) ? '[data-action="randomize-pdf-names"]' : "");
+        }
+      }
+      status.textContent = "PDF filename suggestions ready";
     } else if (ok && command === "book.production.asset.import.cancelled") {
       const assetKind = state.productionImportPending;
       state.productionImportPending = "";
@@ -3142,6 +3187,16 @@
         stopUpdatePolling();
       }
       const error = valueFor(response, "error", "unexpected response");
+      if (requestCommand === "book.production.pdf-name-suggestions.get") {
+        const nameBookId = String(valueFor(productionPdfNameRequest, "bookId", state.selectedBookId) ?? "");
+        state.productionPdfNamePending.delete(nameBookId);
+        state.productionPdfNameErrors.set(nameBookId, productionPdfNameErrorMessage(error));
+        if (state.bookDrawerOpen && state.selectedBookTab === "production" && state.selectedBookId === nameBookId) {
+          refreshProductionWorkspace('[data-action="randomize-pdf-names"]');
+        }
+        status.textContent = "PDF filename suggestions need attention";
+        return;
+      }
       if (requestCommand === "amazon.browser.open" || requestCommand === "amazon.browser.status") {
         state.amazonBrowserPending = false;
         state.amazonBrowserStatus = { state: "Error", reasonCode: error };

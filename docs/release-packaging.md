@@ -45,8 +45,13 @@ PrintableBook-<version>-win-x64/
 ├─ PrintableBook.exe
 ├─ PrintableBook.Updater.exe
 ├─ Frontend/
+├─ Metadata/
+│  ├─ cover_key.txt
+│  └─ interior_key.txt
 └─ .playwright/
 ```
+
+Hai file trong `Metadata/` là runtime data bắt buộc cho phần gợi ý rename Cover/Interior PDF. Thiếu hoặc không đọc được chúng không chặn build PDF, nhưng UI sẽ vô hiệu hóa kết quả gợi ý và hiển thị lỗi cụ thể.
 
 `.playwright/` là controlled Playwright driver runtime cần cho CloakBrowser và được updater backup/replace cùng app. Script dev `playwright.ps1` không được đóng gói. Downloaded Chromium, cookie và profile nằm trong `.cloakbrowser/` runtime cạnh app; folder này không được đưa vào ZIP và updater không được backup/replace/xóa nó.
 

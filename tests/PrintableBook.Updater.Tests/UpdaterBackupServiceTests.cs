@@ -20,6 +20,7 @@ public sealed class UpdaterBackupServiceTests : IDisposable
 
         service.CreateBackup(app, backup);
         Assert.Equal("old-main", File.ReadAllText(Path.Combine(backup, "PrintableBook.exe")));
+        Assert.Equal("Metadata/cover_key.txt", File.ReadAllText(Path.Combine(backup, "Metadata", "cover_key.txt")));
         Assert.False(File.Exists(Path.Combine(backup, "settings.json")));
         Assert.False(Directory.Exists(Path.Combine(backup, ".cloakbrowser")));
         Assert.Empty(Directory.EnumerateDirectories(Path.GetDirectoryName(backup)!, "*.building-*"));

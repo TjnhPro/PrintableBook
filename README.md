@@ -19,6 +19,7 @@ Printable Book là phần mềm Windows chạy local để tổ chức Book Colo
 PrintableBook/
 ├─ PrintableBook.exe
 ├─ Frontend/
+├─ Metadata/               # cover/interior PDF filename suggestion sources
 ├─ .playwright/              # controlled browser driver shipped with the app
 ├─ .cloakbrowser/            # runtime profile + downloaded Chromium cache; created on demand
 ├─ brands/
@@ -85,6 +86,10 @@ interior_cover.png          → No Frame / CropArt ┐
 interior_book_owner.png     → No Frame / CropArt ├→ Build Final Interior
 Intro + randomized Interior ─────────────────────┘
 ```
+
+Tab **Production** cũng hiển thị hai tên file gợi ý lấy ngẫu nhiên từ `Metadata/cover_key.txt` và `Metadata/interior_key.txt`. **Randomize** chỉ đổi gợi ý trong phiên làm việc; ứng dụng vẫn publish bằng tên canonical `<BookId> - Cover.pdf` và `<BookId> - Interior.pdf`, vì vậy user đổi tên file sau khi tải/copy nếu cần.
+
+PDF production mới được gắn Creator ngẫu nhiên theo contract `AAPDF 1-000 10-0000 1000-000000` (hai ký tự đầu và các chữ số được random) cùng CreationDate ngẫu nhiên trong 1–180 ngày trước thời điểm build. Companion `_thumbnail.pdf` giữ luồng metadata preview hiện có.
 
 Cover PNG phải đúng `5242 × 2626 px`; PDF Cover dùng trang `17.47 × 8.75 inch`. Hai trang prefix Interior không bắt buộc kích thước input nhưng luôn dùng policy No Frame/CropArt. **Build Final Interior** là action duy nhất tạo mới/thay thế `<BookId> - Interior.pdf`, theo thứ tự Interior Cover, Book Owner, Intro, rồi Interior đã shuffle; nếu `HasBackground` bật, một background được xen sau mỗi artwork. PDF Library vẫn đọc provenance `Base` và `Legacy` từ output cũ, nhưng output Interior mới luôn là `Production`.
 

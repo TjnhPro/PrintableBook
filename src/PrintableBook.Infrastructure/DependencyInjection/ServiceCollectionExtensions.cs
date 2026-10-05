@@ -69,6 +69,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBookWorkspaceStateStore, JsonBookWorkspaceStateStore>();
         services.AddSingleton<IProductionWorkspaceStateStore, JsonProductionWorkspaceStateStore>();
         services.AddSingleton<IProductionAssetImportService, ProductionAssetImportService>();
+        services.AddSingleton<IProductionPdfNameSuggestionService, FileSystemProductionPdfNameSuggestionService>();
         services.AddSingleton<IAmazonSearchHtmlParser, AmazonSearchHtmlParser>();
         services.AddSingleton<CloakBrowserAmazonPageClient>();
         services.AddSingleton<IAmazonSearchPageClient>(provider => provider.GetRequiredService<CloakBrowserAmazonPageClient>());

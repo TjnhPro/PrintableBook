@@ -1239,6 +1239,39 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Production_pdf_name_suggestions_are_scoped_to_an_authorized_book()
+    {
+        var service = new StubProductionPdfNameSuggestionService();
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            productionPdfNameSuggestionService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"names","command":"book.production.pdf-name-suggestions.get","payload":{"bookId":"Book One","regenerate":true}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("book.production.pdf-name-suggestions", response.Command);
+        var suggestions = Assert.IsType<ProductionPdfNameSuggestions>(response.Payload);
+        Assert.Equal("Book One", suggestions.BookId);
+        Assert.Equal("cover-name.pdf", suggestions.CoverFileName);
+        Assert.Equal("interior-name.pdf", suggestions.InteriorFileName);
+        Assert.True(service.Regenerate);
+    }
+
+    [Fact]
+    public async Task Production_pdf_name_source_failures_keep_a_specific_error_code()
+    {
+        var service = new StubProductionPdfNameSuggestionService { ErrorCode = "pdf_name_source_missing" };
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            productionPdfNameSuggestionService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"names","command":"book.production.pdf-name-suggestions.get","payload":{"bookId":"Book One"}}""");
+
+        Assert.False(response.Ok);
+        Assert.Equal("pdf_name_source_missing", response.Error);
+    }
+
+    [Fact]
     public async Task Production_import_uses_the_native_picker_and_authorized_book_workspace()
     {
         var picker = new StubProductionFilePicker(new FileReference("selected.png"));
@@ -1719,6 +1752,21 @@ public sealed class BridgeMessageContractTests
         private sealed class NoOpKeywordShuffler : IKeywordOutputShuffler
         {
             public void Shuffle(IList<string> words) { }
+        }
+    }
+
+    private sealed class StubProductionPdfNameSuggestionService : IProductionPdfNameSuggestionService
+    {
+        public bool Regenerate { get; private set; }
+        public string? ErrorCode { get; init; }
+
+        public ValueTask<ProductionPdfNameSuggestions> GetAsync(string bookId, bool regenerate, CancellationToken cancellationToken = default)
+        {
+            Regenerate = regenerate;
+            return ErrorCode is null
+                ? ValueTask.FromResult(new ProductionPdfNameSuggestions(bookId, "cover-name.pdf", "interior-name.pdf"))
+                : ValueTask.FromException<ProductionPdfNameSuggestions>(
+                    new ProductionPdfNameSuggestionException(ErrorCode, "PDF filename source is unavailable."));
         }
     }
 
