@@ -11,6 +11,7 @@ using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Brands;
+using PrintableBook.Core.Application.Books;
 using PrintableBook.Core.Application.Production;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
@@ -245,6 +246,76 @@ public sealed class BridgeMessageContractTests
         Assert.Equal("snapshot_unavailable", response.Error);
         Assert.DoesNotContain("sensitive", MainWindow.SerializeBridgeResponse(response), StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, service.Calls);
+    }
+
+    [Theory]
+    [InlineData("{\"version\":1,\"id\":\"clone\",\"command\":\"book.clone\"}")]
+    [InlineData("{\"version\":1,\"id\":\"clone\",\"command\":\"book.clone\",\"payload\":{\"bookId\":\"Book One\"}}")]
+    [InlineData("{\"version\":1,\"id\":\"clone\",\"command\":\"book.clone\",\"payload\":{\"bookId\":12,\"languageCode\":\"de\"}}")]
+    public async Task Book_clone_rejects_a_malformed_payload(string request)
+    {
+        var response = await new WebViewBridgeRouter(
+            applicationLoadCoordinator: CreateCoordinator(new StubSnapshotService(CreateSnapshot())),
+            bookCloneService: new StubBookCloneService())
+            .HandleAsync(request);
+
+        Assert.Equal("invalid_book_clone", response.Error);
+    }
+
+    [Fact]
+    public async Task Book_clone_canonicalizes_language_and_returns_the_refresh_contract()
+    {
+        var service = new StubBookCloneService();
+        var response = await new WebViewBridgeRouter(
+            applicationLoadCoordinator: CreateCoordinator(new StubSnapshotService(CreateSnapshot())),
+            bookCloneService: service)
+            .HandleAsync("""{"version":1,"id":"clone","command":"book.clone","payload":{"bookId":" Book One ","languageCode":" DE "}}""");
+
+        var json = MainWindow.SerializeBridgeResponse(response);
+        Assert.True(response.Ok);
+        Assert.Equal("book.clone.completed", response.Command);
+        Assert.Equal("de", service.Language?.Code);
+        Assert.Contains("\"sourceBookId\":\"Book One\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"languageCode\":\"de\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"destinationBookId\":\"Book One_de\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"refreshTask\":{", json, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(BackgroundTaskKind.ProductionAction, "production_action_active")]
+    [InlineData(BackgroundTaskKind.CacheCleanup, "cache_cleanup_active")]
+    public async Task Book_clone_is_blocked_while_a_state_writer_is_active(BackgroundTaskKind activeKind, string expected)
+    {
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot()) { ActiveKind = activeKind };
+        var service = new StubBookCloneService();
+        var response = await new WebViewBridgeRouter(
+            applicationLoadCoordinator: new ApplicationLoadCoordinator(manager),
+            backgroundTaskManager: manager,
+            bookCloneService: service)
+            .HandleAsync("""{"version":1,"id":"clone","command":"book.clone","payload":{"bookId":"Book One","languageCode":"de"}}""");
+
+        Assert.Equal(expected, response.Error);
+        Assert.Equal(0, service.Calls);
+    }
+
+    [Fact]
+    public async Task Duplicate_book_clone_requests_are_serialized_and_the_second_collision_is_stable()
+    {
+        var service = new BlockingBookCloneService();
+        var router = new WebViewBridgeRouter(
+            applicationLoadCoordinator: CreateCoordinator(new StubSnapshotService(CreateSnapshot())),
+            bookCloneService: service);
+        const string request = "{\"version\":1,\"id\":\"clone\",\"command\":\"book.clone\",\"payload\":{\"bookId\":\"Book One\",\"languageCode\":\"de\"}}";
+
+        var first = router.HandleAsync(request).AsTask();
+        await service.FirstEntered.Task;
+        var second = router.HandleAsync(request.Replace("\"id\":\"clone\"", "\"id\":\"clone-duplicate\"")).AsTask();
+
+        Assert.False(second.IsCompleted);
+        service.AllowFirst.TrySetResult(null);
+        Assert.True((await first).Ok);
+        Assert.Equal("book_clone_destination_exists", (await second).Error);
+        Assert.Equal(2, service.Calls);
     }
 
     [Fact]
@@ -1793,6 +1864,80 @@ public sealed class BridgeMessageContractTests
             var destinationName = LanguageEditionNamingPolicy.CreateDestinationName(sourceBrand.Name, language);
             var destination = new DiscoveredBrand(destinationName, new DirectoryReference(Path.Combine(paths.BrandsDirectory.Value, destinationName)));
             return new BrandCloneResult(sourceBrand, language, destination);
+        }
+    }
+
+    private sealed class StubBookCloneService : IBookCloneService
+    {
+        public int Calls { get; private set; }
+        public SupportedLanguageOption? Language { get; private set; }
+
+        public ValueTask<BookCloneResult> CloneAsync(
+            ApplicationPaths paths,
+            DiscoveredBook sourceBook,
+            SupportedLanguageOption language,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            Language = language;
+            return ValueTask.FromResult(CreateResult(paths, sourceBook, language));
+        }
+
+        private static BookCloneResult CreateResult(
+            ApplicationPaths paths,
+            DiscoveredBook sourceBook,
+            SupportedLanguageOption language)
+        {
+            var destinationName = LanguageEditionNamingPolicy.CreateDestinationName(sourceBook.Name, language);
+            var destinationDirectory = new DirectoryReference(Path.Combine(paths.SourcesDirectory.Value, destinationName));
+            var destinationId = new BookId(destinationName);
+            var destinationWorkspace = new BookWorkspace(
+                destinationId,
+                new DirectoryReference(Path.Combine(destinationDirectory.Value, ".workspace")),
+                new DirectoryReference(Path.Combine(destinationDirectory.Value, ".workspace", "processed")),
+                new DirectoryReference(Path.Combine(destinationDirectory.Value, ".workspace", "output-temp")));
+            return new BookCloneResult(
+                sourceBook,
+                language,
+                new DiscoveredBook(destinationName, destinationId, destinationDirectory, destinationWorkspace));
+        }
+    }
+
+    private sealed class BlockingBookCloneService : IBookCloneService
+    {
+        public TaskCompletionSource<object?> FirstEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<object?> AllowFirst { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int Calls { get; private set; }
+
+        public async ValueTask<BookCloneResult> CloneAsync(
+            ApplicationPaths paths,
+            DiscoveredBook sourceBook,
+            SupportedLanguageOption language,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            if (Calls > 1)
+            {
+                throw new BookCloneException("book_clone_destination_exists", "The destination Book already exists.");
+            }
+
+            FirstEntered.TrySetResult(null);
+            await AllowFirst.Task.WaitAsync(cancellationToken);
+            var destinationName = LanguageEditionNamingPolicy.CreateDestinationName(sourceBook.Name, language);
+            var destinationDirectory = new DirectoryReference(Path.Combine(paths.SourcesDirectory.Value, destinationName));
+            var destinationId = new BookId(destinationName);
+            return new BookCloneResult(
+                sourceBook,
+                language,
+                new DiscoveredBook(
+                    destinationName,
+                    destinationId,
+                    destinationDirectory,
+                    new BookWorkspace(
+                        destinationId,
+                        new DirectoryReference(Path.Combine(destinationDirectory.Value, ".workspace")),
+                        new DirectoryReference(Path.Combine(destinationDirectory.Value, ".workspace", "processed")),
+                        new DirectoryReference(Path.Combine(destinationDirectory.Value, ".workspace", "output-temp")))));
         }
     }
 
