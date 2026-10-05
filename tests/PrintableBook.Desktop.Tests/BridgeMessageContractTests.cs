@@ -522,6 +522,128 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Interior_open_folder_derives_the_canonical_Book_interior_directory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"PrintableBook.InteriorFolder.{Guid.NewGuid():N}");
+        var bookDirectory = Path.Combine(root, "Book One");
+        var interiorDirectory = Path.Combine(bookDirectory, "Clone book", "Book interior");
+        Directory.CreateDirectory(interiorDirectory);
+        try
+        {
+            var interiorPage = Path.Combine(interiorDirectory, "page-001.png");
+            await File.WriteAllBytesAsync(interiorPage, [1]);
+            var current = CreateSnapshot();
+            var discoveredBook = current.Discovery.Books[0] with { Directory = new DirectoryReference(bookDirectory) };
+            var summary = current.BookSummaries[0] with
+            {
+                Assets = [new BookAssetSummary(
+                    interiorPage,
+                    Path.GetRelativePath(bookDirectory, interiorPage),
+                    Path.GetFileName(interiorPage),
+                    Path.GetRelativePath(bookDirectory, interiorDirectory),
+                    "Interior",
+                    2550,
+                    2550,
+                    FrameMode.Disabled,
+                    new Uri(interiorPage).AbsoluteUri)]
+            };
+            var snapshot = current with
+            {
+                Discovery = current.Discovery with { Books = [discoveredBook] },
+                BookSummaries = [summary]
+            };
+            var actions = new RecordingOutputActionService();
+            var router = new WebViewBridgeRouter(
+                new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
+                outputActionService: actions);
+
+            var response = await router.HandleAsync(JsonSerializer.Serialize(new
+            {
+                version = 1,
+                id = "open-interior-folder",
+                command = "book.interior.open-folder",
+                payload = new { bookId = "Book One", folderPath = Path.Combine(root, "untrusted") }
+            }));
+
+            Assert.True(response.Ok);
+            Assert.Equal("book.interior.folder.opened", response.Command);
+            Assert.Equal(new DirectoryReference(Path.GetFullPath(interiorDirectory)), actions.OpenedFolder);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Interior_open_folder_reports_when_the_canonical_directory_is_missing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"PrintableBook.InteriorFolderMissing.{Guid.NewGuid():N}");
+        var bookDirectory = Path.Combine(root, "Book One");
+        Directory.CreateDirectory(bookDirectory);
+        try
+        {
+            var current = CreateSnapshot();
+            var discoveredBook = current.Discovery.Books[0] with { Directory = new DirectoryReference(bookDirectory) };
+            var snapshot = current with { Discovery = current.Discovery with { Books = [discoveredBook] } };
+            var actions = new RecordingOutputActionService();
+            var router = new WebViewBridgeRouter(
+                new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
+                outputActionService: actions);
+
+            var response = await router.HandleAsync("""{"version":1,"id":"open-interior-folder","command":"book.interior.open-folder","payload":{"bookId":"Book One"}}""");
+
+            Assert.False(response.Ok);
+            Assert.Equal("interior_folder_not_found", response.Error);
+            Assert.Null(actions.OpenedFolder);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Interior_open_folder_rejects_a_scanned_reference_outside_the_Book_directory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"PrintableBook.InteriorFolderOutside.{Guid.NewGuid():N}");
+        var bookDirectory = Path.Combine(root, "Book One");
+        var outsideDirectory = Path.Combine(root, "Outside", "Book interior");
+        Directory.CreateDirectory(bookDirectory);
+        Directory.CreateDirectory(outsideDirectory);
+        try
+        {
+            var outsidePage = Path.Combine(outsideDirectory, "page-001.png");
+            await File.WriteAllBytesAsync(outsidePage, [1]);
+            var current = CreateSnapshot();
+            var discoveredBook = current.Discovery.Books[0] with { Directory = new DirectoryReference(bookDirectory) };
+            var summary = current.BookSummaries[0] with
+            {
+                InteriorSourcePages = [new InteriorSourcePageSummary(outsidePage, FrameMode.Disabled)]
+            };
+            var snapshot = current with
+            {
+                Discovery = current.Discovery with { Books = [discoveredBook] },
+                BookSummaries = [summary]
+            };
+            var actions = new RecordingOutputActionService();
+            var router = new WebViewBridgeRouter(
+                new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)),
+                outputActionService: actions);
+
+            var response = await router.HandleAsync("""{"version":1,"id":"open-interior-folder","command":"book.interior.open-folder","payload":{"bookId":"Book One"}}""");
+
+            Assert.False(response.Ok);
+            Assert.Equal("interior_folder_not_found", response.Error);
+            Assert.Null(actions.OpenedFolder);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Brand_validate_uses_the_retained_snapshot_and_returns_the_validation_result()
     {
         var validation = new StubBrandValidationService();

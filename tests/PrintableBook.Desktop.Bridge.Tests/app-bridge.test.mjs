@@ -1593,16 +1593,27 @@ test("Interior artwork starts an explicit random order and reports its saved ref
   const randomButton = content.innerHTML.match(/<button[^>]*data-action="random-interior"[^>]*>/)?.[0] ?? "";
   assert.notEqual(randomButton, "");
   assert.doesNotMatch(randomButton, /\sdisabled(?:\s|>)/);
-  assert.match(content.innerHTML, /class="interior-artwork-actions"><button[^>]*data-action="random-interior"[\s\S]*?<button[^>]*data-action="apply-artwork-bulk"/);
+  assert.match(content.innerHTML, /class="interior-artwork-actions"><button[^>]*data-action="open-interior-folder"[\s\S]*?<button[^>]*data-action="random-interior"[\s\S]*?<button[^>]*data-action="apply-artwork-bulk"/);
   assert.match(content.innerHTML, /Random order is required before processing/);
+
+  const openFolder = { dataset: { action: "open-interior-folder", bookId: "Book 001" }, closest: () => openFolder };
+  contentListeners.click({ target: openFolder });
+  const openRequest = messages.at(-1);
+  assert.equal(openRequest.command, "book.interior.open-folder");
+  assert.deepEqual(openRequest.payload, { bookId: "Book 001" });
+  assert.match(content.innerHTML, /data-action="open-interior-folder"[^>]*aria-busy="true"[^>]*disabled[^>]*>Opening…<\/button>/);
+  messageHandler({ data: { version: 1, id: openRequest.id, ok: true, command: "book.interior.folder.opened", payload: { bookId: "Book 001" } } });
+  assert.equal(status.textContent, "Opened the Book interior folder.");
+  assert.match(content.innerHTML, /data-action="open-interior-folder"[^>]*aria-busy="false"[^>]*>Open Folder<\/button>/);
 
   const random = { dataset: { action: "random-interior", bookId: "Book 001" }, closest: () => random };
   contentListeners.click({ target: random });
-  assert.equal(messages.at(-1).command, "book.interior.shuffle");
-  assert.deepEqual(messages.at(-1).payload, { bookId: "Book 001" });
+  const randomRequest = messages.at(-1);
+  assert.equal(randomRequest.command, "book.interior.shuffle");
+  assert.deepEqual(randomRequest.payload, { bookId: "Book 001" });
   assert.match(content.innerHTML, /Creating a new random Interior order/);
 
-  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { kind: "LibraryRefresh", taskId: "shuffle-refresh" } } });
+  messageHandler({ data: { version: 1, id: randomRequest.id, ok: true, command: "background.task", payload: { kind: "LibraryRefresh", taskId: "shuffle-refresh" } } });
   assert.equal(status.textContent, "Interior order randomized");
   assert.match(content.innerHTML, /Random order saved\. Refreshing Interior status/);
 
