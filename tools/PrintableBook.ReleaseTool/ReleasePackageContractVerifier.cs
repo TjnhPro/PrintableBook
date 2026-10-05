@@ -12,6 +12,8 @@ internal sealed class ReleasePackageContractVerifier
         "Frontend/index.html",
         "Frontend/js/app.js",
         "Frontend/assets/printable-book-logo.png",
+        "Metadata/cover_key.txt",
+        "Metadata/interior_key.txt",
         ".playwright/package/package.json",
         ".playwright/node/win32_x64/node.exe"
     };
@@ -32,7 +34,7 @@ internal sealed class ReleasePackageContractVerifier
             if (wrapped && entry.IsDirectory && entry.Path == wrapper) continue;
             var path = wrapped ? entry.Path[(wrapper.Length + 1)..] : entry.Path;
             var root = path.Split('/')[0];
-            if (root is not ("PrintableBook.exe" or "PrintableBook.Updater.exe" or "Frontend" or ".playwright"))
+            if (root is not ("PrintableBook.exe" or "PrintableBook.Updater.exe" or "Frontend" or "Metadata" or ".playwright"))
             {
                 throw new InvalidDataException("Release package contains an unexpected root entry.");
             }

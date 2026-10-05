@@ -9,6 +9,9 @@ public sealed class UpdaterPayloadInstaller(UpdaterPayloadContractValidator payl
         var frontend = Path.Combine(appRoot, "Frontend");
         if (Directory.Exists(frontend)) Directory.Delete(frontend, recursive: true);
         UpdaterBackupService.CopyDirectory(Path.Combine(payloadDirectory, "Frontend"), frontend);
+        var metadata = Path.Combine(appRoot, "Metadata");
+        if (Directory.Exists(metadata)) Directory.Delete(metadata, recursive: true);
+        UpdaterBackupService.CopyDirectory(Path.Combine(payloadDirectory, "Metadata"), metadata);
         var playwright = Path.Combine(appRoot, ".playwright");
         if (Directory.Exists(playwright)) Directory.Delete(playwright, recursive: true);
         UpdaterBackupService.CopyDirectory(Path.Combine(payloadDirectory, ".playwright"), playwright);

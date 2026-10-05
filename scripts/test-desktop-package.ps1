@@ -28,7 +28,7 @@ try {
         --output $publishDirectory
     if ($LASTEXITCODE -ne 0) { throw "Unsigned Desktop publish failed." }
 
-    foreach ($required in @("PrintableBook.exe", "Frontend/index.html", "Frontend/js/app.js", "Frontend/css/book-workspace.css", ".playwright/package/package.json", ".playwright/node/win32_x64/node.exe")) {
+    foreach ($required in @("PrintableBook.exe", "Frontend/index.html", "Frontend/js/app.js", "Frontend/css/book-workspace.css", "Metadata/cover_key.txt", "Metadata/interior_key.txt", ".playwright/package/package.json", ".playwright/node/win32_x64/node.exe")) {
         if (-not (Test-Path -LiteralPath (Join-Path $publishDirectory $required) -PathType Leaf)) {
             throw "Unsigned package is missing '$required'."
         }

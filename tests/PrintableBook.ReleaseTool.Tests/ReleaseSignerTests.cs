@@ -70,7 +70,7 @@ public sealed class ReleaseSignerTests : IDisposable
         var paths = ReleaseArtifactPaths.Create(_root, new Version(0, 2, 0), "win-x64");
         using (var archive = ZipFile.Open(paths.ArchivePath, ZipArchiveMode.Create))
         {
-            foreach (var file in new[] { "PrintableBook.exe", "PrintableBook.Updater.exe", "Frontend/index.html", "Frontend/js/app.js", "Frontend/assets/printable-book-logo.png", ".playwright/package/package.json", ".playwright/node/win32_x64/node.exe" })
+            foreach (var file in new[] { "PrintableBook.exe", "PrintableBook.Updater.exe", "Frontend/index.html", "Frontend/js/app.js", "Frontend/assets/printable-book-logo.png", "Metadata/cover_key.txt", "Metadata/interior_key.txt", ".playwright/package/package.json", ".playwright/node/win32_x64/node.exe" })
             {
                 using var writer = new StreamWriter(archive.CreateEntry(file).Open());
                 writer.Write("fixture");

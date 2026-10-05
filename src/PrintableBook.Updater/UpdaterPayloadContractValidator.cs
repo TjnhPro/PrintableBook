@@ -9,6 +9,8 @@ public sealed class UpdaterPayloadContractValidator
         Path.Combine("Frontend", "index.html"),
         Path.Combine("Frontend", "js", "app.js"),
         Path.Combine("Frontend", "assets", "printable-book-logo.png"),
+        Path.Combine("Metadata", "cover_key.txt"),
+        Path.Combine("Metadata", "interior_key.txt"),
         Path.Combine(".playwright", "package", "package.json"),
         Path.Combine(".playwright", "node", "win32_x64", "node.exe"),
     ];
@@ -19,6 +21,7 @@ public sealed class UpdaterPayloadContractValidator
         Path.Combine("Frontend", "css"),
         Path.Combine("Frontend", "js"),
         Path.Combine("Frontend", "assets"),
+        "Metadata",
         ".playwright",
         Path.Combine(".playwright", "package"),
         Path.Combine(".playwright", "node"),
@@ -27,7 +30,7 @@ public sealed class UpdaterPayloadContractValidator
 
     private static readonly HashSet<string> AllowedStagedRoot = new(StringComparer.OrdinalIgnoreCase)
     {
-        "PrintableBook.exe", "PrintableBook.Updater.exe", "Frontend", ".playwright",
+        "PrintableBook.exe", "PrintableBook.Updater.exe", "Frontend", "Metadata", ".playwright",
     };
 
     public void ValidateStagedPayload(string payloadDirectory)
