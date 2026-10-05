@@ -22,6 +22,17 @@
   state.brandCloneFeedback = "";
   state.brandCloneFeedbackError = false;
   state.brandCloneNotice = "";
+  state.bookCloneOpen = false;
+  state.bookCloneSourceId = "";
+  state.bookCloneLanguageCode = "";
+  state.bookClonePending = false;
+  state.bookCloneAwaitingSnapshot = false;
+  state.bookCloneDestinationId = "";
+  state.bookCloneDestination = "";
+  state.bookCloneFeedback = "";
+  state.bookCloneFeedbackError = false;
+  state.bookCloneNotice = "";
+  state.bookCloneNoticeBookId = "";
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -71,10 +82,10 @@
   const brandSummaries = () => valueFor(window.appSnapshot, "brandSummaries", []);
   const supportedLanguages = () => valueFor(window.appSnapshot, "supportedLanguages", []);
   const brandSummaryFor = (brand) => brandSummaries().find((summary) => valueFor(summary, "brandName", "") === valueFor(brand, "name", ""));
-  const brandCloneDestinationName = (sourceBrandName, languageCode) => {
+  const languageEditionDestinationName = (sourceName, languageCode) => {
     const language = supportedLanguages().find((option) => String(valueFor(option, "code", "")).toLocaleLowerCase() === String(languageCode ?? "").trim().toLocaleLowerCase());
-    if (!sourceBrandName || !language) return "";
-    let baseName = String(sourceBrandName);
+    if (!sourceName || !language) return "";
+    let baseName = String(sourceName);
     for (const option of supportedLanguages()) {
       const suffix = `_${String(valueFor(option, "code", "")).toLocaleLowerCase()}`;
       if (!baseName.toLocaleLowerCase().endsWith(suffix)) continue;
@@ -83,6 +94,8 @@
     }
     return `${baseName}_${String(valueFor(language, "code", "")).toLocaleLowerCase()}`;
   };
+  const brandCloneDestinationName = (sourceBrandName, languageCode) => languageEditionDestinationName(sourceBrandName, languageCode);
+  const bookCloneDestinationName = (sourceBookName, languageCode) => languageEditionDestinationName(sourceBookName, languageCode);
   const resetBrandClone = (clearNotice = true) => {
     state.brandCloneOpen = false;
     state.brandCloneLanguageCode = "";
@@ -102,11 +115,40 @@
     snapshot_unavailable: "The Brand library is unavailable. Refresh it and try again.",
     brand_clone_failed: "The Brand could not be cloned. The source Brand was not changed."
   })[String(error)] ?? "The Brand could not be cloned. The source Brand was not changed.";
+  const resetBookClone = (clearNotice = true) => {
+    state.bookCloneOpen = false;
+    state.bookCloneSourceId = "";
+    state.bookCloneLanguageCode = "";
+    state.bookClonePending = false;
+    state.bookCloneAwaitingSnapshot = false;
+    state.bookCloneDestinationId = "";
+    state.bookCloneDestination = "";
+    state.bookCloneFeedback = "";
+    state.bookCloneFeedbackError = false;
+    if (clearNotice) {
+      state.bookCloneNotice = "";
+      state.bookCloneNoticeBookId = "";
+    }
+  };
+  const bookCloneErrorMessage = (error) => ({
+    invalid_book_clone: "Review the Book and language, then try again.",
+    book_clone_destination_exists: "That destination Book already exists. Select another language.",
+    book_clone_source_not_found: "The source Book no longer exists. Refresh the library and try again.",
+    book_clone_language_invalid: "Select a supported language.",
+    book_clone_state_invalid: "The source Book state or saved references are invalid. Repair them before cloning.",
+    processing_active: "Wait for Interior processing to finish.",
+    production_action_active: "Wait for the active Production action to finish.",
+    cache_cleanup_active: "Wait for Clear Cache to finish.",
+    snapshot_unavailable: "The Book library is unavailable. Refresh it and try again.",
+    book_clone_failed: "The Book could not be cloned. The source Book was not changed."
+  })[String(error)] ?? "The Book could not be cloned. The source Book was not changed.";
   const assignmentStatus = (summary) => {
     const value = valueFor(summary, "assignmentStatus", "Unassigned");
-    return typeof value === "number" ? ["Unassigned", "Valid", "BookAuthorMissing", "BrandAuthorMissing", "AuthorMismatch", "MissingBrand", "BrandMetadataUnavailable"][value] ?? "Unassigned" : String(value ?? "Unassigned");
+    return typeof value === "number" ? ["Unassigned", "Valid", "BookAuthorMissing", "BrandAuthorMissing", "AuthorMismatch", "MissingBrand", "BrandMetadataUnavailable", "LanguageMismatch"][value] ?? "Unassigned" : String(value ?? "Unassigned");
   };
-  const assignmentLabel = (summary) => ({ BookAuthorMissing: "Book Author missing", BrandAuthorMissing: "Brand Author missing", AuthorMismatch: "Author mismatch", MissingBrand: "Brand missing", BrandMetadataUnavailable: "Brand metadata unavailable" })[assignmentStatus(summary)] ?? assignmentStatus(summary);
+  const assignmentLabel = (summary) => ({ BookAuthorMissing: "Book Author missing", BrandAuthorMissing: "Brand Author missing", AuthorMismatch: "Author mismatch", MissingBrand: "Brand missing", BrandMetadataUnavailable: "Brand metadata unavailable", LanguageMismatch: "Language mismatch" })[assignmentStatus(summary)] ?? assignmentStatus(summary);
+  const languageCodeFor = (summary) => String(valueFor(summary, "languageCode", "en") || "en").toLocaleLowerCase();
+  const languageNameFor = (summary) => String(valueFor(summary, "languageName", "English") || "English");
   const metadataFor = (summary) => valueFor(summary, "metadata", {}) ?? {};
   const bookDisplayTitle = (book, summary = summaryFor(book)) => String(valueFor(metadataFor(summary), "title", "") || valueFor(book, "name", bookId(book)) || "Unknown");
   const normalizedAuthor = (value) => String(value ?? "").trim().toLowerCase();
@@ -117,9 +159,13 @@
     return assigned ? brands().find((brand) => valueFor(brand, "name", "") === assigned) ?? null : null;
   };
   const brandAuthor = (brand) => String(valueFor(brandSummaryFor(brand), "author", "") ?? "");
+  const languageBrandsFor = (summary) => {
+    const languageCode = languageCodeFor(summary);
+    return brands().filter((brand) => languageCodeFor(brandSummaryFor(brand)) === languageCode);
+  };
   const matchingBrandsFor = (summary) => {
     const author = valueFor(metadataFor(summary), "author", "");
-    return brands().filter((brand) => authorMatches(author, brandAuthor(brand)));
+    return languageBrandsFor(summary).filter((brand) => authorMatches(author, brandAuthor(brand)));
   };
   const metadataValues = (summary) => {
     const metadata = metadataFor(summary);
@@ -678,6 +724,16 @@
       state.applicationLoadError = "";
       if (currentRoute() === "brands") render("brands", false);
       status.textContent = "Brand clone refresh needs attention";
+      return;
+    }
+    if (state.bookCloneAwaitingSnapshot) {
+      state.bookClonePending = false;
+      state.bookCloneFeedback = "Book was cloned, but the refreshed library could not be loaded. Use Refresh to retry.";
+      state.bookCloneFeedbackError = true;
+      state.applicationLoadState = "ready";
+      state.applicationLoadError = "";
+      if (currentRoute() === "books") render("books", false);
+      status.textContent = "Book clone refresh needs attention";
       return;
     }
     if (taskId === state.interiorShuffleTaskId) {
@@ -1399,7 +1455,7 @@
     const cloneFeedbackError = cloneDestinationExists || state.brandCloneFeedbackError;
     const cloneGroup = selected && state.brandCloneOpen ? `<fieldset class="brand-clone-group" aria-busy="${cloneBusy}" ${cloneBusy ? "disabled" : ""}><legend>Clone Brand</legend><div class="brand-clone-grid"><label class="field"><span>Source Brand</span><input class="control" value="${escapeHtml(sourceBrandName)}" readonly aria-readonly="true"></label><label class="field"><span>Language</span><select class="control" data-action="clone-brand-language"><option value="">Select language</option>${supportedLanguages().map((option) => { const code = String(valueFor(option, "code", "")); return `<option value="${escapeHtml(code)}" ${code === state.brandCloneLanguageCode ? "selected" : ""}>${escapeHtml(valueFor(option, "name", code))}</option>`; }).join("")}</select></label><label class="field"><span>Destination Brand name</span><input class="control" value="${escapeHtml(cloneDestination)}" placeholder="Select a language" readonly aria-readonly="true"></label></div><div class="brand-clone-footer"><p class="brand-clone-feedback ${cloneFeedbackError ? "is-error" : ""}" role="${cloneFeedbackError ? "alert" : "status"}" aria-live="polite">${escapeHtml(cloneFeedback)}</p><div class="brand-clone-actions"><button class="button-secondary" type="button" data-action="cancel-brand-clone">Cancel</button><button class="button-primary" type="button" data-action="submit-brand-clone" aria-busy="${cloneBusy}" ${cloneBlocked ? "disabled" : ""}>${cloneBusy ? "Cloning…" : "Clone Brand"}</button></div></div></fieldset>` : "";
     const cloneNotice = selected && state.brandCloneNotice ? `<p class="brand-clone-notice" role="status" aria-live="polite">${escapeHtml(state.brandCloneNotice)}</p>` : "";
-    const brandInfo = selected ? `<section class="catalog-card brand-region-card"><div class="catalog-card-heading"><div><h3>Brand Information</h3><p>One Brand has one Primary Author.</p></div><span class="status-badge ${metadata.tone}">${escapeHtml(metadata.label)}</span></div><label class="field"><span>Author</span><input class="control" data-action="brand-author-input" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" value="${escapeHtml(authorDraft)}" placeholder="Unknown" autocomplete="off"></label>${impactedBooks ? `<p class="catalog-warning" role="alert">Saving this Author will make ${impactedBooks} assigned Book${impactedBooks === 1 ? "" : "s"} invalid. Their assignments will be kept for review.</p>` : ""}<div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" role="${state.catalogFeedbackError ? "alert" : "status"} aria-live="polite">${state.catalogMutationTarget === valueFor(selected, "name", "") ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-brand-author" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "brand.author.save"}" ${!authorDirty || state.catalogMutationPending || processIsActive() ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "brand.author.save" ? "Saving…" : "Save Author"}</button></div></section>` : "";
+    const brandInfo = selected ? `<section class="catalog-card brand-region-card"><div class="catalog-card-heading"><div><h3>Brand Information</h3><p>One Brand has one Primary Author and one persisted Language.</p></div><span class="status-badge ${metadata.tone}">${escapeHtml(metadata.label)}</span></div><label class="field"><span>Language</span><input class="control" value="${escapeHtml(languageNameFor(brandSummaryFor(selected)))}" readonly aria-readonly="true"></label><label class="field"><span>Author</span><input class="control" data-action="brand-author-input" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" value="${escapeHtml(authorDraft)}" placeholder="Unknown" autocomplete="off"></label>${impactedBooks ? `<p class="catalog-warning" role="alert">Saving this Author will make ${impactedBooks} assigned Book${impactedBooks === 1 ? "" : "s"} invalid. Their assignments will be kept for review.</p>` : ""}<div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" role="${state.catalogFeedbackError ? "alert" : "status"}" aria-live="polite">${state.catalogMutationTarget === valueFor(selected, "name", "") ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-brand-author" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "brand.author.save"}" ${!authorDirty || state.catalogMutationPending || processIsActive() ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "brand.author.save" ? "Saving…" : "Save Author"}</button></div></section>` : "";
     const validationInfo = selected ? `<section class="catalog-card brand-region-card brand-validation-card"><div class="catalog-card-heading"><div><h3>Brand Validation</h3><p>Check every required asset before processing.</p></div>${badge(validationStatus)}</div><dl class="brand-validation-facts"><div><dt>Last validated</dt><dd>${escapeHtml(dateTime(valueFor(selectedValidation, "validatedAtUtc", null)))}</dd></div><div><dt>Files checked</dt><dd>IntroTemplate + 5 required files</dd></div></dl><p class="panel-note">Validate IntroTemplate, frame.png, background.png, cover.psd, app_plus.psd, and book_owner.psd.</p><div class="brand-validation-action"><button class="button-primary" data-action="validate-brand" ${processIsActive() ? "disabled" : ""}>Validate Brand</button></div></section>` : "";
     const detail = selected
       ? `<section class="panel brand-detail-panel"><header class="brand-panel-header"><div><p class="eyebrow">Selected Brand</p><h2>${escapeHtml(valueFor(selected, "name", ""))}</h2></div><div class="brand-detail-actions"><button class="button-secondary" type="button" data-action="open-brand-clone" aria-expanded="${state.brandCloneOpen}" ${cloneBusy || processIsActive() ? "disabled" : ""}>Clone Brand</button><div class="brand-detail-badges"><span class="status-badge ${metadata.tone}">${escapeHtml(metadata.label)}</span>${badge(validationStatus)}</div></div></header>${cloneNotice}${cloneGroup}<div class="brand-detail-scroll"><div class="brand-region-grid">${brandInfo}${validationInfo}</div>${validationMessage}${assetInventory}</div></section>`
@@ -1492,12 +1548,13 @@
       const errorId = `book-${name}-errors`;
       return `<label class="field" for="book-${name}-input"><span>${label}</span><input id="book-${name}-input" class="control ${name === "title" ? "book-title-input" : ""} ${errors.length ? "control-invalid" : ""}" data-action="book-metadata-input" data-metadata-field="${name}" data-book-id="${escapeHtml(bookId(book))}" value="${escapeHtml(draft[name])}" placeholder="${placeholder}" aria-describedby="${errorId}" aria-invalid="${errors.length > 0}" autocomplete="off" ${name === "title" ? 'autocapitalize="characters" spellcheck="false"' : ""}><small id="${errorId}" class="field-error" ${errors.length ? "" : "hidden"}>${errors.map((error) => escapeHtml(error.message)).join("<br>")}</small></label>`;
     };
-    return `<fieldset class="catalog-card book-settings-card book-settings-information" data-book-information-card aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save"}"><legend>Book Information</legend><div class="catalog-card-heading"><p>Paste production metadata from your ChatGPT Web analysis. Blank fields remain Unknown.</p>${dirty ? '<span class="status-badge status-warn">Unsaved</span>' : ""}</div><div class="catalog-form-grid">${field("Title", "title")}${field("Subtitle", "subtitle")}${field("Subcover", "subcover")}${field("ASIN", "asin")}${field("Author", "author", "Primary Author or Unknown")}<label class="field catalog-description-field"><span>Description</span><textarea class="control" rows="4" data-action="book-metadata-input" data-metadata-field="description" data-book-id="${escapeHtml(bookId(book))}" placeholder="Unknown">${escapeHtml(draft.description)}</textarea></label></div><p id="book-author-assignment-warning" class="catalog-warning" role="alert" ${assignmentWarning ? "" : "hidden"}>${escapeHtml(assignmentWarning)}</p><div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="metadata" role="${state.catalogFeedbackError ? "alert" : "status"}">${state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand === "book.metadata.save" ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-book-metadata" data-book-id="${escapeHtml(bookId(book))}" aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save"}" ${!dirty || disabled ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save" ? "Saving…" : "Save Book Information"}</button></div></fieldset>`;
+    return `<fieldset class="catalog-card book-settings-card book-settings-information" data-book-information-card aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save"}"><legend>Book Information</legend><div class="catalog-card-heading"><p>Paste production metadata from your ChatGPT Web analysis. Blank fields remain Unknown.</p>${dirty ? '<span class="status-badge status-warn">Unsaved</span>' : ""}</div><div class="catalog-form-grid"><label class="field"><span>Language</span><input class="control" value="${escapeHtml(languageNameFor(summary))}" readonly aria-readonly="true"></label>${field("Title", "title")}${field("Subtitle", "subtitle")}${field("Subcover", "subcover")}${field("ASIN", "asin")}${field("Author", "author", "Primary Author or Unknown")}<label class="field catalog-description-field"><span>Description</span><textarea class="control" rows="4" data-action="book-metadata-input" data-metadata-field="description" data-book-id="${escapeHtml(bookId(book))}" placeholder="Unknown">${escapeHtml(draft.description)}</textarea></label></div><p id="book-author-assignment-warning" class="catalog-warning" role="alert" ${assignmentWarning ? "" : "hidden"}>${escapeHtml(assignmentWarning)}</p><div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="metadata" role="${state.catalogFeedbackError ? "alert" : "status"}">${state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand === "book.metadata.save" ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-book-metadata" data-book-id="${escapeHtml(bookId(book))}" aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save"}" ${!dirty || disabled ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save" ? "Saving…" : "Save Book Information"}</button></div></fieldset>`;
   };
 
   const renderBookBrandAssignment = (book, summary) => {
     const assigned = assignedBrandName(summary);
     const currentStatus = assignmentStatus(summary);
+    const languageCandidates = languageBrandsFor(summary);
     const candidates = matchingBrandsFor(summary);
     const valid = currentStatus === "Valid";
     const unavailableCurrent = assigned && !candidates.some((brand) => valueFor(brand, "name", "") === assigned);
@@ -1507,7 +1564,14 @@
     const disabled = catalogMutationBusy() || processIsActive();
     const assignmentCommands = ["book.brand.assign", "book.brand.unassign"];
     const feedbackVisible = state.catalogMutationTarget === bookId(book) && assignmentCommands.includes(state.catalogMutationCommand);
-    return `<fieldset class="catalog-card book-settings-card book-settings-assignment" data-book-assignment-card><legend>Brand Assignment</legend><div class="catalog-card-heading"><p>Only Brands whose Author matches this Book's saved Author are available.</p>${badge(assigned ? assignmentLabel(summary) : "Unassigned")}</div><dl class="catalog-assignment-summary"><div><dt>Book Author</dt><dd>${escapeHtml(author || "Unknown")}</dd></div><div><dt>Assigned Brand</dt><dd>${escapeHtml(assigned || "Unassigned")}</dd></div></dl>${reason ? `<p class="catalog-warning" role="alert">${escapeHtml(reason)} The existing assignment is preserved until you choose what to do.</p>` : ""}<label class="field"><span>Select Brand</span><select class="control" data-action="book-brand-select" data-book-id="${escapeHtml(bookId(book))}" ${!author || disabled ? "disabled" : ""}>${options}</select><small>${author ? candidates.length ? `${candidates.length} matching Brand${candidates.length === 1 ? "" : "s"}.` : "No Brand Author matches this Book Author." : "Save a Book Author before assigning a Brand."}</small></label><div class="catalog-actions"><p class="catalog-feedback ${feedbackVisible && state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="assignment" role="${feedbackVisible && state.catalogFeedbackError ? "alert" : "status"}">${feedbackVisible ? escapeHtml(state.catalogFeedback) : ""}</p><div><button class="button-secondary" data-action="unassign-book-brand" data-book-id="${escapeHtml(bookId(book))}" ${!assigned || disabled ? "disabled" : ""}>Unassign</button><button class="button-primary" data-action="assign-book-brand" data-book-id="${escapeHtml(bookId(book))}" disabled>${state.catalogMutationPending && state.catalogMutationCommand === "book.brand.assign" ? "Assigning…" : "Assign Brand"}</button></div></div></fieldset>`;
+    const availability = !author
+      ? "Save a Book Author before assigning a Brand."
+      : languageCandidates.length === 0
+        ? `No ${languageNameFor(summary)} Brand available.`
+        : candidates.length === 0
+          ? `No ${languageNameFor(summary)} Brand matches this Book Author.`
+          : `${candidates.length} matching ${languageNameFor(summary)} Brand${candidates.length === 1 ? "" : "s"}.`;
+    return `<fieldset class="catalog-card book-settings-card book-settings-assignment" data-book-assignment-card><legend>Brand Assignment</legend><div class="catalog-card-heading"><p>Only Brands whose Language and Author match this Book are available.</p>${badge(assigned ? assignmentLabel(summary) : "Unassigned")}</div><dl class="catalog-assignment-summary"><div><dt>Book Language</dt><dd>${escapeHtml(languageNameFor(summary))}</dd></div><div><dt>Book Author</dt><dd>${escapeHtml(author || "Unknown")}</dd></div><div><dt>Assigned Brand</dt><dd>${escapeHtml(assigned || "Unassigned")}</dd></div></dl>${reason ? `<p class="catalog-warning" role="alert">${escapeHtml(reason)} The existing assignment is preserved until you choose what to do.</p>` : ""}<label class="field"><span>Select Brand</span><select class="control" data-action="book-brand-select" data-book-id="${escapeHtml(bookId(book))}" ${!author || disabled ? "disabled" : ""}>${options}</select><small>${escapeHtml(availability)}</small></label><div class="catalog-actions"><p class="catalog-feedback ${feedbackVisible && state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="assignment" role="${feedbackVisible && state.catalogFeedbackError ? "alert" : "status"}">${feedbackVisible ? escapeHtml(state.catalogFeedback) : ""}</p><div><button class="button-secondary" data-action="unassign-book-brand" data-book-id="${escapeHtml(bookId(book))}" ${!assigned || disabled ? "disabled" : ""}>Unassign</button><button class="button-primary" data-action="assign-book-brand" data-book-id="${escapeHtml(bookId(book))}" disabled>${state.catalogMutationPending && state.catalogMutationCommand === "book.brand.assign" ? "Assigning…" : "Assign Brand"}</button></div></div></fieldset>`;
   };
 
   const renderAsinResearch = (book, summary) => {
@@ -1816,6 +1880,27 @@
     if (focusTab) document.querySelector(`[data-action="book-tab"][data-book-tab="${focusTab}"]`)?.focus();
   };
 
+  const renderBookCloneGroup = (book) => {
+    const id = bookId(book);
+    const sourceName = String(valueFor(book, "name", id));
+    const destination = bookCloneDestinationName(sourceName, state.bookCloneLanguageCode);
+    const destinationExists = Boolean(destination) && books().some((candidate) => String(valueFor(candidate, "name", bookId(candidate))).toLocaleLowerCase() === destination.toLocaleLowerCase());
+    const busy = state.bookClonePending || state.bookCloneAwaitingSnapshot;
+    const writerActive = processIsActive() || productionActionActive() || state.cacheCleanupActive || applicationIsLoading();
+    const blocked = !state.bookCloneLanguageCode || !destination || destinationExists || busy || writerActive;
+    const feedback = destinationExists && !state.bookCloneFeedback
+      ? "That destination Book already exists. Select another language."
+      : state.bookCloneFeedback;
+    const feedbackError = destinationExists || state.bookCloneFeedbackError;
+    const notice = state.bookCloneNotice && state.bookCloneNoticeBookId === id ? `<p class="brand-clone-notice book-clone-notice" role="status" aria-live="polite">${escapeHtml(state.bookCloneNotice)}</p>` : "";
+    if (!state.bookCloneOpen || state.bookCloneSourceId !== id) return notice ? `<div class="book-clone-region">${notice}</div>` : "";
+    const languageOptions = supportedLanguages().map((option) => {
+      const code = String(valueFor(option, "code", ""));
+      return `<option value="${escapeHtml(code)}" ${code === state.bookCloneLanguageCode ? "selected" : ""}>${escapeHtml(valueFor(option, "name", code))}</option>`;
+    }).join("");
+    return `<div class="book-clone-region">${notice}<fieldset class="brand-clone-group book-clone-group" aria-busy="${busy}" ${busy ? "disabled" : ""}><legend>Clone Book</legend><div class="brand-clone-grid"><label class="field"><span>Source Book</span><input class="control" value="${escapeHtml(sourceName)}" readonly aria-readonly="true"></label><label class="field"><span>Language</span><select class="control" data-action="clone-book-language" aria-describedby="book-clone-feedback"><option value="">Select language</option>${languageOptions}</select></label><label class="field"><span>Destination Book name</span><input class="control" value="${escapeHtml(destination)}" placeholder="Select a language" readonly aria-readonly="true"></label></div><div class="brand-clone-footer"><p id="book-clone-feedback" class="brand-clone-feedback ${feedbackError ? "is-error" : ""}" role="${feedbackError ? "alert" : "status"}" aria-live="polite">${escapeHtml(feedback)}</p><div class="brand-clone-actions"><button class="button-secondary" type="button" data-action="cancel-book-clone">Cancel</button><button class="button-primary" type="button" data-action="submit-book-clone" aria-busy="${busy}" ${blocked ? "disabled" : ""}>${busy ? "Cloning…" : "Clone Book"}</button></div></div></fieldset></div>`;
+  };
+
   const renderBookDetail = (book, summary) => {
     if (!state.bookDrawerOpen || !book || !summary) {
       return `<section class="panel book-detail-panel book-detail-empty" aria-labelledby="book-detail-empty-title"><div><h2 id="book-detail-empty-title">Select a Book</h2><p>Choose a Book from the list to review its details and production settings.</p></div></section>`;
@@ -1827,7 +1912,9 @@
     const keywordDirty = hasKeywordBuilderDraft(book, summary);
     const displayTitle = bookDisplayTitle(book, summary);
     const folderName = valueFor(book, "name", bookId(book));
-    return `<section class="panel book-detail-panel" aria-labelledby="book-detail-title"><header class="book-detail-header"><span class="book-detail-preview">${localImageMarkup(cover, `Cover for ${displayTitle}`)}</span><div class="book-detail-heading"><div class="book-detail-title-line"><h2 id="book-detail-title" tabindex="-1" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</h2><p class="book-folder-name" title="${escapeHtml(folderName)}">${escapeHtml(folderName)}</p></div><div class="book-detail-badges">${badge(productionStatus(summary, book))} ${badge(bookFrameState(summary))} <span data-book-assigned-brand-badge>${badge(assignedBrandName(summary) || "Unassigned")}</span></div></div><div class="book-detail-actions"><span data-book-interior-unsaved role="status" ${dirty || metadataDirty || keywordDirty ? "" : "hidden"}>Unsaved changes</span><button class="button-primary" data-action="save-book-interior-settings" data-book-id="${escapeHtml(bookId(book))}" ${saveDisabled ? "disabled" : ""} aria-busy="${state.bookInteriorSavePending}">${state.bookInteriorSavePending ? "Saving…" : "Save Interior changes"}</button></div></header><div class="book-detail-body book-drawer-body">${renderBookTabs(book, summary)}</div></section>`;
+    const cloneBusy = state.bookClonePending || state.bookCloneAwaitingSnapshot;
+    const cloneDisabled = cloneBusy || processIsActive() || productionActionActive() || state.cacheCleanupActive || applicationIsLoading();
+    return `<section class="panel book-detail-panel" aria-labelledby="book-detail-title"><header class="book-detail-header"><span class="book-detail-preview">${localImageMarkup(cover, `Cover for ${displayTitle}`)}</span><div class="book-detail-heading"><div class="book-detail-title-line"><h2 id="book-detail-title" tabindex="-1" title="${escapeHtml(displayTitle)}">${escapeHtml(displayTitle)}</h2><p class="book-folder-name" title="${escapeHtml(folderName)}">${escapeHtml(folderName)}</p></div><div class="book-detail-badges">${badge(productionStatus(summary, book))} ${badge(bookFrameState(summary))} <span data-book-assigned-brand-badge>${badge(assignedBrandName(summary) || "Unassigned")}</span></div></div><div class="book-detail-actions"><span data-book-interior-unsaved role="status" ${dirty || metadataDirty || keywordDirty ? "" : "hidden"}>Unsaved changes</span><div><button class="button-secondary" type="button" data-action="open-book-clone" data-book-id="${escapeHtml(bookId(book))}" aria-expanded="${state.bookCloneOpen && state.bookCloneSourceId === bookId(book)}" ${cloneDisabled ? "disabled" : ""}>Clone Book</button><button class="button-primary" data-action="save-book-interior-settings" data-book-id="${escapeHtml(bookId(book))}" ${saveDisabled ? "disabled" : ""} aria-busy="${state.bookInteriorSavePending}">${state.bookInteriorSavePending ? "Saving…" : "Save Interior changes"}</button></div></div></header>${renderBookCloneGroup(book)}<div class="book-detail-body book-drawer-body">${renderBookTabs(book, summary)}</div></section>`;
   };
 
   const patchBookMetadataValidationUi = (book, summary, focusFirst = false) => {
@@ -2394,6 +2481,7 @@
     if (state.bookDrawerOpen && state.selectedBookId === id) {
       return;
     }
+    if (state.bookCloneOpen && state.bookCloneSourceId !== id) resetBookClone();
     const previousBookId = state.selectedBookId;
     state.selectedBookId = id;
     state.selectedBookTab = "settings";
@@ -2433,7 +2521,7 @@
     if (currentRoute() === "books" && state.bookDrawerOpen) updateBookCatalogMutationUi();
     if (currentRoute() === "brands") render("brands", false);
   };
-  const catalogErrorMessage = (code) => ({ invalid_book_metadata: "Book Information is invalid. Review Title, Subtitle, Subcover, ASIN, and Author, then retry.", invalid_keyword_builder: "Keyword Builder input is invalid.", keyword_preview_invalid: "This preview is invalid or expired. Shuffle again.", keyword_preview_stale: "Inputs changed after this preview. Shuffle again.", keyword_preview_version_unsupported: "This saved output uses an older shuffle version. Shuffle again.", keyword_legacy_shuffle_required: "Shuffle once to update this legacy keyword output.", keyword_word_too_long: "A keyword word is longer than 50 characters. Shorten it and retry.", keyword_capacity_exceeded: "The ordered keyword stream needs more than seven fields. Remove, shorten, or reorder source keywords.", invalid_brand_author: "Brand Author must be a single line.", book_author_required: "Save a Book Author before assigning a Brand.", brand_author_required: "The selected Brand does not have an Author.", book_brand_author_mismatch: "Book Author must match Brand Author before assignment.", brand_metadata_invalid: "Brand metadata could not be read. Fix the metadata file and retry.", processing_active: "Interior Processing is running. Try again when it finishes.", production_action_active: "A Production action is running. Try again when it finishes.", cache_cleanup_active: "Cache Cleanup is running. Try again when it finishes.", snapshot_unavailable: "The library snapshot is unavailable. Refresh and retry.", book_not_found: "This Book is no longer available. Refresh the library.", brand_not_found: "This Brand is no longer available. Refresh the library." })[code] ?? "The change could not be saved. Refresh and retry.";
+  const catalogErrorMessage = (code) => ({ invalid_book_metadata: "Book Information is invalid. Review Title, Subtitle, Subcover, ASIN, and Author, then retry.", invalid_keyword_builder: "Keyword Builder input is invalid.", keyword_preview_invalid: "This preview is invalid or expired. Shuffle again.", keyword_preview_stale: "Inputs changed after this preview. Shuffle again.", keyword_preview_version_unsupported: "This saved output uses an older shuffle version. Shuffle again.", keyword_legacy_shuffle_required: "Shuffle once to update this legacy keyword output.", keyword_word_too_long: "A keyword word is longer than 50 characters. Shorten it and retry.", keyword_capacity_exceeded: "The ordered keyword stream needs more than seven fields. Remove, shorten, or reorder source keywords.", invalid_brand_author: "Brand Author must be a single line.", book_author_required: "Save a Book Author before assigning a Brand.", brand_author_required: "The selected Brand does not have an Author.", book_brand_language_mismatch: "Book Language must match Brand Language before assignment.", book_brand_author_mismatch: "Book Author must match Brand Author before assignment.", brand_metadata_invalid: "Brand metadata could not be read. Fix the metadata file and retry.", processing_active: "Interior Processing is running. Try again when it finishes.", production_action_active: "A Production action is running. Try again when it finishes.", cache_cleanup_active: "Cache Cleanup is running. Try again when it finishes.", snapshot_unavailable: "The library snapshot is unavailable. Refresh and retry.", book_not_found: "This Book is no longer available. Refresh the library.", brand_not_found: "This Brand is no longer available. Refresh the library." })[code] ?? "The change could not be saved. Refresh and retry.";
   document.addEventListener("keydown", (event) => {
     const activeTab = event.target.closest?.('[role="tab"][data-action="book-tab"]');
     if (activeTab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
@@ -2508,6 +2596,32 @@
       state.brandCloneFeedbackError = false;
       send("brand.clone", { brandName: state.inspectedBrand, languageCode: state.brandCloneLanguageCode });
       render("brands", false);
+    }
+    if (action === "open-book-clone") {
+      resetBookClone();
+      state.bookCloneOpen = true;
+      state.bookCloneSourceId = target.dataset.bookId;
+      render("books", false);
+      window.requestAnimationFrame?.(() => document.querySelector('[data-action="clone-book-language"]')?.focus?.());
+    }
+    if (action === "cancel-book-clone") {
+      const sourceId = state.bookCloneSourceId;
+      resetBookClone();
+      render("books", false);
+      window.requestAnimationFrame?.(() => [...document.querySelectorAll('[data-action="open-book-clone"]')].find((button) => button.dataset.bookId === sourceId)?.focus?.());
+    }
+    if (action === "submit-book-clone") {
+      const source = books().find((item) => bookId(item) === state.bookCloneSourceId);
+      const destinationBookName = source ? bookCloneDestinationName(valueFor(source, "name", bookId(source)), state.bookCloneLanguageCode) : "";
+      const destinationExists = Boolean(destinationBookName) && books().some((item) => String(valueFor(item, "name", bookId(item))).toLocaleLowerCase() === destinationBookName.toLocaleLowerCase());
+      const writerActive = processIsActive() || productionActionActive() || state.cacheCleanupActive || applicationIsLoading();
+      if (!source || !destinationBookName || destinationExists || state.bookClonePending || state.bookCloneAwaitingSnapshot || writerActive) return;
+      state.bookClonePending = true;
+      state.bookCloneDestination = destinationBookName;
+      state.bookCloneFeedback = "Cloning Book…";
+      state.bookCloneFeedbackError = false;
+      send("book.clone", { bookId: state.bookCloneSourceId, languageCode: state.bookCloneLanguageCode });
+      render("books", false);
     }
     if (action === "validate-brand") { const requestId = send("brand.validate", { brandName: state.inspectedBrand }); state.brandValidationRequestBrands.set(requestId, state.inspectedBrand); }
     if (action === "save-brand-author") {
@@ -2922,6 +3036,7 @@
   });
   content.addEventListener("change", (event) => {
     if (event.target.dataset.action === "clone-brand-language") { state.brandCloneLanguageCode = event.target.value; state.brandCloneFeedback = ""; state.brandCloneFeedbackError = false; render("brands", false); }
+    if (event.target.dataset.action === "clone-book-language") { state.bookCloneLanguageCode = event.target.value; state.bookCloneFeedback = ""; state.bookCloneFeedbackError = false; render("books", false); window.requestAnimationFrame?.(() => document.querySelector('[data-action="clone-book-language"]')?.focus?.()); }
     if (event.target.dataset.action === "book-status") { state.bookStatus = bookStatuses.includes(event.target.value) ? event.target.value : "All"; state.bookPage = 1; render("books", false); }
     if (event.target.dataset.action === "diagnostic-book") { state.selectedBookId = event.target.value; render("diagnostics", false); }
     if (event.target.dataset.action === "set-book-background") {
@@ -3114,6 +3229,19 @@
       if (currentRoute() === "brands") render("brands", false);
       status.textContent = "Brand cloned";
       if (refreshTask && !refreshWarning) observeLibraryRefresh(refreshTask);
+    } else if (ok && command === "book.clone.completed") {
+      const payload = valueFor(response, "payload", {});
+      const refreshTask = valueFor(payload, "refreshTask", null);
+      const refreshWarning = String(valueFor(payload, "refreshWarning", "") ?? "");
+      state.bookClonePending = false;
+      state.bookCloneAwaitingSnapshot = true;
+      state.bookCloneDestinationId = String(valueFor(payload, "destinationBookId", state.bookCloneDestinationId));
+      state.bookCloneDestination = String(valueFor(payload, "destinationBookName", state.bookCloneDestination));
+      state.bookCloneFeedback = refreshTask && !refreshWarning ? "Book cloned. Refreshing library…" : "Book was cloned, but the library refresh could not start. Use Refresh to continue.";
+      state.bookCloneFeedbackError = !refreshTask || Boolean(refreshWarning);
+      if (currentRoute() === "books") render("books", false);
+      status.textContent = "Book cloned";
+      if (refreshTask && !refreshWarning) observeLibraryRefresh(refreshTask);
     } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "LibraryRefresh") {
       if (requestCommand === "book.interior.settings.save") {
         state.bookInteriorSaveTaskId = valueFor(valueFor(response, "payload", {}), "taskId", "");
@@ -3147,6 +3275,9 @@
     } else if (ok && command === "app.snapshot") {
       const cloneWasAwaiting = state.brandCloneAwaitingSnapshot;
       const cloneDestination = state.brandCloneDestination;
+      const bookCloneWasAwaiting = state.bookCloneAwaitingSnapshot;
+      const bookCloneDestinationId = state.bookCloneDestinationId;
+      const bookCloneDestination = state.bookCloneDestination;
       const interiorSaveWasAwaiting = state.bookInteriorSaveAwaitingSnapshot;
       const interiorShuffleWasAwaiting = state.interiorShuffleAwaitingSnapshot;
       const preserveBookDrawer = (interiorSaveWasAwaiting || interiorShuffleWasAwaiting) && state.bookDrawerOpen && currentRoute() === "books";
@@ -3192,6 +3323,24 @@
           state.brandCloneFeedbackError = true;
         }
       }
+      if (bookCloneWasAwaiting) {
+        const clonedBook = books().find((book) => bookId(book) === bookCloneDestinationId)
+          ?? books().find((book) => String(valueFor(book, "name", bookId(book))) === bookCloneDestination);
+        if (clonedBook) {
+          const clonedBookId = bookId(clonedBook);
+          resetBookClone(false);
+          state.bookCloneNotice = `Book '${bookCloneDestination}' was cloned successfully.`;
+          state.bookCloneNoticeBookId = clonedBookId;
+          state.selectedBookId = clonedBookId;
+          state.bookDrawerOpen = true;
+          const clonedBookIndex = filteredBooks().findIndex((book) => bookId(book) === clonedBookId);
+          if (clonedBookIndex >= 0) state.bookPage = Math.floor(clonedBookIndex / 12) + 1;
+        } else {
+          state.bookClonePending = false;
+          state.bookCloneFeedback = "Book was cloned, but it was not found in the refreshed library. Refresh and try again.";
+          state.bookCloneFeedbackError = true;
+        }
+      }
       loadStorage();
       if (state.keywordBuilderRefreshNeeded && !state.keywordBuilderConfirmed.has(state.keywordBuilderRefreshBookId)) {
         state.keywordBuilderRefreshNeeded = false;
@@ -3217,7 +3366,11 @@
       }
       const allBrands = valueFor(discovery(), "brands", []);
       if (!allBrands.some((brand) => valueFor(brand, "name", "") === state.inspectedBrand)) state.inspectedBrand = valueFor(allBrands[0], "name", "");
-      if (cloneWasAwaiting && currentRoute() === "brands") {
+      if (bookCloneWasAwaiting && currentRoute() === "books") {
+        render("books", false);
+        status.textContent = state.bookCloneNotice ? "Book clone ready" : "Book clone refresh needs attention";
+        window.requestAnimationFrame?.(() => document.querySelector("#book-detail-title")?.focus?.());
+      } else if (cloneWasAwaiting && currentRoute() === "brands") {
         render("brands", false);
         status.textContent = state.brandCloneNotice ? "Brand clone ready for validation" : "Brand clone refresh needs attention";
       } else if (preserveBookDrawer) {
@@ -3445,6 +3598,15 @@
         state.brandCloneFeedbackError = true;
         if (currentRoute() === "brands") render("brands", false);
         status.textContent = "Brand clone needs attention";
+        return;
+      }
+      if (requestCommand === "book.clone") {
+        state.bookClonePending = false;
+        state.bookCloneAwaitingSnapshot = false;
+        state.bookCloneFeedback = bookCloneErrorMessage(error);
+        state.bookCloneFeedbackError = true;
+        if (currentRoute() === "books") render("books", false);
+        status.textContent = "Book clone needs attention";
         return;
       }
       if (requestCommand === "book.interior.settings.save") {

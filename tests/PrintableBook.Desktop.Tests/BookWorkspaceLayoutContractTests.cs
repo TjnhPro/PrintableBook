@@ -343,7 +343,9 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("Reassign this Book from", script, StringComparison.Ordinal);
         Assert.Contains("Existing files and outputs will not be moved or changed", script, StringComparison.Ordinal);
         Assert.Contains("The existing assignment is preserved", script, StringComparison.Ordinal);
-        Assert.Contains("Only Brands whose Author matches", script, StringComparison.Ordinal);
+        Assert.Contains("Only Brands whose Language and Author match", script, StringComparison.Ordinal);
+        Assert.Contains("No ${languageNameFor(summary)} Brand available.", script, StringComparison.Ordinal);
+        Assert.Contains("No ${languageNameFor(summary)} Brand matches this Book Author.", script, StringComparison.Ordinal);
         Assert.Contains("aria-describedby=\"${errorId}\"", script, StringComparison.Ordinal);
         Assert.Contains("patchBookMetadataValidationUi", script, StringComparison.Ordinal);
         Assert.Contains("scrollIntoView?.({ block: \"nearest\" })", script, StringComparison.Ordinal);

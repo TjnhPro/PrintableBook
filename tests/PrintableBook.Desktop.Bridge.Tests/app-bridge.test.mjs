@@ -270,6 +270,23 @@ const diagnosticsSnapshot = () => ({
   }]
 });
 
+const languageEditionSnapshot = ({
+  books = [{ id: { value: "AnimalBook" }, name: "AnimalBook" }],
+  summaries = [{
+    bookId: { value: "AnimalBook" }, workspaceStatus: "Not started", languageCode: "en", languageName: "English",
+    assignmentStatus: "Unassigned", metadata: { title: "ANIMAL BOOK", author: "Jane Doe" },
+    validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [], outputSummaries: []
+  }],
+  brands = [],
+  brandSummaries = []
+} = {}) => ({
+  discovery: { brands, books },
+  globalSettings: {},
+  supportedLanguages: [{ code: "en", name: "English" }, { code: "de", name: "German" }, { code: "fr", name: "French" }],
+  brandSummaries,
+  bookSummaries: summaries
+});
+
 const updateSnapshot = (phase, overrides = {}) => ({
   phase,
   currentVersion: "0.1.1",
@@ -1419,6 +1436,123 @@ test("Build Final Interior alone uses the Building busy label", () => {
   assert.equal(productionFinalButton.textContent, "Building…");
   assert.equal(productionFinalButton.attributes["aria-busy"], "true");
   assert.equal(productionWorkspace.attributes["aria-busy"], "true");
+});
+
+test("Book clone previews the language edition, prevents double submit, and opens the refreshed clone", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "books", ok: true, command: "app.snapshot", payload: languageEditionSnapshot() } });
+
+  const openBook = { dataset: { action: "select-book", bookId: "AnimalBook" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  assert.match(content.innerHTML, /<span>Language<\/span><input class="control" value="English" readonly/);
+
+  const openClone = { dataset: { action: "open-book-clone", bookId: "AnimalBook" }, closest: () => openClone };
+  contentListeners.click({ target: openClone });
+  assert.match(content.innerHTML, /<legend>Clone Book<\/legend>/);
+  assert.match(content.innerHTML, /data-action="submit-book-clone"[^>]*disabled/);
+
+  contentListeners.change({ target: { dataset: { action: "clone-book-language" }, value: "de" } });
+  assert.match(content.innerHTML, /Destination Book name[\s\S]*value="AnimalBook_de"/);
+  assert.doesNotMatch(content.innerHTML, /data-action="submit-book-clone"[^>]*disabled/);
+
+  const submit = { dataset: { action: "submit-book-clone" }, closest: () => submit };
+  const beforeSubmit = messages.length;
+  contentListeners.click({ target: submit });
+  contentListeners.click({ target: submit });
+  assert.equal(messages.length, beforeSubmit + 1, "pending clone must ignore duplicate submit");
+  assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.clone", payload: { bookId: "AnimalBook", languageCode: "de" } });
+  assert.match(content.innerHTML, /Cloning…/);
+  assert.match(content.innerHTML, /aria-busy="true" disabled/);
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "book.clone.completed", payload: {
+    destinationBookId: "AnimalBook_de", destinationBookName: "AnimalBook_de",
+    languageCode: "de", languageName: "German",
+    refreshTask: { taskId: "clone-refresh", kind: "LibraryRefresh", state: "Running" }
+  } } });
+  const refreshed = languageEditionSnapshot({
+    books: [
+      { id: { value: "AnimalBook" }, name: "AnimalBook" },
+      { id: { value: "AnimalBook_de" }, name: "AnimalBook_de" }
+    ],
+    summaries: [
+      languageEditionSnapshot().bookSummaries[0],
+      {
+        bookId: { value: "AnimalBook_de" }, workspaceStatus: "Not started", languageCode: "de", languageName: "German",
+        assignmentStatus: "Unassigned", metadata: { title: "ANIMAL BOOK", author: "Jane Doe", asin: "B012345678" },
+        keywordBuilder: null, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [], outputSummaries: []
+      }
+    ]
+  });
+  messageHandler({ data: { version: 1, id: "clone-refresh", ok: true, command: "app.snapshot", payload: refreshed } });
+
+  assert.match(content.innerHTML, /Book &#39;AnimalBook_de&#39; was cloned successfully/);
+  assert.match(content.innerHTML, /<h2 id="book-detail-title"[^>]*>ANIMAL BOOK<\/h2>[\s\S]*AnimalBook_de/);
+  assert.match(content.innerHTML, /<span>Language<\/span><input class="control" value="German" readonly/);
+  assert.match(content.innerHTML, /Unassigned/);
+  assert.doesNotMatch(content.innerHTML, /data-book-id="AnimalBook" aria-current="true"/);
+});
+
+test("Book clone keeps its destination and actionable error when clone or refresh fails", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "books", ok: true, command: "app.snapshot", payload: languageEditionSnapshot() } });
+  const openBook = { dataset: { action: "select-book", bookId: "AnimalBook" }, closest: () => openBook };
+  const openClone = { dataset: { action: "open-book-clone", bookId: "AnimalBook" }, closest: () => openClone };
+  const submit = { dataset: { action: "submit-book-clone" }, closest: () => submit };
+  contentListeners.click({ target: openBook });
+  contentListeners.click({ target: openClone });
+  contentListeners.change({ target: { dataset: { action: "clone-book-language" }, value: "de" } });
+  contentListeners.click({ target: submit });
+  messageHandler({ data: { version: 1, id: messages.at(-1).id, ok: false, error: "book_clone_destination_exists" } });
+  assert.match(content.innerHTML, /role="alert"[\s\S]*destination Book already exists/);
+
+  contentListeners.change({ target: { dataset: { action: "clone-book-language" }, value: "fr" } });
+  contentListeners.click({ target: submit });
+  messageHandler({ data: { version: 1, id: messages.at(-1).id, ok: true, command: "book.clone.completed", payload: {
+    destinationBookId: "AnimalBook_fr", destinationBookName: "AnimalBook_fr",
+    refreshTask: { taskId: "failed-refresh", kind: "LibraryRefresh", state: "Running" }
+  } } });
+  messageHandler({ data: { version: 1, id: "failed-refresh", ok: true, command: "background.task", payload: {
+    taskId: "failed-refresh", kind: "LibraryRefresh", state: "Failed", errorMessage: "scan failed"
+  } } });
+  assert.match(content.innerHTML, /value="AnimalBook_fr"/);
+  assert.match(content.innerHTML, /role="alert"[\s\S]*refreshed library could not be loaded/);
+  assert.match(content.innerHTML, /Use Refresh to retry/);
+});
+
+test("Brand assignment filters by language before author and preserves an invalid current assignment", () => {
+  const bookSummary = {
+    bookId: { value: "AnimalBook_de" }, workspaceStatus: "Not started", languageCode: "de", languageName: "German",
+    assignedBrand: "EnglishBrand", assignmentStatus: "LanguageMismatch", assignmentReason: "Book and Brand languages differ.",
+    metadata: { title: "ANIMAL BOOK", author: "Jane Doe" },
+    validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: []
+  };
+  const books = [{ id: { value: "AnimalBook_de" }, name: "AnimalBook_de" }];
+  const englishBrand = { name: "EnglishBrand" };
+  const germanWrongAuthor = { name: "GermanWrongAuthor" };
+
+  const noGerman = loadBridge("books");
+  noGerman.messageHandler({ data: { version: 1, id: "no-german", ok: true, command: "app.snapshot", payload: languageEditionSnapshot({
+    books, summaries: [bookSummary], brands: [englishBrand],
+    brandSummaries: [{ brandName: "EnglishBrand", languageCode: "en", languageName: "English", author: "Jane Doe" }]
+  }) } });
+  const openNoGerman = { dataset: { action: "select-book", bookId: "AnimalBook_de" }, closest: () => openNoGerman };
+  noGerman.contentListeners.click({ target: openNoGerman });
+  assert.match(noGerman.content.innerHTML, /No German Brand available\./);
+  assert.match(noGerman.content.innerHTML, /value="EnglishBrand" selected disabled>EnglishBrand — Language mismatch/);
+
+  const wrongAuthor = loadBridge("books");
+  wrongAuthor.messageHandler({ data: { version: 1, id: "wrong-author", ok: true, command: "app.snapshot", payload: languageEditionSnapshot({
+    books, summaries: [{ ...bookSummary, assignedBrand: null, assignmentStatus: "Unassigned" }], brands: [englishBrand, germanWrongAuthor],
+    brandSummaries: [
+      { brandName: "EnglishBrand", languageCode: "en", languageName: "English", author: "Jane Doe" },
+      { brandName: "GermanWrongAuthor", languageCode: "de", languageName: "German", author: "Someone Else" }
+    ]
+  }) } });
+  const openWrongAuthor = { dataset: { action: "select-book", bookId: "AnimalBook_de" }, closest: () => openWrongAuthor };
+  wrongAuthor.contentListeners.click({ target: openWrongAuthor });
+  assert.match(wrongAuthor.content.innerHTML, /No German Brand matches this Book Author\./);
+  const assignmentMarkup = wrongAuthor.content.innerHTML.match(/<fieldset class="catalog-card book-settings-card book-settings-assignment"[\s\S]*?<\/fieldset>/)?.[0] ?? "";
+  assert.doesNotMatch(assignmentMarkup, /<option value="GermanWrongAuthor"/);
 });
 
 test("Book detail changes tabs without redrawing its drawer shell", () => {
