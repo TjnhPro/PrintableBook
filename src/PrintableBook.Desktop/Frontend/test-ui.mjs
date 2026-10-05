@@ -71,6 +71,21 @@ const expected = [
   ,"missingArtifacts"
   ,"uploadCompletedCount"
   ,'aria-live="polite"'
+  ,'supportedLanguages'
+  ,'brandCloneDestinationName'
+  ,'data-action="open-brand-clone"'
+  ,'data-action="clone-brand-language"'
+  ,'data-action="submit-brand-clone"'
+  ,'command === "brand.clone.completed"'
+  ,'Brand cloned. Validate this Brand before processing.'
+  ,'Cloning…'
+  ,'invalid_brand_clone'
+  ,'brand_clone_destination_exists'
+  ,'brand_clone_source_not_found'
+  ,'brand_clone_language_invalid'
+  ,'snapshot_unavailable'
+  ,'brand_clone_failed'
+  ,'state.brandCloneAwaitingSnapshot = true'
 ];
 
 for (const value of expected) {
@@ -91,6 +106,14 @@ if (app.includes('tabButton("overview"') || app.includes("Review the summary and
 
 if (app.includes("storage.settings.save") || app.includes("storage.book.check") || app.includes("storage.book.upload")) {
   throw new Error("Legacy standalone Storage bridge commands must not remain in the UI.");
+}
+
+if (!/const cloneBlocked = !state\.brandCloneLanguageCode \|\| !cloneDestination \|\| cloneDestinationExists \|\| cloneBusy \|\| processIsActive\(\)/.test(app)) {
+  throw new Error("Clone Brand must stay disabled until the request is safe to submit.");
+}
+
+if (!/state\.brandFilter = "";[\s\S]*state\.inspectedBrand = cloneDestination;[\s\S]*resetBrandClone\(false\)/.test(app)) {
+  throw new Error("Clone refresh must reveal and select the newly cloned Brand.");
 }
 
 console.log(`UI contract passed (${expected.length} checks).`);

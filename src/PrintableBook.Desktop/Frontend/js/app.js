@@ -14,6 +14,14 @@
   state.productionPdfNamePending = new Set();
   state.productionPdfNameErrors = new Map();
   state.productionPdfNameRequests = new Map();
+  state.brandCloneOpen = false;
+  state.brandCloneLanguageCode = "";
+  state.brandClonePending = false;
+  state.brandCloneAwaitingSnapshot = false;
+  state.brandCloneDestination = "";
+  state.brandCloneFeedback = "";
+  state.brandCloneFeedbackError = false;
+  state.brandCloneNotice = "";
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -61,7 +69,39 @@
   const displayStatus = (value) => typeof value === "number" ? ["Not started", "Running", "Failed", "Cancelled", "Completed", "Interrupted"][value] ?? "Unknown" : value;
   const brandValidationStatus = (value) => typeof value === "number" ? ["Not validated", "Validated", "Needs validation"][value] ?? "Not validated" : String(value ?? "NotValidated").replace(/([a-z])([A-Z])/g, "$1 $2");
   const brandSummaries = () => valueFor(window.appSnapshot, "brandSummaries", []);
+  const supportedLanguages = () => valueFor(window.appSnapshot, "supportedLanguages", []);
   const brandSummaryFor = (brand) => brandSummaries().find((summary) => valueFor(summary, "brandName", "") === valueFor(brand, "name", ""));
+  const brandCloneDestinationName = (sourceBrandName, languageCode) => {
+    const language = supportedLanguages().find((option) => String(valueFor(option, "code", "")).toLocaleLowerCase() === String(languageCode ?? "").trim().toLocaleLowerCase());
+    if (!sourceBrandName || !language) return "";
+    let baseName = String(sourceBrandName);
+    for (const option of supportedLanguages()) {
+      const suffix = `_${String(valueFor(option, "code", "")).toLocaleLowerCase()}`;
+      if (!baseName.toLocaleLowerCase().endsWith(suffix)) continue;
+      baseName = baseName.slice(0, -suffix.length);
+      break;
+    }
+    return `${baseName}_${String(valueFor(language, "code", "")).toLocaleLowerCase()}`;
+  };
+  const resetBrandClone = (clearNotice = true) => {
+    state.brandCloneOpen = false;
+    state.brandCloneLanguageCode = "";
+    state.brandClonePending = false;
+    state.brandCloneAwaitingSnapshot = false;
+    state.brandCloneDestination = "";
+    state.brandCloneFeedback = "";
+    state.brandCloneFeedbackError = false;
+    if (clearNotice) state.brandCloneNotice = "";
+  };
+  const brandCloneErrorMessage = (error) => ({
+    invalid_brand_clone: "Review the Brand and language, then try again.",
+    brand_clone_destination_exists: "That destination Brand already exists. Select another language.",
+    brand_clone_source_not_found: "The source Brand no longer exists. Refresh the library and try again.",
+    brand_clone_language_invalid: "Select a supported language.",
+    processing_active: "Wait for Interior processing to finish.",
+    snapshot_unavailable: "The Brand library is unavailable. Refresh it and try again.",
+    brand_clone_failed: "The Brand could not be cloned. The source Brand was not changed."
+  })[String(error)] ?? "The Brand could not be cloned. The source Brand was not changed.";
   const assignmentStatus = (summary) => {
     const value = valueFor(summary, "assignmentStatus", "Unassigned");
     return typeof value === "number" ? ["Unassigned", "Valid", "BookAuthorMissing", "BrandAuthorMissing", "AuthorMismatch", "MissingBrand", "BrandMetadataUnavailable"][value] ?? "Unassigned" : String(value ?? "Unassigned");
@@ -628,6 +668,16 @@
       state.applicationLoadError = "";
       if (state.bookDrawerOpen && currentRoute() === "books") refreshBookKeywordBuilderCard();
       status.textContent = "Keyword Builder saved; refresh needed";
+      return;
+    }
+    if (state.brandCloneAwaitingSnapshot) {
+      state.brandClonePending = false;
+      state.brandCloneFeedback = "Brand was cloned, but the refreshed library could not be loaded. Use Refresh to retry.";
+      state.brandCloneFeedbackError = true;
+      state.applicationLoadState = "ready";
+      state.applicationLoadError = "";
+      if (currentRoute() === "brands") render("brands", false);
+      status.textContent = "Brand clone refresh needs attention";
       return;
     }
     if (taskId === state.interiorShuffleTaskId) {
@@ -1338,10 +1388,21 @@
       return assignedBrandName(summary) === valueFor(selected, "name", "") && !authorMatches(valueFor(metadataFor(summary), "author", ""), authorDraft);
     }).length : 0;
     const metadata = selected ? brandMetadataPresentation(selected) : null;
+    const sourceBrandName = selected ? String(valueFor(selected, "name", "")) : "";
+    const cloneDestination = brandCloneDestinationName(sourceBrandName, state.brandCloneLanguageCode);
+    const cloneDestinationExists = Boolean(cloneDestination) && availableBrands.some((brand) => String(valueFor(brand, "name", "")).toLocaleLowerCase() === cloneDestination.toLocaleLowerCase());
+    const cloneBusy = state.brandClonePending || state.brandCloneAwaitingSnapshot;
+    const cloneBlocked = !state.brandCloneLanguageCode || !cloneDestination || cloneDestinationExists || cloneBusy || processIsActive();
+    const cloneFeedback = cloneDestinationExists && !state.brandCloneFeedback
+      ? "That destination Brand already exists. Select another language."
+      : state.brandCloneFeedback;
+    const cloneFeedbackError = cloneDestinationExists || state.brandCloneFeedbackError;
+    const cloneGroup = selected && state.brandCloneOpen ? `<fieldset class="brand-clone-group" aria-busy="${cloneBusy}" ${cloneBusy ? "disabled" : ""}><legend>Clone Brand</legend><div class="brand-clone-grid"><label class="field"><span>Source Brand</span><input class="control" value="${escapeHtml(sourceBrandName)}" readonly aria-readonly="true"></label><label class="field"><span>Language</span><select class="control" data-action="clone-brand-language"><option value="">Select language</option>${supportedLanguages().map((option) => { const code = String(valueFor(option, "code", "")); return `<option value="${escapeHtml(code)}" ${code === state.brandCloneLanguageCode ? "selected" : ""}>${escapeHtml(valueFor(option, "name", code))}</option>`; }).join("")}</select></label><label class="field"><span>Destination Brand name</span><input class="control" value="${escapeHtml(cloneDestination)}" placeholder="Select a language" readonly aria-readonly="true"></label></div><div class="brand-clone-footer"><p class="brand-clone-feedback ${cloneFeedbackError ? "is-error" : ""}" role="${cloneFeedbackError ? "alert" : "status"}" aria-live="polite">${escapeHtml(cloneFeedback)}</p><div class="brand-clone-actions"><button class="button-secondary" type="button" data-action="cancel-brand-clone">Cancel</button><button class="button-primary" type="button" data-action="submit-brand-clone" aria-busy="${cloneBusy}" ${cloneBlocked ? "disabled" : ""}>${cloneBusy ? "Cloning…" : "Clone Brand"}</button></div></div></fieldset>` : "";
+    const cloneNotice = selected && state.brandCloneNotice ? `<p class="brand-clone-notice" role="status" aria-live="polite">${escapeHtml(state.brandCloneNotice)}</p>` : "";
     const brandInfo = selected ? `<section class="catalog-card brand-region-card"><div class="catalog-card-heading"><div><h3>Brand Information</h3><p>One Brand has one Primary Author.</p></div><span class="status-badge ${metadata.tone}">${escapeHtml(metadata.label)}</span></div><label class="field"><span>Author</span><input class="control" data-action="brand-author-input" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" value="${escapeHtml(authorDraft)}" placeholder="Unknown" autocomplete="off"></label>${impactedBooks ? `<p class="catalog-warning" role="alert">Saving this Author will make ${impactedBooks} assigned Book${impactedBooks === 1 ? "" : "s"} invalid. Their assignments will be kept for review.</p>` : ""}<div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" role="${state.catalogFeedbackError ? "alert" : "status"} aria-live="polite">${state.catalogMutationTarget === valueFor(selected, "name", "") ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-brand-author" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "brand.author.save"}" ${!authorDirty || state.catalogMutationPending || processIsActive() ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "brand.author.save" ? "Saving…" : "Save Author"}</button></div></section>` : "";
     const validationInfo = selected ? `<section class="catalog-card brand-region-card brand-validation-card"><div class="catalog-card-heading"><div><h3>Brand Validation</h3><p>Check every required asset before processing.</p></div>${badge(validationStatus)}</div><dl class="brand-validation-facts"><div><dt>Last validated</dt><dd>${escapeHtml(dateTime(valueFor(selectedValidation, "validatedAtUtc", null)))}</dd></div><div><dt>Files checked</dt><dd>IntroTemplate + 5 required files</dd></div></dl><p class="panel-note">Validate IntroTemplate, frame.png, background.png, cover.psd, app_plus.psd, and book_owner.psd.</p><div class="brand-validation-action"><button class="button-primary" data-action="validate-brand" ${processIsActive() ? "disabled" : ""}>Validate Brand</button></div></section>` : "";
     const detail = selected
-      ? `<section class="panel brand-detail-panel"><header class="brand-panel-header"><div><p class="eyebrow">Selected Brand</p><h2>${escapeHtml(valueFor(selected, "name", ""))}</h2></div><div class="brand-detail-badges"><span class="status-badge ${metadata.tone}">${escapeHtml(metadata.label)}</span>${badge(validationStatus)}</div></header><div class="brand-detail-scroll"><div class="brand-region-grid">${brandInfo}${validationInfo}</div>${validationMessage}${assetInventory}</div></section>`
+      ? `<section class="panel brand-detail-panel"><header class="brand-panel-header"><div><p class="eyebrow">Selected Brand</p><h2>${escapeHtml(valueFor(selected, "name", ""))}</h2></div><div class="brand-detail-actions"><button class="button-secondary" type="button" data-action="open-brand-clone" aria-expanded="${state.brandCloneOpen}" ${cloneBusy || processIsActive() ? "disabled" : ""}>Clone Brand</button><div class="brand-detail-badges"><span class="status-badge ${metadata.tone}">${escapeHtml(metadata.label)}</span>${badge(validationStatus)}</div></div></header>${cloneNotice}${cloneGroup}<div class="brand-detail-scroll"><div class="brand-region-grid">${brandInfo}${validationInfo}</div>${validationMessage}${assetInventory}</div></section>`
       : `<section class="panel brand-detail-panel"><header class="brand-panel-header"><div><p class="eyebrow">Selected Brand</p><h2>Brand detail</h2></div></header><div class="brand-detail-scroll"><div class="brand-detail-empty"><strong>No Brand selected</strong><p>Add a Brand folder or refresh the library to inspect its templates.</p></div></div></section>`;
     content.innerHTML = `<section class="brands-page"><div class="page-header"><div><h1>Brands & templates</h1><p>Inspect reusable Brand assets and resolve exact file requirements before processing.</p></div></div><div class="brand-workspace"><section class="panel brand-list-panel"><header class="brand-panel-header"><div><h2>Brands</h2><p data-brand-result-count aria-live="polite">${allBrands.length} of ${availableBrands.length} shown</p></div></header><label class="brand-search"><span class="sr-only">Search Brands by name</span><input class="control" type="search" data-action="filter-brands" value="${escapeHtml(state.brandFilter)}" placeholder="Search Brand name…" autocomplete="off"></label><div class="brand-list-scroll" data-brand-list>${brandListMarkup(allBrands)}</div></section>${detail}</div></section>`;
   };
@@ -2434,7 +2495,20 @@
       beginApplicationRefresh();
     }
     if (action === "refresh-diagnostics") { send("diagnostics.get"); send("task.list"); }
-    if (action === "select-brand") { state.inspectedBrand = target.dataset.brandName; state.brandValidationResult = null; render("brands"); }
+    if (action === "select-brand") { resetBrandClone(); state.inspectedBrand = target.dataset.brandName; state.brandValidationResult = null; render("brands"); }
+    if (action === "open-brand-clone") { state.brandCloneOpen = true; state.brandCloneFeedback = ""; state.brandCloneFeedbackError = false; state.brandCloneNotice = ""; render("brands", false); }
+    if (action === "cancel-brand-clone") { resetBrandClone(); render("brands", false); }
+    if (action === "submit-brand-clone") {
+      const destinationBrandName = brandCloneDestinationName(state.inspectedBrand, state.brandCloneLanguageCode);
+      const destinationExists = Boolean(destinationBrandName) && brands().some((brand) => String(valueFor(brand, "name", "")).toLocaleLowerCase() === destinationBrandName.toLocaleLowerCase());
+      if (!destinationBrandName || destinationExists || state.brandClonePending || state.brandCloneAwaitingSnapshot || processIsActive()) return;
+      state.brandClonePending = true;
+      state.brandCloneDestination = destinationBrandName;
+      state.brandCloneFeedback = "Cloning Brand…";
+      state.brandCloneFeedbackError = false;
+      send("brand.clone", { brandName: state.inspectedBrand, languageCode: state.brandCloneLanguageCode });
+      render("brands", false);
+    }
     if (action === "validate-brand") { const requestId = send("brand.validate", { brandName: state.inspectedBrand }); state.brandValidationRequestBrands.set(requestId, state.inspectedBrand); }
     if (action === "save-brand-author") {
       const brandName = target.dataset.brandName;
@@ -2847,6 +2921,7 @@
     }
   });
   content.addEventListener("change", (event) => {
+    if (event.target.dataset.action === "clone-brand-language") { state.brandCloneLanguageCode = event.target.value; state.brandCloneFeedback = ""; state.brandCloneFeedbackError = false; render("brands", false); }
     if (event.target.dataset.action === "book-status") { state.bookStatus = bookStatuses.includes(event.target.value) ? event.target.value : "All"; state.bookPage = 1; render("books", false); }
     if (event.target.dataset.action === "diagnostic-book") { state.selectedBookId = event.target.value; render("diagnostics", false); }
     if (event.target.dataset.action === "set-book-background") {
@@ -3027,6 +3102,18 @@
       if (unsaved && book && summary) unsaved.hidden = !(hasInteriorDraft(bookId(book)) || hasMetadataDraft(book, summary) || hasKeywordBuilderDraft(book, summary));
       status.textContent = "Keyword Builder saved";
       if (refreshTask) observeLibraryRefresh(refreshTask);
+    } else if (ok && command === "brand.clone.completed") {
+      const payload = valueFor(response, "payload", {});
+      const refreshTask = valueFor(payload, "refreshTask", null);
+      const refreshWarning = String(valueFor(payload, "refreshWarning", "") ?? "");
+      state.brandClonePending = false;
+      state.brandCloneAwaitingSnapshot = true;
+      state.brandCloneDestination = String(valueFor(payload, "destinationBrandName", state.brandCloneDestination));
+      state.brandCloneFeedback = refreshTask && !refreshWarning ? "Brand cloned. Refreshing library…" : "Brand was cloned, but the library refresh could not start. Use Refresh to continue.";
+      state.brandCloneFeedbackError = !refreshTask || Boolean(refreshWarning);
+      if (currentRoute() === "brands") render("brands", false);
+      status.textContent = "Brand cloned";
+      if (refreshTask && !refreshWarning) observeLibraryRefresh(refreshTask);
     } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "LibraryRefresh") {
       if (requestCommand === "book.interior.settings.save") {
         state.bookInteriorSaveTaskId = valueFor(valueFor(response, "payload", {}), "taskId", "");
@@ -3058,6 +3145,8 @@
     } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "ProductionAction") {
       observeProductionAction(valueFor(response, "payload", {}));
     } else if (ok && command === "app.snapshot") {
+      const cloneWasAwaiting = state.brandCloneAwaitingSnapshot;
+      const cloneDestination = state.brandCloneDestination;
       const interiorSaveWasAwaiting = state.bookInteriorSaveAwaitingSnapshot;
       const interiorShuffleWasAwaiting = state.interiorShuffleAwaitingSnapshot;
       const preserveBookDrawer = (interiorSaveWasAwaiting || interiorShuffleWasAwaiting) && state.bookDrawerOpen && currentRoute() === "books";
@@ -3090,6 +3179,19 @@
         }
       }
       window.appSnapshot = incomingSnapshot;
+      if (cloneWasAwaiting) {
+        const clonedBrand = valueFor(discovery(), "brands", []).find((brand) => String(valueFor(brand, "name", "")) === cloneDestination);
+        if (clonedBrand) {
+          if (state.brandFilter && !cloneDestination.toLocaleLowerCase().includes(state.brandFilter.trim().toLocaleLowerCase())) state.brandFilter = "";
+          state.inspectedBrand = cloneDestination;
+          resetBrandClone(false);
+          state.brandCloneNotice = "Brand cloned. Validate this Brand before processing.";
+        } else {
+          state.brandClonePending = false;
+          state.brandCloneFeedback = "Brand was cloned, but it was not found in the refreshed library. Refresh and try again.";
+          state.brandCloneFeedbackError = true;
+        }
+      }
       loadStorage();
       if (state.keywordBuilderRefreshNeeded && !state.keywordBuilderConfirmed.has(state.keywordBuilderRefreshBookId)) {
         state.keywordBuilderRefreshNeeded = false;
@@ -3115,7 +3217,10 @@
       }
       const allBrands = valueFor(discovery(), "brands", []);
       if (!allBrands.some((brand) => valueFor(brand, "name", "") === state.inspectedBrand)) state.inspectedBrand = valueFor(allBrands[0], "name", "");
-      if (preserveBookDrawer) {
+      if (cloneWasAwaiting && currentRoute() === "brands") {
+        render("brands", false);
+        status.textContent = state.brandCloneNotice ? "Brand clone ready for validation" : "Brand clone refresh needs attention";
+      } else if (preserveBookDrawer) {
         if (state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();
         else updateInteriorSaveUi();
         refreshBookListRow(state.selectedBookId);
@@ -3332,6 +3437,15 @@
       if (requestCommand === "book.brand.templates.copy") {
         state.brandTemplateCopyPending = false;
         if (state.bookDrawerOpen && currentRoute() === "books") refreshBookDrawerBody();
+      }
+      if (requestCommand === "brand.clone") {
+        state.brandClonePending = false;
+        state.brandCloneAwaitingSnapshot = false;
+        state.brandCloneFeedback = brandCloneErrorMessage(error);
+        state.brandCloneFeedbackError = true;
+        if (currentRoute() === "brands") render("brands", false);
+        status.textContent = "Brand clone needs attention";
+        return;
       }
       if (requestCommand === "book.interior.settings.save") {
         state.bookInteriorSavePending = false;

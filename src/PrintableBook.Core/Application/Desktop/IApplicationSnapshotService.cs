@@ -59,7 +59,7 @@ public interface ILocalOutputActionService
 }
 public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = true, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null, ProductionDesktopSummary? Production = null, BookProductionMetadata? Metadata = null, string? AssignedBrand = null, BookBrandAssignmentStatus AssignmentStatus = BookBrandAssignmentStatus.Unassigned, string? AssignmentReason = null, bool WorkspaceStateAvailable = true, string? WorkspaceStateError = null, int LegacyFrameModePageCount = 0, BookKeywordBuilderState? KeywordBuilder = null, InteriorShuffleDesktopSummary? InteriorShuffle = null);
 public sealed record BrandDesktopSummary(string BrandName, BrandValidationStatus ValidationStatus, DateTimeOffset? ValidatedAtUtc, string? Fingerprint, string? Author = null, string MetadataStatus = "Missing", string? MetadataError = null);
-public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt, IReadOnlyList<BrandDesktopSummary>? BrandSummaries = null, IReadOnlyList<BrandImageSizeRequirement>? BrandImageSizeRequirements = null);
+public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt, IReadOnlyList<BrandDesktopSummary>? BrandSummaries = null, IReadOnlyList<BrandImageSizeRequirement>? BrandImageSizeRequirements = null, IReadOnlyList<SupportedLanguageOption>? SupportedLanguages = null);
 
 public interface IApplicationSnapshotService
 {
@@ -144,7 +144,7 @@ public sealed class ApplicationSnapshotService(
             .Select(summary => summary ?? throw new InvalidOperationException("Book summary was not produced."))
             .ToArray();
         var composedDiscovery = discoverySnapshot with { Brands = composedBrands };
-        return new ApplicationSnapshot(composedDiscovery, settings, completedSummaries, DateTimeOffset.UtcNow, brandSummaries, BrandValidationDefinition.GetImageSizeRequirements(settings));
+        return new ApplicationSnapshot(composedDiscovery, settings, completedSummaries, DateTimeOffset.UtcNow, brandSummaries, BrandValidationDefinition.GetImageSizeRequirements(settings), SupportedLanguageCatalog.All);
     }
 
     private static DiscoveredBrand ApplyValidatedBrandFacts(DiscoveredBrand brand, BrandValidationState state)

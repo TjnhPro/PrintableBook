@@ -170,6 +170,7 @@ public sealed class ApplicationSnapshotServiceTests
         Assert.Equal(GlobalSettings.Default, snapshot.GlobalSettings);
         Assert.Equal(1, settings.LoadCallCount);
         Assert.Equal("Ready", Assert.Single(snapshot.BookSummaries).ValidationStatus);
+        Assert.Equal(SupportedLanguageCatalog.All, snapshot.SupportedLanguages);
         Assert.Equal(
             [new ImageSize(1024, 1024), new ImageSize(2048, 2048), new ImageSize(GlobalSettings.Default.FinalPageWidth, GlobalSettings.Default.FinalPageHeight)],
             Assert.Single(snapshot.BrandImageSizeRequirements!, requirement => requirement.Target == "IntroTemplate").AllowedSizes);
