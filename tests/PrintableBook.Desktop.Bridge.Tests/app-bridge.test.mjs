@@ -35,6 +35,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   let bookDrawerBodyRenderCount = 0;
   let bookDetailPanelRenderCount = 0;
   let productionWorkspaceRenderCount = 0;
+  let latestProductionWorkspaceMarkup = "";
   let introWorkspaceRenderCount = 0;
   let artworkWorkspaceRenderCount = 0;
   const introPaginationFocus = { action: "", focus() { this.action = "focused"; } };
@@ -100,7 +101,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     setAttribute(name, value) { this.attributes[name] = value; },
     querySelector: (selector) => selector === '[data-action="build-final-interior"]' ? productionFinalButton : selector === "[data-production-feedback]" ? productionFeedback : null,
     querySelectorAll: () => [],
-    set outerHTML(_markup) { productionWorkspaceRenderCount += 1; }
+    set outerHTML(markup) { productionWorkspaceRenderCount += 1; latestProductionWorkspaceMarkup = markup; }
   };
   const keywordBuilderCard = {
     contains: () => false,
@@ -188,7 +189,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, settingsSaveButton, settingsLoadButton, settingsFeedback, processQueueScroll, processFocusTarget, setDocumentActiveElement: (element) => { documentActiveElement = element; }, brandResultCount, brandSettingsEditor, genericKeywordsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getBookDetailPanelRenderCount: () => bookDetailPanelRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, settingsSaveButton, settingsLoadButton, settingsFeedback, processQueueScroll, processFocusTarget, setDocumentActiveElement: (element) => { documentActiveElement = element; }, brandResultCount, brandSettingsEditor, genericKeywordsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getBookDetailPanelRenderCount: () => bookDetailPanelRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getLatestProductionWorkspaceMarkup: () => latestProductionWorkspaceMarkup, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -1264,6 +1265,40 @@ test("Production removes redundant context and places Final Interior before grou
   assert.ok(content.innerHTML.indexOf("<legend>Final Interior</legend>") < content.innerHTML.indexOf("<legend>Final Cover</legend>"));
   assert.ok(content.innerHTML.indexOf("<legend>Final Cover</legend>") < content.innerHTML.indexOf("<legend>Interior Cover</legend>"));
   assert.ok(content.innerHTML.indexOf("<legend>Interior Cover</legend>") < content.innerHTML.indexOf("<legend>Book Owner</legend>"));
+});
+
+test("Production loads stable PDF filename suggestions and randomizes them explicitly", () => {
+  const { messageHandler, contentListeners, content, messages, getLatestProductionWorkspaceMarkup } = loadBridge("books");
+  openProductionTab(messageHandler, contentListeners);
+
+  assert.equal(messages.at(-1).command, "book.production.pdf-name-suggestions.get");
+  assert.equal(messages.at(-1).payload.bookId, "Book 001");
+  assert.equal(messages.at(-1).payload.regenerate, false);
+  assert.match(content.innerHTML, /<legend>Suggested PDF filenames<\/legend>/);
+  assert.match(content.innerHTML, /id="production-cover-pdf-name"[^>]*readonly/);
+  assert.match(content.innerHTML, /id="production-interior-pdf-name"[^>]*readonly/);
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "book.production.pdf-name-suggestions", payload: {
+    bookId: "Book 001", coverFileName: "cover-suggestion.pdf", interiorFileName: "interior-suggestion.pdf"
+  } } });
+
+  assert.match(getLatestProductionWorkspaceMarkup(), /value="cover-suggestion\.pdf"/);
+  assert.match(getLatestProductionWorkspaceMarkup(), /value="interior-suggestion\.pdf"/);
+  const randomize = { dataset: { action: "randomize-pdf-names", bookId: "Book 001" }, closest: () => randomize };
+  contentListeners.click({ target: randomize });
+  assert.equal(messages.at(-1).command, "book.production.pdf-name-suggestions.get");
+  assert.equal(messages.at(-1).payload.regenerate, true);
+});
+
+test("Production reports a missing PDF filename source without blocking its other actions", () => {
+  const { messageHandler, contentListeners, status, getLatestProductionWorkspaceMarkup } = loadBridge("books");
+  openProductionTab(messageHandler, contentListeners);
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: false, error: "pdf_name_source_missing" } });
+
+  assert.equal(status.textContent, "PDF filename suggestions need attention");
+  assert.match(getLatestProductionWorkspaceMarkup(), /PDF filename sources are missing/);
+  assert.match(getLatestProductionWorkspaceMarkup(), /<legend>Final Interior<\/legend>/);
 });
 
 test("Production import preserves the open drawer while refreshing its snapshot", () => {

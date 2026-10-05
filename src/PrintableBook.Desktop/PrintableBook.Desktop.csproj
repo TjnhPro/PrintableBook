@@ -25,6 +25,10 @@
              Exclude="Frontend\node_modules\**;Frontend\package.json;Frontend\package-lock.json;Frontend\tailwind.config.js;Frontend\test-*.mjs;Frontend\verify-css.mjs;Frontend\css\input.css">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Metadata\*.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <Resource Include="Assets\app-icon.ico" />
   </ItemGroup>
 

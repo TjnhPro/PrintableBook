@@ -46,7 +46,8 @@ internal sealed class WebViewBridgeRouter(
     IBookKeywordPreviewService? bookKeywordPreviewService = null,
     IAmazonAsinCrawlSessionService? amazonAsinCrawlSessionService = null,
     IAmazonSearchPageClient? amazonSearchPageClient = null,
-    IS3StorageService? s3StorageService = null)
+    IS3StorageService? s3StorageService = null,
+    IProductionPdfNameSuggestionService? productionPdfNameSuggestionService = null)
 {
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
     private readonly ProcessingMutationGate processingMutationGate = processingMutationGate ?? new ProcessingMutationGate();
@@ -970,6 +971,42 @@ internal sealed class WebViewBridgeRouter(
                     await brandTemplateCopyService.CopyAsync(brand.Directory, book.Workspace, cancellationToken));
             }
 
+            if (request.Command == "book.production.pdf-name-suggestions.get")
+            {
+                if (applicationLoadCoordinator is null || productionPdfNameSuggestionService is null ||
+                    request.Payload is not { } namePayload ||
+                    !TryGetRequiredString(namePayload, "bookId", out var nameBookId))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_pdf_name_suggestion_request");
+                }
+
+                var regenerate = false;
+                if (namePayload.TryGetProperty("regenerate", out var regenerateElement))
+                {
+                    if (regenerateElement.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "invalid_pdf_name_suggestion_request");
+                    }
+                    regenerate = regenerateElement.GetBoolean();
+                }
+
+                var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                if (snapshot is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+                var book = snapshot.Discovery.Books.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Id.Value, nameBookId, StringComparison.Ordinal));
+                if (book is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+
+                try
+                {
+                    var names = await productionPdfNameSuggestionService.GetAsync(book.Id.Value, regenerate, cancellationToken);
+                    return BridgeResponse.Succeeded(request.Id, "book.production.pdf-name-suggestions", names);
+                }
+                catch (ProductionPdfNameSuggestionException exception)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, exception.Code);
+                }
+            }
+
             if (request.Command == "book.production.asset.import")
             {
                 if (applicationLoadCoordinator is null || productionFilePicker is null || productionAssetImportService is null ||
@@ -1148,7 +1185,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" or "s3.get" or "s3.credentials.replace" or "book.s3.check" or "book.s3.upload" or "book.s3.get" or "book.s3.cancel" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.pdf-name-suggestions.get" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" or "s3.get" or "s3.credentials.replace" or "book.s3.check" or "book.s3.upload" or "book.s3.get" or "book.s3.cancel" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

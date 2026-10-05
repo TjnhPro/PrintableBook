@@ -275,6 +275,12 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.DoesNotContain(".production-preview-grid", layout, StringComparison.Ordinal);
         Assert.Contains(".production-group>legend", layout, StringComparison.Ordinal);
         Assert.Contains(".production-final-action { grid-column:1/-1;", layout, StringComparison.Ordinal);
+        Assert.Contains("<legend>Suggested PDF filenames</legend>", script, StringComparison.Ordinal);
+        Assert.Contains("Cover PDF filename", script, StringComparison.Ordinal);
+        Assert.Contains("Interior PDF filename", script, StringComparison.Ordinal);
+        Assert.Contains("readonly aria-describedby=\"production-pdf-name-help production-pdf-name-error\"", script, StringComparison.Ordinal);
+        Assert.Contains(".production-pdf-name-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)) auto;", layout, StringComparison.Ordinal);
+        Assert.Contains(".production-pdf-name-error[hidden] { display:none; }", layout, StringComparison.Ordinal);
         Assert.Contains("@media (max-width:900px)", layout, StringComparison.Ordinal);
     }
 
