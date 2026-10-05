@@ -10,7 +10,7 @@ public sealed class PhysicalBrandCloneServiceTests : IAsyncLifetime
     private readonly string rootPath = Path.Combine(Path.GetTempPath(), $"PrintableBook.BrandClone.{Guid.NewGuid():N}");
 
     [Fact]
-    public async Task CloneAsync_copies_all_nested_bytes_preserves_metadata_and_excludes_only_root_validation()
+    public async Task CloneAsync_copies_all_nested_bytes_rewrites_metadata_and_excludes_only_root_validation()
     {
         var (paths, source) = CreateSource("ColoringWorld_de");
         var sourceNested = Path.Combine(source.Directory.Value, "custom", "nested");
@@ -27,7 +27,10 @@ public sealed class PhysicalBrandCloneServiceTests : IAsyncLifetime
         Assert.Equal("ColoringWorld_fr", result.DestinationBrand.Name);
         Assert.Equal(Path.GetFullPath(destination), result.DestinationBrand.Directory.Value);
         Assert.Equal(expectedBytes, await File.ReadAllBytesAsync(Path.Combine(destination, "custom", "nested", "unknown.asset")));
-        Assert.Equal("{\"author\":\"Jane Doe\"}", await File.ReadAllTextAsync(Path.Combine(destination, "brand.metadata.json")));
+        var metadata = await new JsonBrandMetadataStore(new PrintableBook.Infrastructure.FileSystem.PhysicalFileSystem())
+            .LoadAsync(new DirectoryReference(destination));
+        Assert.Equal("Jane Doe", metadata!.Author);
+        Assert.Equal("fr", metadata.LanguageCode);
         Assert.False(File.Exists(Path.Combine(destination, "brand.validation.json")));
         Assert.Equal("nested user asset", await File.ReadAllTextAsync(Path.Combine(destination, "custom", "nested", "brand.validation.json")));
 
@@ -35,6 +38,37 @@ public sealed class PhysicalBrandCloneServiceTests : IAsyncLifetime
         await File.WriteAllTextAsync(Path.Combine(destination, "brand.metadata.json"), "changed");
         Assert.Equal(expectedBytes, await File.ReadAllBytesAsync(Path.Combine(sourceNested, "unknown.asset")));
         Assert.Equal("{\"author\":\"Jane Doe\"}", await File.ReadAllTextAsync(Path.Combine(source.Directory.Value, "brand.metadata.json")));
+        Assert.Empty(StagingDirectories());
+    }
+
+    [Fact]
+    public async Task CloneAsync_creates_target_metadata_when_source_metadata_is_missing()
+    {
+        var (paths, source) = CreateSource("ColoringWorld");
+
+        await new PhysicalBrandCloneService().CloneAsync(paths, source, Language("de"));
+
+        var destination = new DirectoryReference(Path.Combine(paths.BrandsDirectory.Value, "ColoringWorld_de"));
+        var metadata = await new JsonBrandMetadataStore(new PrintableBook.Infrastructure.FileSystem.PhysicalFileSystem())
+            .LoadAsync(destination);
+        Assert.Null(metadata!.Author);
+        Assert.Equal("de", metadata.LanguageCode);
+        Assert.Empty(StagingDirectories());
+    }
+
+    [Fact]
+    public async Task CloneAsync_rejects_invalid_source_metadata_without_publishing()
+    {
+        var (paths, source) = CreateSource("ColoringWorld");
+        await File.WriteAllTextAsync(
+            Path.Combine(source.Directory.Value, "brand.metadata.json"),
+            "{\"author\":\"Jane\",\"languageCode\":\"xx\"}");
+
+        var exception = await Assert.ThrowsAsync<BrandCloneException>(() =>
+            new PhysicalBrandCloneService().CloneAsync(paths, source, Language("de")).AsTask());
+
+        Assert.Equal("brand_clone_failed", exception.Code);
+        Assert.False(Directory.Exists(Path.Combine(paths.BrandsDirectory.Value, "ColoringWorld_de")));
         Assert.Empty(StagingDirectories());
     }
 

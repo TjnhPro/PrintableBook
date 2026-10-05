@@ -1,21 +1,36 @@
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Application.Discovery;
+using PrintableBook.Infrastructure.FileSystem;
 
 namespace PrintableBook.Infrastructure.Brands;
 
 public sealed class PhysicalBrandCloneService : IBrandCloneService
 {
     private const string ValidationFileName = "brand.validation.json";
+    private readonly IBrandMetadataStore metadataStore;
     private readonly Func<string, string, CancellationToken, ValueTask> copyFile;
 
     public PhysicalBrandCloneService()
-        : this(CopyFileAsync)
+        : this(new JsonBrandMetadataStore(new PhysicalFileSystem()), CopyFileAsync)
+    {
+    }
+
+    public PhysicalBrandCloneService(IBrandMetadataStore metadataStore)
+        : this(metadataStore, CopyFileAsync)
     {
     }
 
     internal PhysicalBrandCloneService(Func<string, string, CancellationToken, ValueTask> copyFile)
+        : this(new JsonBrandMetadataStore(new PhysicalFileSystem()), copyFile)
     {
+    }
+
+    internal PhysicalBrandCloneService(
+        IBrandMetadataStore metadataStore,
+        Func<string, string, CancellationToken, ValueTask> copyFile)
+    {
+        this.metadataStore = metadataStore;
         this.copyFile = copyFile;
     }
 
@@ -56,6 +71,11 @@ public sealed class PhysicalBrandCloneService : IBrandCloneService
             cancellationToken.ThrowIfCancellationRequested();
             Directory.CreateDirectory(stagingPath);
             await CopyDirectoryAsync(sourcePath, stagingPath, isRoot: true, cancellationToken);
+            var sourceMetadata = await metadataStore.LoadAsync(sourceBrand.Directory, cancellationToken);
+            await metadataStore.SaveAsync(
+                new DirectoryReference(stagingPath),
+                BrandMetadata.Create(sourceMetadata?.Author, canonicalLanguage.Code),
+                cancellationToken);
 
             cancellationToken.ThrowIfCancellationRequested();
             if (DestinationExists(brandsPath, destinationName))
