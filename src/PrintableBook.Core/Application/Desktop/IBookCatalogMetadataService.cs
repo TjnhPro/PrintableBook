@@ -104,13 +104,17 @@ public sealed class BookCatalogMetadataService(
         await stateStore.SaveAsync(book.Workspace, state with { AssignedBrand = null }, cancellationToken);
     }
 
-    public ValueTask SaveBrandAuthorAsync(
+    public async ValueTask SaveBrandAuthorAsync(
         DiscoveredBrand brand,
         string? author,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(brand);
-        return brandMetadataStore.SaveAsync(brand.Directory, BrandMetadata.Create(author), cancellationToken);
+        var existing = await brandMetadataStore.LoadAsync(brand.Directory, cancellationToken);
+        await brandMetadataStore.SaveAsync(
+            brand.Directory,
+            BrandMetadata.Create(author, existing?.LanguageCode),
+            cancellationToken);
     }
 
     private async ValueTask<BookProcessingState> LoadStateAsync(DiscoveredBook book, CancellationToken cancellationToken) =>

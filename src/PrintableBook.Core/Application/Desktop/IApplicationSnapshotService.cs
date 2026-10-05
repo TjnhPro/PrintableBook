@@ -57,8 +57,8 @@ public interface ILocalOutputActionService
     ValueTask RevealAsync(FileReference file, CancellationToken cancellationToken = default);
     ValueTask CopyPathAsync(FileReference file, CancellationToken cancellationToken = default);
 }
-public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = true, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null, ProductionDesktopSummary? Production = null, BookProductionMetadata? Metadata = null, string? AssignedBrand = null, BookBrandAssignmentStatus AssignmentStatus = BookBrandAssignmentStatus.Unassigned, string? AssignmentReason = null, bool WorkspaceStateAvailable = true, string? WorkspaceStateError = null, int LegacyFrameModePageCount = 0, BookKeywordBuilderState? KeywordBuilder = null, InteriorShuffleDesktopSummary? InteriorShuffle = null);
-public sealed record BrandDesktopSummary(string BrandName, BrandValidationStatus ValidationStatus, DateTimeOffset? ValidatedAtUtc, string? Fingerprint, string? Author = null, string MetadataStatus = "Missing", string? MetadataError = null);
+public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = true, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null, ProductionDesktopSummary? Production = null, BookProductionMetadata? Metadata = null, string? AssignedBrand = null, BookBrandAssignmentStatus AssignmentStatus = BookBrandAssignmentStatus.Unassigned, string? AssignmentReason = null, bool WorkspaceStateAvailable = true, string? WorkspaceStateError = null, int LegacyFrameModePageCount = 0, BookKeywordBuilderState? KeywordBuilder = null, InteriorShuffleDesktopSummary? InteriorShuffle = null, string LanguageCode = "en", string LanguageName = "English");
+public sealed record BrandDesktopSummary(string BrandName, BrandValidationStatus ValidationStatus, DateTimeOffset? ValidatedAtUtc, string? Fingerprint, string? Author = null, string MetadataStatus = "Missing", string? MetadataError = null, string LanguageCode = "en", string LanguageName = "English");
 public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt, IReadOnlyList<BrandDesktopSummary>? BrandSummaries = null, IReadOnlyList<BrandImageSizeRequirement>? BrandImageSizeRequirements = null, IReadOnlyList<SupportedLanguageOption>? SupportedLanguages = null);
 
 public interface IApplicationSnapshotService
@@ -126,7 +126,8 @@ public sealed class ApplicationSnapshotService(
                     ? new BrandValidationState(BrandValidationStatus.NotValidated)
                     : await brandValidationService.CheckStateAsync(brand.Directory, settings, cancellationToken);
             }
-            brandSummaries.Add(new BrandDesktopSummary(brand.Name, state.Status, state.ValidatedAtUtc, state.Fingerprint, metadata?.Author, metadataStatus, metadataError));
+            var language = SupportedLanguageCatalog.GetEffective(metadata?.LanguageCode);
+            brandSummaries.Add(new BrandDesktopSummary(brand.Name, state.Status, state.ValidatedAtUtc, state.Fingerprint, metadata?.Author, metadataStatus, metadataError, language.Code, language.Name));
             composedBrands.Add(ApplyValidatedBrandFacts(brand, state));
         }
         var brandsByName = composedBrands.ToDictionary(brand => brand.Name, StringComparer.Ordinal);
@@ -207,6 +208,7 @@ public sealed class ApplicationSnapshotService(
             stateLoad = new(BookProcessingState.NotStarted(book.Id), BookProcessingState.CurrentFrameModeContractVersion, LegacyFrameContractDetected: false);
         }
         var state = stateLoad.State ?? BookProcessingState.NotStarted(book.Id);
+        var language = SupportedLanguageCatalog.GetEffective(state.LanguageCode);
         assignmentTargets.TryGetValue(state.AssignedBrand ?? string.Empty, out var assignmentTarget);
         brandsByName.TryGetValue(state.AssignedBrand ?? string.Empty, out var assignedBrand);
         var assignment = BookBrandAssignmentEvaluator.Evaluate(state.AssignedBrand, state.Metadata?.Author, assignmentTarget);
@@ -377,7 +379,9 @@ public sealed class ApplicationSnapshotService(
             WorkspaceStateError: stateError,
             LegacyFrameModePageCount: legacyFrameModePageCount,
             KeywordBuilder: state.KeywordBuilder,
-            InteriorShuffle: shuffleSummary);
+            InteriorShuffle: shuffleSummary,
+            LanguageCode: language.Code,
+            LanguageName: language.Name);
     }
 
     private async ValueTask<ProductionDesktopSummary> DescribeProductionAsync(

@@ -28,9 +28,24 @@ public static class SupportedLanguageCatalog
         language = match;
         return true;
     }
+
+    public static SupportedLanguageOption GetEffective(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return All.Single(option => option.Code == "en");
+        }
+
+        return TryGet(code, out var language)
+            ? language
+            : throw new ArgumentException($"Unsupported language code '{code}'.", nameof(code));
+    }
+
+    public static string? NormalizeStoredCode(string? code) =>
+        string.IsNullOrWhiteSpace(code) ? null : GetEffective(code).Code;
 }
 
-public static class BrandCloneNamingPolicy
+public static class LanguageEditionNamingPolicy
 {
     public static string CreateDestinationName(string sourceBrandName, SupportedLanguageOption language)
     {

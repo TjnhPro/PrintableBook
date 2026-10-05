@@ -1764,7 +1764,7 @@ public sealed class BridgeMessageContractTests
         {
             Calls++;
             Language = language;
-            var destinationName = BrandCloneNamingPolicy.CreateDestinationName(sourceBrand.Name, language);
+            var destinationName = LanguageEditionNamingPolicy.CreateDestinationName(sourceBrand.Name, language);
             var destination = new DiscoveredBrand(destinationName, new DirectoryReference(Path.Combine(paths.BrandsDirectory.Value, destinationName)));
             return ValueTask.FromResult(new BrandCloneResult(sourceBrand, language, destination));
         }
@@ -1790,7 +1790,7 @@ public sealed class BridgeMessageContractTests
 
             FirstEntered.TrySetResult(null);
             await AllowFirst.Task.WaitAsync(cancellationToken);
-            var destinationName = BrandCloneNamingPolicy.CreateDestinationName(sourceBrand.Name, language);
+            var destinationName = LanguageEditionNamingPolicy.CreateDestinationName(sourceBrand.Name, language);
             var destination = new DiscoveredBrand(destinationName, new DirectoryReference(Path.Combine(paths.BrandsDirectory.Value, destinationName)));
             return new BrandCloneResult(sourceBrand, language, destination);
         }

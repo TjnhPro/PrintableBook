@@ -1,10 +1,13 @@
 namespace PrintableBook.Core.Application.Brands;
 
-public sealed record BrandMetadata(string? Author)
+public sealed record BrandMetadata(string? Author, string? LanguageCode = null)
 {
-    public static BrandMetadata Create(string? author) => new(NormalizeAuthor(author));
+    public static BrandMetadata Create(string? author, string? languageCode = null) =>
+        new(NormalizeAuthor(author), SupportedLanguageCatalog.NormalizeStoredCode(languageCode));
 
-    public BrandMetadata Normalize() => Create(Author);
+    public BrandMetadata Normalize() => Create(Author, LanguageCode);
+
+    public SupportedLanguageOption EffectiveLanguage => SupportedLanguageCatalog.GetEffective(LanguageCode);
 
     public static string? NormalizeAuthor(string? author)
     {

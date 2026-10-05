@@ -52,15 +52,18 @@ public sealed class BookCatalogMetadataServiceTests
     }
 
     [Fact]
-    public async Task SaveBrandAuthor_normalizes_display_text()
+    public async Task SaveBrandAuthor_normalizes_display_text_and_preserves_language()
     {
         var brandStore = new BrandStore();
         var service = new BookCatalogMetadataService(new StateStore(), brandStore);
         var brand = Brand("Brand A");
+        brandStore.Set(brand, BrandMetadata.Create("Old Author", "de"));
 
         await service.SaveBrandAuthorAsync(brand, " Jane Doe ");
 
-        Assert.Equal("Jane Doe", (await brandStore.LoadAsync(brand.Directory))!.Author);
+        var saved = await brandStore.LoadAsync(brand.Directory);
+        Assert.Equal("Jane Doe", saved!.Author);
+        Assert.Equal("de", saved.LanguageCode);
     }
 
     [Fact]

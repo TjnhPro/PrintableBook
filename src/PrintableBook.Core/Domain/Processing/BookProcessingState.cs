@@ -48,7 +48,8 @@ public sealed record BookProcessingState(
     BookProductionMetadata? Metadata = null,
     string? AssignedBrand = null,
     int FrameModeContractVersion = 2,
-    BookKeywordBuilderState? KeywordBuilder = null)
+    BookKeywordBuilderState? KeywordBuilder = null,
+    string? LanguageCode = null)
 {
     public const int CurrentFrameModeContractVersion = 2;
 

@@ -20,6 +20,7 @@ public sealed class JsonBookWorkspaceStateStoreTests : IAsyncLifetime
         Assert.True(state!.HasBackground);
         Assert.Equal(["a.png", "B.PNG"], state.InactiveInteriorSourceKeys);
         Assert.Null(state.PublishedInteriorPreviews);
+        Assert.Equal("en", PrintableBook.Core.Application.Brands.SupportedLanguageCatalog.GetEffective(state.LanguageCode).Code);
     }
 
     [Fact]
@@ -32,6 +33,19 @@ public sealed class JsonBookWorkspaceStateStoreTests : IAsyncLifetime
         var restored = await store.LoadAsync(workspace);
         Assert.True(restored!.HasBackground);
         Assert.False(restored.IsInteriorActive("BOOK INTERIOR/B.PNG"));
+    }
+
+    [Fact]
+    public async Task SaveAsync_canonicalizes_language_and_load_rejects_an_unknown_persisted_code()
+    {
+        var workspace = await CreateWorkspaceAsync();
+        var store = new JsonBookWorkspaceStateStore(new PhysicalFileSystem());
+        await store.SaveAsync(workspace, BookProcessingState.NotStarted(new BookId("book")) with { LanguageCode = " DE " });
+        Assert.Equal("de", (await store.LoadAsync(workspace))!.LanguageCode);
+
+        var json = await File.ReadAllTextAsync(StatePath(workspace));
+        await File.WriteAllTextAsync(StatePath(workspace), json.Replace("\"de\"", "\"xx\"", StringComparison.Ordinal));
+        await Assert.ThrowsAsync<InvalidDataException>(async () => await store.LoadAsync(workspace));
     }
 
     [Fact]

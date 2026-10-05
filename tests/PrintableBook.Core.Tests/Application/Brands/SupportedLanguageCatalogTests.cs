@@ -25,6 +25,26 @@ public sealed class SupportedLanguageCatalogTests
         Assert.Equal(new SupportedLanguageOption("fr", "French"), language);
     }
 
+    [Fact]
+    public void Effective_language_defaults_missing_values_to_English_and_rejects_unknown_codes()
+    {
+        Assert.Equal(new SupportedLanguageOption("en", "English"), SupportedLanguageCatalog.GetEffective(null));
+        Assert.Equal("en", BrandMetadata.Create("Jane").EffectiveLanguage.Code);
+        Assert.Equal("de", SupportedLanguageCatalog.NormalizeStoredCode(" DE "));
+        Assert.Throws<ArgumentException>(() => SupportedLanguageCatalog.GetEffective("xx"));
+    }
+
+    [Fact]
+    public void Legacy_language_does_not_come_from_a_recognized_name_suffix()
+    {
+        var legacyMetadata = BrandMetadata.Create("Jane");
+
+        Assert.Equal("en", legacyMetadata.EffectiveLanguage.Code);
+        Assert.Equal("AnimalBook_fr", LanguageEditionNamingPolicy.CreateDestinationName(
+            "AnimalBook_de",
+            SupportedLanguageCatalog.All.Single(language => language.Code == "fr")));
+    }
+
     [Theory]
     [InlineData("ColoringWorld", "de", "ColoringWorld_de")]
     [InlineData("ColoringWorld_de", "fr", "ColoringWorld_fr")]
@@ -34,6 +54,6 @@ public sealed class SupportedLanguageCatalogTests
     {
         Assert.True(SupportedLanguageCatalog.TryGet(languageCode, out var language));
 
-        Assert.Equal(expected, BrandCloneNamingPolicy.CreateDestinationName(source, language));
+        Assert.Equal(expected, LanguageEditionNamingPolicy.CreateDestinationName(source, language));
     }
 }

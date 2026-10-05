@@ -40,7 +40,7 @@ public sealed class PhysicalBrandCloneService : IBrandCloneService
             throw new BrandCloneException("brand_clone_source_not_found", "The source Brand no longer exists.");
         }
 
-        var destinationName = BrandCloneNamingPolicy.CreateDestinationName(sourceBrand.Name, canonicalLanguage);
+        var destinationName = LanguageEditionNamingPolicy.CreateDestinationName(sourceBrand.Name, canonicalLanguage);
         var brandsPath = Path.GetFullPath(paths.BrandsDirectory.Value);
         var destinationPath = Path.Combine(brandsPath, destinationName);
         if (DestinationExists(brandsPath, destinationName))
