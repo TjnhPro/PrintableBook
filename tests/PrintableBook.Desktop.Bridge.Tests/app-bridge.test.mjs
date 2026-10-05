@@ -1593,6 +1593,7 @@ test("Interior artwork starts an explicit random order and reports its saved ref
   const randomButton = content.innerHTML.match(/<button[^>]*data-action="random-interior"[^>]*>/)?.[0] ?? "";
   assert.notEqual(randomButton, "");
   assert.doesNotMatch(randomButton, /\sdisabled(?:\s|>)/);
+  assert.match(content.innerHTML, /class="interior-artwork-actions"><button[^>]*data-action="random-interior"[\s\S]*?<button[^>]*data-action="apply-artwork-bulk"/);
   assert.match(content.innerHTML, /Random order is required before processing/);
 
   const random = { dataset: { action: "random-interior", bookId: "Book 001" }, closest: () => random };

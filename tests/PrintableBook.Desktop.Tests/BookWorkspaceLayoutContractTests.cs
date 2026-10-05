@@ -220,6 +220,8 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("Random Interior using the current active artwork before processing.", script, StringComparison.Ordinal);
         Assert.Contains("interior-shuffle-status", script, StringComparison.Ordinal);
         Assert.Contains(".interior-shuffle-button", layout, StringComparison.Ordinal);
+        Assert.Contains("class=\"interior-artwork-actions\"", script, StringComparison.Ordinal);
+        Assert.Contains(".interior-artwork-actions { display:flex", layout, StringComparison.Ordinal);
         Assert.Contains(".interior-artwork-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr))", layout, StringComparison.Ordinal);
         Assert.DoesNotContain("@media (min-width:1450px) { .interior-artwork-grid", layout, StringComparison.Ordinal);
         Assert.Contains(".interior-artwork-card.is-selected", layout, StringComparison.Ordinal);
