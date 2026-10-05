@@ -408,3 +408,4 @@ button.process-queue-card-main:hover { background:var(--pb-surface-muted); }
 .keyword-builder-outputs { height:100%; }
 @media (max-width:760px) { .keyword-builder-group-summary,.keyword-builder-output-heading { align-items:stretch; flex-direction:column; }.keyword-builder-actions { grid-template-columns:1fr; } }
 @media (prefers-reduced-motion:reduce) { .asin-progress span { transition:none; } }
+.book-title-input { text-transform:uppercase; }

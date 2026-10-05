@@ -22,7 +22,7 @@ public sealed class BookCatalogMetadataServiceTests
         await service.SaveBookMetadataAsync(book, new BookProductionMetadata(" Coloring Days ", null, " Cute Friends Coloring Book Pages ", null, " Jane Doe "));
         await service.AssignBrandAsync(book, brand);
 
-        Assert.Equal("Coloring Days", stateStore.State!.Metadata!.Title);
+        Assert.Equal("COLORING DAYS", stateStore.State!.Metadata!.Title);
         Assert.Equal("Brand A", stateStore.State.AssignedBrand);
 
         await service.UnassignBrandAsync(book);
@@ -125,7 +125,7 @@ public sealed class BookCatalogMetadataServiceTests
         var result = await service.SaveKeywordBuilderAsync(Book(), ["coloring books", "coloring book"], " targets ");
 
         Assert.Same(result, stateStore.State!.KeywordBuilder);
-        Assert.Equal("Peaceful Days", stateStore.State.Metadata!.Title);
+        Assert.Equal("PEACEFUL DAYS", stateStore.State.Metadata!.Title);
         Assert.Equal("coloring books book", result.Keyword1);
         Assert.Equal("coloring books, coloring book", result.AdsKeyword);
         Assert.Equal("targets", result.AdsAsin);

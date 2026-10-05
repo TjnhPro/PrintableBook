@@ -1702,11 +1702,25 @@ test("Book Information validation blocks invalid save without redrawing and subm
   assert.equal(getFullRenderCount(), fullRenders);
   assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
 
-  contentListeners.input({ target: { dataset: { action: "book-metadata-input", metadataField: "title", bookId: "Book 001" }, value: "Peaceful Days" } });
+  const titleInput = {
+    dataset: { action: "book-metadata-input", metadataField: "title", bookId: "Book 001" },
+    value: "Peaceful Days",
+    selectionStart: 13,
+    selectionEnd: 13,
+    setSelectionRange(start, end) {
+      this.selectionStart = start;
+      this.selectionEnd = end;
+    }
+  };
+  contentListeners.input({ target: titleInput });
+
+  assert.equal(titleInput.value, "PEACEFUL DAYS");
+  assert.equal(titleInput.selectionStart, 13);
+  assert.equal(titleInput.selectionEnd, 13);
   contentListeners.click({ target: save });
 
   assert.equal(messages.at(-1).command, "book.metadata.save");
-  assert.equal(messages.at(-1).payload.title, "Peaceful Days");
+  assert.equal(messages.at(-1).payload.title, "PEACEFUL DAYS");
   assert.equal(getFullRenderCount(), fullRenders);
   assert.equal(getBookDrawerBodyRenderCount(), drawerRenders);
 });

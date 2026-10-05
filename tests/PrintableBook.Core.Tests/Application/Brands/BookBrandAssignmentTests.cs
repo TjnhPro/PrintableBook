@@ -25,10 +25,18 @@ public sealed class BookBrandAssignmentTests
         var subcover = new string('a', 99);
         var metadata = BookProductionMetadata.Create(" Title ", null, subcover, " Description ", " Author ");
 
-        Assert.Equal("Title", metadata.Title);
+        Assert.Equal("TITLE", metadata.Title);
         Assert.Equal(subcover.Trim(), metadata.Subcover);
         Assert.Equal("Description", metadata.Description);
         Assert.Equal("Author", metadata.Author);
+    }
+
+    [Fact]
+    public void Book_metadata_normalizes_title_to_uppercase()
+    {
+        var metadata = BookProductionMetadata.Create("Peaceful Days", null, null, null, null);
+
+        Assert.Equal("PEACEFUL DAYS", metadata.Title);
     }
 
     [Fact]

@@ -40,7 +40,7 @@ public sealed class CacheCleanupWorkerTests
         Assert.Equal("Cleaned", Assert.Single(result.Books).Status);
         var restored = (await stateStore.LoadAsync(book.Workspace))!;
         Assert.Empty(restored.PublishedInteriorPreviews!);
-        Assert.Equal("Title", restored.Metadata!.Title);
+        Assert.Equal("TITLE", restored.Metadata!.Title);
         Assert.Equal("Brand", restored.AssignedBrand);
     }
 
