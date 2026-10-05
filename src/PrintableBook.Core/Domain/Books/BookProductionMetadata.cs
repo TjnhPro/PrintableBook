@@ -52,7 +52,7 @@ public sealed record BookProductionMetadata(
         }
 
         return new BookProductionMetadata(
-            NormalizeSingleLine(title),
+            NormalizeSingleLine(title)?.ToUpperInvariant(),
             NormalizeSingleLine(subtitle),
             normalizedSubcover,
             NormalizeMultiline(description),

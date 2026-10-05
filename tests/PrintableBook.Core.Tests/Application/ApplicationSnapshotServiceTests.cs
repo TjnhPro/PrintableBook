@@ -131,7 +131,7 @@ public sealed class ApplicationSnapshotServiceTests
 
         var book = Assert.Single(snapshot.BookSummaries);
         var brand = Assert.Single(snapshot.BrandSummaries!);
-        Assert.Equal("Production Title", book.Metadata!.Title);
+        Assert.Equal("PRODUCTION TITLE", book.Metadata!.Title);
         Assert.Equal("Brand A", book.AssignedBrand);
         Assert.Equal(BookBrandAssignmentStatus.Valid, book.AssignmentStatus);
         Assert.Equal("jane doe", brand.Author);

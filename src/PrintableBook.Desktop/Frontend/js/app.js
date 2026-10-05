@@ -77,7 +77,7 @@
   };
   const metadataValues = (summary) => {
     const metadata = metadataFor(summary);
-    return { title: String(valueFor(metadata, "title", "") ?? ""), subtitle: String(valueFor(metadata, "subtitle", "") ?? ""), subcover: String(valueFor(metadata, "subcover", "") ?? ""), asin: String(valueFor(metadata, "asin", "") ?? ""), description: String(valueFor(metadata, "description", "") ?? ""), author: String(valueFor(metadata, "author", "") ?? "") };
+    return { title: String(valueFor(metadata, "title", "") ?? "").toUpperCase(), subtitle: String(valueFor(metadata, "subtitle", "") ?? ""), subcover: String(valueFor(metadata, "subcover", "") ?? ""), asin: String(valueFor(metadata, "asin", "") ?? ""), description: String(valueFor(metadata, "description", "") ?? ""), author: String(valueFor(metadata, "author", "") ?? "") };
   };
   const metadataDraftFor = (book, summary, create = false) => {
     const id = bookId(book);
@@ -1388,7 +1388,7 @@
     const field = (label, name, placeholder = "Unknown") => {
       const errors = validation.errors.filter((error) => error.field === name);
       const errorId = `book-${name}-errors`;
-      return `<label class="field" for="book-${name}-input"><span>${label}</span><input id="book-${name}-input" class="control ${errors.length ? "control-invalid" : ""}" data-action="book-metadata-input" data-metadata-field="${name}" data-book-id="${escapeHtml(bookId(book))}" value="${escapeHtml(draft[name])}" placeholder="${placeholder}" aria-describedby="${errorId}" aria-invalid="${errors.length > 0}" autocomplete="off"><small id="${errorId}" class="field-error" ${errors.length ? "" : "hidden"}>${errors.map((error) => escapeHtml(error.message)).join("<br>")}</small></label>`;
+      return `<label class="field" for="book-${name}-input"><span>${label}</span><input id="book-${name}-input" class="control ${name === "title" ? "book-title-input" : ""} ${errors.length ? "control-invalid" : ""}" data-action="book-metadata-input" data-metadata-field="${name}" data-book-id="${escapeHtml(bookId(book))}" value="${escapeHtml(draft[name])}" placeholder="${placeholder}" aria-describedby="${errorId}" aria-invalid="${errors.length > 0}" autocomplete="off" ${name === "title" ? 'autocapitalize="characters" spellcheck="false"' : ""}><small id="${errorId}" class="field-error" ${errors.length ? "" : "hidden"}>${errors.map((error) => escapeHtml(error.message)).join("<br>")}</small></label>`;
     };
     return `<fieldset class="catalog-card book-settings-card book-settings-information" data-book-information-card aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save"}"><legend>Book Information</legend><div class="catalog-card-heading"><p>Paste production metadata from your ChatGPT Web analysis. Blank fields remain Unknown.</p>${dirty ? '<span class="status-badge status-warn">Unsaved</span>' : ""}</div><div class="catalog-form-grid">${field("Title", "title")}${field("Subtitle", "subtitle")}${field("Subcover", "subcover")}${field("ASIN", "asin")}${field("Author", "author", "Primary Author or Unknown")}<label class="field catalog-description-field"><span>Description</span><textarea class="control" rows="4" data-action="book-metadata-input" data-metadata-field="description" data-book-id="${escapeHtml(bookId(book))}" placeholder="Unknown">${escapeHtml(draft.description)}</textarea></label></div><p id="book-author-assignment-warning" class="catalog-warning" role="alert" ${assignmentWarning ? "" : "hidden"}>${escapeHtml(assignmentWarning)}</p><div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" data-catalog-feedback="metadata" role="${state.catalogFeedbackError ? "alert" : "status"}">${state.catalogMutationTarget === bookId(book) && state.catalogMutationCommand === "book.metadata.save" ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-book-metadata" data-book-id="${escapeHtml(bookId(book))}" aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save"}" ${!dirty || disabled ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "book.metadata.save" ? "Saving…" : "Save Book Information"}</button></div></fieldset>`;
   };
@@ -2700,7 +2700,14 @@
       if (book && summary) {
         const draft = metadataDraftFor(book, summary, true);
         const field = event.target.dataset.metadataField;
-        draft[field] = event.target.value;
+        const selectionStart = event.target.selectionStart;
+        const selectionEnd = event.target.selectionEnd;
+        const nextValue = field === "title" ? String(event.target.value ?? "").toUpperCase() : event.target.value;
+        if (event.target.value !== nextValue) {
+          event.target.value = nextValue;
+          if (Number.isInteger(selectionStart) && Number.isInteger(selectionEnd)) event.target.setSelectionRange?.(selectionStart, selectionEnd);
+        }
+        draft[field] = nextValue;
         const dirty = hasMetadataDraft(book, summary);
         const validation = metadataValidationFor(bookId(book));
         if (!dirty) {
