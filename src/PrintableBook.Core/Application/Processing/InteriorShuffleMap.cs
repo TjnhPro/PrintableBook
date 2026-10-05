@@ -1,4 +1,6 @@
 using PrintableBook.Core.Abstractions;
+using PrintableBook.Core.Domain.Books;
+using PrintableBook.Core.Domain.Processing;
 
 namespace PrintableBook.Core.Application.Processing;
 
@@ -8,6 +10,65 @@ namespace PrintableBook.Core.Application.Processing;
 public sealed record InteriorShuffleEntry(FileReference Page, int OutputIndex);
 
 public sealed record InteriorShuffleMap(IReadOnlyList<InteriorShuffleEntry> Entries, int? Seed);
+
+public enum InteriorShuffleCompatibility
+{
+    Missing,
+    Current,
+    Stale
+}
+
+public static class InteriorShufflePolicy
+{
+    public static IReadOnlyList<FileReference> EligiblePages(
+        BookSource source,
+        DirectoryReference bookDirectory,
+        BookProcessingState state)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(bookDirectory);
+        ArgumentNullException.ThrowIfNull(state);
+
+        var introKeys = state.HasIntro
+            ? new HashSet<string>(state.SelectedIntroInteriorSourceKeys ?? [], StringComparer.OrdinalIgnoreCase)
+            : [];
+
+        return source.GetAssets(BookAssetKind.Interior)
+            .Select(asset => new FileReference(asset.Reference))
+            .Where(page =>
+            {
+                var key = InteriorSourceKey.FromBookRoot(bookDirectory, page);
+                return !introKeys.Contains(key) && state.IsInteriorActive(key);
+            })
+            .OrderBy(page => page.Value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    public static InteriorShuffleCompatibility Compatibility(
+        InteriorShuffleMap? shuffleMap,
+        IReadOnlyList<FileReference> eligiblePages)
+    {
+        ArgumentNullException.ThrowIfNull(eligiblePages);
+        if (shuffleMap is null) return InteriorShuffleCompatibility.Missing;
+        if (shuffleMap.Entries.Count != eligiblePages.Count ||
+            shuffleMap.Entries.Select(entry => entry.Page.Value).Distinct(StringComparer.OrdinalIgnoreCase).Count() != shuffleMap.Entries.Count ||
+            shuffleMap.Entries.Select(entry => entry.OutputIndex).Distinct().Count() != shuffleMap.Entries.Count ||
+            !shuffleMap.Entries.Select(entry => entry.OutputIndex).Order().SequenceEqual(Enumerable.Range(1, eligiblePages.Count)) ||
+            !shuffleMap.Entries.Select(entry => entry.Page.Value).OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .SequenceEqual(eligiblePages.Select(page => page.Value).OrderBy(value => value, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase))
+        {
+            return InteriorShuffleCompatibility.Stale;
+        }
+
+        return InteriorShuffleCompatibility.Current;
+    }
+
+    public static bool HasSameOrder(InteriorShuffleMap left, InteriorShuffleMap right) =>
+        left.Entries.OrderBy(entry => entry.OutputIndex).Select(entry => entry.Page.Value)
+            .SequenceEqual(
+                right.Entries.OrderBy(entry => entry.OutputIndex).Select(entry => entry.Page.Value),
+                StringComparer.OrdinalIgnoreCase);
+}
 
 public static class InteriorShuffleIndexGenerator
 {

@@ -122,6 +122,26 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     "Activate at least one Interior page before processing."));
             }
 
+            state = await BeginStepAsync(state, "shuffle", cancellationToken);
+            InteriorShuffleMap? shuffleMap;
+            try
+            {
+                shuffleMap = await shuffleStore.LoadAsync(workspace, cancellationToken);
+            }
+            catch (InvalidDataException)
+            {
+                shuffleMap = null;
+            }
+            var eligibleShufflePages = activeInteriorSources.Select(item => item.Source).ToArray();
+            if (InteriorShufflePolicy.Compatibility(shuffleMap, eligibleShufflePages) != InteriorShuffleCompatibility.Current)
+            {
+                throw new BookProcessingFailureException("shuffle", new ProcessingFailure(
+                    "interior.shuffle_required",
+                    "Random Interior using the current active artwork before processing."));
+            }
+            var fixedShuffleMap = shuffleMap!;
+            state = await CompleteStepAsync(state, "shuffle", cancellationToken);
+
             StagedFrameAsset? stagedFrame = null;
             var framePage = activeInteriorSources.FirstOrDefault(item =>
                 (priorState?.GetInteriorFrameMode(item.SourceKey) ?? FrameMode.Disabled) == FrameMode.Enabled);
@@ -231,30 +251,12 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                 cancellationToken);
             state = await CompleteStepAsync(state, "interior-pages", cancellationToken);
 
-            state = await BeginStepAsync(state, "shuffle", cancellationToken);
-            var shuffleMap = await shuffleStore.LoadAsync(workspace, cancellationToken);
-            if (HasCompatiblePageSet(shuffleMap, pageResults) && command.ShuffleSeed is null)
-            {
-                if (shuffleMap!.Seed is null)
-                {
-                    shuffleMap = shuffleMap with { Seed = Random.Shared.Next() };
-                    await shuffleStore.SaveAsync(workspace, shuffleMap, cancellationToken);
-                }
-            }
-            else if (!HasCompatiblePageSet(shuffleMap, pageResults) || command.ShuffleSeed != shuffleMap!.Seed)
-            {
-                var effectiveSeed = command.ShuffleSeed ?? shuffleMap?.Seed ?? Random.Shared.Next();
-                shuffleMap = InteriorShuffleIndexGenerator.Generate(pageResults.Select(page => page.Source).ToArray(), effectiveSeed);
-                await shuffleStore.SaveAsync(workspace, shuffleMap, cancellationToken);
-            }
-
-            state = await CompleteStepAsync(state, "shuffle", cancellationToken);
             state = await BeginStepAsync(state, "assembly", cancellationToken);
             var assembly = await bookAssembler.AssembleAsync(new OrderedBookAssemblyRequest(
                 workspace,
                 introResults.Select(result => result.FinalPage).ToArray(),
                 pageResults,
-                shuffleMap!,
+                fixedShuffleMap,
                 command.FinalPageSize,
                 command.BackgroundPage,
                 productionResults.Select(result => result.FinalPage).ToArray()), cancellationToken);
@@ -306,7 +308,7 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
                     productionPrefixSources,
                     productionResults,
                     activeInteriorSources,
-                    shuffleMap!,
+                    fixedShuffleMap,
                     priorState ?? BookProcessingState.NotStarted(command.BookId),
                     publishedInterior.InteriorPdf,
                     publishedInterior.PreviewPdf,
@@ -423,11 +425,6 @@ public sealed class WorkspaceBookProcessingQueueBookProcessor(
             await stateStore.AppendLogAsync(workspace, new BookProcessingLogEntry(DateTimeOffset.UtcNow, eventName, detail), token);
         }
     }
-
-    private static bool HasCompatiblePageSet(InteriorShuffleMap? shuffleMap, IReadOnlyList<InteriorPageProcessingResult> pageResults) =>
-        shuffleMap is not null &&
-        shuffleMap.Entries.Select(entry => entry.Page.Value).OrderBy(page => page, StringComparer.OrdinalIgnoreCase)
-            .SequenceEqual(pageResults.Select(page => page.Source.Value).OrderBy(page => page, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
 
     private static async ValueTask<StagedFrameAsset> StageFrameAsync(
         BookWorkspace workspace,

@@ -33,6 +33,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBookCoverSelectionService, BookCoverSelectionService>();
         services.AddSingleton<IInteriorFrameModeService, InteriorFrameModeService>();
         services.AddSingleton<IBookInteriorSettingsService, BookInteriorSettingsService>();
+        services.AddSingleton<IInteriorShuffleSeedSource, SecureInteriorShuffleSeedSource>();
+        services.AddSingleton<IInteriorShuffleService, InteriorShuffleService>();
         services.AddSingleton<IBookCatalogMetadataService, BookCatalogMetadataService>();
         services.AddSingleton<IKeywordReceiptKeyProvider, ProcessKeywordReceiptKeyProvider>();
         services.AddSingleton<IKeywordPreviewReceiptProtector, KeywordPreviewReceiptProtector>();

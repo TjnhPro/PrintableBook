@@ -1028,6 +1028,38 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Book_interior_shuffle_randomizes_the_authorized_book_and_starts_one_refresh()
+    {
+        var shuffle = new StubInteriorShuffleService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var router = new WebViewBridgeRouter(new ApplicationLoadCoordinator(manager), interiorShuffleService: shuffle);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"shuffle","command":"book.interior.shuffle","payload":{"bookId":"Book One"}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("background.task", response.Command);
+        Assert.Equal("Book One", shuffle.Book?.Id.Value);
+        Assert.Equal(1, manager.Starts);
+    }
+
+    [Fact]
+    public async Task Book_interior_shuffle_rejects_an_active_process_without_writing()
+    {
+        var shuffle = new StubInteriorShuffleService();
+        var process = new StubProcessSessionService(new ProcessSessionSnapshot(true, false, null, null, null, []));
+        var router = new WebViewBridgeRouter(
+            CreateCoordinator(new StubSnapshotService(CreateSnapshot())),
+            processSessionService: process,
+            interiorShuffleService: shuffle);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"shuffle","command":"book.interior.shuffle","payload":{"bookId":"Book One"}}""");
+
+        Assert.False(response.Ok);
+        Assert.Equal("processing_active", response.Error);
+        Assert.Null(shuffle.Book);
+    }
+
+    [Fact]
     public async Task Book_interior_settings_save_persists_an_ordered_intro_selection_authorized_by_the_book_interior()
     {
         var settings = new StubBookInteriorSettingsService();
@@ -1644,6 +1676,17 @@ public sealed class BridgeMessageContractTests
         public ValueTask SetHasBackgroundAsync(DiscoveredBook book, bool enabled, CancellationToken cancellationToken = default) { Background = (book.Id.Value, enabled); return ValueTask.CompletedTask; }
         public ValueTask SetActiveAsync(DiscoveredBook book, FileReference source, bool isActive, CancellationToken cancellationToken = default) { Active = (book.Id.Value, source.Value, isActive); return ValueTask.CompletedTask; }
         public ValueTask SaveAsync(DiscoveredBook book, BookInteriorSettingsChange change, CancellationToken cancellationToken = default) { Batch = change; return ValueTask.CompletedTask; }
+    }
+
+    private sealed class StubInteriorShuffleService : IInteriorShuffleService
+    {
+        public DiscoveredBook? Book { get; private set; }
+
+        public ValueTask<InteriorShuffleResult> RandomizeAsync(DiscoveredBook book, CancellationToken cancellationToken = default)
+        {
+            Book = book;
+            return ValueTask.FromResult(new InteriorShuffleResult(2, 42));
+        }
     }
 
     private sealed class StubBookCatalogMetadataService : IBookCatalogMetadataService

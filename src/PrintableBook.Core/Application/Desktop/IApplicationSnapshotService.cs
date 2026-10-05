@@ -57,7 +57,7 @@ public interface ILocalOutputActionService
     ValueTask RevealAsync(FileReference file, CancellationToken cancellationToken = default);
     ValueTask CopyPathAsync(FileReference file, CancellationToken cancellationToken = default);
 }
-public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = true, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null, ProductionDesktopSummary? Production = null, BookProductionMetadata? Metadata = null, string? AssignedBrand = null, BookBrandAssignmentStatus AssignmentStatus = BookBrandAssignmentStatus.Unassigned, string? AssignmentReason = null, bool WorkspaceStateAvailable = true, string? WorkspaceStateError = null, int LegacyFrameModePageCount = 0, BookKeywordBuilderState? KeywordBuilder = null);
+public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = true, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null, ProductionDesktopSummary? Production = null, BookProductionMetadata? Metadata = null, string? AssignedBrand = null, BookBrandAssignmentStatus AssignmentStatus = BookBrandAssignmentStatus.Unassigned, string? AssignmentReason = null, bool WorkspaceStateAvailable = true, string? WorkspaceStateError = null, int LegacyFrameModePageCount = 0, BookKeywordBuilderState? KeywordBuilder = null, InteriorShuffleDesktopSummary? InteriorShuffle = null);
 public sealed record BrandDesktopSummary(string BrandName, BrandValidationStatus ValidationStatus, DateTimeOffset? ValidatedAtUtc, string? Fingerprint, string? Author = null, string MetadataStatus = "Missing", string? MetadataError = null);
 public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt, IReadOnlyList<BrandDesktopSummary>? BrandSummaries = null, IReadOnlyList<BrandImageSizeRequirement>? BrandImageSizeRequirements = null);
 
@@ -322,6 +322,28 @@ public sealed class ApplicationSnapshotService(
         var representativeCoverReference = scan.Metadata?.RepresentativeImageReference?.Value ??
             FindRepresentativeCoverReference(processingRoot, source, state.SelectedCoverReference);
         var assetSummaries = DescribeAssets(book, source, state, scan.Metadata?.RepresentativeImageReference);
+        var eligibleShufflePages = source is null
+            ? []
+            : InteriorShufflePolicy.EligiblePages(source, book.Directory, state);
+        InteriorShuffleMap? savedShuffle = null;
+        var shuffleCompatibility = InteriorShuffleCompatibility.Missing;
+        if (interiorShuffleStore is not null)
+        {
+            try
+            {
+                savedShuffle = await interiorShuffleStore.LoadAsync(book.Workspace, cancellationToken);
+                shuffleCompatibility = InteriorShufflePolicy.Compatibility(savedShuffle, eligibleShufflePages);
+            }
+            catch (InvalidDataException)
+            {
+                shuffleCompatibility = InteriorShuffleCompatibility.Stale;
+            }
+        }
+        var shuffleSummary = new InteriorShuffleDesktopSummary(
+            shuffleCompatibility.ToString(),
+            savedShuffle?.Entries.Count ?? 0,
+            eligibleShufflePages.Count,
+            stateAvailable && source is not null && eligibleShufflePages.Count > 0);
         return new BookDesktopSummary(
             book.Id,
             !isReady ? "Invalid" : needsIntroSelection ? "Needs review" : "Ready",
@@ -354,7 +376,8 @@ public sealed class ApplicationSnapshotService(
             WorkspaceStateAvailable: stateAvailable,
             WorkspaceStateError: stateError,
             LegacyFrameModePageCount: legacyFrameModePageCount,
-            KeywordBuilder: state.KeywordBuilder);
+            KeywordBuilder: state.KeywordBuilder,
+            InteriorShuffle: shuffleSummary);
     }
 
     private async ValueTask<ProductionDesktopSummary> DescribeProductionAsync(

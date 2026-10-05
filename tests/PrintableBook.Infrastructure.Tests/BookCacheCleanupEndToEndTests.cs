@@ -5,6 +5,7 @@ using PrintableBook.Core.Application.BackgroundTasks.Workers;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Pipelines;
 using PrintableBook.Core.Application.Processing;
+using PrintableBook.Core.Application.Scanning;
 using PrintableBook.Core.Application.Storage;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
@@ -82,6 +83,7 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
         await stateStore.SaveAsync(fixture.Workspace, BookProcessingState.NotStarted(fixture.Command.BookId)
             .SetHasIntro(true)
             .SetIntroInteriorSourceKeys(["Book interior/page-01.png"]));
+        await SaveCurrentShuffleAsync(fixture.Command.BookId, fixture.BookDirectory, fixture.Workspace, stateStore);
         var command = fixture.Command with { IntroTemplatePages = [intro], CustomIntroFromBookInterior = true };
 
         Assert.Equal(BookProcessingStatus.Completed, (await fixture.Processor.ProcessBookAsync(command)).Status);
@@ -149,9 +151,11 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
         await WriteInteriorAsync(Path.Combine(bookDirectory.Value, "Book interior", "page-02.png"), 20, 40);
         var fileSystem = new PhysicalFileSystem();
         var workspaceFactory = new PhysicalBookWorkspaceFactory(fileSystem);
+        var stateStore = new JsonBookWorkspaceStateStore(fileSystem);
+        var shuffleStore = new JsonInteriorShuffleStore(fileSystem);
         var processor = new WorkspaceBookProcessingQueueBookProcessor(
-            new BookSourceScanner(fileSystem), workspaceFactory, new JsonBookWorkspaceStateStore(fileSystem),
-            new MagickCoverValidator(), new JsonInteriorShuffleStore(fileSystem), CreatePagePipeline(),
+            new BookSourceScanner(fileSystem), workspaceFactory, stateStore,
+            new MagickCoverValidator(), shuffleStore, CreatePagePipeline(),
             new OrderedBookAssembler(fileSystem, new MagickImageInspector()), new PdfSharpPrintableBookPdfExporter(),
             new ValidatedBookOutputPublisher(new PdfSharpDocumentInspector()));
         var command = new PrintableBookProcessingCommand(
@@ -159,12 +163,29 @@ public sealed class BookCacheCleanupEndToEndTests : IAsyncLifetime
             new ImageSize(300, 300), new ImageSize(300, 300), new ImageSize(300, 300), new ImageSize(300, 300),
             new ImageDensity(300, 300), new PhysicalPageSize(1, 1), new PhysicalPageSize(1, 1), 1,
             new ArtworkDetectionThreshold(20), null, 123) { Mode = BookProcessingMode.InteriorOnly };
+        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
+        await SaveCurrentShuffleAsync(command.BookId, bookDirectory, workspace, stateStore);
         var first = await processor.ProcessBookAsync(command);
         Assert.Equal(BookProcessingStatus.Completed, first.Status);
         Assert.Null(first.PublishedInteriorOutput);
-        var workspace = await workspaceFactory.CreateAsync(command.BookId, bookDirectory);
         Assert.Equal(2, (await new JsonBookWorkspaceStateStore(fileSystem).LoadAsync(workspace))!.PublishedInteriorPreviews!.Count);
         return new ProcessedFixture(bookDirectory, workspace, command, processor, first);
+    }
+
+    private static async Task SaveCurrentShuffleAsync(
+        BookId bookId,
+        DirectoryReference bookDirectory,
+        BookWorkspace workspace,
+        IBookWorkspaceStateStore stateStore)
+    {
+        var fileSystem = new PhysicalFileSystem();
+        var scan = await new BookSourceScanner(fileSystem).ScanAsync(bookId, bookDirectory);
+        var source = BookSourceValidator.Validate(scan.Source!).Source;
+        var state = await stateStore.LoadAsync(workspace) ?? BookProcessingState.NotStarted(bookId);
+        var pages = InteriorShufflePolicy.EligiblePages(source, bookDirectory, state);
+        await new JsonInteriorShuffleStore(fileSystem).SaveAsync(
+            workspace,
+            InteriorShuffleIndexGenerator.Generate(pages, seed: 123));
     }
 
     private static DiskBackedInteriorPagePipeline CreatePagePipeline() => new(

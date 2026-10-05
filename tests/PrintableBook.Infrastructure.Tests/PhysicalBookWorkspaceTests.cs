@@ -133,6 +133,20 @@ public sealed class PhysicalBookWorkspaceTests : IAsyncLifetime
         Assert.True(File.Exists(Path.Combine(bookDirectory.Value, ".workspace", "state", "interior-shuffle.json")));
     }
 
+    [Fact]
+    public async Task Shuffle_store_reports_invalid_json_as_invalid_data()
+    {
+        var bookDirectory = new DirectoryReference(Path.Combine(rootPath, "Invalid-Shuffle"));
+        var fileSystem = new PhysicalFileSystem();
+        var workspace = await new PhysicalBookWorkspaceFactory(fileSystem).CreateAsync(new BookId("invalid-shuffle"), bookDirectory);
+        var shuffleFile = Path.Combine(workspace.WorkingDirectory.Value, "state", "interior-shuffle.json");
+        await File.WriteAllTextAsync(shuffleFile, "{not-json");
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() => new JsonInteriorShuffleStore(fileSystem).LoadAsync(workspace).AsTask());
+
+        Assert.Contains("shuffle", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     public Task InitializeAsync() => Task.CompletedTask;
 
     public Task DisposeAsync()

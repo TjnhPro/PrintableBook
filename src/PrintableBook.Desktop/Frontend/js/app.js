@@ -3,7 +3,7 @@
   const content = document.getElementById("app-content");
   const routeNames = { configuration: "Settings", brands: "Brands & templates", books: "Book Library", process: "Interior processing", outputs: "PDF Library", diagnostics: "Diagnostics" };
   const bookStatuses = ["All", "Needs review", "Ready", "Processing", "PDF ready", "Failed"];
-  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "settings", bookDrawerOpen: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), keywordBuilderPreviews: new Map(), keywordBuilderRevisions: new Map(), keywordBuilderPending: new Map(), keywordBuilderConfirmed: new Map(), keywordBuilderSubmitted: null, keywordBuilderRefreshPending: false, keywordBuilderRefreshNeeded: false, keywordBuilderRefreshBookId: "", asinResearchDrafts: new Map(), asinResearchSessions: new Map(), asinResearchFeedback: new Map(), asinResearchActiveBookId: "", asinResearchPollTimer: null, amazonBrowserStatus: { state: "Closed", reasonCode: null }, amazonBrowserPending: false, settingsSavePending: false, settingsFeedback: "", settingsFeedbackError: false, storageSnapshot: null, storageLoading: false, storageSettingsPending: false, storagePendingBooks: new Set(), storagePollTimers: new Map(), storageFeedback: "", storageFeedbackError: false, brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetStatus: "Active", assetFrameMode: "", pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processQueuePage: 1, processQueueScrollTop: 0, processFocusIdentity: null, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
+  const state = { inspectedBrand: "", selectedBookId: "", selectedBookIds: new Set(), selectedBookTab: "settings", bookDrawerOpen: false, bookDrawerScrollTop: 0, artworkGridScrollTop: 0, selectedArtworkReferences: new Set(), assetBulkActive: "unchanged", assetBulkFrameMode: "unchanged", bookInteriorDrafts: new Map(), bookMetadataDrafts: new Map(), bookMetadataValidation: new Map(), keywordBuilderPreviews: new Map(), keywordBuilderRevisions: new Map(), keywordBuilderPending: new Map(), keywordBuilderConfirmed: new Map(), keywordBuilderSubmitted: null, keywordBuilderRefreshPending: false, keywordBuilderRefreshNeeded: false, keywordBuilderRefreshBookId: "", asinResearchDrafts: new Map(), asinResearchSessions: new Map(), asinResearchFeedback: new Map(), asinResearchActiveBookId: "", asinResearchPollTimer: null, amazonBrowserStatus: { state: "Closed", reasonCode: null }, amazonBrowserPending: false, settingsSavePending: false, settingsFeedback: "", settingsFeedbackError: false, storageSnapshot: null, storageLoading: false, storageSettingsPending: false, storagePendingBooks: new Set(), storagePollTimers: new Map(), storageFeedback: "", storageFeedbackError: false, brandAuthorDrafts: new Map(), catalogMutationPending: false, catalogMutationAwaitingSnapshot: false, catalogMutationCommand: "", catalogMutationTarget: "", catalogFeedback: "", catalogFeedbackError: false, introTemplateDimensions: new Map(), introTemplatePage: 1, bookInteriorSavePending: false, bookInteriorSaveTaskId: "", bookInteriorSaveAwaitingSnapshot: false, interiorShufflePending: false, interiorShuffleTaskId: "", interiorShuffleAwaitingSnapshot: false, interiorShuffleFeedback: "", interiorShuffleFeedbackError: false, brandTemplateCopyPending: false, productionImportPending: "", productionActionTaskId: "", productionActionPollTimer: null, productionActionName: "", productionFeedback: "", productionFeedbackError: false, productionFeedbackWarning: false, productionRefreshAwaitingSnapshot: false, productionFocusSelector: "", productionFinalBuildActive: false, bookFilter: "", bookBrandFilter: "All", bookStatus: "All", bookPage: 1, bookSort: "activity", brandFilter: "", brandValidationResult: null, brandValidationRequestBrands: new Map(), selectedAssetReference: "", assetView: "grid", assetStatus: "Active", assetFrameMode: "", pdfLibrarySearch: "", pdfLibrarySort: "newest", pdfLibraryPage: 1, pdfLibraryView: "grid", pdfLibrarySearchFocused: false, pdfLibrarySearchCaret: 0, pdfLibraryFeedback: "", pdfLibraryFeedbackError: false, pdfLibraryPendingActions: new Set(), pdfLibraryRequestActions: new Map(), applicationLoadState: "idle", applicationLoadError: "", libraryRefreshTaskId: "", libraryRefreshPollTimer: null, libraryRefreshResultRequested: false, cacheCleanupTaskId: "", cacheCleanupPollTimer: null, cacheCleanupResultRequested: false, cacheCleanupActive: false, processQueuePage: 1, processQueueScrollTop: 0, processFocusIdentity: null, processStartPending: false, lastTerminalRefreshSession: "", diagnosticsTab: "summary", backgroundTasks: [], pendingCommands: new Map(), updateSnapshot: null, updateCommandPending: "", updatePollTimer: null, updateDismissedVersion: "", updateDialogPreviousFocus: null };
 
   state.bookKeywordBuilderDrafts = new Map();
   state.bookKeywordBuilderValidation = new Map();
@@ -613,6 +613,7 @@
     if (taskState === "Completed" && !state.libraryRefreshResultRequested) {
       state.libraryRefreshResultRequested = true;
       if (taskId === state.bookInteriorSaveTaskId) state.bookInteriorSaveAwaitingSnapshot = true;
+      if (taskId === state.interiorShuffleTaskId) state.interiorShuffleAwaitingSnapshot = true;
       send("app.refresh.result", { taskId });
       return;
     }
@@ -625,6 +626,17 @@
       state.applicationLoadError = "";
       if (state.bookDrawerOpen && currentRoute() === "books") refreshBookKeywordBuilderCard();
       status.textContent = "Keyword Builder saved; refresh needed";
+      return;
+    }
+    if (taskId === state.interiorShuffleTaskId) {
+      state.interiorShuffleTaskId = "";
+      state.interiorShufflePending = false;
+      state.interiorShuffleFeedback = "Random order was saved, but its refreshed status could not be loaded. Use Refresh to retry.";
+      state.interiorShuffleFeedbackError = true;
+      state.applicationLoadState = "ready";
+      state.applicationLoadError = "";
+      if (state.bookDrawerOpen && state.selectedBookTab === "artwork" && currentRoute() === "books") refreshInteriorArtworkWorkspace();
+      status.textContent = "Interior status refresh failed";
       return;
     }
     state.applicationLoadState = "failed";
@@ -851,6 +863,7 @@
   const processingReadiness = (book, summary) => {
     if (!workspaceStateAvailable(summary)) return { ready: false, reason: valueFor(summary, "workspaceStateError", "Workspace state is unavailable. Restore or repair the state file, then refresh.") };
     if (hasInteriorDraft(bookId(book))) return { ready: false, reason: "Save Interior changes before processing." };
+    if (String(valueFor(valueFor(summary, "interiorShuffle", {}), "status", "Missing")) !== "Current") return { ready: false, reason: "Random Interior using the current active artwork before processing." };
     if (valueFor(summary, "validationStatus", "Needs review") !== "Ready") return { ready: false, reason: "Run Interior preflight until this Book is ready." };
     const assignment = assignedBrandExecutionReadiness(summary);
     if (!assignment.ready) return assignment;
@@ -1684,9 +1697,27 @@
     const activeCount = allAssets.filter((asset) => effectiveInteriorAsset(book, asset).isActive).length;
     const inactiveCount = allAssets.length - activeCount;
     const controlsDisabled = processIsActive() || state.bookInteriorSavePending;
+    const shuffle = valueFor(summary, "interiorShuffle", {});
+    const shuffleState = String(valueFor(shuffle, "status", "Missing"));
+    const shufflePageCount = Number(valueFor(shuffle, "eligiblePageCount", activeCount)) || 0;
+    const interiorDirty = hasInteriorDraft(bookId(book));
+    const canRandomize = Boolean(valueFor(shuffle, "canRandomize", false));
+    const shuffleDisabled = controlsDisabled || state.interiorShufflePending || interiorDirty || !canRandomize;
+    const shuffleTitle = interiorDirty
+      ? "Save Interior changes first"
+      : processIsActive() ? "Wait for Interior processing to finish"
+        : state.bookInteriorSavePending ? "Wait for Interior changes to finish saving"
+          : !canRandomize ? "Activate at least one Interior page before randomizing"
+            : "Create and save a new random order for the active Interior pages";
+    const defaultShuffleFeedback = shuffleState === "Current"
+      ? `Random order ready · ${shufflePageCount} page${shufflePageCount === 1 ? "" : "s"}`
+      : shuffleState === "Stale"
+        ? "Random order is out of date. Random again before processing."
+        : "Random order is required before processing.";
+    const shuffleFeedback = state.interiorShuffleFeedback || defaultShuffleFeedback;
     const allShownSelected = eligibleMatching.length > 0 && selectedVisibleCount === eligibleMatching.length;
     const bulkDisabled = !selectedCount || (state.assetBulkActive === "unchanged" && state.assetBulkFrameMode === "unchanged") || controlsDisabled;
-    const filterControls = `<div class="asset-filter-controls"><span class="asset-filter-label">Filter artwork</span><div class="asset-filter-chip-groups"><div class="asset-status-filter" role="group" aria-label="Interior artwork status filters">${["Active", "Inactive"].map((name) => `<button type="button" class="${state.assetStatus === name ? "active" : ""}" data-action="asset-status" data-asset-status="${name}" aria-pressed="${state.assetStatus === name}">${name}</button>`).join("")}</div><div class="asset-frame-filter" role="group" aria-label="Interior artwork frame mode filters">${[["", "All"], ["enabled", "Frame"], ["disabled", "No Frame"]].map(([value, label]) => `<button type="button" class="${state.assetFrameMode === value ? "active" : ""}" data-action="asset-frame-mode" data-asset-frame-mode="${value}" aria-pressed="${state.assetFrameMode === value}">${label}</button>`).join("")}</div></div></div>`;
+    const filterControls = `<div class="asset-filter-controls"><span class="asset-filter-label">Filter artwork</span><div class="asset-filter-row"><div class="asset-filter-chip-groups"><div class="asset-status-filter" role="group" aria-label="Interior artwork status filters">${["Active", "Inactive"].map((name) => `<button type="button" class="${state.assetStatus === name ? "active" : ""}" data-action="asset-status" data-asset-status="${name}" aria-pressed="${state.assetStatus === name}">${name}</button>`).join("")}</div><div class="asset-frame-filter" role="group" aria-label="Interior artwork frame mode filters">${[["", "All"], ["enabled", "Frame"], ["disabled", "No Frame"]].map(([value, label]) => `<button type="button" class="${state.assetFrameMode === value ? "active" : ""}" data-action="asset-frame-mode" data-asset-frame-mode="${value}" aria-pressed="${state.assetFrameMode === value}">${label}</button>`).join("")}</div></div><button type="button" class="button-secondary interior-shuffle-button" data-action="random-interior" data-book-id="${escapeHtml(bookId(book))}" title="${escapeHtml(shuffleTitle)}" aria-describedby="interior-shuffle-status" aria-busy="${state.interiorShufflePending}" ${shuffleDisabled ? "disabled" : ""}>${state.interiorShufflePending ? "Randomizing…" : "Random Interior"}</button></div><small id="interior-shuffle-status" class="interior-shuffle-status ${state.interiorShuffleFeedbackError ? "is-error" : ""}" role="${state.interiorShuffleFeedbackError ? "alert" : "status"}" aria-live="polite">${escapeHtml(shuffleFeedback)}</small></div>`;
     const bulkControls = `<div class="interior-artwork-bulk-controls"><label class="artwork-select-all"><input type="checkbox" data-action="toggle-all-artwork" ${allShownSelected ? "checked" : ""} ${!eligibleMatching.length || controlsDisabled ? "disabled" : ""}> Select all ${eligibleMatching.length} shown</label><label class="field artwork-bulk-field"><span>Status</span><select class="control h-8" data-action="set-artwork-bulk-active"><option value="unchanged" ${state.assetBulkActive === "unchanged" ? "selected" : ""}>No change</option><option value="active" ${state.assetBulkActive === "active" ? "selected" : ""}>Active</option><option value="inactive" ${state.assetBulkActive === "inactive" ? "selected" : ""}>Inactive</option></select></label><label class="field artwork-bulk-field"><span>Frame mode</span><select class="control h-8" data-action="set-artwork-bulk-frame-mode"><option value="unchanged" ${state.assetBulkFrameMode === "unchanged" ? "selected" : ""}>No change</option><option value="enabled" ${state.assetBulkFrameMode === "enabled" ? "selected" : ""}>Frame</option><option value="disabled" ${state.assetBulkFrameMode === "disabled" ? "selected" : ""}>No Frame</option></select></label><button class="button-primary" data-action="apply-artwork-bulk" ${bulkDisabled ? "disabled" : ""}>Apply to ${selectedCount} selected</button></div>`;
     return `<section class="interior-artwork-workspace">${renderFrameModeMigrationWarning(summary)}<header class="interior-artwork-heading"><div><h3>Interior artwork</h3><p>Review every available Book interior page, then control whether it is processed and which frame mode it uses.</p></div><p class="interior-artwork-count" role="status" aria-live="polite" aria-atomic="true"><strong>${matching.length}</strong> shown · <strong>${allAssets.length}</strong> total · <strong>${activeCount}</strong> active · <strong>${inactiveCount}</strong> inactive</p></header><fieldset class="interior-artwork-toolbar"><legend>Artwork controls</legend>${filterControls}${bulkControls}</fieldset><div class="interior-artwork-grid-scroll"><div class="interior-artwork-grid">${matching.length ? matching.map(tile).join("") : `<p class="empty-copy interior-artwork-empty">No artwork matches this view. <button type="button" class="button-link" data-action="clear-artwork-filters">Clear filters</button></p>`}</div></div></section>`;
   };
@@ -2587,6 +2618,20 @@
         send("book.interior.settings.save", payload);
       }
     }
+    if (action === "random-interior" && !state.interiorShufflePending) {
+      const targetBookId = target.dataset.bookId;
+      if (hasInteriorDraft(targetBookId)) {
+        state.interiorShuffleFeedback = "Save Interior changes first";
+        state.interiorShuffleFeedbackError = true;
+        refreshInteriorArtworkWorkspace();
+        return;
+      }
+      state.interiorShufflePending = true;
+      state.interiorShuffleFeedback = "Creating a new random Interior order…";
+      state.interiorShuffleFeedbackError = false;
+      refreshInteriorArtworkWorkspace();
+      send("book.interior.shuffle", { bookId: targetBookId });
+    }
     if (action === "intro-add-template" || action === "intro-remove-template" || action === "intro-move-template") {
       const book = books().find((item) => bookId(item) === target.dataset.bookId);
       if (book) {
@@ -2981,6 +3026,14 @@
         status.textContent = "Interior changes saved";
         updateInteriorSaveUi();
       }
+      if (requestCommand === "book.interior.shuffle") {
+        state.interiorShuffleTaskId = valueFor(valueFor(response, "payload", {}), "taskId", "");
+        state.interiorShufflePending = false;
+        state.interiorShuffleFeedback = "Random order saved. Refreshing Interior status…";
+        state.interiorShuffleFeedbackError = false;
+        status.textContent = "Interior order randomized";
+        if (state.bookDrawerOpen && state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();
+      }
       if (["book.metadata.save", "book.brand.assign", "book.brand.unassign", "brand.author.save"].includes(requestCommand)) {
         state.catalogMutationPending = false;
         state.catalogMutationAwaitingSnapshot = true;
@@ -2995,12 +3048,19 @@
     } else if (ok && command === "background.task" && valueFor(valueFor(response, "payload", {}), "kind", "") === "ProductionAction") {
       observeProductionAction(valueFor(response, "payload", {}));
     } else if (ok && command === "app.snapshot") {
-      const preserveBookDrawer = state.bookInteriorSaveAwaitingSnapshot && state.bookDrawerOpen && currentRoute() === "books";
+      const interiorSaveWasAwaiting = state.bookInteriorSaveAwaitingSnapshot;
+      const interiorShuffleWasAwaiting = state.interiorShuffleAwaitingSnapshot;
+      const preserveBookDrawer = (interiorSaveWasAwaiting || interiorShuffleWasAwaiting) && state.bookDrawerOpen && currentRoute() === "books";
       const preserveProductionDrawer = state.productionRefreshAwaitingSnapshot && state.bookDrawerOpen && state.selectedBookTab === "production" && currentRoute() === "books";
       const preserveCatalogDrawer = state.catalogMutationAwaitingSnapshot && state.bookDrawerOpen && currentRoute() === "books" && state.catalogMutationCommand.startsWith("book.");
       const preserveKeywordDrawer = state.keywordBuilderRefreshPending && state.bookDrawerOpen && currentRoute() === "books";
       state.bookInteriorSaveAwaitingSnapshot = false;
       state.bookInteriorSaveTaskId = "";
+      state.interiorShuffleAwaitingSnapshot = false;
+      state.interiorShuffleTaskId = "";
+      state.interiorShufflePending = false;
+      state.interiorShuffleFeedback = "";
+      state.interiorShuffleFeedbackError = false;
       state.productionRefreshAwaitingSnapshot = false;
       const catalogWasAwaiting = state.catalogMutationAwaitingSnapshot;
       const catalogTarget = state.catalogMutationTarget;
@@ -3049,7 +3109,7 @@
         if (state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();
         else updateInteriorSaveUi();
         refreshBookListRow(state.selectedBookId);
-        status.textContent = "Interior changes saved";
+        status.textContent = interiorShuffleWasAwaiting ? "Interior order randomized" : "Interior changes saved";
       } else if (preserveProductionDrawer) {
         state.productionFeedback = state.productionFeedback.replace(" Refreshing status…", "");
         refreshProductionWorkspace(state.productionFocusSelector);
@@ -3261,6 +3321,22 @@
       if (requestCommand === "book.interior.settings.save") {
         state.bookInteriorSavePending = false;
         updateInteriorSaveUi();
+      }
+      if (requestCommand === "book.interior.shuffle") {
+        state.interiorShufflePending = false;
+        const message = ({
+          processing_active: "Wait for Interior processing to finish.",
+          production_action_active: "Wait for the active Production action to finish.",
+          cache_cleanup_active: "Wait for Clear Cache to finish.",
+          workspace_state_unavailable: "Repair the Book workspace state, then refresh and retry.",
+          interior_shuffle_no_active_pages: "Activate at least one Interior page before randomizing.",
+          interior_shuffle_source_invalid: "The Book interior source is unavailable or invalid."
+        })[String(error)] ?? "Interior order could not be randomized. Refresh and retry.";
+        state.interiorShuffleFeedback = message;
+        state.interiorShuffleFeedbackError = true;
+        if (state.bookDrawerOpen && state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();
+        status.textContent = "Random Interior needs attention";
+        return;
       }
       if (requestCommand === "settings.save") {
         state.settingsSavePending = false;

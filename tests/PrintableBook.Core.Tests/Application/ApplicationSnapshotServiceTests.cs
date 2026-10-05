@@ -560,6 +560,28 @@ public sealed class ApplicationSnapshotServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_reports_whether_the_saved_interior_shuffle_matches_current_eligible_pages()
+    {
+        var bookDirectory = new DirectoryReference("sources/Book A");
+        var pages = new[]
+        {
+            new FileReference(Path.Combine(bookDirectory.Value, "Book interior", "page-1.png")),
+            new FileReference(Path.Combine(bookDirectory.Value, "Book interior", "page-2.png"))
+        };
+        var shuffleStore = new StubShuffleStore(InteriorShuffleIndexGenerator.Generate(pages, seed: 42));
+
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(), new StubSettingsStore(), new TwoInteriorScanner(), new StubStateStore(), new StubFileSystem(),
+            interiorShuffleStore: shuffleStore).RefreshAsync();
+
+        var shuffle = Assert.Single(snapshot.BookSummaries).InteriorShuffle!;
+        Assert.Equal("Current", shuffle.Status);
+        Assert.Equal(2, shuffle.PageCount);
+        Assert.Equal(2, shuffle.EligiblePageCount);
+        Assert.True(shuffle.CanRandomize);
+    }
+
+    [Fact]
     public async Task RefreshAsync_builds_book_summaries_with_concurrency_limited_to_four_and_keeps_discovery_order()
     {
         var scanner = new GatedScanner();
@@ -822,6 +844,12 @@ public sealed class ApplicationSnapshotServiceTests
         public ValueTask AppendLogAsync(BookWorkspace workspace, BookProcessingLogEntry entry, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
         public ValueTask<IReadOnlyList<BookProcessingLogEntry>> LoadLogsAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) => ValueTask.FromResult<IReadOnlyList<BookProcessingLogEntry>>([]);
         public ValueTask SaveErrorAsync(BookWorkspace workspace, ProcessingFailure failure, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    }
+
+    private sealed class StubShuffleStore(InteriorShuffleMap? map) : IInteriorShuffleStore
+    {
+        public ValueTask<InteriorShuffleMap?> LoadAsync(BookWorkspace workspace, CancellationToken cancellationToken = default) => ValueTask.FromResult(map);
+        public ValueTask SaveAsync(BookWorkspace workspace, InteriorShuffleMap shuffleMap, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 
     private sealed class MetadataStateStore(BookWorkspaceStateLoadResult? result = null, Exception? exception = null) : IBookWorkspaceStateStore
