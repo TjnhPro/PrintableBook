@@ -1,5 +1,6 @@
 using ImageMagick;
 using PdfSharp.Pdf.IO;
+using System.Text.RegularExpressions;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Infrastructure.Pdf;
@@ -27,9 +28,11 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
         var pdfText = System.Text.Encoding.Latin1.GetString(await File.ReadAllBytesAsync(result.CoverPdf.Value));
         Assert.Contains("/Width 5242", pdfText, StringComparison.Ordinal);
         Assert.Contains("/Height 2626", pdfText, StringComparison.Ordinal);
+        AssertProductionMetadata(pdf);
 
         Assert.NotNull(result.PreviewPdf);
         using var previewPdf = PdfReader.Open(result.PreviewPdf!.Value);
+        Assert.DoesNotMatch("^[A-Z]{2}PDF 1-", previewPdf.Info.Creator ?? string.Empty);
         Assert.Single(previewPdf.Pages);
         Assert.Equal(pdf.Pages[0].Width.Point, previewPdf.Pages[0].Width.Point, precision: 3);
         Assert.Equal(pdf.Pages[0].Height.Point, previewPdf.Pages[0].Height.Point, precision: 3);
@@ -101,6 +104,8 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
 
         using var coverPdf = PdfReader.Open(result.CoverPdf.Value);
         using var interiorPdf = PdfReader.Open(result.InteriorPdf.Value);
+        AssertProductionMetadata(coverPdf);
+        AssertProductionMetadata(interiorPdf);
         Assert.Single(coverPdf.Pages);
         Assert.Equal(2, interiorPdf.Pages.Count);
         Assert.Equal(5242d / 300d * 72d, coverPdf.Pages[0].Width.Point, precision: 3);
@@ -129,6 +134,17 @@ public sealed class PdfSharpPrintableBookPdfExporterTests : IAsyncLifetime
         Assert.Contains("/Height 1313", coverPreviewText, StringComparison.Ordinal);
         Assert.Contains("/Width 600", interiorPreviewText, StringComparison.Ordinal);
         Assert.Contains("/Height 609", interiorPreviewText, StringComparison.Ordinal);
+    }
+
+    private static void AssertProductionMetadata(PdfSharp.Pdf.PdfDocument document)
+    {
+        Assert.Matches(
+            new Regex("^[A-Z]{2}PDF 1-[0-9]{3} 10-[0-9]{4} 1000-[0-9]{6}$", RegexOptions.CultureInvariant),
+            document.Info.Creator ?? string.Empty);
+        Assert.InRange(
+            document.Info.CreationDate,
+            DateTime.Now.AddDays(-180).AddMinutes(-1),
+            DateTime.Now.AddDays(-1).AddMinutes(1));
     }
 
     [Fact]

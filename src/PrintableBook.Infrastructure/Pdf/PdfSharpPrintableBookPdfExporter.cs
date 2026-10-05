@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using ImageMagick;
 using PdfSharp.Drawing;
 using PdfSharp.Pdf;
@@ -157,6 +158,7 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
         using var document = new PdfDocument();
         AddRasterPage(document, source, pageSize, null, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
+        ApplyProductionMetadata(document);
         document.Save(target.Value);
     }
 
@@ -421,6 +423,7 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
             }
 
             cancellationToken.ThrowIfCancellationRequested();
+            ApplyProductionMetadata(finalDocument);
             finalDocument.Save(target.Value);
         }
         finally
@@ -439,6 +442,27 @@ public sealed class PdfSharpPrintableBookPdfExporter : IPrintableBookPdfExporter
             }
         }
     }
+
+    private static void ApplyProductionMetadata(PdfDocument document)
+    {
+        document.Info.Creator = $"{RandomUppercaseCharacter()}{RandomUppercaseCharacter()}PDF 1-{RandomDigits(3)} 10-{RandomDigits(4)} 1000-{RandomDigits(6)}";
+        var secondsBack = RandomNumberGenerator.GetInt32(
+            (int)TimeSpan.FromDays(1).TotalSeconds,
+            (int)TimeSpan.FromDays(180).TotalSeconds + 1);
+        document.Info.CreationDate = DateTime.Now.AddSeconds(-secondsBack);
+    }
+
+    private static char RandomUppercaseCharacter() =>
+        (char)('A' + RandomNumberGenerator.GetInt32(26));
+
+    private static string RandomDigits(int length) =>
+        string.Create(length, 0, static (characters, _) =>
+        {
+            for (var index = 0; index < characters.Length; index++)
+            {
+                characters[index] = (char)('0' + RandomNumberGenerator.GetInt32(10));
+            }
+        });
 
     private static InteriorPagePlan BuildInteriorPagePlan(
         IReadOnlyList<FileReference> productionPrefixPages,
