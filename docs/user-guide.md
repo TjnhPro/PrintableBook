@@ -12,11 +12,17 @@ Tạo một thư mục Brand dưới `brands/`. Một Brand gồm hai folder tù
 
 Trong card **Brand Information**, nhập một Primary Author rồi nhấn **Save Author**. MVP dùng contract `1 Brand = 1 Author`; Author có thể để trống nhưng Brand đó sẽ không xuất hiện trong danh sách assign của Book. So sánh Author bỏ qua chữ hoa/thường và khoảng trắng ở đầu/cuối, nhưng không sửa khoảng trắng ở giữa hay dấu câu. Nếu việc đổi Author làm các Book đang assign trở nên invalid, ứng dụng hiển thị số Book bị ảnh hưởng trước khi Save và không tự đổi assignment.
 
+Mỗi Brand còn có Language persisted, hiển thị read-only trong Brand Information. Dữ liệu legacy chưa có Language được xem là English mà không rewrite file. Dùng **Clone Brand** để tạo edition ngôn ngữ khác; suffix trong tên chỉ phục vụ đặt tên và không quyết định Language.
+
 Kích thước hợp lệ: `frame.png` phải là `Artwork maximum side × Artwork maximum side`; `background.png` phải đúng `Final Interior Page`; ảnh trong `IntroTemplate/` phải là `1024 × 1024 px`, `2048 × 2048 px`, hoặc đúng `Final Interior Page` (mặc định `2588 × 2625 px`). Ba file PSD chỉ được kiểm tra tồn tại, không được đọc như ảnh. Với ảnh Intro đúng Final Interior Page, ứng dụng đưa thẳng artwork đó vào PDF, không thêm viền hay xử lý ảnh. Sau khi chọn **Validate Brand**, lỗi chỉ rõ file nào sai, kích thước hiện tại và kích thước cần sửa.
 
 ![Brands and templates](assets/screenshots/0.1/12-brands-templates.png)
 
 ## 3. Chuẩn bị Book
+
+Book Settings hiển thị Language read-only. Dùng **Clone Book** ở header Book detail để chọn Language và xem trước tên destination. Clone giữ Book Information, Publishing ASIN và cấu hình Interior có thể tái sử dụng, nhưng luôn bắt đầu `Unassigned` và không mang theo Keyword Builder, Ads ASIN, Production, cache, log hay output. Sau refresh thành công, app tự mở Book mới; nếu refresh lỗi sau khi clone đã tạo xong, dùng **Refresh** thay vì submit clone lần nữa.
+
+Brand Assignment chỉ liệt kê Brand có cả Language và Author khớp Book. Assignment cũ khác Language được giữ để review/unassign nhưng processing bị chặn. Chi tiết về legacy compatibility, dữ liệu được giữ/reset và recovery nằm trong [Language editions and clone boundaries](language-editions-and-cloning.md).
 
 Trong tab **Overview** của Book detail, card **Book Information** lưu riêng:
 

@@ -141,6 +141,7 @@ Script mặc định không ghi đè Brand hoặc Book mẫu cùng tên đã có
 - [BorderPixel V1](docs/borderpixel-detector-spec.md)
 - [Interior pipeline](docs/interior-shared-pipeline-integration.md)
 - [Intro processing](docs/intro-template-processing.md)
+- [Language editions and clone boundaries](docs/language-editions-and-cloning.md)
 - [Release packaging](docs/release-packaging.md)
 - [Third-party components](docs/third-party-notices.md)
 
