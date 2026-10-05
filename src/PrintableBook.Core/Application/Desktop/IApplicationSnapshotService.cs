@@ -211,7 +211,7 @@ public sealed class ApplicationSnapshotService(
         var language = SupportedLanguageCatalog.GetEffective(state.LanguageCode);
         assignmentTargets.TryGetValue(state.AssignedBrand ?? string.Empty, out var assignmentTarget);
         brandsByName.TryGetValue(state.AssignedBrand ?? string.Empty, out var assignedBrand);
-        var assignment = BookBrandAssignmentEvaluator.Evaluate(state.AssignedBrand, state.Metadata?.Author, assignmentTarget);
+        var assignment = BookBrandAssignmentEvaluator.Evaluate(state.AssignedBrand, state.Metadata?.Author, language, assignmentTarget);
         var coverCandidates = source?.GetAssets(BookAssetKind.Cover).Select(asset => asset.Reference).ToArray() ?? [];
         var hasSelectedCover = coverCandidates.Length == 1 || coverCandidates.Any(candidate => string.Equals(candidate, state.SelectedCoverReference, StringComparison.OrdinalIgnoreCase));
         var interiorPages = (state.PublishedInteriorPreviews ?? [])

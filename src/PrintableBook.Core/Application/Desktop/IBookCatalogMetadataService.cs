@@ -77,13 +77,22 @@ public sealed class BookCatalogMetadataService(
         ArgumentNullException.ThrowIfNull(book);
         ArgumentNullException.ThrowIfNull(brand);
         var state = await LoadStateAsync(book, cancellationToken);
+        var bookLanguage = SupportedLanguageCatalog.GetEffective(state.LanguageCode);
+        var brandMetadata = await brandMetadataStore.LoadAsync(brand.Directory, cancellationToken);
+        var brandLanguage = SupportedLanguageCatalog.GetEffective(brandMetadata?.LanguageCode);
+        if (!string.Equals(bookLanguage.Code, brandLanguage.Code, StringComparison.Ordinal))
+        {
+            throw new BookCatalogMetadataException(
+                "book_brand_language_mismatch",
+                $"Book Language '{bookLanguage.Name}' must match Brand Language '{brandLanguage.Name}' before assignment.");
+        }
+
         var bookAuthor = state.Metadata?.Author;
         if (string.IsNullOrWhiteSpace(bookAuthor))
         {
             throw new BookCatalogMetadataException("book_author_required", "Save a Book Author before assigning a Brand.");
         }
 
-        var brandMetadata = await brandMetadataStore.LoadAsync(brand.Directory, cancellationToken);
         if (string.IsNullOrWhiteSpace(brandMetadata?.Author))
         {
             throw new BookCatalogMetadataException("brand_author_required", $"Brand '{brand.Name}' does not have an Author.");

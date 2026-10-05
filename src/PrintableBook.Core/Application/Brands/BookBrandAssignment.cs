@@ -8,7 +8,8 @@ public enum BookBrandAssignmentStatus
     BrandAuthorMissing = 3,
     AuthorMismatch = 4,
     MissingBrand = 5,
-    BrandMetadataUnavailable = 6
+    BrandMetadataUnavailable = 6,
+    LanguageMismatch = 7
 }
 
 public sealed record BrandAssignmentTarget(
@@ -28,6 +29,7 @@ public static class BookBrandAssignmentEvaluator
     public static BookBrandAssignmentEvaluation Evaluate(
         string? assignedBrand,
         string? bookAuthor,
+        SupportedLanguageOption bookLanguage,
         BrandAssignmentTarget? target)
     {
         if (string.IsNullOrWhiteSpace(assignedBrand))
@@ -43,6 +45,14 @@ public static class BookBrandAssignmentEvaluator
         if (!target.MetadataAvailable)
         {
             return new(BookBrandAssignmentStatus.BrandMetadataUnavailable, $"Brand metadata for '{target.BrandName}' could not be read.");
+        }
+
+        var brandLanguage = SupportedLanguageCatalog.GetEffective(target.Metadata?.LanguageCode);
+        if (!string.Equals(bookLanguage.Code, brandLanguage.Code, StringComparison.Ordinal))
+        {
+            return new(
+                BookBrandAssignmentStatus.LanguageMismatch,
+                $"Book Language '{bookLanguage.Name}' does not match Brand Language '{brandLanguage.Name}'.");
         }
 
         if (string.IsNullOrWhiteSpace(bookAuthor))

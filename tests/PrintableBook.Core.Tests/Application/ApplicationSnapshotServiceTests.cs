@@ -158,6 +158,26 @@ public sealed class ApplicationSnapshotServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_marks_existing_cross_language_assignment_invalid()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("Book A")) with
+        {
+            LanguageCode = "de",
+            Metadata = BookProductionMetadata.Create(null, null, null, null, "Jane Doe"),
+            AssignedBrand = "Brand A"
+        };
+
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(), new StubSettingsStore(), new StubScanner(), new StubStateStore(explicitState: state), new StubFileSystem(),
+            brandMetadataStore: new StubBrandMetadataStore(BrandMetadata.Create("Jane Doe", "en"))).RefreshAsync();
+
+        var summary = Assert.Single(snapshot.BookSummaries);
+        Assert.Equal(BookBrandAssignmentStatus.LanguageMismatch, summary.AssignmentStatus);
+        Assert.Contains("German", summary.AssignmentReason);
+        Assert.Contains("English", summary.AssignmentReason);
+    }
+
+    [Fact]
     public async Task RefreshAsync_returns_one_coherent_discovery_snapshot()
     {
         var discovery = new StubDiscovery();

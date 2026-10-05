@@ -69,26 +69,58 @@ public sealed class BookBrandAssignmentTests
     [InlineData(null, BookBrandAssignmentStatus.Unassigned)]
     [InlineData("", BookBrandAssignmentStatus.Unassigned)]
     public void Evaluator_reports_unassigned(string? assignedBrand, BookBrandAssignmentStatus expected) =>
-        Assert.Equal(expected, BookBrandAssignmentEvaluator.Evaluate(assignedBrand, "Jane", null).Status);
+        Assert.Equal(expected, BookBrandAssignmentEvaluator.Evaluate(assignedBrand, "Jane", Language("en"), null).Status);
 
     [Fact]
     public void Evaluator_reports_each_invalid_assignment_state()
     {
         Assert.Equal(BookBrandAssignmentStatus.MissingBrand,
-            BookBrandAssignmentEvaluator.Evaluate("Brand", "Jane", null).Status);
+            BookBrandAssignmentEvaluator.Evaluate("Brand", "Jane", Language("en"), null).Status);
         Assert.Equal(BookBrandAssignmentStatus.BrandMetadataUnavailable,
-            BookBrandAssignmentEvaluator.Evaluate("Brand", "Jane", new("Brand", null, false)).Status);
+            BookBrandAssignmentEvaluator.Evaluate("Brand", "Jane", Language("en"), new("Brand", null, false)).Status);
         Assert.Equal(BookBrandAssignmentStatus.BookAuthorMissing,
-            BookBrandAssignmentEvaluator.Evaluate("Brand", null, new("Brand", BrandMetadata.Create("Jane"))).Status);
+            BookBrandAssignmentEvaluator.Evaluate("Brand", null, Language("en"), new("Brand", BrandMetadata.Create("Jane"))).Status);
         Assert.Equal(BookBrandAssignmentStatus.BrandAuthorMissing,
-            BookBrandAssignmentEvaluator.Evaluate("Brand", "Jane", new("Brand", null)).Status);
+            BookBrandAssignmentEvaluator.Evaluate("Brand", "Jane", Language("en"), new("Brand", null)).Status);
         Assert.Equal(BookBrandAssignmentStatus.AuthorMismatch,
-            BookBrandAssignmentEvaluator.Evaluate("Brand", "Jane", new("Brand", BrandMetadata.Create("John"))).Status);
+            BookBrandAssignmentEvaluator.Evaluate("Brand", "Jane", Language("en"), new("Brand", BrandMetadata.Create("John"))).Status);
     }
 
     [Fact]
     public void Evaluator_accepts_matching_authors() =>
         Assert.Equal(
             BookBrandAssignmentStatus.Valid,
-            BookBrandAssignmentEvaluator.Evaluate("Brand", " Jane Doe ", new("Brand", BrandMetadata.Create("jane doe"))).Status);
+            BookBrandAssignmentEvaluator.Evaluate("Brand", " Jane Doe ", Language("en"), new("Brand", BrandMetadata.Create("jane doe"))).Status);
+
+    [Fact]
+    public void Evaluator_checks_language_before_author()
+    {
+        var mismatch = BookBrandAssignmentEvaluator.Evaluate(
+            "Brand",
+            null,
+            Language("de"),
+            new("Brand", BrandMetadata.Create(null, "en")));
+
+        Assert.Equal(BookBrandAssignmentStatus.LanguageMismatch, mismatch.Status);
+        Assert.Contains("German", mismatch.Reason);
+        Assert.Contains("English", mismatch.Reason);
+    }
+
+    [Fact]
+    public void Evaluator_accepts_matching_language_and_author()
+    {
+        var result = BookBrandAssignmentEvaluator.Evaluate(
+            "Brand",
+            "Jane",
+            Language("de"),
+            new("Brand", BrandMetadata.Create("jane", "de")));
+
+        Assert.Equal(BookBrandAssignmentStatus.Valid, result.Status);
+    }
+
+    private static SupportedLanguageOption Language(string code)
+    {
+        Assert.True(SupportedLanguageCatalog.TryGet(code, out var language));
+        return language;
+    }
 }

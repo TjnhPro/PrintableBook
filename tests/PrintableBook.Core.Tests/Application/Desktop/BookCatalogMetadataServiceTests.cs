@@ -52,6 +52,39 @@ public sealed class BookCatalogMetadataServiceTests
     }
 
     [Fact]
+    public async Task Assign_rejects_language_mismatch_before_author_validation()
+    {
+        var stateStore = new StateStore(BookProcessingState.NotStarted(new BookId("book")) with { LanguageCode = "de" });
+        var brandStore = new BrandStore();
+        var service = new BookCatalogMetadataService(stateStore, brandStore);
+        var brand = Brand("Brand A");
+        brandStore.Set(brand, BrandMetadata.Create(null, "en"));
+
+        var mismatch = await Assert.ThrowsAsync<BookCatalogMetadataException>(() => service.AssignBrandAsync(Book(), brand).AsTask());
+
+        Assert.Equal("book_brand_language_mismatch", mismatch.Code);
+        Assert.Equal(0, stateStore.Saves);
+    }
+
+    [Fact]
+    public async Task Assign_accepts_matching_non_English_language_and_author()
+    {
+        var stateStore = new StateStore(BookProcessingState.NotStarted(new BookId("book")) with
+        {
+            LanguageCode = "de",
+            Metadata = BookProductionMetadata.Create(null, null, null, null, "Jane")
+        });
+        var brandStore = new BrandStore();
+        var service = new BookCatalogMetadataService(stateStore, brandStore);
+        var brand = Brand("Brand A");
+        brandStore.Set(brand, BrandMetadata.Create("jane", "de"));
+
+        await service.AssignBrandAsync(Book(), brand);
+
+        Assert.Equal("Brand A", stateStore.State!.AssignedBrand);
+    }
+
+    [Fact]
     public async Task SaveBrandAuthor_normalizes_display_text_and_preserves_language()
     {
         var brandStore = new BrandStore();
@@ -243,6 +276,7 @@ public sealed class BookCatalogMetadataServiceTests
         Assert.True(BookBrandExecutionPolicy.Evaluate("Brand A", BookBrandAssignmentStatus.Valid, null).IsAllowed);
         Assert.Equal("book_brand_mismatch", BookBrandExecutionPolicy.Evaluate("Brand A", BookBrandAssignmentStatus.Valid, "Brand B").Code);
         Assert.Equal("book_brand_assignment_invalid", BookBrandExecutionPolicy.Evaluate("Brand A", BookBrandAssignmentStatus.AuthorMismatch, "Brand A").Code);
+        Assert.Equal("book_brand_assignment_invalid", BookBrandExecutionPolicy.Evaluate("Brand A", BookBrandAssignmentStatus.LanguageMismatch, "Brand A").Code);
     }
 
     private static DiscoveredBook Book()
