@@ -152,6 +152,8 @@ Tab **Production** sở hữu workflow publish PDF. **Process Interior** chỉ c
 4. Nhấn **Build Cover PDF** để tạo `Output/<BookId> - Cover.pdf` với page size `17.47 × 8.75 inch`. Cùng lần build, app tạo `Output/back_cover.jpg` và `Output/front_cover.jpg` ở `1198 × 1200 px` để preview nhanh; hai JPEG này không dùng để in.
 5. Lưu mọi thay đổi Interior/Intro/Background còn pending, sau đó nhấn **Build Final Interior**.
 
+Nhóm **Suggested PDF filenames** hiển thị một tên Cover và một tên Interior ngẫu nhiên. Hai input chỉ đọc, giữ ổn định theo Book trong phiên chạy hiện tại; nhấn **Randomize** để lấy cặp khác. Đây chỉ là gợi ý cho bước rename sau khi tải/copy: app không đổi tên canonical trong `Output` và các workflow Preview, S3 hay freshness không bị ảnh hưởng. Danh sách nguồn nằm cạnh ứng dụng tại `Metadata/cover_key.txt` và `Metadata/interior_key.txt`; nếu file thiếu, không đọc được hoặc không còn tên hợp lệ, Production vẫn hoạt động và chỉ nhóm gợi ý báo lỗi cụ thể.
+
 Hai trang prefix luôn dùng No Frame/CropArt. Final Interior được build mới từ source hiện tại theo thứ tự:
 
 ```text
@@ -162,6 +164,8 @@ Interior Cover
 ```
 
 Khi `HasBackground=true`, background được chèn sau từng trang artwork ở cả bốn nhóm. Build thành công thay atomically file `<BookId> - Interior.pdf`; build lỗi giữ PDF trước đó. Chạy **Process Interior** sau đó chỉ refresh processed-page previews và giữ nguyên PDF, companion thumbnail, build time và provenance. PDF Library vẫn có thể hiển thị `Base` hoặc `Legacy` cho output cũ; Interior PDF được build mới có provenance `Production`.
+
+Cover và Interior PDF production mới có Creator ngẫu nhiên theo pattern `AAPDF 1-000 10-0000 1000-000000` (hai chữ cái và các chữ số đều được random), cùng CreationDate ngẫu nhiên từ 1 đến 180 ngày trước lúc build. Metadata này không áp dụng cho companion `_thumbnail.pdf`.
 
 ## 9. Chọn Books để Process
 

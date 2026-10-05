@@ -37,6 +37,10 @@ randomized Interior pages
 
 The same exporter interleaves one background after every artwork when `HasBackground=true`. New Interior PDFs are published only by `ProductionInterior` / **Build Final Interior**, atomically to `Output/<BookId> - Interior.pdf`. `InteriorOnly` / **Process Interior** stops after logical assembly and records processed-page previews without invoking this exporter. Existing `Base` and `Legacy` provenance remains readable for backward compatibility, but pages-only processing never rewrites it.
 
+Main Cover and Final Interior PDFs receive production metadata immediately before save. `Creator` follows `^[A-Z]{2}PDF 1-[0-9]{3} 10-[0-9]{4} 1000-[0-9]{6}$`; `CreationDate` is selected cryptographically at random between 1 and 180 days before the build. Lightweight preview companions are intentionally excluded from this production metadata contract.
+
+Canonical published names remain `<BookId> - Cover.pdf` and `<BookId> - Interior.pdf`. The Desktop UI independently selects read-only rename suggestions from packaged `Metadata/cover_key.txt` and `Metadata/interior_key.txt`. Suggestions are cached per Book for the current process and regenerated only by an explicit **Randomize** request; they never participate in output paths, manifests, S3 keys, provenance or freshness.
+
 ## Lightweight preview companions
 
 Mỗi lần Cover hoặc Final Interior publish thành công, exporter cố gắng tạo thêm một PDF preview từ chính page plan/raster inputs của PDF chính:
