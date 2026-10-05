@@ -1605,6 +1605,11 @@ test("Interior artwork starts an explicit random order and reports its saved ref
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.task", payload: { kind: "LibraryRefresh", taskId: "shuffle-refresh" } } });
   assert.equal(status.textContent, "Interior order randomized");
   assert.match(content.innerHTML, /Random order saved\. Refreshing Interior status/);
+
+  snapshot.bookSummaries[0].interiorShuffle = { status: "Current", canRandomize: true, eligiblePageCount: 2 };
+  messageHandler({ data: { version: 1, id: "shuffle-current", ok: true, command: "app.snapshot", payload: snapshot } });
+  assert.doesNotMatch(content.innerHTML, /Random order ready/);
+  assert.doesNotMatch(content.innerHTML, /id="interior-shuffle-status"/);
 });
 
 test("Interior pages shows read-only processed previews and an empty state before processing", () => {

@@ -219,6 +219,7 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("Save Interior changes first", script, StringComparison.Ordinal);
         Assert.Contains("Random Interior using the current active artwork before processing.", script, StringComparison.Ordinal);
         Assert.Contains("interior-shuffle-status", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("Random order ready", script, StringComparison.Ordinal);
         Assert.Contains(".interior-shuffle-button", layout, StringComparison.Ordinal);
         Assert.Contains("class=\"interior-artwork-actions\"", script, StringComparison.Ordinal);
         Assert.Contains(".interior-artwork-actions { display:flex", layout, StringComparison.Ordinal);
