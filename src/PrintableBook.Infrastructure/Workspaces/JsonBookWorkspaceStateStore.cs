@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using System.Text;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Processing;
+using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 
 namespace PrintableBook.Infrastructure.Workspaces;
@@ -59,7 +60,7 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
                     .ToArray() is { Length: > 0 } inactive ? inactive : null,
-                Metadata = state.Metadata?.Normalize(),
+                Metadata = NormalizeStoredMetadata(state.Metadata),
                 KeywordBuilder = state.KeywordBuilder?.NormalizeStored(),
                 AssignedBrand = string.IsNullOrWhiteSpace(state.AssignedBrand) ? null : state.AssignedBrand.Trim()
             };
@@ -84,7 +85,7 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
         {
             FrameModeContractVersion = BookProcessingState.CurrentFrameModeContractVersion,
             InteriorFrameOverrides = NormalizeFrameOverrides(state.InteriorFrameOverrides),
-            Metadata = state.Metadata?.Normalize(),
+            Metadata = NormalizeStoredMetadata(state.Metadata),
             KeywordBuilder = state.KeywordBuilder?.NormalizeStored(),
             AssignedBrand = string.IsNullOrWhiteSpace(state.AssignedBrand) ? null : state.AssignedBrand.Trim()
         };
@@ -126,6 +127,13 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
 
     private static FileReference StateFile(BookWorkspace workspace) =>
         new(Path.Combine(workspace.WorkingDirectory.Value, "state", "book-state.json"));
+
+    private static BookProductionMetadata? NormalizeStoredMetadata(BookProductionMetadata? metadata)
+    {
+        if (metadata is null) return null;
+        var title = BookProductionMetadata.NormalizeSingleLine(metadata.Title);
+        return metadata.Normalize() with { Title = title };
+    }
 
     private static int ReadFrameModeContractVersion(JsonElement root)
     {

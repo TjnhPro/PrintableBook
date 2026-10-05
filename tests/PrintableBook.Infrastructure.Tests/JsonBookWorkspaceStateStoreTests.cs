@@ -48,7 +48,7 @@ public sealed class JsonBookWorkspaceStateStoreTests : IAsyncLifetime
         await store.SaveAsync(workspace, state);
         var restored = await store.LoadAsync(workspace);
 
-        Assert.Equal("Title", restored!.Metadata!.Title);
+        Assert.Equal("TITLE", restored!.Metadata!.Title);
         Assert.Equal("ABCD", restored.Metadata.Subcover);
         Assert.Equal("Line one\nLine two", restored.Metadata.Description);
         Assert.Equal("Jane Doe", restored.Metadata.Author);
@@ -62,7 +62,7 @@ public sealed class JsonBookWorkspaceStateStoreTests : IAsyncLifetime
         var store = new JsonBookWorkspaceStateStore(new PhysicalFileSystem());
         var state = BookProcessingState.NotStarted(new BookId("book")) with
         {
-            Metadata = BookProductionMetadata.Create("Legacy", "and and", "only four terms here", null, "Jane Doe"),
+            Metadata = new BookProductionMetadata("Legacy", "and and", "only four terms here", null, "Jane Doe"),
             AssignedBrand = "Brand A"
         };
 
