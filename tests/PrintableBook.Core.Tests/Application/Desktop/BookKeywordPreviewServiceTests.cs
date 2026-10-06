@@ -12,7 +12,7 @@ public sealed class BookKeywordPreviewServiceTests
         .TrimEnd('=').Replace('+', '-').Replace('/', '_'));
 
     [Fact]
-    public async Task Shuffle_creates_preview_without_reading_or_writing_book_state()
+    public async Task Shuffle_creates_preview_after_reading_language_without_writing_book_state()
     {
         var stateStore = new StateStore();
         var service = CreateService(stateStore);
@@ -23,8 +23,36 @@ public sealed class BookKeywordPreviewServiceTests
         Assert.Equal(Seed.Value, result.Preview.ShuffleSeed);
         Assert.False(string.IsNullOrWhiteSpace(result.Receipt));
         Assert.False(string.IsNullOrWhiteSpace(result.ReceiptDigest));
-        Assert.Equal(0, stateStore.Loads);
+        Assert.Equal(1, stateStore.Loads);
         Assert.Equal(0, stateStore.Saves);
+    }
+
+    [Fact]
+    public async Task Shuffle_uses_only_the_profile_for_the_persisted_book_language()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book")) with { LanguageCode = "de" };
+        var settings = new SettingsStore(SettingsWithProfiles(
+            ("en", ["English generic"]),
+            ("de", ["German generic"])));
+        var service = CreateService(new StateStore(state), settings);
+
+        var result = await service.ShuffleAsync(Book(), ["book phrase"], null);
+
+        Assert.Equal(["German generic"], result.Preview.GenericKeywords);
+        Assert.DoesNotContain("English generic", result.Preview.GenericKeywords!);
+    }
+
+    [Fact]
+    public async Task Shuffle_does_not_fall_back_to_English_when_the_book_language_profile_is_empty()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book")) with { LanguageCode = "de" };
+        var settings = new SettingsStore(SettingsWithProfiles(("en", ["English generic"])));
+        var service = CreateService(new StateStore(state), settings);
+
+        var result = await service.ShuffleAsync(Book(), ["German book phrase"], null);
+
+        Assert.Empty(result.Preview.GenericKeywords!);
+        Assert.Contains("German book phrase", result.Preview.SourceKeywords);
     }
 
     [Fact]
@@ -106,6 +134,25 @@ public sealed class BookKeywordPreviewServiceTests
     }
 
     [Fact]
+    public async Task Changing_an_unrelated_language_profile_does_not_make_the_preview_stale()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("book")) with { LanguageCode = "de" };
+        var settings = new SettingsStore(SettingsWithProfiles(
+            ("en", ["first English generic"]),
+            ("de", ["German generic"])));
+        var service = CreateService(new StateStore(state), settings);
+        var preview = await service.ShuffleAsync(Book(), ["cute animals"], null);
+        settings.Value = SettingsWithProfiles(
+            ("en", ["changed English generic"]),
+            ("de", ["German generic"]));
+
+        var saved = await service.SaveAsync(Book(), preview.Receipt);
+
+        Assert.Equal("saved", saved.Disposition);
+        Assert.Equal(["German generic"], saved.KeywordBuilder.GenericKeywords);
+    }
+
+    [Fact]
     public async Task Crawl_source_is_resolved_from_the_signed_preview()
     {
         var service = CreateService(new StateStore());
@@ -147,6 +194,16 @@ public sealed class BookKeywordPreviewServiceTests
             new FixedSeedSource(),
             new FixedBuildIdFactory(),
             new FixedTimeProvider());
+
+    private static GlobalSettings SettingsWithProfiles(
+        params (string LanguageCode, IReadOnlyList<string> Keywords)[] profiles) =>
+        GlobalSettings.Default with
+        {
+            GenericKeywordsByLanguage = profiles.ToDictionary(
+                profile => profile.LanguageCode,
+                profile => profile.Keywords,
+                StringComparer.Ordinal)
+        };
 
     private static DiscoveredBook Book(string id = "book")
     {

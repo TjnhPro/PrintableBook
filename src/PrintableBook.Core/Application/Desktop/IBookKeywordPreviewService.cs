@@ -54,7 +54,8 @@ public sealed class BookKeywordPreviewService(
     {
         ArgumentNullException.ThrowIfNull(book);
         ArgumentNullException.ThrowIfNull(bookKeywords);
-        var generic = await LoadGenericAsync(cancellationToken);
+        var state = await LoadStateAsync(book, cancellationToken);
+        var generic = await LoadGenericAsync(state, cancellationToken);
         var preview = builder.Build(generic, bookKeywords, adsAsin, buildIdFactory.Create(), timeProvider.GetUtcNow(), seedSource.Create());
         return Issue(book, preview);
     }
@@ -86,7 +87,8 @@ public sealed class BookKeywordPreviewService(
     {
         ArgumentNullException.ThrowIfNull(book);
         var payload = ValidateReceiptForBook(book, baseReceipt);
-        var generic = await LoadGenericAsync(cancellationToken);
+        var state = await LoadStateAsync(book, cancellationToken);
+        var generic = await LoadGenericAsync(state, cancellationToken);
         EnsureGenericCurrent(payload, generic);
         var preview = builder.Build(
             generic,
@@ -105,7 +107,8 @@ public sealed class BookKeywordPreviewService(
     {
         ArgumentNullException.ThrowIfNull(book);
         var payload = ValidateReceiptForBook(book, receipt);
-        var generic = await LoadGenericAsync(cancellationToken);
+        var state = await LoadStateAsync(book, cancellationToken);
+        var generic = await LoadGenericAsync(state, cancellationToken);
         EnsureGenericCurrent(payload, generic);
         var rebuilt = builder.Build(
             generic,
@@ -116,7 +119,6 @@ public sealed class BookKeywordPreviewService(
             new KeywordShuffleSeed(payload.ShuffleSeed));
         EnsureExact(payload.InputFingerprint, payload.OutputDigest, rebuilt);
 
-        var state = await LoadStateAsync(book, cancellationToken);
         if (string.Equals(state.KeywordBuilder?.BuildId, rebuilt.BuildId, StringComparison.Ordinal) &&
             string.Equals(state.KeywordBuilder?.OutputDigest, rebuilt.OutputDigest, StringComparison.Ordinal))
         {
@@ -138,7 +140,8 @@ public sealed class BookKeywordPreviewService(
         if (!string.IsNullOrWhiteSpace(previewReceipt))
         {
             var payload = ValidateReceiptForBook(book, previewReceipt);
-            var generic = await LoadGenericAsync(cancellationToken);
+            var state = await LoadStateAsync(book, cancellationToken);
+            var generic = await LoadGenericAsync(state, cancellationToken);
             EnsureGenericCurrent(payload, generic);
             source = builder.Build(generic, payload.BookKeywords, payload.AdsAsinSource, payload.BuildId,
                 DateTimeOffset.FromUnixTimeMilliseconds(payload.BuiltAtUnixMilliseconds), new KeywordShuffleSeed(payload.ShuffleSeed));
@@ -148,7 +151,8 @@ public sealed class BookKeywordPreviewService(
         else
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(savedBuildId);
-            var saved = (await LoadStateAsync(book, cancellationToken)).KeywordBuilder?.NormalizeStored()
+            var state = await LoadStateAsync(book, cancellationToken);
+            var saved = state.KeywordBuilder?.NormalizeStored()
                 ?? throw Stale("The saved keyword output was not found. Refresh and try again.", "refresh");
             if (!string.Equals(saved.BuildId, savedBuildId, StringComparison.Ordinal)) throw Stale("The saved keyword output changed. Refresh and try again.", "refresh");
             if (saved.AlgorithmVersion != BookKeywordBuilder.CurrentAlgorithmVersion || string.IsNullOrWhiteSpace(saved.ShuffleSeed) ||
@@ -156,7 +160,7 @@ public sealed class BookKeywordPreviewService(
             {
                 throw new KeywordPreviewException(new("keyword_legacy_shuffle_required", "Shuffle once to update this legacy keyword output.", "preview", "shuffle"));
             }
-            var generic = await LoadGenericAsync(cancellationToken);
+            var generic = await LoadGenericAsync(state, cancellationToken);
             source = builder.Build(generic, saved.SourceKeywords, saved.AdsAsinSource, saved.BuildId, saved.BuiltAtUtc, new KeywordShuffleSeed(saved.ShuffleSeed));
             EnsureExact(saved.InputFingerprint, saved.OutputDigest, source);
         }
@@ -211,8 +215,10 @@ public sealed class BookKeywordPreviewService(
             "The keyword preview no longer matches its inputs. Shuffle again.", "shuffle");
     }
 
-    private async ValueTask<IReadOnlyList<string>> LoadGenericAsync(CancellationToken cancellationToken) =>
-        (await settingsStore.LoadAsync(cancellationToken)).EffectiveGenericKeywords;
+    private async ValueTask<IReadOnlyList<string>> LoadGenericAsync(
+        BookProcessingState state,
+        CancellationToken cancellationToken) =>
+        (await settingsStore.LoadAsync(cancellationToken)).GetEffectiveGenericKeywords(state.LanguageCode);
 
     private async ValueTask<BookProcessingState> LoadStateAsync(DiscoveredBook book, CancellationToken cancellationToken) =>
         await stateStore.LoadAsync(book.Workspace, cancellationToken) ?? BookProcessingState.NotStarted(book.Id);

@@ -195,7 +195,33 @@ public sealed class BookCatalogMetadataServiceTests
     }
 
     [Fact]
-    public async Task SaveKeywordBuilder_validation_failure_does_not_load_or_save_state()
+    public async Task SaveKeywordBuilder_loads_generic_keywords_for_the_persisted_book_language()
+    {
+        var stateStore = new StateStore(BookProcessingState.NotStarted(new BookId("book")) with { LanguageCode = "fr" });
+        var settingsStore = new SettingsStore(GlobalSettings.Default with
+        {
+            GenericKeywordsByLanguage = new Dictionary<string, IReadOnlyList<string>>
+            {
+                ["en"] = ["English generic"],
+                ["fr"] = ["French generic"]
+            }
+        });
+        var service = new BookCatalogMetadataService(
+            stateStore,
+            new BrandStore(),
+            new BookKeywordBuilder(new NoOpKeywordShuffler()),
+            settingsStore);
+
+        var result = await service.SaveKeywordBuilderAsync(Book(), ["French book phrase"], null);
+
+        Assert.Equal(["French generic"], result.GenericKeywords);
+        Assert.DoesNotContain("English generic", result.GenericKeywords!);
+        Assert.Equal(1, stateStore.Loads);
+        Assert.Equal(1, stateStore.Saves);
+    }
+
+    [Fact]
+    public async Task SaveKeywordBuilder_validation_failure_loads_language_but_does_not_save_state()
     {
         var stateStore = new StateStore(BookProcessingState.NotStarted(new BookId("book")));
         var service = new BookCatalogMetadataService(stateStore, new BrandStore());
@@ -204,7 +230,7 @@ public sealed class BookCatalogMetadataServiceTests
             service.SaveKeywordBuilderAsync(Book(), [new string('a', 51)], null).AsTask());
 
         Assert.Equal("keyword_word_too_long", exception.Error.Code);
-        Assert.Equal(0, stateStore.Loads);
+        Assert.Equal(1, stateStore.Loads);
         Assert.Equal(0, stateStore.Saves);
     }
 

@@ -60,11 +60,11 @@ public sealed class BookCatalogMetadataService(
     {
         ArgumentNullException.ThrowIfNull(book);
         ArgumentNullException.ThrowIfNull(keywords);
+        var state = await LoadStateAsync(book, cancellationToken);
         var genericKeywords = settingsStore is null
             ? []
-            : (await settingsStore.LoadAsync(cancellationToken)).EffectiveGenericKeywords;
+            : (await settingsStore.LoadAsync(cancellationToken)).GetEffectiveGenericKeywords(state.LanguageCode);
         var result = keywordBuilder.Build(genericKeywords, keywords, adsAsin, Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow);
-        var state = await LoadStateAsync(book, cancellationToken);
         await stateStore.SaveAsync(book.Workspace, state with { KeywordBuilder = result }, cancellationToken);
         return result;
     }
