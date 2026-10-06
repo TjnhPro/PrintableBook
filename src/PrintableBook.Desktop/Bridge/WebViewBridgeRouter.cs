@@ -1381,10 +1381,7 @@ internal sealed class WebViewBridgeRouter(
             {
                 var settings = payload.Deserialize<GlobalSettings>(JsonOptions);
                 if (settings is null) return new BridgeResponse(Version, request.Id, false, null, "invalid_settings");
-                settings = settings with
-                {
-                    GenericKeywords = BookTextPolicy.NormalizePhrases(settings.EffectiveGenericKeywords, distinct: true)
-                };
+                settings = GenericKeywordProfilePolicy.NormalizeForSave(settings);
                 await settingsStore.SaveAsync(settings, cancellationToken);
                 return BridgeResponse.Succeeded(request.Id, "settings.saved", settings);
             }
@@ -1399,6 +1396,10 @@ internal sealed class WebViewBridgeRouter(
             catch (S3StorageValidationException exception)
             {
                 return new BridgeResponse(Version, request.Id, false, null, exception.Code);
+            }
+            catch (ArgumentException)
+            {
+                return new BridgeResponse(Version, request.Id, false, null, "invalid_settings");
             }
         }
         catch (OperationCanceledException)

@@ -33,6 +33,9 @@
   state.bookCloneFeedbackError = false;
   state.bookCloneNotice = "";
   state.bookCloneNoticeBookId = "";
+  state.settingsGenericLanguageCode = "en";
+  state.settingsGenericKeywordDrafts = new Map();
+  state.settingsGenericKeywordDraftsInitialized = false;
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;" }[character]));
   const valueFor = (object, name, fallback = null) => object?.[name] ?? object?.[name[0].toUpperCase() + name.slice(1)] ?? fallback;
@@ -273,7 +276,46 @@
   };
   const keywordBuilderFor = (summary) => valueFor(summary, "keywordBuilder", null);
   const normalizeKeywordPhrases = (sourceText) => String(sourceText ?? "").split(/\r?\n/u).map((line) => metadataTerms(line).join(" ")).filter(Boolean);
-  const genericKeywords = () => valueFor(valueFor(window.appSnapshot, "globalSettings", {}), "genericKeywords", []).map(String);
+  const persistedGenericKeywords = (languageCode) => {
+    const settings = valueFor(window.appSnapshot, "globalSettings", {});
+    const profiles = valueFor(settings, "genericKeywordsByLanguage", null);
+    const code = String(languageCode ?? "en").toLocaleLowerCase();
+    if (profiles && Array.isArray(valueFor(profiles, code, null))) return valueFor(profiles, code, []).map(String);
+    return code === "en" ? valueFor(settings, "genericKeywords", []).map(String) : [];
+  };
+  const resetGenericKeywordDrafts = () => {
+    const languages = supportedLanguages();
+    state.settingsGenericKeywordDrafts = new Map(languages.map((language) => {
+      const code = String(valueFor(language, "code", "")).toLocaleLowerCase();
+      return [code, persistedGenericKeywords(code).join("\n")];
+    }));
+    if (!state.settingsGenericKeywordDrafts.has(state.settingsGenericLanguageCode)) {
+      state.settingsGenericLanguageCode = state.settingsGenericKeywordDrafts.has("en") ? "en" : state.settingsGenericKeywordDrafts.keys().next().value ?? "";
+    }
+    state.settingsGenericKeywordDraftsInitialized = true;
+  };
+  const ensureGenericKeywordDrafts = () => {
+    if (!state.settingsGenericKeywordDraftsInitialized) resetGenericKeywordDrafts();
+  };
+  const genericKeywords = (languageCode = "en") => {
+    ensureGenericKeywordDrafts();
+    const code = String(languageCode ?? "en").toLocaleLowerCase();
+    return normalizeKeywordPhrases(state.settingsGenericKeywordDrafts.get(code) ?? persistedGenericKeywords(code).join("\n"));
+  };
+  const storeGenericKeywordEditorDraft = () => {
+    const editor = document.querySelector("[data-generic-keywords]");
+    if (editor && state.settingsGenericLanguageCode) state.settingsGenericKeywordDrafts.set(state.settingsGenericLanguageCode, String(editor.value ?? ""));
+  };
+  const showGenericKeywordLanguage = (languageCode) => {
+    storeGenericKeywordEditorDraft();
+    const language = supportedLanguages().find((option) => String(valueFor(option, "code", "")).toLocaleLowerCase() === String(languageCode ?? "").toLocaleLowerCase());
+    if (!language) return;
+    state.settingsGenericLanguageCode = String(valueFor(language, "code", "")).toLocaleLowerCase();
+    const editor = document.querySelector("[data-generic-keywords]");
+    if (editor) editor.value = state.settingsGenericKeywordDrafts.get(state.settingsGenericLanguageCode) ?? "";
+    const label = document.querySelector("[data-generic-keyword-language-label]");
+    if (label) label.textContent = `${valueFor(language, "name", state.settingsGenericLanguageCode)} (${state.settingsGenericLanguageCode})`;
+  };
   const normalizeKeywordBuilderDraft = (draft) => ({ keywords: normalizeKeywordPhrases(draft?.sourceText), adsAsin: String(draft?.adsAsin ?? "").trim() });
   const keywordBuilderPersistedValues = (summary) => {
     const saved = keywordBuilderFor(summary);
@@ -1131,17 +1173,19 @@
   };
 
   const renderConfiguration = () => {
+    ensureGenericKeywordDrafts();
     const settings = valueFor(window.appSnapshot, "globalSettings", {});
     const setting = (name, fallback) => valueFor(settings, name, fallback);
     const grouped = (group, name, fallback) => valueFor(valueFor(settings, group, {}), name, fallback);
     const detectionInput = (label, name, fallback, extra = "") => `<label class="field"><span>${label}</span><input class="control" data-setting-group="borderLineDetection" data-setting="${name}" type="number" ${extra} value="${grouped("borderLineDetection", name, fallback)}"></label>`;
     const group = (id, title, description, fields, wide = false) => `<fieldset class="configuration-group ${wide ? "configuration-group-wide" : ""}" aria-describedby="${id}-help"><legend>${title}</legend><p id="${id}-help">${description}</p>${fields}</fieldset>`;
-    const genericKeywordText = genericKeywords().join("\n");
+    const genericKeywordLanguage = supportedLanguages().find((language) => String(valueFor(language, "code", "")).toLocaleLowerCase() === state.settingsGenericLanguageCode) ?? supportedLanguages()[0];
+    const genericKeywordText = state.settingsGenericKeywordDrafts.get(state.settingsGenericLanguageCode) ?? "";
     const feedback = state.settingsFeedback || "Ready";
     const feedbackState = state.settingsFeedbackError ? "error" : state.settingsSavePending ? "saving" : feedback === "Saved" ? "saved" : "ready";
     const runtime = `<div class="configuration-field-grid"><label class="field"><span>Maximum concurrency</span><input class="control" data-setting="maximumPageConcurrency" type="number" min="1" max="12" value="${setting("maximumPageConcurrency", 4)}"></label></div>`;
     const artworkPreparation = `<div class="configuration-field-grid three"><label class="field"><span>Artwork dark threshold</span><input class="control" data-setting="artworkDetectionThreshold" type="number" min="0" max="255" value="${setting("artworkDetectionThreshold", 20)}"></label><label class="field"><span>Maximum artwork side (px)</span><input class="control" data-setting="artworkMaximumSide" type="number" min="1" value="${setting("artworkMaximumSide", 2270)}"></label><label class="field"><span>Normalized source size (px)</span><input class="control" data-setting-group="artworkSourceNormalization" data-setting="normalizedSourceSize" type="number" min="1" value="${grouped("artworkSourceNormalization", "normalizedSourceSize", 2048)}"></label></div>`;
-    const keywordDefaults = `<label class="field keyword-settings-field" for="generic-keywords-input"><span>Generic Keywords</span><textarea id="generic-keywords-input" class="control keyword-list-input" rows="5" data-generic-keywords aria-describedby="generic-keywords-help" autocomplete="off" spellcheck="false">${escapeHtml(genericKeywordText)}</textarea><small id="generic-keywords-help">One phrase per line. These shared phrases are saved once and used first whenever a Book is built.</small></label>`;
+    const keywordDefaults = `<div class="configuration-field-grid two"><label class="field" for="generic-keywords-language"><span>Language</span><select id="generic-keywords-language" class="control" data-action="generic-keyword-language" data-generic-keyword-language>${supportedLanguages().map((language) => { const code = String(valueFor(language, "code", "")).toLocaleLowerCase(); return `<option value="${escapeHtml(code)}" ${code === state.settingsGenericLanguageCode ? "selected" : ""}>${escapeHtml(valueFor(language, "name", code))} (${escapeHtml(code)})</option>`; }).join("")}</select><small>Select the language profile to edit.</small></label><label class="field keyword-settings-field" for="generic-keywords-input"><span>Generic Keywords · <strong data-generic-keyword-language-label>${escapeHtml(valueFor(genericKeywordLanguage, "name", state.settingsGenericLanguageCode))} (${escapeHtml(state.settingsGenericLanguageCode)})</strong></span><textarea id="generic-keywords-input" class="control keyword-list-input" rows="5" data-generic-keywords aria-describedby="generic-keywords-help" autocomplete="off" spellcheck="false">${escapeHtml(genericKeywordText)}</textarea><small id="generic-keywords-help">One phrase per line. Books use only the profile matching their persisted Language; empty profiles do not fall back.</small></label></div>`;
     const workingCanvas = `<div class="configuration-field-grid two"><label class="field"><span>Working Area width (px)</span><input class="control" data-setting="workingPageWidth" type="number" min="1" value="${setting("workingPageWidth", 2550)}"></label><label class="field"><span>Working Area height (px)</span><input class="control" data-setting="workingPageHeight" type="number" min="1" value="${setting("workingPageHeight", 2550)}"></label></div>`;
     const finalOutput = `<div class="configuration-field-grid three"><label class="field"><span>Final Page width (px)</span><input class="control" data-setting="finalPageWidth" type="number" min="1" value="${setting("finalPageWidth", 2588)}"></label><label class="field"><span>Final Page height (px)</span><input class="control" data-setting="finalPageHeight" type="number" min="1" value="${setting("finalPageHeight", 2625)}"></label><label class="field"><span>Output DPI</span><input class="control" data-setting="dpi" type="number" min="1" value="${setting("dpi", 300)}"></label></div>`;
     const borderRange = `<div class="configuration-field-grid three">${detectionInput("Pass 1 depth", "pass1SearchDepth", 200, "min=1")}${detectionInput("Pass 2 depth", "pass2SearchDepth", 320, "min=1")}${detectionInput("Corner padding", "cornerSearchPadding", 40, "min=0")}</div>`;
@@ -1156,7 +1200,7 @@
     content.innerHTML = `<section class="configuration-page"><div class="page-header"><div><h1>Configuration</h1><p>Manage global application settings.</p></div></div><form class="panel configuration-panel" data-form="configuration"><header class="configuration-panel-header"><div><p class="eyebrow">Settings</p><h2>Application configuration</h2><p>Shared defaults for keyword building, artwork preparation, final Interior output, and S3 publishing.</p></div><div class="configuration-panel-actions"><span class="configuration-save-status" data-settings-feedback data-state="${feedbackState}" role="${state.settingsFeedbackError ? "alert" : "status"}" aria-live="polite">${escapeHtml(feedback)}</span>${refreshAction("Load", state.settingsSavePending)}<button class="button-primary" type="submit" data-settings-save aria-busy="${state.settingsSavePending}" ${state.settingsSavePending ? "disabled" : ""}>${state.settingsSavePending ? "Saving…" : "Save"}</button></div></header><div class="configuration-panel-scroll"><div class="configuration-group-grid">${group("configuration-s3", "S3 Storage", "Configuration is saved with the app. Credentials are encrypted for the current Windows user and replaced separately.", s3Storage, true)}${group("configuration-runtime", "Processing capacity", "Controls the number of pages processed in parallel.", runtime)}${group("configuration-artwork-preparation", "Artwork preparation", "Normalizes source artwork before border detection and page composition.", artworkPreparation)}${group("configuration-keywords", "Keyword Builder defaults", "Shared phrases applied before each Book's own keywords.", keywordDefaults, true)}${group("configuration-working-canvas", "Working canvas", "The processing canvas must be at least as large as the maximum artwork side.", workingCanvas)}${group("configuration-final-output", "Final Interior output", "The exported raster must be at least as large as the working canvas.", finalOutput)}${group("configuration-border-range", "Border search range", "Pass 2 must include Pass 1 and remain within half of the normalized source.", borderRange)}${group("configuration-border-tolerances", "Border tolerances", "Controls how much depth and corner variation a detected frame may contain.", borderTolerances)}${group("configuration-border-acceptance", "Border acceptance rules", "Defines the segment, corner, support, and span evidence required to accept a frame.", borderAcceptance, true)}</div></div></form></section>`;
   };
   const updateSettingsSaveUi = () => {
-    document.querySelectorAll('[data-setting], [data-generic-keywords]').forEach((input) => { input.disabled = state.settingsSavePending; });
+    document.querySelectorAll('[data-setting], [data-generic-keywords], [data-generic-keyword-language]').forEach((input) => { input.disabled = state.settingsSavePending; });
     const save = content.querySelector("[data-settings-save]");
     if (save) {
       save.disabled = state.settingsSavePending;
@@ -1183,7 +1227,12 @@
       else if (group) { payload[group] ??= {}; payload[group][input.dataset.setting] = Number(input.value); }
       else payload[input.dataset.setting] = Number(input.value);
     });
-    payload.genericKeywords = normalizeKeywordPhrases(document.querySelector("[data-generic-keywords]")?.value);
+    storeGenericKeywordEditorDraft();
+    payload.genericKeywordsByLanguage = Object.fromEntries(supportedLanguages().map((language) => {
+      const code = String(valueFor(language, "code", "")).toLocaleLowerCase();
+      return [code, normalizeKeywordPhrases(state.settingsGenericKeywordDrafts.get(code) ?? "")];
+    }));
+    payload.genericKeywords = payload.genericKeywordsByLanguage.en ?? [];
     state.settingsSavePending = true;
     state.settingsFeedback = "Saving…";
     state.settingsFeedbackError = false;
@@ -1639,7 +1688,7 @@
     const refreshing = state.keywordBuilderRefreshPending && state.keywordBuilderRefreshBookId === id;
     const refreshNeeded = state.keywordBuilderRefreshNeeded && state.keywordBuilderRefreshBookId === id;
     const feedbackVisible = state.catalogMutationTarget === id && state.catalogMutationCommand.startsWith("book.keywords.");
-    const genericKeywordCount = genericKeywords().length;
+    const genericKeywordCount = genericKeywords(languageCodeFor(summary)).length;
     const disabled = catalogMutationBusy() || processIsActive();
     const stateLabel = pendingAction === "shuffle" ? "Shuffling…" : pendingAction === "save" ? "Saving…" : pendingAction === "update-ads-asin" ? "Applying ASINs…" : validation ? "Needs attention" : refreshing ? "Saved · Refreshing…" : refreshNeeded ? "Saved · Refresh needed" : previewState ? "Preview · Not saved" : dirty ? "Shuffle required" : saved ? "Saved" : "Not shuffled";
     const outputMessage = previewState ? "Unsaved shuffled preview" : saved ? "Last saved generated keywords" : "Shuffle inputs to generate a preview.";
@@ -2960,6 +3009,9 @@
     beginSettingsSave();
   });
   content.addEventListener("input", (event) => {
+    if (Object.hasOwn(event.target.dataset, "genericKeywords") && state.settingsGenericLanguageCode) {
+      state.settingsGenericKeywordDrafts.set(state.settingsGenericLanguageCode, String(event.target.value ?? ""));
+    }
     if (!state.settingsSavePending && (event.target.dataset.setting || Object.hasOwn(event.target.dataset, "genericKeywords"))) {
       state.settingsFeedback = "";
       state.settingsFeedbackError = false;
@@ -3035,6 +3087,7 @@
     }
   });
   content.addEventListener("change", (event) => {
+    if (event.target.dataset.action === "generic-keyword-language") showGenericKeywordLanguage(event.target.value);
     if (event.target.dataset.action === "clone-brand-language") { state.brandCloneLanguageCode = event.target.value; state.brandCloneFeedback = ""; state.brandCloneFeedbackError = false; render("brands", false); }
     if (event.target.dataset.action === "clone-book-language") { state.bookCloneLanguageCode = event.target.value; state.bookCloneFeedback = ""; state.bookCloneFeedbackError = false; render("books", false); window.requestAnimationFrame?.(() => document.querySelector('[data-action="clone-book-language"]')?.focus?.()); }
     if (event.target.dataset.action === "book-status") { state.bookStatus = bookStatuses.includes(event.target.value) ? event.target.value : "All"; state.bookPage = 1; render("books", false); }
@@ -3310,6 +3363,7 @@
         }
       }
       window.appSnapshot = incomingSnapshot;
+      state.settingsGenericKeywordDraftsInitialized = false;
       if (cloneWasAwaiting) {
         const clonedBrand = valueFor(discovery(), "brands", []).find((brand) => String(valueFor(brand, "name", "")) === cloneDestination);
         if (clonedBrand) {
@@ -3412,6 +3466,7 @@
       beginApplicationRefresh();
     } else if (ok && command === "settings.saved") {
       window.appSnapshot = { ...(window.appSnapshot ?? {}), globalSettings: valueFor(response, "payload", {}) };
+      state.settingsGenericKeywordDraftsInitialized = false;
       state.settingsSavePending = false;
       state.settingsFeedback = "Saved";
       state.settingsFeedbackError = false;

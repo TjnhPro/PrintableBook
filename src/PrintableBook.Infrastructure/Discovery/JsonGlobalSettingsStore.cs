@@ -1,9 +1,7 @@
 using System.Text.Json;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
-using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Abstractions;
-using PrintableBook.Core.Domain.Books;
 
 namespace PrintableBook.Infrastructure.Discovery;
 
@@ -20,7 +18,6 @@ public sealed class JsonGlobalSettingsStore(IApplicationRootDiscovery discovery,
     {
         if (!await fileSystem.FileExistsAsync(paths.SettingsFile, cancellationToken)) return NormalizeLoaded(GlobalSettings.Default);
         var settings = JsonSerializer.Deserialize<GlobalSettings>(await fileSystem.ReadTextAsync(paths.SettingsFile, cancellationToken), Options) ?? GlobalSettings.Default;
-        ValidateLanguageProfiles(settings.GenericKeywordsByLanguage);
         settings = NormalizeLoaded(settings);
         Validate(settings);
         return settings;
@@ -28,7 +25,6 @@ public sealed class JsonGlobalSettingsStore(IApplicationRootDiscovery discovery,
 
     public async ValueTask SaveAsync(GlobalSettings settings, CancellationToken cancellationToken = default)
     {
-        ValidateLanguageProfiles(settings.GenericKeywordsByLanguage);
         settings = NormalizeForSave(settings);
         Validate(settings);
         var paths = (await discovery.DiscoverAsync(cancellationToken)).Paths;
@@ -61,68 +57,22 @@ public sealed class JsonGlobalSettingsStore(IApplicationRootDiscovery discovery,
 
     private static GlobalSettings NormalizeLoaded(GlobalSettings settings)
     {
-        var profiles = NormalizeProfiles(settings, preferLegacyEnglish: settings.GenericKeywords is not null);
-        return Normalize(settings, profiles);
+        settings = GenericKeywordProfilePolicy.NormalizeLoaded(settings);
+        return Normalize(settings);
     }
 
     private static GlobalSettings NormalizeForSave(GlobalSettings settings)
     {
-        var profiles = NormalizeProfiles(settings, preferLegacyEnglish: false);
-        return Normalize(settings, profiles);
+        settings = GenericKeywordProfilePolicy.NormalizeForSave(settings);
+        return Normalize(settings);
     }
 
-    private static GlobalSettings Normalize(
-        GlobalSettings settings,
-        IReadOnlyDictionary<string, IReadOnlyList<string>> profiles) => settings with
+    private static GlobalSettings Normalize(GlobalSettings settings) => settings with
     {
         ArtworkSourceNormalization = settings.EffectiveArtworkSourceNormalization,
         BorderLineDetection = settings.EffectiveBorderLineDetection,
-        GenericKeywords = profiles["en"],
-        GenericKeywordsByLanguage = profiles,
         S3Storage = settings.EffectiveS3Storage
     };
-
-    private static IReadOnlyDictionary<string, IReadOnlyList<string>> NormalizeProfiles(
-        GlobalSettings settings,
-        bool preferLegacyEnglish)
-    {
-        var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
-        foreach (var language in SupportedLanguageCatalog.All)
-        {
-            var source = FindProfile(settings.GenericKeywordsByLanguage, language.Code);
-            if (language.Code == "en" && (preferLegacyEnglish || source is null))
-            {
-                source = settings.GenericKeywords;
-            }
-
-            result.Add(language.Code, BookTextPolicy.NormalizePhrases(source ?? [], distinct: true));
-        }
-
-        return result;
-    }
-
-    private static IReadOnlyList<string>? FindProfile(
-        IReadOnlyDictionary<string, IReadOnlyList<string>>? profiles,
-        string languageCode) =>
-        profiles?.FirstOrDefault(pair => string.Equals(pair.Key, languageCode, StringComparison.OrdinalIgnoreCase)).Value;
-
-    private static void ValidateLanguageProfiles(IReadOnlyDictionary<string, IReadOnlyList<string>>? profiles)
-    {
-        if (profiles is null) return;
-        var canonicalCodes = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var code in profiles.Keys)
-        {
-            if (!SupportedLanguageCatalog.TryGet(code, out var language))
-            {
-                throw new ArgumentException($"Unsupported Generic Keywords language code '{code}'.", nameof(profiles));
-            }
-
-            if (!canonicalCodes.Add(language.Code))
-            {
-                throw new ArgumentException($"Duplicate Generic Keywords language code '{language.Code}'.", nameof(profiles));
-            }
-        }
-    }
 
     private static bool IsRatio(double value) => value is >= 0 and <= 1;
 }

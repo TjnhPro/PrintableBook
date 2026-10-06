@@ -143,6 +143,23 @@ public sealed class JsonGlobalSettingsStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task SaveAsync_rejects_duplicate_language_profiles_after_code_normalization()
+    {
+        var paths = CreatePaths();
+        var settings = GlobalSettings.Default with
+        {
+            GenericKeywordsByLanguage = new Dictionary<string, IReadOnlyList<string>>
+            {
+                ["de"] = ["first"],
+                ["DE"] = ["second"]
+            }
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => CreateStore(paths).SaveAsync(settings).AsTask());
+        Assert.False(File.Exists(paths.SettingsFile.Value));
+    }
+
+    [Fact]
     public async Task SaveAsync_round_trips_s3_configuration_without_changing_unrelated_settings()
     {
         var paths = CreatePaths();
