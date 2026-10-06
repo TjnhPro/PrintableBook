@@ -36,7 +36,7 @@ Trong tab **Overview** của Book detail, card **Book Information** lưu riêng:
 
 Tab **ASIN Research** chứa một Keyword Builder workspace hai panel: **Build inputs** bên trái và **Generated output** bên phải. Crawl Results nằm ngay dưới Book Keywords trong Build inputs:
 
-1. Mở **Settings → Keyword Builder**, nhập **Generic Keywords** dùng chung, mỗi dòng một phrase, rồi Save settings.
+1. Mở **Configuration → Keyword Builder defaults**, chọn Language rồi nhập **Generic Keywords**, mỗi dòng một phrase. Có thể đổi qua lại giữa các Language mà draft chưa Save vẫn được giữ; nút **Save** ghi atomically toàn bộ profile đang hiển thị trong session.
 2. Trong Book detail, nhập **Book Keywords** riêng của Book, mỗi dòng một phrase.
 3. Có thể nhập nhiều **Ads ASIN (product targets)** trên một dòng, phân cách bằng dấu phẩy. Field này dành cho advertising targets và hoàn toàn tách biệt với ASIN trong Book Information.
 4. Nhấn **Shuffle**. App normalize khoảng trắng, loại Book phrase trùng Generic phrase không phân biệt hoa/thường, xử lý Generic trước Book, rồi tạo một preview chưa lưu.
@@ -47,6 +47,8 @@ Mỗi `keyword_*` tối đa 50 ký tự và không bao giờ cắt giữa word. 
 Sau khi packing hợp lệ, app shuffle word trong từng `keyword_1…keyword_7` có dữ liệu, shuffle các phrase của Ads Keyword và shuffle danh sách Ads ASIN bằng một seed bảo mật. Field rỗng hoặc chỉ có một phần tử được bỏ qua. Preview mang receipt đã ký; Save rebuild cùng seed và từ chối receipt bị sửa, hết hiệu lực, thuộc Book khác hoặc stale. Bấm **Shuffle** lần nữa để chủ động tạo thứ tự mới.
 
 Ads Keyword giữ tối đa 30 phrase: ưu tiên tối đa 20 Generic và 10 Book; nếu một bên thiếu thì bên còn lại bù phần trống. Generic được chọn trước Book để tính quota, sau đó toàn bộ phrase đã chọn được shuffle trước khi lưu.
+
+Generic Keywords có profile riêng cho `en`, `de`, `fr`, `es`, `it`, `pt`, `ja` và `nl`. Keyword Builder luôn chọn profile bằng Language đã persist trong state của Book; Book legacy chưa có Language được xem là `en`, còn mã Language không hợp lệ bị từ chối. Profile trống nghĩa là không dùng Generic Keywords và không fallback sang `en` hay profile khác. Settings legacy chỉ có `genericKeywords` vẫn được đọc như profile `en` mà không tự rewrite file; mỗi lần Save mới sẽ đồng thời mirror profile `en` về field legacy để có thể rollback sang phiên bản cũ.
 
 Generated keywords và Ads Keyword là read-only. **Copy to Clipboard** copy chín giá trị đang hiển thị (`keyword_1…keyword_7`, Ads Keyword, Ads ASIN) trên một dòng, phân cách bằng tab và không kèm label; field rỗng vẫn giữ cột. Preview chưa Save cũng có thể copy để review.
 

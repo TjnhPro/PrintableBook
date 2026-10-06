@@ -206,6 +206,8 @@ Keyword Builder v4 tách **Shuffle preview** khỏi **Save**. Core canonicalize 
 
 Application phát hành opaque receipt gồm payload versioned và HMAC-SHA256 bằng process-local key. Bridge/WebView không được tự khẳng định output: Save xác minh receipt, Book ownership, Generic Keywords fingerprint, rebuild cùng seed và so exact digest trước khi ghi state. Restart làm receipt cũ hết hiệu lực; `preview.open` rebuild persisted v4 và phát receipt mới mà không đổi BuildId/output.
 
+Global Settings lưu Generic Keywords theo canonical language code cho tám profile `en`, `de`, `fr`, `es`, `it`, `pt`, `ja`, `nl`. Load settings legacy ánh xạ `genericKeywords` vào `en` trong memory nhưng không rewrite; Save normalize toàn bộ map trong một lần ghi atomically và mirror `en` về field legacy cho rollback. Application chỉ resolve profile sau khi load Book state: Language thiếu có effective value `en`, Language persisted không hỗ trợ fail closed, và tuyệt đối không fallback chéo profile. Vì receipt fingerprint chỉ chứa profile thực sự được chọn, sửa profile của Language khác không làm preview hiện tại stale.
+
 ASIN Research dùng chính Ads Keyword trong preview đã xác minh:
 
 ```text

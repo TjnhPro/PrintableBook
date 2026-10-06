@@ -41,6 +41,8 @@ Mỗi thư mục trực tiếp trong `sources/` là một Book. Gói Book mới 
 
 Để dùng workflow Production, mở tab **Production** trong Book detail, upload ba PNG canonical, build Cover và Final Interior theo hướng dẫn trong [User Guide](docs/user-guide.md#8-production-assets).
 
+Trong **Configuration → Keyword Builder defaults**, Generic Keywords được lưu thành profile riêng cho `en`, `de`, `fr`, `es`, `it`, `pt`, `ja` và `nl`. Mỗi Book chỉ dùng profile khớp với Language persisted của chính nó; profile trống không fallback sang ngôn ngữ khác.
+
 Trong **Book Detail → ASIN Research**, Keyword Builder và Crawl Results nằm trong cùng workspace hai panel. Nhập Book Keywords rồi bấm **Shuffle** để tạo preview; **Save** ghi đúng preview đang hiển thị và không shuffle lại. Crawl dùng tối đa 30 phrase trong Ads Keyword của preview đã ký, không có ô Search Keywords riêng. ASIN hợp lệ được merge vào Ads ASIN draft và cập nhật preview cùng seed; user vẫn phải review rồi Save. Hướng dẫn đầy đủ và lệnh kiểm thử nằm trong [User Guide](docs/user-guide.md#31-keyword-builder).
 
 Kiểm thử workflow bằng `pwsh ./scripts/test-keyword-workflow.ps1 -Fast`; dùng `-Full` trước khi release. Repo pin .NET SDK và Node trong `global.json`/`.node-version`, còn `npm run verify:css` chỉ so sánh CSS generated trong thư mục tạm và không sửa working tree.
