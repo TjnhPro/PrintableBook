@@ -81,15 +81,16 @@ Với Book theo cấu trúc phẳng cũ, tiếp tục đặt `Book interior/`, `
 ASIN Research dùng Crawl Results đã gộp trong panel Build inputs và chỉ tạo preview/draft quảng cáo; nó không tự lưu Book.
 
 1. Nhập Book Keywords và bấm **Shuffle**. Ads Keyword read-only của preview (tối đa 30 phrase) là nguồn crawl duy nhất; không còn ô Search Keywords riêng.
-2. Bấm **Open Browser** nếu cần đăng nhập hoặc xử lý thông báo Amazon. Nếu chưa mở, **Crawl ASINs** sẽ tự mở browser.
-3. Lần chạy đầu tải CloakBrowser Chromium vài trăm MB. Profile và binary cache nằm tại `.cloakbrowser/` cạnh app để các lần sau không tải lại. Để dùng binary mới nhất, lấy free access key từ `https://cloakbrowser.dev/free` rồi đặt vào biến môi trường `CLOAKBROWSER_LICENSE_KEY` trước khi mở app; Printable Book không đọc, lưu hoặc hiển thị key trong settings/bridge/log.
-4. Review từng row. App chỉ lấy title chứa `coloring book` hoặc `coloring books`, tối đa một ASIN unique cho mỗi phrase; viewport desktop hiển thị năm row và scroll phần còn lại.
-5. Khi crawl kết thúc, app merge/dedupe ASIN hợp lệ vào **Ads ASIN** draft và cập nhật preview bằng cùng seed. Manual target hiện có được giữ. Nếu Book Keywords/Ads ASIN đã đổi trong lúc crawl, kết quả cũ không được apply.
-6. Review preview mới, sau đó bấm **Save**. Crawl không tự Save Book.
+2. Trước lần dùng đầu, mở **Configuration → Amazon market profiles**. Chọn từng Language để review Browser profile key, Amazon Base URL, Locale và Title Terms. Title Terms nhập trên một dòng và phân cách bằng dấu phẩy. Draft được giữ khi đổi Language; nút Save chung ghi toàn bộ profile.
+3. Bấm **Open Browser** nếu cần đăng nhập hoặc xử lý thông báo Amazon. Nếu chưa mở, **Crawl ASINs** sẽ tự mở browser. Market luôn lấy từ Language đã lưu của Book, không chọn thủ công trong ASIN Research.
+4. Lần chạy đầu tải CloakBrowser Chromium vài trăm MB. Mỗi profile và binary cache nằm tại `.cloakbrowser/` cạnh app để các lần sau không tải lại. Default English giữ `profile-v1`; các key khác dùng `profile-<key>-v1`. Để dùng binary mới nhất, lấy free access key từ `https://cloakbrowser.dev/free` rồi đặt vào biến môi trường `CLOAKBROWSER_LICENSE_KEY` trước khi mở app; Printable Book không đọc, lưu hoặc hiển thị key trong settings/bridge/log.
+5. Review từng row. App dùng Title Terms của market đang active và lấy tối đa một ASIN unique cho mỗi phrase; viewport desktop hiển thị năm row và scroll phần còn lại.
+6. Khi crawl kết thúc, app merge/dedupe ASIN hợp lệ vào **Ads ASIN** draft và cập nhật preview bằng cùng seed. Manual target hiện có được giữ. Nếu Book Keywords/Ads ASIN đã đổi trong lúc crawl, kết quả cũ không được apply.
+7. Review preview mới, sau đó bấm **Save**. Crawl không tự Save Book.
 
 Nếu Amazon báo CAPTCHA, robot check hoặc rate limit, crawl dừng và giữ các ASIN đã tìm được. Xử lý trong cửa sổ browser rồi chạy lại. Đóng Book Detail không hủy crawl; mở lại cùng Book sẽ nối lại trạng thái trong app session. App restart sẽ xóa draft/result research nhưng không xóa browser profile.
 
-Nếu báo license/access key không hợp lệ, cập nhật `CLOAKBROWSER_LICENSE_KEY`, đóng app và mở lại. Nếu tải browser lỗi, kiểm tra network, dung lượng đĩa, antivirus và quyền ghi tại folder app; không xóa `.cloakbrowser/profile-v1` nếu muốn giữ Amazon session.
+Nếu báo license/access key không hợp lệ, cập nhật `CLOAKBROWSER_LICENSE_KEY`, đóng app và mở lại. Nếu tải browser lỗi, kiểm tra network, dung lượng đĩa, antivirus và quyền ghi tại folder app; không xóa folder profile tương ứng nếu muốn giữ Amazon session.
 
 ## 4. Refresh Library
 
