@@ -63,6 +63,83 @@ public sealed class JsonGlobalSettingsStoreTests : IAsyncLifetime
         var loaded = await store.LoadAsync(paths);
 
         Assert.Equal(["coloring books", "books for adults"], loaded.GenericKeywords);
+        Assert.Equal(["coloring books", "books for adults"], loaded.GetEffectiveGenericKeywords("en"));
+        Assert.Empty(loaded.GetEffectiveGenericKeywords("de"));
+    }
+
+    [Fact]
+    public async Task LoadAsync_maps_legacy_generic_keywords_to_English_without_rewriting_the_file()
+    {
+        var paths = CreatePaths();
+        Directory.CreateDirectory(root);
+        const string legacy = "{\"maximumPageConcurrency\":4,\"artworkDetectionThreshold\":20,\"artworkMaximumSide\":2270,\"workingPageWidth\":2550,\"workingPageHeight\":2550,\"finalPageWidth\":2588,\"finalPageHeight\":2625,\"dpi\":300,\"genericKeywords\":[\" calm  coloring \",\"CALM COLORING\"]}";
+        await File.WriteAllTextAsync(paths.SettingsFile.Value, legacy);
+
+        var loaded = await CreateStore(paths).LoadAsync(paths);
+
+        Assert.Equal(["calm coloring"], loaded.GetEffectiveGenericKeywords("en"));
+        Assert.Empty(loaded.GetEffectiveGenericKeywords("fr"));
+        Assert.Equal(legacy, await File.ReadAllTextAsync(paths.SettingsFile.Value));
+    }
+
+    [Fact]
+    public async Task SaveAsync_round_trips_independent_language_profiles_and_mirrors_English_for_rollback()
+    {
+        var paths = CreatePaths();
+        var store = CreateStore(paths);
+        var profiles = new Dictionary<string, IReadOnlyList<string>>
+        {
+            ["en"] = [" English generic "],
+            ["de"] = [" German generic "],
+            ["ja"] = [" Japanese generic "]
+        };
+
+        await store.SaveAsync(GlobalSettings.Default with
+        {
+            GenericKeywords = ["stale legacy value"],
+            GenericKeywordsByLanguage = profiles
+        });
+        var loaded = await store.LoadAsync(paths);
+
+        Assert.Equal(["English generic"], loaded.GenericKeywords);
+        Assert.Equal(["English generic"], loaded.GetEffectiveGenericKeywords("en"));
+        Assert.Equal(["German generic"], loaded.GetEffectiveGenericKeywords("de"));
+        Assert.Equal(["Japanese generic"], loaded.GetEffectiveGenericKeywords("ja"));
+        Assert.Empty(loaded.GetEffectiveGenericKeywords("pt"));
+        Assert.Equal(8, loaded.EffectiveGenericKeywordsByLanguage.Count);
+
+        var persisted = await File.ReadAllTextAsync(paths.SettingsFile.Value);
+        Assert.Contains("\"genericKeywords\"", persisted, StringComparison.Ordinal);
+        Assert.Contains("\"genericKeywordsByLanguage\"", persisted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LoadAsync_prefers_legacy_English_when_both_storage_contracts_exist()
+    {
+        var paths = CreatePaths();
+        Directory.CreateDirectory(root);
+        await File.WriteAllTextAsync(paths.SettingsFile.Value,
+            "{\"maximumPageConcurrency\":4,\"artworkDetectionThreshold\":20,\"artworkMaximumSide\":2270,\"workingPageWidth\":2550,\"workingPageHeight\":2550,\"finalPageWidth\":2588,\"finalPageHeight\":2625,\"dpi\":300,\"genericKeywords\":[\"rollback edit\"],\"genericKeywordsByLanguage\":{\"en\":[\"old map value\"],\"de\":[\"German value\"]}} ");
+
+        var loaded = await CreateStore(paths).LoadAsync(paths);
+
+        Assert.Equal(["rollback edit"], loaded.GetEffectiveGenericKeywords("en"));
+        Assert.Equal(["German value"], loaded.GetEffectiveGenericKeywords("de"));
+    }
+
+    [Theory]
+    [InlineData("xx")]
+    [InlineData("")]
+    public async Task SaveAsync_rejects_unsupported_language_profiles(string languageCode)
+    {
+        var paths = CreatePaths();
+        var settings = GlobalSettings.Default with
+        {
+            GenericKeywordsByLanguage = new Dictionary<string, IReadOnlyList<string>> { [languageCode] = ["value"] }
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => CreateStore(paths).SaveAsync(settings).AsTask());
+        Assert.False(File.Exists(paths.SettingsFile.Value));
     }
 
     [Fact]

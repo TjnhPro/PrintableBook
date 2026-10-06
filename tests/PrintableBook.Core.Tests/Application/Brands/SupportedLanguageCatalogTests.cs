@@ -5,7 +5,7 @@ namespace PrintableBook.Core.Tests.Application.Brands;
 public sealed class SupportedLanguageCatalogTests
 {
     [Fact]
-    public void Catalog_exposes_the_seven_canonical_languages_in_stable_order()
+    public void Catalog_exposes_the_eight_canonical_languages_in_stable_order()
     {
         Assert.Collection(
             SupportedLanguageCatalog.All,
@@ -15,6 +15,7 @@ public sealed class SupportedLanguageCatalogTests
             option => Assert.Equal(new SupportedLanguageOption("es", "Spanish"), option),
             option => Assert.Equal(new SupportedLanguageOption("it", "Italian"), option),
             option => Assert.Equal(new SupportedLanguageOption("pt", "Portuguese"), option),
+            option => Assert.Equal(new SupportedLanguageOption("ja", "Japanese"), option),
             option => Assert.Equal(new SupportedLanguageOption("nl", "Dutch"), option));
     }
 

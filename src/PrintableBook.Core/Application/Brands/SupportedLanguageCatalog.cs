@@ -12,6 +12,7 @@ public static class SupportedLanguageCatalog
         new("es", "Spanish"),
         new("it", "Italian"),
         new("pt", "Portuguese"),
+        new("ja", "Japanese"),
         new("nl", "Dutch")
     ];
 
