@@ -46,9 +46,9 @@ public sealed class AmazonAsinCrawlWorker(
 
                 try
                 {
-                    var response = await FetchWithRetryAsync(AmazonCrawlPolicy.BuildSearchUri(request.Keywords[index]), token);
+                    var response = await FetchWithRetryAsync(AmazonCrawlPolicy.BuildSearchUri(request.Profile, request.Keywords[index]), token);
                     var parsed = parser.Parse(response.Html);
-                    rows[index] = AmazonAsinSelection.Select(index, request.Keywords[index], parsed, selected);
+                    rows[index] = AmazonAsinSelection.Select(index, request.Keywords[index], parsed, selected, request.Profile);
 
                     if (parsed.Diagnostic is AmazonSearchPageDiagnostic.NeedsAttention or AmazonSearchPageDiagnostic.UnexpectedMarkup)
                     {
@@ -120,7 +120,17 @@ public sealed class AmazonAsinCrawlWorker(
         {
             var completed = rows.Count(row => row.Status is not AmazonAsinKeywordStatus.Pending and not AmazonAsinKeywordStatus.Searching and not AmazonAsinKeywordStatus.NotProcessed);
             var final = string.Join(',', rows.Where(row => row.Status == AmazonAsinKeywordStatus.Selected).Select(row => row.Asin));
-            var view = new AmazonAsinCrawlView(outcome, rows.ToArray(), completed, rows.Length, final, request.RequestFingerprint, stopReason);
+            var view = new AmazonAsinCrawlView(
+                outcome,
+                rows.ToArray(),
+                completed,
+                rows.Length,
+                final,
+                request.RequestFingerprint,
+                stopReason,
+                request.Profile.MarketCode,
+                request.Profile.MarketName,
+                request.Profile.Domain);
             context.SetView(view);
             return view;
         }

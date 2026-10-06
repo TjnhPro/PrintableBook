@@ -162,7 +162,7 @@ public sealed class BookKeywordPreviewServiceTests
 
         Assert.Equal(preview.ReceiptDigest, source.ReceiptDigest);
         Assert.NotEmpty(source.Keywords);
-        Assert.Equal(PrintableBook.Core.Application.AmazonCrawl.AmazonCrawlPolicy.Fingerprint(source.Keywords), source.SourceFingerprint);
+        Assert.Equal(PrintableBook.Core.Application.AmazonCrawl.AmazonCrawlPolicy.SourceFingerprint(source.Keywords), source.SourceFingerprint);
     }
 
     [Fact]

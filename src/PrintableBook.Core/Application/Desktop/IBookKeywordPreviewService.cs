@@ -166,7 +166,7 @@ public sealed class BookKeywordPreviewService(
         }
         var adsKeywords = (source.AdsKeyword ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var normalized = AmazonCrawlPolicy.NormalizeKeywords(adsKeywords);
-        return new(normalized, AmazonCrawlPolicy.Fingerprint(normalized), receiptDigest);
+        return new(normalized, AmazonCrawlPolicy.SourceFingerprint(normalized), receiptDigest);
     }
 
     private KeywordPreviewResult Issue(DiscoveredBook book, BookKeywordBuilderState preview)
