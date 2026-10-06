@@ -401,7 +401,7 @@
   };
   const asinReasonLabel = (code) => ({
     amazon_no_search_result: "No search results",
-    amazon_no_matching_title: "No title containing “coloring book”",
+    amazon_no_matching_title: "No title matching this market’s book terms",
     amazon_all_candidates_used: "Matching ASIN already used",
     amazon_not_processed: "Not searched — crawl stopped",
     amazon_crawl_cancelled: "Search cancelled",
@@ -432,6 +432,13 @@
     } else if (state.asinResearchActiveBookId === id) {
       state.asinResearchActiveBookId = "";
       stopAmazonAsinPolling();
+      const view = asinSessionView(session);
+      state.amazonBrowserStatus = {
+        state: "Closed",
+        reasonCode: null,
+        targetMarketName: valueFor(view, "marketName", valueFor(state.amazonBrowserStatus, "targetMarketName", null)),
+        targetDomain: valueFor(view, "marketplaceDomain", valueFor(state.amazonBrowserStatus, "targetDomain", null))
+      };
     }
     patchAsinResearch(id);
   };
@@ -1628,10 +1635,13 @@
     const rows = valueFor(view, "rows", []);
     const outcome = asinOutcomeName(valueFor(view, "outcome", "Idle"));
     const active = asinSessionActive(session);
+    const crawlBusy = active || Boolean(state.asinResearchActiveBookId);
     const cancelling = valueFor(session, "isCancelling", false);
     const finalAsins = asinFinalValue(session);
     const browserState = browserStateName(valueFor(state.amazonBrowserStatus, "state", "Closed"));
     const browserBusy = state.amazonBrowserPending || ["Checking", "Downloading", "Opening", "WarmingUp"].includes(browserState);
+    const marketName = String(valueFor(state.amazonBrowserStatus, "targetMarketName", valueFor(view, "marketName", "")) ?? "");
+    const marketDomain = String(valueFor(state.amazonBrowserStatus, "targetDomain", valueFor(view, "marketplaceDomain", "")) ?? "");
     const needsAttention = browserState === "NeedsAttention" || outcome === "NeedsAttention";
     const previewState = keywordPreviewFor(id);
     const hasTrustedSource = Boolean(valueFor(previewState, "receipt", ""));
@@ -1657,14 +1667,15 @@
             : outcome === "Cancelled" ? "Crawl cancelled; available results were kept."
               : outcome === "Failed" ? "Crawl stopped. Review the result below."
                 : "Open Browser is optional; Crawl ASINs opens it automatically.";
-    return `<fieldset class="keyword-builder-group keyword-builder-crawl" data-asin-research data-book-id="${escapeHtml(id)}" aria-labelledby="asin-research-results-title" aria-busy="${active || browserBusy}">
+    return `<fieldset class="keyword-builder-group keyword-builder-crawl" data-asin-research data-book-id="${escapeHtml(id)}" aria-labelledby="asin-research-results-title" aria-busy="${crawlBusy || browserBusy}">
       <legend id="asin-research-results-title">Crawl Results</legend>
       <div class="asin-research-pane-heading"><p class="asin-result-summary"><strong>${selectedCount} selected</strong><span>${noMatchCount} no match · ${failedCount} failed</span></p><span data-asin-status class="status-badge ${needsAttention || outcome === "Failed" ? "status-bad" : active || browserBusy ? "status-warn" : browserState === "Ready" ? "status-good" : "status-muted"}">${escapeHtml(active ? cancelling ? "Cancelling" : "Running" : outcome !== "Idle" ? outcome : browserState)}</span></div>
       <p class="asin-keyword-source">Uses generated Ads Keyword · <span data-asin-keyword-count>${keywords.length} / 30</span></p>
+      <p class="asin-keyword-source">Amazon Market: ${escapeHtml(marketName || "Resolving…")}${marketDomain ? ` — ${escapeHtml(marketDomain)}` : ""}</p>
       <div class="asin-progress-slot">${active && total ? `<div class="asin-progress" role="progressbar" aria-label="Amazon ASIN crawl progress" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${completed}"><span style="width:${Math.round(completed / total * 100)}%"></span></div>` : ""}</div>
       <ol class="asin-result-list">${rowMarkup || '<li class="asin-result-empty">No crawl results yet.</li>'}</ol>
       <div class="asin-stale-slot">${stale && finalAsins ? '<p class="catalog-warning" role="status">Previous results — shuffle again before applying.</p>' : ""}</div>
-      <footer class="asin-research-pane-footer"><div class="asin-research-actions"><button class="button-secondary" data-action="open-amazon-browser" data-book-id="${escapeHtml(id)}" ${browserBusy ? "disabled" : ""}>${browserBusy ? "Opening Browser…" : "Open Browser"}</button><button class="button-secondary" data-action="crawl-amazon-asins" data-book-id="${escapeHtml(id)}" title="${validInput ? "Search with the generated Ads Keyword preview" : "Shuffle inputs before crawling"}" ${!validInput || active || browserBusy ? "disabled" : ""}>Crawl ASINs</button>${active ? `<button class="button-secondary" data-action="cancel-amazon-asins" data-book-id="${escapeHtml(id)}" ${cancelling ? "disabled" : ""}>${cancelling ? "Cancelling…" : "Cancel"}</button>` : ""}</div><p class="asin-research-state" role="${needsAttention ? "alert" : "status"}">${escapeHtml(stateCopy)}</p></footer>
+      <footer class="asin-research-pane-footer"><div class="asin-research-actions"><button class="button-secondary" data-action="open-amazon-browser" data-book-id="${escapeHtml(id)}" ${crawlBusy || browserBusy ? "disabled" : ""}>${browserBusy ? "Opening Browser…" : "Open Browser"}</button><button class="button-secondary" data-action="crawl-amazon-asins" data-book-id="${escapeHtml(id)}" title="${validInput ? "Search with the generated Ads Keyword preview" : "Shuffle inputs before crawling"}" ${!validInput || crawlBusy || browserBusy ? "disabled" : ""}>Crawl ASINs</button>${active ? `<button class="button-secondary" data-action="cancel-amazon-asins" data-book-id="${escapeHtml(id)}" ${cancelling ? "disabled" : ""}>${cancelling ? "Cancelling…" : "Cancel"}</button>` : ""}</div><p class="asin-research-state" role="${needsAttention ? "alert" : "status"}">${escapeHtml(stateCopy)}</p></footer>
       <p class="catalog-feedback ${feedback.error ? "is-error" : ""}" data-asin-feedback role="${feedback.error ? "alert" : "status"}" aria-live="polite" aria-atomic="true">${escapeHtml(feedback.message)}</p>
     </fieldset>`;
   };
@@ -2528,6 +2539,7 @@
     if (state.bookCloneOpen && state.bookCloneSourceId !== id) resetBookClone();
     const previousBookId = state.selectedBookId;
     state.selectedBookId = id;
+    if (previousBookId !== id) state.amazonBrowserStatus = { state: "Closed", reasonCode: null };
     state.selectedBookTab = "settings";
     state.selectedAssetReference = "";
     clearArtworkBulkSelection();
@@ -2549,7 +2561,7 @@
     const detailPanel = document.querySelector(".book-detail-panel");
     if (detailPanel) detailPanel.outerHTML = renderBookDetail(book, summary);
     else render("books", false);
-    send("amazon.browser.status");
+    send("amazon.browser.status", { bookId: id });
     send("book.keywords.asin-crawl.get", { bookId: id });
     loadStorage();
   };
@@ -2748,7 +2760,7 @@
       state.amazonBrowserPending = true;
       setAsinFeedback(target.dataset.bookId, "Opening the app-owned Amazon browser…");
       patchAsinResearch(target.dataset.bookId);
-      send("amazon.browser.open");
+      send("amazon.browser.open", { bookId: target.dataset.bookId });
     }
     if (action === "crawl-amazon-asins") {
       const id = target.dataset.bookId;
@@ -3595,7 +3607,8 @@
           cloak_browser_license_required: "CloakBrowser needs a valid free access key or license.",
           cloak_browser_license_invalid: "The CloakBrowser access key or license is invalid or expired. Update it and retry.",
           cloak_browser_profile_locked: "The Amazon browser profile is already in use. Close the other browser or app instance and retry.",
-          browser_storage_not_writable: "The app cannot write the .cloakbrowser profile and cache folders."
+          browser_storage_not_writable: "The app cannot write the .cloakbrowser profile and cache folders.",
+          amazon_asin_crawl_active: "An ASIN crawl is using the Amazon browser. Wait for it to finish or cancel it from its Book."
         })[String(error)] ?? "Amazon browser could not be opened. Check the setup and retry.";
         setAsinFeedback(state.selectedBookId, message, true);
         patchAsinResearch(state.selectedBookId);

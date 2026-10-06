@@ -114,14 +114,22 @@ internal sealed class WebViewBridgeRouter(
             if (request.Command == "amazon.browser.status")
             {
                 if (amazonSearchPageClient is null) return BridgeResponse.UnsupportedCommand(request.Id);
-                return BridgeResponse.Succeeded(request.Id, "amazon.browser.status", await amazonSearchPageClient.GetStatusAsync(cancellationToken));
+                var target = await ResolveAmazonMarketplaceAsync(request, cancellationToken);
+                if (target.Error is not null) return new BridgeResponse(Version, request.Id, false, null, target.Error);
+                return BridgeResponse.Succeeded(request.Id, "amazon.browser.status", await amazonSearchPageClient.GetStatusAsync(target.Profile!, cancellationToken));
             }
             if (request.Command == "amazon.browser.open")
             {
                 if (amazonSearchPageClient is null) return BridgeResponse.UnsupportedCommand(request.Id);
+                var target = await ResolveAmazonMarketplaceAsync(request, cancellationToken);
+                if (target.Error is not null) return new BridgeResponse(Version, request.Id, false, null, target.Error);
+                if (amazonAsinCrawlSessionService is not null && (await amazonAsinCrawlSessionService.GetAsync(target.BookId!, cancellationToken)).IsActive)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "amazon_asin_crawl_active");
+                }
                 try
                 {
-                    return BridgeResponse.Succeeded(request.Id, "amazon.browser.status", await amazonSearchPageClient.OpenAsync(cancellationToken));
+                    return BridgeResponse.Succeeded(request.Id, "amazon.browser.status", await amazonSearchPageClient.OpenAsync(target.Profile!, cancellationToken));
                 }
                 catch (AmazonSearchPageException exception)
                 {
@@ -154,8 +162,11 @@ internal sealed class WebViewBridgeRouter(
                         var current = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
                         var book = current?.Discovery.Books.FirstOrDefault(item => string.Equals(item.Id.Value, crawlBookId, StringComparison.Ordinal));
                         if (book is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+                        var summary = current!.BookSummaries.FirstOrDefault(item => item.BookId == book.Id);
+                        if (summary is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+                        var profile = AmazonMarketplaceCatalog.GetByLanguage(summary.LanguageCode);
                         var trustedSource = await bookKeywordPreviewService.ResolveCrawlSourceAsync(book, previewReceipt, savedBuildId, cancellationToken);
-                        snapshot = await amazonAsinCrawlSessionService.StartAsync(crawlBookId, trustedSource.Keywords, cancellationToken);
+                        snapshot = await amazonAsinCrawlSessionService.StartAsync(crawlBookId, trustedSource.Keywords, profile, cancellationToken);
                         crawlSources[crawlBookId] = trustedSource;
                     }
                     else if (request.Command == "book.keywords.asin-crawl.cancel")
@@ -1410,6 +1421,24 @@ internal sealed class WebViewBridgeRouter(
         {
             return BridgeResponse.Failed(request.Id, $"{request.Command.Replace('.', '_')}_failed", exception);
         }
+    }
+
+    private async ValueTask<(AmazonMarketplaceProfile? Profile, string? BookId, string? Error)> ResolveAmazonMarketplaceAsync(
+        BridgeRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (applicationLoadCoordinator is null || request.Payload is not { } payload ||
+            !TryGetRequiredString(payload, "bookId", out var bookId))
+        {
+            return (null, null, "invalid_amazon_browser");
+        }
+
+        var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+        if (snapshot is null) return (null, bookId, "snapshot_unavailable");
+        var summary = snapshot.BookSummaries.FirstOrDefault(item => string.Equals(item.BookId.Value, bookId, StringComparison.Ordinal));
+        return summary is null
+            ? (null, bookId, "book_not_found")
+            : (AmazonMarketplaceCatalog.GetByLanguage(summary.LanguageCode), bookId, null);
     }
 
     private async ValueTask<bool> IsProcessingActiveAsync(CancellationToken cancellationToken)

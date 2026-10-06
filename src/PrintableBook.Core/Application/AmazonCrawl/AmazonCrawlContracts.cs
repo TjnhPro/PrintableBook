@@ -197,15 +197,6 @@ public interface IAmazonSearchPageClient
     ValueTask<CloakBrowserStatus> OpenFreshAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default);
     ValueTask CloseAsync(CancellationToken cancellationToken = default);
     ValueTask<BrowserFetchResponse> FetchAsync(AmazonMarketplaceProfile profile, Uri uri, CancellationToken cancellationToken = default);
-
-    ValueTask<CloakBrowserStatus> GetStatusAsync(CancellationToken cancellationToken = default) =>
-        GetStatusAsync(AmazonMarketplaceCatalog.UnitedStates, cancellationToken);
-
-    ValueTask<CloakBrowserStatus> OpenAsync(CancellationToken cancellationToken = default) =>
-        OpenAsync(AmazonMarketplaceCatalog.UnitedStates, cancellationToken);
-
-    ValueTask<BrowserFetchResponse> FetchAsync(Uri uri, CancellationToken cancellationToken = default) =>
-        FetchAsync(AmazonMarketplaceCatalog.UnitedStates, uri, cancellationToken);
 }
 
 public interface IAmazonBrowserLifetime

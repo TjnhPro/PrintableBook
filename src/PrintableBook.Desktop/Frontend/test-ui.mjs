@@ -99,6 +99,11 @@ const expected = [
   ,'No ${languageNameFor(summary)} Brand available.'
   ,'No ${languageNameFor(summary)} Brand matches this Book Author.'
   ,'persistedGenericKeywords(languageCodeFor(summary)).length'
+  ,'Amazon Market:'
+  ,'amazon.browser.status", { bookId: id }'
+  ,'amazon.browser.open", { bookId: target.dataset.bookId }'
+  ,'amazon_asin_crawl_active: "An ASIN crawl is using the Amazon browser.'
+  ,'targetMarketName: valueFor(view, "marketName"'
 ];
 
 for (const value of expected) {

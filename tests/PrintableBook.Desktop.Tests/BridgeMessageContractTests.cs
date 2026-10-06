@@ -13,6 +13,7 @@ using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Application.Books;
 using PrintableBook.Core.Application.Production;
+using PrintableBook.Core.Application.AmazonCrawl;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 using System.Text.Json;
@@ -1058,6 +1059,7 @@ public sealed class BridgeMessageContractTests
 
         Assert.True(response.Ok);
         Assert.Equal(["cute cats"], crawl.Keywords);
+        Assert.Equal("us", crawl.Profile?.MarketCode);
         Assert.Equal("signed-receipt", preview.ResolvedReceipt);
         var json = JsonSerializer.Serialize(response.Payload, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.Contains("\"sourceFingerprint\":\"source\"", json, StringComparison.Ordinal);
@@ -2244,10 +2246,12 @@ public sealed class BridgeMessageContractTests
     private sealed class StubAmazonAsinCrawlSessionService : IAmazonAsinCrawlSessionService
     {
         public IReadOnlyList<string>? Keywords { get; private set; }
+        public AmazonMarketplaceProfile? Profile { get; private set; }
         public ValueTask<AmazonAsinCrawlSessionSnapshot> GetAsync(string bookId, CancellationToken cancellationToken = default) => ValueTask.FromResult(Snapshot(bookId));
-        public ValueTask<AmazonAsinCrawlSessionSnapshot> StartAsync(string bookId, IReadOnlyList<string> keywords, CancellationToken cancellationToken = default)
+        public ValueTask<AmazonAsinCrawlSessionSnapshot> StartAsync(string bookId, IReadOnlyList<string> keywords, AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default)
         {
             Keywords = keywords;
+            Profile = profile;
             return ValueTask.FromResult(Snapshot(bookId));
         }
         public ValueTask<AmazonAsinCrawlSessionSnapshot> CancelAsync(string bookId, CancellationToken cancellationToken = default) => ValueTask.FromResult(Snapshot(bookId));
