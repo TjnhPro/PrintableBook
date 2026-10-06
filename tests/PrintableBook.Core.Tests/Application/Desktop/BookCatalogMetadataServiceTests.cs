@@ -221,6 +221,31 @@ public sealed class BookCatalogMetadataServiceTests
     }
 
     [Fact]
+    public async Task SaveKeywordBuilder_does_not_write_state_when_effective_inputs_are_unchanged()
+    {
+        var stateStore = new StateStore(BookProcessingState.NotStarted(new BookId("book")) with { LanguageCode = "de" });
+        var settingsStore = new SettingsStore(GlobalSettings.Default with
+        {
+            GenericKeywordsByLanguage = new Dictionary<string, IReadOnlyList<string>>
+            {
+                ["de"] = ["German generic"]
+            }
+        });
+        var service = new BookCatalogMetadataService(
+            stateStore,
+            new BrandStore(),
+            new BookKeywordBuilder(new NoOpKeywordShuffler()),
+            settingsStore);
+
+        var first = await service.SaveKeywordBuilderAsync(Book(), ["Book phrase"], "B0123");
+        var second = await service.SaveKeywordBuilderAsync(Book(), ["Book phrase"], "B0123");
+
+        Assert.Same(first, second);
+        Assert.Equal(2, stateStore.Loads);
+        Assert.Equal(1, stateStore.Saves);
+    }
+
+    [Fact]
     public async Task SaveKeywordBuilder_validation_failure_loads_language_but_does_not_save_state()
     {
         var stateStore = new StateStore(BookProcessingState.NotStarted(new BookId("book")));

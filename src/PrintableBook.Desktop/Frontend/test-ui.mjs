@@ -98,6 +98,7 @@ const expected = [
   ,'Language mismatch'
   ,'No ${languageNameFor(summary)} Brand available.'
   ,'No ${languageNameFor(summary)} Brand matches this Book Author.'
+  ,'persistedGenericKeywords(languageCodeFor(summary)).length'
 ];
 
 for (const value of expected) {

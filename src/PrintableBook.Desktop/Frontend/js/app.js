@@ -297,11 +297,6 @@
   const ensureGenericKeywordDrafts = () => {
     if (!state.settingsGenericKeywordDraftsInitialized) resetGenericKeywordDrafts();
   };
-  const genericKeywords = (languageCode = "en") => {
-    ensureGenericKeywordDrafts();
-    const code = String(languageCode ?? "en").toLocaleLowerCase();
-    return normalizeKeywordPhrases(state.settingsGenericKeywordDrafts.get(code) ?? persistedGenericKeywords(code).join("\n"));
-  };
   const storeGenericKeywordEditorDraft = () => {
     const editor = document.querySelector("[data-generic-keywords]");
     if (editor && state.settingsGenericLanguageCode) state.settingsGenericKeywordDrafts.set(state.settingsGenericLanguageCode, String(editor.value ?? ""));
@@ -1688,7 +1683,7 @@
     const refreshing = state.keywordBuilderRefreshPending && state.keywordBuilderRefreshBookId === id;
     const refreshNeeded = state.keywordBuilderRefreshNeeded && state.keywordBuilderRefreshBookId === id;
     const feedbackVisible = state.catalogMutationTarget === id && state.catalogMutationCommand.startsWith("book.keywords.");
-    const genericKeywordCount = genericKeywords(languageCodeFor(summary)).length;
+    const genericKeywordCount = persistedGenericKeywords(languageCodeFor(summary)).length;
     const disabled = catalogMutationBusy() || processIsActive();
     const stateLabel = pendingAction === "shuffle" ? "Shuffling…" : pendingAction === "save" ? "Saving…" : pendingAction === "update-ads-asin" ? "Applying ASINs…" : validation ? "Needs attention" : refreshing ? "Saved · Refreshing…" : refreshNeeded ? "Saved · Refresh needed" : previewState ? "Preview · Not saved" : dirty ? "Shuffle required" : saved ? "Saved" : "Not shuffled";
     const outputMessage = previewState ? "Unsaved shuffled preview" : saved ? "Last saved generated keywords" : "Shuffle inputs to generate a preview.";

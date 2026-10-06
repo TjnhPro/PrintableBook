@@ -65,6 +65,17 @@ public sealed class BookCatalogMetadataService(
             ? []
             : (await settingsStore.LoadAsync(cancellationToken)).GetEffectiveGenericKeywords(state.LanguageCode);
         var result = keywordBuilder.Build(genericKeywords, keywords, adsAsin, Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow);
+        var saved = state.KeywordBuilder?.NormalizeStored();
+        if (saved is not null &&
+            saved.AlgorithmVersion == BookKeywordBuilder.CurrentAlgorithmVersion &&
+            !string.IsNullOrWhiteSpace(saved.BuildId) &&
+            !string.IsNullOrWhiteSpace(saved.ShuffleSeed) &&
+            !string.IsNullOrWhiteSpace(saved.InputFingerprint) &&
+            !string.IsNullOrWhiteSpace(saved.OutputDigest) &&
+            string.Equals(saved.InputFingerprint, result.InputFingerprint, StringComparison.Ordinal))
+        {
+            return state.KeywordBuilder!;
+        }
         await stateStore.SaveAsync(book.Workspace, state with { KeywordBuilder = result }, cancellationToken);
         return result;
     }
