@@ -104,6 +104,14 @@ const expected = [
   ,'amazon.browser.open", { bookId: target.dataset.bookId }'
   ,'amazon_asin_crawl_active: "An ASIN crawl is using the Amazon browser.'
   ,'targetMarketName: valueFor(view, "marketName"'
+  ,'Amazon market profiles'
+  ,'data-action="amazon-market-language"'
+  ,'data-amazon-profile-field="profileKey"'
+  ,'data-amazon-profile-field="baseUrl"'
+  ,'data-amazon-profile-field="locale"'
+  ,'data-amazon-profile-field="titleTerms"'
+  ,'Comma-separated title phrases'
+  ,'payload.amazonMarketplaceProfiles'
 ];
 
 for (const value of expected) {

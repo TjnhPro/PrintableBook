@@ -476,6 +476,23 @@ public sealed class BookWorkspaceLayoutContractTests
     }
 
     [Fact]
+    public void ConfigurationEditsAmazonMarketProfilesByLanguage()
+    {
+        var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
+        var script = File.ReadAllText(Path.Combine(frontend, "js", "app.js"));
+
+        Assert.Contains("Amazon market profiles", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"amazon-market-language\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-amazon-profile-field=\"profileKey\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-amazon-profile-field=\"baseUrl\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-amazon-profile-field=\"locale\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-amazon-profile-field=\"titleTerms\"", script, StringComparison.Ordinal);
+        Assert.Contains("Comma-separated title phrases", script, StringComparison.Ordinal);
+        Assert.Contains("payload.amazonMarketplaceProfiles", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("textarea id=\"amazon-title-terms\"", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void KeywordBuilderAsinResearchHasScopedResponsiveAndAccessibleUi()
     {
         var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
