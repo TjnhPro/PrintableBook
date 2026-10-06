@@ -1,4 +1,5 @@
 using PrintableBook.Core.Application.AmazonCrawl;
+using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Infrastructure.CloakBrowser;
 
 namespace PrintableBook.Infrastructure.Tests.CloakBrowser;
@@ -24,8 +25,8 @@ public sealed class CloakBrowserStorageLayoutTests
         {
             var layout = new CloakBrowserStorageLayout(root);
 
-        layout.EnsureWritable(AmazonMarketplaceCatalog.UnitedStates);
-        layout.EnsureWritable(AmazonMarketplaceCatalog.UnitedStates);
+            layout.EnsureWritable(Profile());
+            layout.EnsureWritable(Profile());
 
             Assert.True(Directory.Exists(layout.Profile));
             Assert.True(Directory.Exists(layout.Cache));
@@ -43,9 +44,19 @@ public sealed class CloakBrowserStorageLayoutTests
         var root = Path.Combine(Path.GetTempPath(), "printable-book-layout");
         var layout = new CloakBrowserStorageLayout(root);
 
-        Assert.Equal(layout.Profile, layout.ProfileFor(AmazonMarketplaceCatalog.UnitedStates));
-        Assert.Equal(Path.Combine(layout.Root, "profile-de-v1"), layout.ProfileFor(AmazonMarketplaceCatalog.GetByLanguage("de")));
-        Assert.NotEqual(layout.ProfileFor(AmazonMarketplaceCatalog.GetByLanguage("de")), layout.ProfileFor(AmazonMarketplaceCatalog.GetByLanguage("fr")));
+        Assert.Equal(layout.Profile, layout.ProfileFor(Profile()));
+        Assert.Equal(Path.Combine(layout.Root, "profile-de-v1"), layout.ProfileFor(Profile("de")));
+        Assert.NotEqual(layout.ProfileFor(Profile("de")), layout.ProfileFor(Profile("fr")));
+    }
+
+    [Fact]
+    public void Layout_uses_the_configured_profile_key()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "printable-book-layout");
+        var layout = new CloakBrowserStorageLayout(root);
+        var configured = Profile("de") with { MarketCode = "de-books" };
+
+        Assert.Equal(Path.Combine(layout.Root, "profile-de-books-v1"), layout.ProfileFor(configured));
     }
 
     [Fact]
@@ -69,4 +80,7 @@ public sealed class CloakBrowserStorageLayoutTests
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PrintableBook.sln"))) directory = directory.Parent;
         return directory?.FullName ?? throw new InvalidOperationException("Repository root was not found.");
     }
+
+    private static AmazonMarketplaceProfile Profile(string languageCode = "en") =>
+        AmazonMarketplaceProfilePolicy.Resolve(GlobalSettings.Default, languageCode);
 }

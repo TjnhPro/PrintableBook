@@ -1,5 +1,6 @@
 using PrintableBook.Core.Application.AmazonCrawl;
 using PrintableBook.Core.Application.BackgroundTasks;
+using PrintableBook.Core.Application.Desktop;
 
 namespace PrintableBook.Core.Tests.Application.AmazonCrawl;
 
@@ -33,7 +34,7 @@ public sealed class AmazonAsinCrawlWorkerTests
         var worker = new AmazonAsinCrawlWorker(page, parser, new NoDelay());
 
         var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)worker).ExecuteAsync(
-            AmazonAsinCrawlRequest.Create(["one", "two", "three"]), context, CancellationToken.None));
+            AmazonAsinCrawlRequest.Create(["one", "two", "three"], Profile()), context, CancellationToken.None));
 
         Assert.Equal(AmazonAsinCrawlOutcome.Completed, result.Outcome);
         Assert.Equal("B000000001,B000000004,B000000006", result.FinalAsins);
@@ -58,7 +59,7 @@ public sealed class AmazonAsinCrawlWorkerTests
         var context = new RecordingContext();
 
         var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)new AmazonAsinCrawlWorker(page, parser, new NoDelay())).ExecuteAsync(
-            AmazonAsinCrawlRequest.Create(["one", "two"]), context, CancellationToken.None));
+            AmazonAsinCrawlRequest.Create(["one", "two"], Profile()), context, CancellationToken.None));
 
         Assert.Equal(AmazonAsinCrawlOutcome.Partial, result.Outcome);
         Assert.Equal("B000000001", result.FinalAsins);
@@ -78,7 +79,7 @@ public sealed class AmazonAsinCrawlWorkerTests
         var context = new RecordingContext();
 
         var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)new AmazonAsinCrawlWorker(page, parser, new NoDelay())).ExecuteAsync(
-            AmazonAsinCrawlRequest.Create(["one", "two", "three"]), context, CancellationToken.None));
+            AmazonAsinCrawlRequest.Create(["one", "two", "three"], Profile()), context, CancellationToken.None));
 
         Assert.Equal(AmazonAsinCrawlOutcome.NeedsAttention, result.Outcome);
         Assert.Equal("B000000001", result.FinalAsins);
@@ -97,7 +98,7 @@ public sealed class AmazonAsinCrawlWorkerTests
         var context = new RecordingContext();
 
         var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)new AmazonAsinCrawlWorker(page, parser, new NoDelay())).ExecuteAsync(
-            AmazonAsinCrawlRequest.Create(["one", "two", "three"]), context, CancellationToken.None));
+            AmazonAsinCrawlRequest.Create(["one", "two", "three"], Profile()), context, CancellationToken.None));
 
         Assert.Equal(AmazonAsinCrawlOutcome.Failed, result.Outcome);
         Assert.Equal("amazon_searchbox_missing", result.StopReasonCode);
@@ -120,7 +121,7 @@ public sealed class AmazonAsinCrawlWorkerTests
         var context = new RecordingContext();
 
         var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)new AmazonAsinCrawlWorker(page, parser, new NoDelay())).ExecuteAsync(
-            AmazonAsinCrawlRequest.Create(["one", "two", "three"]), context, CancellationToken.None));
+            AmazonAsinCrawlRequest.Create(["one", "two", "three"], Profile()), context, CancellationToken.None));
 
         Assert.Equal(AmazonAsinCrawlOutcome.Failed, result.Outcome);
         Assert.Equal("amazon_fetch_payload_invalid", result.StopReasonCode);
@@ -144,7 +145,7 @@ public sealed class AmazonAsinCrawlWorkerTests
         var context = new RecordingContext();
 
         var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)new AmazonAsinCrawlWorker(page, new QueueParser([]), new NoDelay())).ExecuteAsync(
-            AmazonAsinCrawlRequest.Create(["one", "two"]), context, CancellationToken.None));
+            AmazonAsinCrawlRequest.Create(["one", "two"], Profile()), context, CancellationToken.None));
 
         Assert.Equal(AmazonAsinCrawlOutcome.NeedsAttention, result.Outcome);
         Assert.Equal("cloak_browser_license_required", result.StopReasonCode);
@@ -166,7 +167,7 @@ public sealed class AmazonAsinCrawlWorkerTests
             page,
             new QueueParser([Parsed(("B000000001", "Coloring book"))]),
             new NoDelay())).ExecuteAsync(
-                AmazonAsinCrawlRequest.Create(["one"]), context, CancellationToken.None));
+                AmazonAsinCrawlRequest.Create(["one"], Profile()), context, CancellationToken.None));
 
         Assert.Equal(AmazonAsinCrawlOutcome.Completed, result.Outcome);
         Assert.Equal("B000000001", result.FinalAsins);
@@ -174,6 +175,8 @@ public sealed class AmazonAsinCrawlWorkerTests
     }
 
     private static BrowserFetchResponse Response(string marker) => new(200, true, false, "https://www.amazon.com/s", "text/html", marker);
+
+    private static AmazonMarketplaceProfile Profile() => AmazonMarketplaceProfilePolicy.Resolve(GlobalSettings.Default, "en");
 
     private static AmazonSearchParseResult Parsed(params (string Asin, string Title)[] candidates) =>
         new(AmazonSearchPageDiagnostic.Results, candidates.Select(item => new AmazonSearchCandidate(item.Asin, item.Title)).ToArray());

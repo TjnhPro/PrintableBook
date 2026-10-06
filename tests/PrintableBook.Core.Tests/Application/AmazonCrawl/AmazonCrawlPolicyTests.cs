@@ -1,4 +1,5 @@
 using PrintableBook.Core.Application.AmazonCrawl;
+using PrintableBook.Core.Application.Desktop;
 
 namespace PrintableBook.Core.Tests.Application.AmazonCrawl;
 
@@ -23,18 +24,18 @@ public sealed class AmazonCrawlPolicyTests
     [Fact]
     public void BuildSearchUri_encodes_input_and_stays_on_allowlisted_origin()
     {
-        var uri = AmazonCrawlPolicy.BuildSearchUri(AmazonMarketplaceCatalog.UnitedStates, "cats & coffee");
+        var uri = AmazonCrawlPolicy.BuildSearchUri(Profile(), "cats & coffee");
 
-        Assert.True(AmazonCrawlPolicy.IsAllowedUri(AmazonMarketplaceCatalog.UnitedStates, uri));
+        Assert.True(AmazonCrawlPolicy.IsAllowedUri(Profile(), uri));
         Assert.Equal("?k=cats%20%26%20coffee", uri.Query);
     }
 
     [Fact]
     public void Fingerprint_is_stable_and_order_sensitive()
     {
-        Assert.Equal(AmazonCrawlPolicy.Fingerprint(AmazonMarketplaceCatalog.UnitedStates, ["one", "two"]), AmazonCrawlPolicy.Fingerprint(AmazonMarketplaceCatalog.UnitedStates, ["ONE", "TWO"]));
-        Assert.NotEqual(AmazonCrawlPolicy.Fingerprint(AmazonMarketplaceCatalog.UnitedStates, ["one", "two"]), AmazonCrawlPolicy.Fingerprint(AmazonMarketplaceCatalog.UnitedStates, ["two", "one"]));
-        Assert.NotEqual(AmazonCrawlPolicy.Fingerprint(AmazonMarketplaceCatalog.UnitedStates, ["one", "two"]), AmazonCrawlPolicy.Fingerprint(AmazonMarketplaceCatalog.GetByLanguage("de"), ["one", "two"]));
+        Assert.Equal(AmazonCrawlPolicy.Fingerprint(Profile(), ["one", "two"]), AmazonCrawlPolicy.Fingerprint(Profile(), ["ONE", "TWO"]));
+        Assert.NotEqual(AmazonCrawlPolicy.Fingerprint(Profile(), ["one", "two"]), AmazonCrawlPolicy.Fingerprint(Profile(), ["two", "one"]));
+        Assert.NotEqual(AmazonCrawlPolicy.Fingerprint(Profile(), ["one", "two"]), AmazonCrawlPolicy.Fingerprint(Profile("de"), ["one", "two"]));
     }
 
     [Fact]
@@ -48,7 +49,7 @@ public sealed class AmazonCrawlPolicyTests
         ]);
         var selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "B000000002" };
 
-        var result = AmazonAsinSelection.Select(0, "cozy", parsed, selected, AmazonMarketplaceCatalog.UnitedStates);
+        var result = AmazonAsinSelection.Select(0, "cozy", parsed, selected, Profile());
 
         Assert.Equal(AmazonAsinKeywordStatus.Selected, result.Status);
         Assert.Equal("B000000003", result.Asin);
@@ -63,7 +64,7 @@ public sealed class AmazonCrawlPolicyTests
     {
         var parsed = new AmazonSearchParseResult(AmazonSearchPageDiagnostic.Results, [new("B000000001", title)]);
 
-        Assert.Equal(expected, AmazonAsinSelection.Select(0, "test", parsed, new HashSet<string>(), AmazonMarketplaceCatalog.UnitedStates).Status);
+        Assert.Equal(expected, AmazonAsinSelection.Select(0, "test", parsed, new HashSet<string>(), Profile()).Status);
     }
 
     [Theory]
@@ -79,16 +80,19 @@ public sealed class AmazonCrawlPolicyTests
     {
         var parsed = new AmazonSearchParseResult(AmazonSearchPageDiagnostic.Results, [new("B000000001", title)]);
 
-        var result = AmazonAsinSelection.Select(0, "test", parsed, new HashSet<string>(), AmazonMarketplaceCatalog.GetByLanguage(languageCode));
+        var result = AmazonAsinSelection.Select(0, "test", parsed, new HashSet<string>(), Profile(languageCode));
 
         Assert.Equal(expected, result.Status);
     }
 
     [Fact]
-    public void Marketplace_catalog_covers_every_supported_language()
+    public void Marketplace_settings_cover_every_supported_language()
     {
-        Assert.Equal(8, AmazonMarketplaceCatalog.All.Count);
-        Assert.Equal(["en", "de", "fr", "es", "it", "pt", "ja", "nl"], AmazonMarketplaceCatalog.All.Select(profile => profile.LanguageCode));
-        Assert.Equal("amazon.com.br", AmazonMarketplaceCatalog.GetByLanguage("pt").Domain);
+        Assert.Equal(8, AmazonMarketplaceProfilePolicy.DefaultProfiles.Count);
+        Assert.Equal(["en", "de", "fr", "es", "it", "pt", "ja", "nl"], AmazonMarketplaceProfilePolicy.DefaultProfiles.Keys);
+        Assert.Equal("amazon.com.br", Profile("pt").Domain);
     }
+
+    private static AmazonMarketplaceProfile Profile(string languageCode = "en") =>
+        AmazonMarketplaceProfilePolicy.Resolve(GlobalSettings.Default, languageCode);
 }

@@ -58,12 +58,14 @@ public sealed class JsonGlobalSettingsStore(IApplicationRootDiscovery discovery,
     private static GlobalSettings NormalizeLoaded(GlobalSettings settings)
     {
         settings = GenericKeywordProfilePolicy.NormalizeLoaded(settings);
+        settings = AmazonMarketplaceProfilePolicy.NormalizeLoaded(settings);
         return Normalize(settings);
     }
 
     private static GlobalSettings NormalizeForSave(GlobalSettings settings)
     {
         settings = GenericKeywordProfilePolicy.NormalizeForSave(settings);
+        settings = AmazonMarketplaceProfilePolicy.NormalizeForSave(settings);
         return Normalize(settings);
     }
 

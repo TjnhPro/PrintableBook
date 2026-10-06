@@ -19,7 +19,7 @@ public sealed class CloakBrowserStorageLayout
     public string ProfileFor(AmazonMarketplaceProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        return profile.MarketCode == AmazonMarketplaceCatalog.UnitedStates.MarketCode
+        return profile.LanguageCode == "en" && profile.MarketCode == "us"
             ? Profile
             : Path.Combine(Root, $"profile-{profile.MarketCode}-v1");
     }

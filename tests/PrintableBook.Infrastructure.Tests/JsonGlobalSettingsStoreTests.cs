@@ -2,6 +2,7 @@ using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
+using PrintableBook.Core.Application.AmazonCrawl;
 using PrintableBook.Infrastructure.Discovery;
 using PrintableBook.Infrastructure.FileSystem;
 
@@ -193,6 +194,64 @@ public sealed class JsonGlobalSettingsStoreTests : IAsyncLifetime
 
         Assert.Empty(loaded.EffectiveGenericKeywords);
         Assert.Empty(loaded.GenericKeywords!);
+    }
+
+    [Fact]
+    public async Task LoadAsync_legacy_settings_materializes_default_amazon_marketplace_profiles_without_rewriting_file()
+    {
+        var paths = CreatePaths();
+        Directory.CreateDirectory(root);
+        const string legacy = "{\"maximumPageConcurrency\":4,\"artworkDetectionThreshold\":20,\"artworkMaximumSide\":2270,\"workingPageWidth\":2550,\"workingPageHeight\":2550,\"finalPageWidth\":2588,\"finalPageHeight\":2625,\"dpi\":300}";
+        await File.WriteAllTextAsync(paths.SettingsFile.Value, legacy);
+
+        var loaded = await CreateStore(paths).LoadAsync(paths);
+
+        Assert.Equal(8, loaded.AmazonMarketplaceProfiles!.Count);
+        Assert.Equal("https://www.amazon.de/", loaded.AmazonMarketplaceProfiles["de"].BaseUrl);
+        Assert.Equal("Malbuch, Malbücher, Ausmalbuch, Ausmalbücher", loaded.AmazonMarketplaceProfiles["de"].TitleTerms);
+        Assert.Equal(legacy, await File.ReadAllTextAsync(paths.SettingsFile.Value));
+    }
+
+    [Fact]
+    public async Task SaveAsync_normalizes_and_round_trips_amazon_marketplace_profiles()
+    {
+        var paths = CreatePaths();
+        var store = CreateStore(paths);
+        var profiles = AmazonMarketplaceProfilePolicy.DefaultProfiles.ToDictionary(pair => pair.Key, pair => pair.Value);
+        profiles["de"] = new AmazonMarketplaceSettings(" DE-BOOKS ", "https://amazon.de/", " de-DE ", " Malbuch, MALBUCH, Ausmalbuch ");
+
+        await store.SaveAsync(GlobalSettings.Default with { AmazonMarketplaceProfiles = profiles });
+        var loaded = await store.LoadAsync(paths);
+
+        Assert.Equal(new AmazonMarketplaceSettings("de-books", "https://amazon.de/", "de-DE", "Malbuch, Ausmalbuch"), loaded.AmazonMarketplaceProfiles!["de"]);
+        var runtime = AmazonMarketplaceProfilePolicy.Resolve(loaded, "de");
+        Assert.Equal("de-books", runtime.MarketCode);
+        Assert.Equal(["Malbuch", "Ausmalbuch"], runtime.TitleTerms);
+    }
+
+    [Theory]
+    [InlineData("http://www.amazon.de/")]
+    [InlineData("https://www.amazon.com/")]
+    [InlineData("https://www.amazon.de/s?k=cats")]
+    public async Task SaveAsync_rejects_invalid_or_cross_market_amazon_base_url(string baseUrl)
+    {
+        var paths = CreatePaths();
+        var profiles = AmazonMarketplaceProfilePolicy.DefaultProfiles.ToDictionary(pair => pair.Key, pair => pair.Value);
+        profiles["de"] = profiles["de"] with { BaseUrl = baseUrl };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => CreateStore(paths).SaveAsync(
+            GlobalSettings.Default with { AmazonMarketplaceProfiles = profiles }).AsTask());
+    }
+
+    [Fact]
+    public async Task SaveAsync_rejects_duplicate_amazon_profile_keys()
+    {
+        var paths = CreatePaths();
+        var profiles = AmazonMarketplaceProfilePolicy.DefaultProfiles.ToDictionary(pair => pair.Key, pair => pair.Value);
+        profiles["de"] = profiles["de"] with { ProfileKey = "us" };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => CreateStore(paths).SaveAsync(
+            GlobalSettings.Default with { AmazonMarketplaceProfiles = profiles }).AsTask());
     }
 
     [Theory]

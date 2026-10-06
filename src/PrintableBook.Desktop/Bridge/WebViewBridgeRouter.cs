@@ -164,7 +164,8 @@ internal sealed class WebViewBridgeRouter(
                         if (book is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
                         var summary = current!.BookSummaries.FirstOrDefault(item => item.BookId == book.Id);
                         if (summary is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
-                        var profile = AmazonMarketplaceCatalog.GetByLanguage(summary.LanguageCode);
+                        if (settingsStore is null) return BridgeResponse.UnsupportedCommand(request.Id);
+                        var profile = AmazonMarketplaceProfilePolicy.Resolve(await settingsStore.LoadAsync(cancellationToken), summary.LanguageCode);
                         var trustedSource = await bookKeywordPreviewService.ResolveCrawlSourceAsync(book, previewReceipt, savedBuildId, cancellationToken);
                         snapshot = await amazonAsinCrawlSessionService.StartAsync(crawlBookId, trustedSource.Keywords, profile, cancellationToken);
                         crawlSources[crawlBookId] = trustedSource;
@@ -1393,6 +1394,7 @@ internal sealed class WebViewBridgeRouter(
                 var settings = payload.Deserialize<GlobalSettings>(JsonOptions);
                 if (settings is null) return new BridgeResponse(Version, request.Id, false, null, "invalid_settings");
                 settings = GenericKeywordProfilePolicy.NormalizeForSave(settings);
+                settings = AmazonMarketplaceProfilePolicy.NormalizeForSave(settings);
                 await settingsStore.SaveAsync(settings, cancellationToken);
                 return BridgeResponse.Succeeded(request.Id, "settings.saved", settings);
             }
@@ -1427,7 +1429,7 @@ internal sealed class WebViewBridgeRouter(
         BridgeRequest request,
         CancellationToken cancellationToken)
     {
-        if (applicationLoadCoordinator is null || request.Payload is not { } payload ||
+        if (applicationLoadCoordinator is null || settingsStore is null || request.Payload is not { } payload ||
             !TryGetRequiredString(payload, "bookId", out var bookId))
         {
             return (null, null, "invalid_amazon_browser");
@@ -1438,7 +1440,7 @@ internal sealed class WebViewBridgeRouter(
         var summary = snapshot.BookSummaries.FirstOrDefault(item => string.Equals(item.BookId.Value, bookId, StringComparison.Ordinal));
         return summary is null
             ? (null, bookId, "book_not_found")
-            : (AmazonMarketplaceCatalog.GetByLanguage(summary.LanguageCode), bookId, null);
+            : (AmazonMarketplaceProfilePolicy.Resolve(await settingsStore.LoadAsync(cancellationToken), summary.LanguageCode), bookId, null);
     }
 
     private async ValueTask<bool> IsProcessingActiveAsync(CancellationToken cancellationToken)

@@ -77,9 +77,9 @@ public sealed record AmazonAsinCrawlRequest(
     string RequestFingerprint,
     AmazonMarketplaceProfile Profile)
 {
-    public static AmazonAsinCrawlRequest Create(IEnumerable<string> keywords, AmazonMarketplaceProfile? profile = null)
+    public static AmazonAsinCrawlRequest Create(IEnumerable<string> keywords, AmazonMarketplaceProfile profile)
     {
-        profile ??= AmazonMarketplaceCatalog.UnitedStates;
+        ArgumentNullException.ThrowIfNull(profile);
         var normalized = AmazonCrawlPolicy.NormalizeKeywords(keywords);
         return new AmazonAsinCrawlRequest(normalized, AmazonCrawlPolicy.Fingerprint(profile, normalized), profile);
     }

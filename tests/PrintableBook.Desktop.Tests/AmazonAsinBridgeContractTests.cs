@@ -26,7 +26,7 @@ public sealed class AmazonAsinBridgeContractTests
     public async Task Browser_status_and_open_use_the_typed_browser_boundary()
     {
         var browser = new StubBrowser();
-        var router = new WebViewBridgeRouter(CreateCoordinator("de"), amazonSearchPageClient: browser);
+        var router = new WebViewBridgeRouter(CreateCoordinator("de"), settingsStore: new StubSettingsStore(), amazonSearchPageClient: browser);
 
         var status = await router.HandleAsync("""{"version":1,"id":"status","command":"amazon.browser.status","payload":{"bookId":"Book One"}}""");
         Assert.True(status.Ok);
@@ -46,12 +46,31 @@ public sealed class AmazonAsinBridgeContractTests
     {
         var browser = new StubBrowser();
         var session = new StubSession { Active = true };
-        var router = new WebViewBridgeRouter(CreateCoordinator("en"), amazonAsinCrawlSessionService: session, amazonSearchPageClient: browser);
+        var router = new WebViewBridgeRouter(CreateCoordinator("en"), settingsStore: new StubSettingsStore(), amazonAsinCrawlSessionService: session, amazonSearchPageClient: browser);
 
         var response = await router.HandleAsync("""{"version":1,"id":"open","command":"amazon.browser.open","payload":{"bookId":"Book One"}}""");
 
         Assert.Equal("amazon_asin_crawl_active", response.Error);
         Assert.Equal(0, browser.OpenCount);
+    }
+
+    [Fact]
+    public async Task Browser_target_uses_the_saved_marketplace_profile_for_the_book_language()
+    {
+        var profiles = AmazonMarketplaceProfilePolicy.DefaultProfiles.ToDictionary(pair => pair.Key, pair => pair.Value);
+        profiles["de"] = profiles["de"] with { ProfileKey = "de-books", Locale = "de-AT", TitleTerms = "Malbuch, Ausmalbuch" };
+        var browser = new StubBrowser();
+        var router = new WebViewBridgeRouter(
+            CreateCoordinator("de"),
+            settingsStore: new StubSettingsStore(GlobalSettings.Default with { AmazonMarketplaceProfiles = profiles }),
+            amazonSearchPageClient: browser);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"status","command":"amazon.browser.status","payload":{"bookId":"Book One"}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("de-books", browser.StatusProfile?.MarketCode);
+        Assert.Equal("de-AT", browser.StatusProfile?.Locale);
+        Assert.Equal(["Malbuch", "Ausmalbuch"], browser.StatusProfile?.TitleTerms);
     }
 
     [Fact]
@@ -122,6 +141,14 @@ public sealed class AmazonAsinBridgeContractTests
         public ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default) => ValueTask.FromResult(true);
 
         private AmazonAsinCrawlSessionSnapshot Snapshot(string bookId) => new(null, bookId, Active, false, null);
+    }
+
+    private sealed class StubSettingsStore(GlobalSettings? settings = null) : IGlobalSettingsStore
+    {
+        private readonly GlobalSettings settings = settings ?? GlobalSettings.Default;
+        public ValueTask<GlobalSettings> LoadAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(settings);
+        public ValueTask<GlobalSettings> LoadAsync(ApplicationPaths paths, CancellationToken cancellationToken = default) => ValueTask.FromResult(settings);
+        public ValueTask SaveAsync(GlobalSettings settings, CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 
     private static ApplicationLoadCoordinator CreateCoordinator(string languageCode) =>

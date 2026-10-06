@@ -2,6 +2,7 @@ using global::CloakBrowser;
 using Microsoft.Playwright;
 using PrintableBook.Core.Application.AmazonCrawl;
 using PrintableBook.Core.Application.Diagnostics;
+using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Infrastructure.AmazonCrawl;
 using PrintableBook.Infrastructure.CloakBrowser;
 
@@ -126,7 +127,7 @@ public sealed class CloakBrowserLifecycleIntegrationTests
 
         try
         {
-            var profile = AmazonMarketplaceCatalog.UnitedStates;
+            var profile = AmazonMarketplaceProfilePolicy.Resolve(GlobalSettings.Default, "en");
             var status = await client.OpenAsync(profile).AsTask().WaitAsync(LaunchTimeout);
             Assert.Equal(CloakBrowserState.Ready, status.State);
 

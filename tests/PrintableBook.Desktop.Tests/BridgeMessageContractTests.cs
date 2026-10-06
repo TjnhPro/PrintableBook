@@ -1052,6 +1052,7 @@ public sealed class BridgeMessageContractTests
         var crawl = new StubAmazonAsinCrawlSessionService();
         var router = new WebViewBridgeRouter(
             new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            settingsStore: new StubSettingsStore(),
             bookKeywordPreviewService: preview,
             amazonAsinCrawlSessionService: crawl);
 

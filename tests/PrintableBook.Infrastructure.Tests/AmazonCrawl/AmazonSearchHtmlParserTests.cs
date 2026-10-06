@@ -1,4 +1,5 @@
 using PrintableBook.Core.Application.AmazonCrawl;
+using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Infrastructure.AmazonCrawl;
 
 namespace PrintableBook.Infrastructure.Tests.AmazonCrawl;
@@ -6,7 +7,7 @@ namespace PrintableBook.Infrastructure.Tests.AmazonCrawl;
 public sealed class AmazonSearchHtmlParserTests
 {
     private readonly AmazonSearchHtmlParser parser = new();
-    private readonly AmazonMarketplaceProfile profile = AmazonMarketplaceCatalog.UnitedStates;
+    private readonly AmazonMarketplaceProfile profile = Profile();
 
     [Fact]
     public void Parse_returns_valid_candidates_in_dom_order_and_deduplicates_asins()
@@ -101,7 +102,7 @@ public sealed class AmazonSearchHtmlParserTests
             </body></html>
             """;
 
-        var result = parser.Parse(html, AmazonMarketplaceCatalog.GetByLanguage("de"));
+        var result = parser.Parse(html, Profile("de"));
 
         Assert.Equal("B000000002", Assert.Single(result.Candidates).Asin);
     }
@@ -114,7 +115,7 @@ public sealed class AmazonSearchHtmlParserTests
     {
         var html = $"<html><body><input id='twotabsearchtextbox'><div data-component-type='s-search-result' data-asin='B000000001'><span class='a-size-base-plus a-color-base a-text-normal'>Title</span><span>{marker}</span></div></body></html>";
 
-        var result = parser.Parse(html, AmazonMarketplaceCatalog.GetByLanguage(languageCode));
+        var result = parser.Parse(html, Profile(languageCode));
 
         Assert.Equal(AmazonSearchPageDiagnostic.Results, result.Diagnostic);
         Assert.Empty(result.Candidates);
@@ -136,4 +137,7 @@ public sealed class AmazonSearchHtmlParserTests
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PrintableBook.sln"))) directory = directory.Parent;
         return directory?.FullName ?? throw new InvalidOperationException("Repository root was not found.");
     }
+
+    private static AmazonMarketplaceProfile Profile(string languageCode = "en") =>
+        AmazonMarketplaceProfilePolicy.Resolve(GlobalSettings.Default, languageCode);
 }

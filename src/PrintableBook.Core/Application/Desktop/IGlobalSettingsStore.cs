@@ -3,10 +3,11 @@ using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.S3Storage;
+using PrintableBook.Core.Application.AmazonCrawl;
 
 namespace PrintableBook.Core.Application.Desktop;
 
-public sealed record GlobalSettings(int MaximumPageConcurrency, byte ArtworkDetectionThreshold, int ArtworkMaximumSide, int WorkingPageWidth, int WorkingPageHeight, int FinalPageWidth, int FinalPageHeight, int Dpi, ArtworkSourceNormalizationSettings? ArtworkSourceNormalization = null, BorderLineDetectionSettings? BorderLineDetection = null, IReadOnlyList<string>? GenericKeywords = null, S3StorageConfiguration? S3Storage = null, IReadOnlyDictionary<string, IReadOnlyList<string>>? GenericKeywordsByLanguage = null)
+public sealed record GlobalSettings(int MaximumPageConcurrency, byte ArtworkDetectionThreshold, int ArtworkMaximumSide, int WorkingPageWidth, int WorkingPageHeight, int FinalPageWidth, int FinalPageHeight, int Dpi, ArtworkSourceNormalizationSettings? ArtworkSourceNormalization = null, BorderLineDetectionSettings? BorderLineDetection = null, IReadOnlyList<string>? GenericKeywords = null, S3StorageConfiguration? S3Storage = null, IReadOnlyDictionary<string, IReadOnlyList<string>>? GenericKeywordsByLanguage = null, IReadOnlyDictionary<string, AmazonMarketplaceSettings>? AmazonMarketplaceProfiles = null)
 {
     public static GlobalSettings Default { get; } = new(4, 20, 2270, 2550, 2550, 2588, 2625, 300);
 
@@ -55,6 +56,10 @@ public sealed record GlobalSettings(int MaximumPageConcurrency, byte ArtworkDete
 
         return language.Code == "en" ? EffectiveGenericKeywords : [];
     }
+
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, AmazonMarketplaceSettings> EffectiveAmazonMarketplaceProfiles =>
+        AmazonMarketplaceProfilePolicy.NormalizeLoaded(this).AmazonMarketplaceProfiles!;
 
     [JsonIgnore]
     public S3StorageConfiguration EffectiveS3Storage => S3StoragePolicy.NormalizeConfiguration(S3Storage ?? S3StorageConfiguration.Default);
