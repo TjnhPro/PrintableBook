@@ -1,6 +1,8 @@
 <!-- /autoplan restore point: C:/Users/admin/.gstack/projects/PrintableBook/feat-book-keyword-builder-autoplan-restore-20260929-071311.md -->
 # Keyword Builder — Amazon ASIN Crawler
 
+> Các quyết định marketplace cố định và reuse browser session trong tài liệu gốc đã được thay thế bởi [Amazon Crawl by Language Market](amazon-crawl-by-language-market.md). Tài liệu mới là contract hiện hành cho Phase 4; crawler vẫn giữ nguyên phạm vi MVP.
+
 ## Trạng thái
 
 - Loại tài liệu: implementation plan đã qua `/autoplan` review.
