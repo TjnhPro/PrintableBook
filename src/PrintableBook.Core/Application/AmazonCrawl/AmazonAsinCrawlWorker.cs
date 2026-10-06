@@ -34,7 +34,7 @@ public sealed class AmazonAsinCrawlWorker(
         try
         {
             context.Report("amazon.browser.ensure", 0, request.Keywords.Count, "Preparing Amazon browser");
-            await pageClient.OpenAsync(token);
+            await pageClient.OpenFreshAsync(request.Profile, token);
             Publish(AmazonAsinCrawlOutcome.Running);
 
             for (var index = 0; index < request.Keywords.Count; index++)
@@ -47,7 +47,7 @@ public sealed class AmazonAsinCrawlWorker(
                 try
                 {
                     var response = await FetchWithRetryAsync(AmazonCrawlPolicy.BuildSearchUri(request.Profile, request.Keywords[index]), token);
-                    var parsed = parser.Parse(response.Html);
+                    var parsed = parser.Parse(response.Html, request.Profile);
                     rows[index] = AmazonAsinSelection.Select(index, request.Keywords[index], parsed, selected, request.Profile);
 
                     if (parsed.Diagnostic is AmazonSearchPageDiagnostic.NeedsAttention or AmazonSearchPageDiagnostic.UnexpectedMarkup)
@@ -92,12 +92,24 @@ public sealed class AmazonAsinCrawlWorker(
                 exception.NeedsAttention ? AmazonAsinCrawlOutcome.NeedsAttention : AmazonAsinCrawlOutcome.Failed,
                 exception.Code);
         }
+        finally
+        {
+            try
+            {
+                await pageClient.CloseAsync(CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                var detail = exception is AmazonSearchPageException pageException ? pageException.Code : exception.Message;
+                context.Report("amazon.browser.close.warning", detail: detail, subject: request.Profile.MarketCode);
+            }
+        }
 
         async ValueTask<BrowserFetchResponse> FetchWithRetryAsync(Uri uri, CancellationToken tokenValue)
         {
             for (var attempt = 0; ; attempt++)
             {
-                try { return await pageClient.FetchAsync(uri, tokenValue); }
+                try { return await pageClient.FetchAsync(request.Profile, uri, tokenValue); }
                 catch (AmazonSearchPageException exception) when (exception.Retryable && attempt == 0)
                 {
                     await delay.WaitAsync(tokenValue);

@@ -60,13 +60,15 @@ public sealed class AmazonAsinBridgeContractTests
     private sealed class StubBrowser : IAmazonSearchPageClient
     {
         public int OpenCount { get; private set; }
-        public ValueTask<CloakBrowserStatus> GetStatusAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(new CloakBrowserStatus(CloakBrowserState.Closed));
-        public ValueTask<CloakBrowserStatus> OpenAsync(CancellationToken cancellationToken = default)
+        public ValueTask<CloakBrowserStatus> GetStatusAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default) => ValueTask.FromResult(new CloakBrowserStatus(CloakBrowserState.Closed));
+        public ValueTask<CloakBrowserStatus> OpenAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default)
         {
             OpenCount++;
             return ValueTask.FromResult(new CloakBrowserStatus(CloakBrowserState.Ready));
         }
-        public ValueTask<BrowserFetchResponse> FetchAsync(Uri uri, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public ValueTask<CloakBrowserStatus> OpenFreshAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default) => OpenAsync(profile, cancellationToken);
+        public ValueTask CloseAsync(CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+        public ValueTask<BrowserFetchResponse> FetchAsync(AmazonMarketplaceProfile profile, Uri uri, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class StubSession : IAmazonAsinCrawlSessionService

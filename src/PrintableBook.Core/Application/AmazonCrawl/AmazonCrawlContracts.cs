@@ -159,7 +159,7 @@ public sealed record AmazonSearchParseResult(
 
 public interface IAmazonSearchHtmlParser
 {
-    AmazonSearchParseResult Parse(string html);
+    AmazonSearchParseResult Parse(string html, AmazonMarketplaceProfile profile);
 }
 
 public sealed record BrowserFetchResponse(
@@ -182,13 +182,30 @@ public enum CloakBrowserState
     Error
 }
 
-public sealed record CloakBrowserStatus(CloakBrowserState State, string? ReasonCode = null);
+public sealed record CloakBrowserStatus(
+    CloakBrowserState State,
+    string? ReasonCode = null,
+    string? TargetMarketCode = null,
+    string? TargetMarketName = null,
+    string? TargetDomain = null,
+    string? ActiveMarketCode = null);
 
 public interface IAmazonSearchPageClient
 {
-    ValueTask<CloakBrowserStatus> GetStatusAsync(CancellationToken cancellationToken = default);
-    ValueTask<CloakBrowserStatus> OpenAsync(CancellationToken cancellationToken = default);
-    ValueTask<BrowserFetchResponse> FetchAsync(Uri uri, CancellationToken cancellationToken = default);
+    ValueTask<CloakBrowserStatus> GetStatusAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default);
+    ValueTask<CloakBrowserStatus> OpenAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default);
+    ValueTask<CloakBrowserStatus> OpenFreshAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default);
+    ValueTask CloseAsync(CancellationToken cancellationToken = default);
+    ValueTask<BrowserFetchResponse> FetchAsync(AmazonMarketplaceProfile profile, Uri uri, CancellationToken cancellationToken = default);
+
+    ValueTask<CloakBrowserStatus> GetStatusAsync(CancellationToken cancellationToken = default) =>
+        GetStatusAsync(AmazonMarketplaceCatalog.UnitedStates, cancellationToken);
+
+    ValueTask<CloakBrowserStatus> OpenAsync(CancellationToken cancellationToken = default) =>
+        OpenAsync(AmazonMarketplaceCatalog.UnitedStates, cancellationToken);
+
+    ValueTask<BrowserFetchResponse> FetchAsync(Uri uri, CancellationToken cancellationToken = default) =>
+        FetchAsync(AmazonMarketplaceCatalog.UnitedStates, uri, cancellationToken);
 }
 
 public interface IAmazonBrowserLifetime

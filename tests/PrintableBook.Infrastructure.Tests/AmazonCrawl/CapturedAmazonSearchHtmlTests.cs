@@ -13,7 +13,7 @@ public sealed class CapturedAmazonSearchHtmlTests
         var path = Path.Combine(RepositoryRoot(), "docs", "screenshots", "keyword.html");
         Assert.True(File.Exists(path), $"Captured fixture is missing: {path}");
 
-        var result = new AmazonSearchHtmlParser().Parse(File.ReadAllText(path));
+        var result = new AmazonSearchHtmlParser().Parse(File.ReadAllText(path), AmazonMarketplaceCatalog.UnitedStates);
 
         Assert.Equal(AmazonSearchPageDiagnostic.Results, result.Diagnostic);
         Assert.Null(result.ReasonCode);

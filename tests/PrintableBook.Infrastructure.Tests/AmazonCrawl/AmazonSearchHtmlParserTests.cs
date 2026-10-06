@@ -6,6 +6,7 @@ namespace PrintableBook.Infrastructure.Tests.AmazonCrawl;
 public sealed class AmazonSearchHtmlParserTests
 {
     private readonly AmazonSearchHtmlParser parser = new();
+    private readonly AmazonMarketplaceProfile profile = AmazonMarketplaceCatalog.UnitedStates;
 
     [Fact]
     public void Parse_returns_valid_candidates_in_dom_order_and_deduplicates_asins()
@@ -20,7 +21,7 @@ public sealed class AmazonSearchHtmlParserTests
             </body></html>
             """;
 
-        var result = parser.Parse(html);
+        var result = parser.Parse(html, profile);
 
         Assert.Equal(AmazonSearchPageDiagnostic.Results, result.Diagnostic);
         Assert.Equal(["B000000001", "B000000002"], result.Candidates.Select(item => item.Asin));
@@ -37,13 +38,13 @@ public sealed class AmazonSearchHtmlParserTests
                 <span class="a-size-base-plus a-color-base a-text-normal">Paid Coloring Book</span>
                 <span>Sponsored</span>
               </div>
-              <div class="s-result-item AdHolder" data-component-type="s-search-result" data-asin="B000000001">
+              <div class="s-result-item" data-component-type="s-search-result" data-asin="B000000001">
                 <span class="a-size-base-plus a-color-base a-text-normal">Organic Coloring Book</span>
               </div>
             </body></html>
             """;
 
-        var result = parser.Parse(html);
+        var result = parser.Parse(html, profile);
 
         var candidate = Assert.Single(result.Candidates);
         Assert.Equal("B000000001", candidate.Asin);
@@ -59,7 +60,7 @@ public sealed class AmazonSearchHtmlParserTests
     {
         var html = $"<html><body><input id='twotabsearchtextbox'><div data-component-type='s-search-result' data-asin='B000000001'>{titleMarkup}</div></body></html>";
 
-        var candidate = Assert.Single(parser.Parse(html).Candidates);
+        var candidate = Assert.Single(parser.Parse(html, profile).Candidates);
 
         Assert.Equal(expectedTitle, candidate.Title);
     }
@@ -70,7 +71,7 @@ public sealed class AmazonSearchHtmlParserTests
     [InlineData("<html><body><input id='twotabsearchtextbox'><main>Different markup</main></body></html>", AmazonSearchPageDiagnostic.UnexpectedMarkup)]
     public void Parse_classifies_terminal_page_shapes(string html, AmazonSearchPageDiagnostic expected)
     {
-        Assert.Equal(expected, parser.Parse(html).Diagnostic);
+        Assert.Equal(expected, parser.Parse(html, profile).Diagnostic);
     }
 
     [Theory]
@@ -78,10 +79,44 @@ public sealed class AmazonSearchHtmlParserTests
     [InlineData("<html><body><script>const marker = 'id=\"twotabsearchtextbox\"';</script><div data-component-type='s-search-result' data-asin='B000000001'><h2><span>Coloring Book</span></h2></div></body></html>")]
     public void Parse_rejects_result_cards_when_the_amazon_searchbox_element_is_missing(string html)
     {
-        var result = parser.Parse(html);
+        var result = parser.Parse(html, profile);
 
         Assert.Equal(AmazonSearchPageDiagnostic.UnexpectedMarkup, result.Diagnostic);
         Assert.Equal("amazon_searchbox_missing", result.ReasonCode);
+        Assert.Empty(result.Candidates);
+    }
+
+    [Fact]
+    public void Parse_uses_structural_sponsored_markers_before_localized_text()
+    {
+        const string html = """
+            <html><body>
+              <input id="twotabsearchtextbox">
+              <div class="s-result-item AdHolder" data-component-type="s-search-result" data-asin="B000000001">
+                <span class="a-size-base-plus a-color-base a-text-normal">Bezahltes Malbuch</span>
+              </div>
+              <div data-component-type="s-search-result" data-asin="B000000002">
+                <span class="a-size-base-plus a-color-base a-text-normal">Normales Malbuch</span>
+              </div>
+            </body></html>
+            """;
+
+        var result = parser.Parse(html, AmazonMarketplaceCatalog.GetByLanguage("de"));
+
+        Assert.Equal("B000000002", Assert.Single(result.Candidates).Asin);
+    }
+
+    [Theory]
+    [InlineData("de", "Gesponsert")]
+    [InlineData("fr", "Sponsorisé")]
+    [InlineData("ja", "スポンサー")]
+    public void Parse_applies_best_effort_localized_sponsored_markers(string languageCode, string marker)
+    {
+        var html = $"<html><body><input id='twotabsearchtextbox'><div data-component-type='s-search-result' data-asin='B000000001'><span class='a-size-base-plus a-color-base a-text-normal'>Title</span><span>{marker}</span></div></body></html>";
+
+        var result = parser.Parse(html, AmazonMarketplaceCatalog.GetByLanguage(languageCode));
+
+        Assert.Equal(AmazonSearchPageDiagnostic.Results, result.Diagnostic);
         Assert.Empty(result.Candidates);
     }
 

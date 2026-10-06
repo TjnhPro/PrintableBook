@@ -1,3 +1,4 @@
+using PrintableBook.Core.Application.AmazonCrawl;
 using PrintableBook.Infrastructure.CloakBrowser;
 
 namespace PrintableBook.Infrastructure.Tests.CloakBrowser;
@@ -23,8 +24,8 @@ public sealed class CloakBrowserStorageLayoutTests
         {
             var layout = new CloakBrowserStorageLayout(root);
 
-            layout.EnsureWritable();
-            layout.EnsureWritable();
+        layout.EnsureWritable(AmazonMarketplaceCatalog.UnitedStates);
+        layout.EnsureWritable(AmazonMarketplaceCatalog.UnitedStates);
 
             Assert.True(Directory.Exists(layout.Profile));
             Assert.True(Directory.Exists(layout.Cache));
@@ -34,6 +35,17 @@ public sealed class CloakBrowserStorageLayoutTests
         {
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Fact]
+    public void Layout_keeps_US_legacy_profile_and_isolates_other_markets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "printable-book-layout");
+        var layout = new CloakBrowserStorageLayout(root);
+
+        Assert.Equal(layout.Profile, layout.ProfileFor(AmazonMarketplaceCatalog.UnitedStates));
+        Assert.Equal(Path.Combine(layout.Root, "profile-de-v1"), layout.ProfileFor(AmazonMarketplaceCatalog.GetByLanguage("de")));
+        Assert.NotEqual(layout.ProfileFor(AmazonMarketplaceCatalog.GetByLanguage("de")), layout.ProfileFor(AmazonMarketplaceCatalog.GetByLanguage("fr")));
     }
 
     [Fact]
@@ -47,8 +59,8 @@ public sealed class CloakBrowserStorageLayoutTests
         Assert.Contains("JSON.stringify", source, StringComparison.Ordinal);
         Assert.Contains("EvaluateAsync<string>", source, StringComparison.Ordinal);
         Assert.Contains("JsonSerializer.Deserialize<FetchPayload>", source, StringComparison.Ordinal);
-        Assert.Contains("AmazonCrawlPolicy.IsAllowedUri(TryUri(page.Url))", source, StringComparison.Ordinal);
-        Assert.Contains("AmazonCrawlPolicy.IsAllowedUri(TryUri(payload.FinalUrl))", source, StringComparison.Ordinal);
+        Assert.Contains("AmazonCrawlPolicy.IsAllowedUri(profile, TryUri(page.Url))", source, StringComparison.Ordinal);
+        Assert.Contains("AmazonCrawlPolicy.IsAllowedUri(profile, TryUri(payload.FinalUrl))", source, StringComparison.Ordinal);
     }
 
     private static string RepositoryRoot()

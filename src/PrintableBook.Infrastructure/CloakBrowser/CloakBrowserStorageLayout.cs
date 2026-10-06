@@ -1,3 +1,5 @@
+using PrintableBook.Core.Application.AmazonCrawl;
+
 namespace PrintableBook.Infrastructure.CloakBrowser;
 
 public sealed class CloakBrowserStorageLayout
@@ -14,9 +16,17 @@ public sealed class CloakBrowserStorageLayout
     public string Profile { get; }
     public string Cache { get; }
 
-    public void EnsureWritable()
+    public string ProfileFor(AmazonMarketplaceProfile profile)
     {
-        Directory.CreateDirectory(Profile);
+        ArgumentNullException.ThrowIfNull(profile);
+        return profile.MarketCode == AmazonMarketplaceCatalog.UnitedStates.MarketCode
+            ? Profile
+            : Path.Combine(Root, $"profile-{profile.MarketCode}-v1");
+    }
+
+    public void EnsureWritable(AmazonMarketplaceProfile profile)
+    {
+        Directory.CreateDirectory(ProfileFor(profile));
         Directory.CreateDirectory(Cache);
         var probe = Path.Combine(Root, $".write-{Guid.NewGuid():N}");
         try
