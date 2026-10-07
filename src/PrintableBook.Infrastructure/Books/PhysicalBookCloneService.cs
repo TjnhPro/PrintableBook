@@ -186,7 +186,8 @@ public sealed class PhysicalBookCloneService(
             Metadata = source.Metadata,
             AssignedBrand = null,
             KeywordBuilder = null,
-            LanguageCode = language.Code
+            LanguageCode = language.Code,
+            IsCompleted = false
         };
     }
 

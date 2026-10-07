@@ -47,6 +47,7 @@ public sealed class PhysicalBookCloneServiceTests : IAsyncLifetime
                 "Jane Doe",
                 "ASIN-SHARED"),
             AssignedBrand = "Animal Brand",
+            IsCompleted = true,
             KeywordBuilder = new BookKeywordBuilderState(
                 ["animal coloring"], "keyword one", null, null, null, null, null, null,
                 "ads keyword", "ADS-ASIN", "build", DateTimeOffset.UtcNow, 4)
@@ -77,6 +78,7 @@ public sealed class PhysicalBookCloneServiceTests : IAsyncLifetime
         Assert.Equal(DateTimeOffset.MinValue, clonedState.UpdatedAt);
         Assert.Null(clonedState.AssignedBrand);
         Assert.Null(clonedState.KeywordBuilder);
+        Assert.False(clonedState.IsCompleted);
         Assert.Empty(clonedState.PublishedArtifactReferences!);
         Assert.Equal("fr", clonedState.LanguageCode);
         Assert.Equal("ASIN-SHARED", clonedState.Metadata!.Asin);

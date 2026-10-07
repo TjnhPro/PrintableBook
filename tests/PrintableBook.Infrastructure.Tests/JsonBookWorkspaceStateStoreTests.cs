@@ -21,6 +21,18 @@ public sealed class JsonBookWorkspaceStateStoreTests : IAsyncLifetime
         Assert.Equal(["a.png", "B.PNG"], state.InactiveInteriorSourceKeys);
         Assert.Null(state.PublishedInteriorPreviews);
         Assert.Equal("en", PrintableBook.Core.Application.Brands.SupportedLanguageCatalog.GetEffective(state.LanguageCode).Code);
+        Assert.False(state.IsCompleted);
+    }
+
+    [Fact]
+    public async Task SaveAsync_round_trips_completion_marker()
+    {
+        var workspace = await CreateWorkspaceAsync();
+        var store = new JsonBookWorkspaceStateStore(new PhysicalFileSystem());
+
+        await store.SaveAsync(workspace, BookProcessingState.NotStarted(new BookId("book")) with { IsCompleted = true });
+
+        Assert.True((await store.LoadAsync(workspace))!.IsCompleted);
     }
 
     [Fact]

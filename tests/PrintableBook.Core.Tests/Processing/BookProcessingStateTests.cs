@@ -7,13 +7,14 @@ namespace PrintableBook.Core.Tests.Processing;
 public sealed class BookProcessingStateTests
 {
     [Fact]
-    public void Processing_transitions_preserve_book_metadata_and_assignment()
+    public void Processing_transitions_preserve_book_metadata_assignment_and_completion_marker()
     {
         var metadata = BookProductionMetadata.Create("Title", null, "ABCD", null, "Jane Doe");
         var state = BookProcessingState.NotStarted(new BookId("book")) with
         {
             Metadata = metadata,
-            AssignedBrand = "Demo Brand"
+            AssignedBrand = "Demo Brand",
+            IsCompleted = true
         };
 
         var completed = state
@@ -24,6 +25,7 @@ public sealed class BookProcessingStateTests
 
         Assert.Same(metadata, completed.Metadata);
         Assert.Equal("Demo Brand", completed.AssignedBrand);
+        Assert.True(completed.IsCompleted);
     }
 
     [Fact]
@@ -72,6 +74,7 @@ public sealed class BookProcessingStateTests
         Assert.True(state.HasBackground);
         Assert.True(state.IsInteriorActive("Book interior/page.png"));
         Assert.Null(state.InactiveInteriorSourceKeys);
+        Assert.False(state.IsCompleted);
     }
 
     [Fact]

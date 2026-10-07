@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 const app = readFileSync(new URL("./js/app.js", import.meta.url), "utf8");
+const bookWorkspaceCss = readFileSync(new URL("./css/book-workspace.css", import.meta.url), "utf8");
 const expected = [
   'tabButton("settings", "Settings")',
   'tabButton("asin", "Keyword")',
@@ -112,6 +113,14 @@ const expected = [
   ,'data-amazon-profile-field="titleTerms"'
   ,'Comma-separated title phrases'
   ,'payload.amazonMarketplaceProfiles'
+  ,'"Complete"'
+  ,'data-book-completion-card'
+  ,'data-action="set-book-completion"'
+  ,'book.completion.set'
+  ,'Mark as completed'
+  ,'Mark as incomplete'
+  ,'This does not change its processing status.'
+  ,'filter === "Complete" ? bookIsCompleted(summary)'
 ];
 
 for (const value of expected) {
@@ -148,6 +157,34 @@ if (!/const blocked = !state\.bookCloneLanguageCode \|\| !destination \|\| desti
 
 if (!/const languageCandidates = languageBrandsFor\(summary\);[\s\S]*const candidates = matchingBrandsFor\(summary\)/.test(app)) {
   throw new Error("Brand Assignment must filter Language before Author.");
+}
+
+if (!/data-book-completion-card[\s\S]*aria-busy=[\s\S]*data-action="set-book-completion"[\s\S]*disabled/.test(app)) {
+  throw new Error("Book completion must expose pending state and disable repeated submission.");
+}
+
+if (!/const bookCompletionFilters = \["Incomplete", "Complete", "All"\]/.test(app)
+    || !/bookCompletion: "Incomplete"/.test(app)
+    || !/data-action="book-completion-filter"/.test(app)
+    || !/const completionCounts = bookCompletionFilters\.map\([\s\S]*matchesBookCompletionFilter/.test(app)) {
+  throw new Error("Book completion must be a separate filter that defaults to incomplete Books.");
+}
+
+if (/const bookStatuses = \[[^\]]*"Complete"/.test(app)) {
+  throw new Error("Complete must not be part of the processing Status filter.");
+}
+
+if (!/\.book-settings-background,\.book-settings-templates,\.book-settings-completion \{ grid-column:span 4; \}/.test(bookWorkspaceCss)) {
+  throw new Error("Brand background, Brand PSD templates and Book completion must use a 4-4-4 grid.");
+}
+
+if (/data-action="book-sort"/.test(app) || /bookSort:/.test(app)) {
+  throw new Error("The Book filter toolbar must not expose Sort state or controls.");
+}
+
+if (!/brandFilterOptions\.map\(\(\{ value, label, incomplete, total \}\)[\s\S]*\(\$\{incomplete\}\/\$\{total\}\)/.test(app)
+    || !/grid-template-columns:minmax\(220px,1\.35fr\) repeat\(3,minmax\(160px,1fr\)\)/.test(bookWorkspaceCss)) {
+  throw new Error("Book Brand options must show incomplete over total in the four-column toolbar.");
 }
 
 console.log(`UI contract passed (${expected.length} checks).`);

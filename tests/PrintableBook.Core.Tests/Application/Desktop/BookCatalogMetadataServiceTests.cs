@@ -259,6 +259,28 @@ public sealed class BookCatalogMetadataServiceTests
         Assert.Equal(0, stateStore.Saves);
     }
 
+    [Fact]
+    public async Task SetCompletion_persists_only_changed_values_and_preserves_book_state()
+    {
+        var original = BookProcessingState.NotStarted(new BookId("book")) with
+        {
+            Metadata = BookProductionMetadata.Create("Peaceful Days", null, null, null, "Jane Doe"),
+            AssignedBrand = "Brand A"
+        };
+        var stateStore = new StateStore(original);
+        var service = new BookCatalogMetadataService(stateStore, new BrandStore());
+
+        await service.SetCompletionAsync(Book(), true);
+        await service.SetCompletionAsync(Book(), true);
+        await service.SetCompletionAsync(Book(), false);
+
+        Assert.False(stateStore.State!.IsCompleted);
+        Assert.Equal("PEACEFUL DAYS", stateStore.State.Metadata!.Title);
+        Assert.Equal("Brand A", stateStore.State.AssignedBrand);
+        Assert.Equal(3, stateStore.Loads);
+        Assert.Equal(2, stateStore.Saves);
+    }
+
     [Theory]
     [InlineData("only three terms", 3)]
     [InlineData("one two three four five six seven", 7)]
