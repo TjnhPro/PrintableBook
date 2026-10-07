@@ -2125,6 +2125,7 @@ public sealed class BridgeMessageContractTests
         public BookProductionMetadata? Metadata { get; private set; }
         public string? AssignedBrand { get; private set; }
         public bool Unassigned { get; private set; }
+        public bool? IsCompleted { get; private set; }
         public string? BrandAuthor { get; private set; }
         public BookKeywordBuilderState? KeywordBuilder { get; private set; }
 
@@ -2158,6 +2159,12 @@ public sealed class BridgeMessageContractTests
         public ValueTask UnassignBrandAsync(DiscoveredBook book, CancellationToken cancellationToken = default)
         {
             Unassigned = true;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask SetCompletionAsync(DiscoveredBook book, bool isCompleted, CancellationToken cancellationToken = default)
+        {
+            IsCompleted = isCompleted;
             return ValueTask.CompletedTask;
         }
 

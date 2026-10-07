@@ -21,6 +21,7 @@ public interface IBookCatalogMetadataService
     ValueTask<BookKeywordBuilderState> SaveKeywordBuilderAsync(DiscoveredBook book, IReadOnlyList<string> keywords, string? adsAsin, CancellationToken cancellationToken = default);
     ValueTask AssignBrandAsync(DiscoveredBook book, DiscoveredBrand brand, CancellationToken cancellationToken = default);
     ValueTask UnassignBrandAsync(DiscoveredBook book, CancellationToken cancellationToken = default);
+    ValueTask SetCompletionAsync(DiscoveredBook book, bool isCompleted, CancellationToken cancellationToken = default);
     ValueTask SaveBrandAuthorAsync(DiscoveredBrand brand, string? author, CancellationToken cancellationToken = default);
 }
 
@@ -122,6 +123,17 @@ public sealed class BookCatalogMetadataService(
         ArgumentNullException.ThrowIfNull(book);
         var state = await LoadStateAsync(book, cancellationToken);
         await stateStore.SaveAsync(book.Workspace, state with { AssignedBrand = null }, cancellationToken);
+    }
+
+    public async ValueTask SetCompletionAsync(
+        DiscoveredBook book,
+        bool isCompleted,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(book);
+        var state = await LoadStateAsync(book, cancellationToken);
+        if (state.IsCompleted == isCompleted) return;
+        await stateStore.SaveAsync(book.Workspace, state with { IsCompleted = isCompleted }, cancellationToken);
     }
 
     public async ValueTask SaveBrandAuthorAsync(
