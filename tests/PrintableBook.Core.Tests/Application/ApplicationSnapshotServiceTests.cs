@@ -520,6 +520,21 @@ public sealed class ApplicationSnapshotServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_projects_the_saved_completion_marker()
+    {
+        var state = BookProcessingState.NotStarted(new BookId("Book A")) with { IsCompleted = true };
+
+        var snapshot = await new ApplicationSnapshotService(
+            new StubDiscovery(),
+            new StubSettingsStore(),
+            new StubScanner(),
+            new StubStateStore(explicitState: state),
+            new StubFileSystem()).RefreshAsync();
+
+        Assert.True(Assert.Single(snapshot.BookSummaries).IsCompleted);
+    }
+
+    [Fact]
     public async Task RefreshAsync_marks_an_empty_custom_intro_selection_as_needing_review()
     {
         var state = BookProcessingState.NotStarted(new BookId("Book A")).SetHasIntro(true).SetIntroInteriorSourceKeys([]);

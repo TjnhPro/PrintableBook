@@ -600,6 +600,34 @@ internal sealed class WebViewBridgeRouter(
                 }
             }
 
+            if (request.Command == "book.completion.set")
+            {
+                if (applicationLoadCoordinator is null || bookCatalogMetadataService is null || request.Payload is not { } completionPayload ||
+                    !TryGetRequiredString(completionPayload, "bookId", out var completionBookId) ||
+                    !completionPayload.TryGetProperty("isCompleted", out var isCompletedElement) ||
+                    isCompletedElement.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_book_completion");
+                }
+
+                await using (await processingMutationGate.EnterAsync(cancellationToken))
+                {
+                    if (await IsProcessingActiveAsync(cancellationToken)) return new BridgeResponse(Version, request.Id, false, null, "processing_active");
+                    if (await GetActiveStateWriterErrorAsync(cancellationToken) is { } activityError)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, activityError);
+                    }
+
+                    var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                    if (snapshot is null) return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+                    var book = snapshot.Discovery.Books.FirstOrDefault(item => string.Equals(item.Id.Value, completionBookId, StringComparison.Ordinal));
+                    if (book is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+
+                    await bookCatalogMetadataService.SetCompletionAsync(book, isCompletedElement.GetBoolean(), cancellationToken);
+                    return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
+                }
+            }
+
             if (request.Command is "book.metadata.save" or "book.brand.assign" or "book.brand.unassign" or "brand.author.save")
             {
                 if (applicationLoadCoordinator is null || bookCatalogMetadataService is null || request.Payload is not { } metadataPayload)
@@ -1463,7 +1491,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.clone" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.interior.shuffle" or "book.interior.open-folder" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.pdf-name-suggestions.get" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "brand.clone" or "diagnostics.get" or "s3.get" or "s3.credentials.replace" or "book.s3.check" or "book.s3.upload" or "book.s3.get" or "book.s3.cancel" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.clone" or "book.completion.set" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.interior.shuffle" or "book.interior.open-folder" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.pdf-name-suggestions.get" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "brand.clone" or "diagnostics.get" or "s3.get" or "s3.credentials.replace" or "book.s3.check" or "book.s3.upload" or "book.s3.get" or "book.s3.cancel" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

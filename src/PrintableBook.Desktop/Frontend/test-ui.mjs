@@ -112,6 +112,14 @@ const expected = [
   ,'data-amazon-profile-field="titleTerms"'
   ,'Comma-separated title phrases'
   ,'payload.amazonMarketplaceProfiles'
+  ,'"Complete"'
+  ,'data-book-completion-card'
+  ,'data-action="set-book-completion"'
+  ,'book.completion.set'
+  ,'Mark as completed'
+  ,'Mark as incomplete'
+  ,'This does not change its processing status.'
+  ,'filter === "Complete" ? bookIsCompleted(summary)'
 ];
 
 for (const value of expected) {
@@ -148,6 +156,14 @@ if (!/const blocked = !state\.bookCloneLanguageCode \|\| !destination \|\| desti
 
 if (!/const languageCandidates = languageBrandsFor\(summary\);[\s\S]*const candidates = matchingBrandsFor\(summary\)/.test(app)) {
   throw new Error("Brand Assignment must filter Language before Author.");
+}
+
+if (!/data-book-completion-card[\s\S]*aria-busy=[\s\S]*data-action="set-book-completion"[\s\S]*disabled/.test(app)) {
+  throw new Error("Book completion must expose pending state and disable repeated submission.");
+}
+
+if (!/const statusCounts = bookStatuses\.map\([\s\S]*matchesBookStatusFilter/.test(app)) {
+  throw new Error("The Complete filter count must use the persisted completion marker.");
 }
 
 console.log(`UI contract passed (${expected.length} checks).`);

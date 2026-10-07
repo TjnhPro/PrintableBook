@@ -877,6 +877,64 @@ test("Book Library uses one compact status select with live counts and resets fi
   assert.match(content.innerHTML, /Page 1 of 1/);
 });
 
+test("Complete filter uses the persisted marker without replacing processing status", () => {
+  const { messageHandler, content, contentListeners } = loadBridge("books");
+  const readyBook = { id: { value: "Ready Book" }, name: "Ready Book" };
+  const completedFailedBook = { id: { value: "Completed Failed Book" }, name: "Completed Failed Book" };
+  messageHandler({ data: { version: 1, id: "completion-filter", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [], books: [readyBook, completedFailedBook] }, globalSettings: {},
+    bookSummaries: [
+      { bookId: readyBook.id, interiorSourcePageCount: 12, activeInteriorSourcePageCount: 12, validationStatus: "Ready", workspaceStatus: "Not started", isCompleted: false, assets: [] },
+      { bookId: completedFailedBook.id, interiorSourcePageCount: 12, activeInteriorSourcePageCount: 12, validationStatus: "Ready", workspaceStatus: "Failed", isCompleted: true, assets: [] }
+    ]
+  } } });
+
+  assert.match(content.innerHTML, /<option value="Complete"[^>]*>Complete \(1\)<\/option>/);
+  assert.match(content.innerHTML, /<option value="Needs review"[^>]*>Needs review \(1\)<\/option>/);
+  assert.match(content.innerHTML, /<option value="Failed"[^>]*>Failed \(1\)<\/option>/);
+
+  contentListeners.change({ target: { dataset: { action: "book-status" }, value: "Complete" } });
+
+  assert.match(content.innerHTML, /Completed Failed Book/);
+  assert.doesNotMatch(content.innerHTML, /Ready Book/);
+  assert.match(content.innerHTML, /status-bad">Failed/);
+});
+
+test("Book Settings toggles completion through its own mutation and refreshes the marker", () => {
+  const { messageHandler, content, contentListeners, messages, getFullRenderCount } = loadBridge("books");
+  const snapshot = {
+    discovery: { brands: [], books: [{ id: { value: "Book 001" }, name: "Book 001" }] },
+    globalSettings: {},
+    bookSummaries: [{
+      bookId: { value: "Book 001" }, workspaceStatus: "Not started", validationStatus: "Ready", isCompleted: false,
+      validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [],
+      interiorSourcePageCount: 12, activeInteriorSourcePageCount: 12
+    }]
+  };
+  messageHandler({ data: { version: 1, id: "completion-snapshot", ok: true, command: "app.snapshot", payload: snapshot } });
+  const openBook = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+
+  assert.match(content.innerHTML, /<legend>Book completion<\/legend>/);
+  assert.match(content.innerHTML, /data-action="set-book-completion"[^>]*data-is-completed="true"[^>]*>Mark as completed<\/button>/);
+  const rendersBeforeSave = getFullRenderCount();
+  const complete = { dataset: { action: "set-book-completion", bookId: "Book 001", isCompleted: "true" }, closest: () => complete };
+  contentListeners.click({ target: complete });
+  const request = messages.at(-1);
+
+  assert.equal(request.command, "book.completion.set");
+  assert.deepEqual(request.payload, { bookId: "Book 001", isCompleted: true });
+  assert.equal(getFullRenderCount(), rendersBeforeSave, "submitting completion must not redraw Book detail");
+
+  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "background.task", payload: { kind: "LibraryRefresh", taskId: "completion-refresh", state: "Completed" } } });
+  snapshot.bookSummaries[0].isCompleted = true;
+  messageHandler({ data: { version: 1, id: request.id, ok: true, command: "app.snapshot", payload: snapshot } });
+
+  assert.match(content.innerHTML, /data-action="set-book-completion"[^>]*data-is-completed="false"[^>]*>Mark as incomplete<\/button>/);
+  assert.match(content.innerHTML, /<option value="Complete"[^>]*>Complete \(1\)<\/option>/);
+  assert.match(content.innerHTML, /aria-selected="true"[^>]*aria-controls="book-panel-settings"/);
+});
+
 test("books toolbar starts one confirmed cache cleanup and polls it", () => {
   const { messageHandler, contentListeners, messages, intervals } = loadBridge("books");
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "app.snapshot", payload: { discovery: { brands: [], books: [] }, globalSettings: {}, bookSummaries: [] } } });

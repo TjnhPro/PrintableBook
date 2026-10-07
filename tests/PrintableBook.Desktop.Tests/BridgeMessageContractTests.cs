@@ -1089,6 +1089,99 @@ public sealed class BridgeMessageContractTests
     }
 
     [Fact]
+    public async Task Book_completion_routes_authorized_book_and_refreshes()
+    {
+        var service = new StubBookCatalogMetadataService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(manager),
+            backgroundTaskManager: manager,
+            bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"complete","command":"book.completion.set","payload":{"bookId":"Book One","isCompleted":true}}""");
+
+        Assert.True(response.Ok);
+        Assert.Equal("background.task", response.Command);
+        Assert.True(service.IsCompleted);
+        Assert.Equal(1, manager.Starts);
+    }
+
+    [Theory]
+    [InlineData("{}", "invalid_book_completion")]
+    [InlineData("{\"bookId\":\"Book One\",\"isCompleted\":\"true\"}", "invalid_book_completion")]
+    [InlineData("{\"bookId\":\"Missing\",\"isCompleted\":true}", "book_not_found")]
+    public async Task Book_completion_rejects_invalid_requests_without_mutation_or_refresh(string payload, string expectedError)
+    {
+        var service = new StubBookCatalogMetadataService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(manager),
+            backgroundTaskManager: manager,
+            bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync($"{{\"version\":1,\"id\":\"complete\",\"command\":\"book.completion.set\",\"payload\":{payload}}}");
+
+        Assert.Equal(expectedError, response.Error);
+        Assert.Null(service.IsCompleted);
+        Assert.Equal(0, manager.Starts);
+    }
+
+    [Fact]
+    public async Task Book_completion_rejects_an_unavailable_snapshot_without_mutation_or_refresh()
+    {
+        var service = new StubBookCatalogMetadataService();
+        var manager = new RetainedSnapshotTaskManager(null);
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(manager),
+            backgroundTaskManager: manager,
+            bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"complete","command":"book.completion.set","payload":{"bookId":"Book One","isCompleted":true}}""");
+
+        Assert.Equal("snapshot_unavailable", response.Error);
+        Assert.Null(service.IsCompleted);
+        Assert.Equal(0, manager.Starts);
+    }
+
+    [Theory]
+    [InlineData(BackgroundTaskKind.ProductionAction, "production_action_active")]
+    [InlineData(BackgroundTaskKind.CacheCleanup, "cache_cleanup_active")]
+    public async Task Book_completion_is_blocked_while_another_workspace_writer_is_active(BackgroundTaskKind activeKind, string expectedError)
+    {
+        var service = new StubBookCatalogMetadataService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot()) { ActiveKind = activeKind };
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(manager),
+            backgroundTaskManager: manager,
+            bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"complete","command":"book.completion.set","payload":{"bookId":"Book One","isCompleted":true}}""");
+
+        Assert.Equal(expectedError, response.Error);
+        Assert.Null(service.IsCompleted);
+        Assert.Equal(0, manager.Starts);
+    }
+
+    [Fact]
+    public async Task Book_completion_is_blocked_while_processing()
+    {
+        var service = new StubBookCatalogMetadataService();
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot());
+        var process = new StubProcessSessionService(new ProcessSessionSnapshot(true, false, "Brand One", null, "Running", []));
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(manager),
+            processSessionService: process,
+            backgroundTaskManager: manager,
+            bookCatalogMetadataService: service);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"complete","command":"book.completion.set","payload":{"bookId":"Book One","isCompleted":true}}""");
+
+        Assert.Equal("processing_active", response.Error);
+        Assert.Null(service.IsCompleted);
+        Assert.Equal(0, manager.Starts);
+    }
+
+    [Fact]
     public async Task Keyword_builder_save_returns_the_exact_persisted_state_before_refresh_completion()
     {
         var service = new StubBookKeywordPreviewService();
