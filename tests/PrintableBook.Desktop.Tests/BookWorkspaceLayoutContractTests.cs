@@ -46,6 +46,9 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("data-action=\"clear-artwork-filters\"", script, StringComparison.Ordinal);
         Assert.Contains("book-status-filter", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"book-status\"", script, StringComparison.Ordinal);
+        Assert.Contains("book-completion-filter", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"book-completion-filter\"", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-action=\"book-sort\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain("book-status-filters", script, StringComparison.Ordinal);
         Assert.DoesNotContain("toggle-book-selection", script, StringComparison.Ordinal);
         Assert.DoesNotContain("toggle-book-page-selection", script, StringComparison.Ordinal);
@@ -54,7 +57,7 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains(".book-library-page { display:grid", layout, StringComparison.Ordinal);
         Assert.Contains(".book-master-detail { display:grid; grid-template-columns:minmax(250px,3fr) minmax(0,9fr)", layout, StringComparison.Ordinal);
         Assert.Contains(".book-list-scroll { display:grid; align-content:start; min-height:0", layout, StringComparison.Ordinal);
-        Assert.Contains(".book-status-filter { min-width:0; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-search-field,.book-status-filter,.book-completion-filter { min-width:0; }", layout, StringComparison.Ordinal);
         Assert.DoesNotContain(".book-status-filters", layout, StringComparison.Ordinal);
         Assert.Contains(".book-pagination { display:flex", layout, StringComparison.Ordinal);
     }
@@ -247,14 +250,16 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("book-settings-assignment", script, StringComparison.Ordinal);
         Assert.Contains("book-settings-background", script, StringComparison.Ordinal);
         Assert.Contains("book-settings-templates", script, StringComparison.Ordinal);
+        Assert.Contains("book-settings-completion", script, StringComparison.Ordinal);
         Assert.Contains("<legend>Book Information</legend>", script, StringComparison.Ordinal);
         Assert.Contains("<legend>Brand Assignment</legend>", script, StringComparison.Ordinal);
         Assert.Contains("<legend>Brand background</legend>", script, StringComparison.Ordinal);
         Assert.Contains("<legend>Brand PSD templates</legend>", script, StringComparison.Ordinal);
+        Assert.Contains("<legend>Book completion</legend>", script, StringComparison.Ordinal);
         Assert.Contains(".book-settings-card>legend", layout, StringComparison.Ordinal);
         Assert.Contains(".book-settings-information { grid-column:span 8; }", layout, StringComparison.Ordinal);
         Assert.Contains(".book-settings-assignment { grid-column:span 4; }", layout, StringComparison.Ordinal);
-        Assert.Contains(".book-settings-background,.book-settings-templates { grid-column:span 6; }", layout, StringComparison.Ordinal);
+        Assert.Contains(".book-settings-background,.book-settings-templates,.book-settings-completion { grid-column:span 4; }", layout, StringComparison.Ordinal);
         Assert.Contains(".book-settings-card.book-settings-s3 { grid-column:1/-1; width:100%; align-items:stretch; justify-content:stretch; }", layout, StringComparison.Ordinal);
         Assert.Contains("const renderProcessedInteriorPages", script, StringComparison.Ordinal);
         Assert.Contains("const introPageSize = 6", script, StringComparison.Ordinal);
