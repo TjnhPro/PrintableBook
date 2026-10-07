@@ -178,4 +178,13 @@ if (!/\.book-settings-background,\.book-settings-templates,\.book-settings-compl
   throw new Error("Brand background, Brand PSD templates and Book completion must use a 4-4-4 grid.");
 }
 
+if (/data-action="book-sort"/.test(app) || /bookSort:/.test(app)) {
+  throw new Error("The Book filter toolbar must not expose Sort state or controls.");
+}
+
+if (!/brandFilterOptions\.map\(\(\{ value, label, incomplete, total \}\)[\s\S]*\(\$\{incomplete\}\/\$\{total\}\)/.test(app)
+    || !/grid-template-columns:minmax\(220px,1\.35fr\) repeat\(3,minmax\(160px,1fr\)\)/.test(bookWorkspaceCss)) {
+  throw new Error("Book Brand options must show incomplete over total in the four-column toolbar.");
+}
+
 console.log(`UI contract passed (${expected.length} checks).`);

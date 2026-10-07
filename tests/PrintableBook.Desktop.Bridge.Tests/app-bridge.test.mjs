@@ -879,6 +879,31 @@ test("Book Library keeps processing status separate from completion and resets f
   assert.match(content.innerHTML, /Page 1 of 1/);
 });
 
+test("Book filter toolbar removes Sort and shows Brand counts as incomplete over total", () => {
+  const { messageHandler, content } = loadBridge("books");
+  const books = [
+    { id: { value: "Brand A Incomplete" }, name: "Brand A Incomplete" },
+    { id: { value: "Brand A Complete" }, name: "Brand A Complete" },
+    { id: { value: "Brand B Complete" }, name: "Brand B Complete" },
+    { id: { value: "Unassigned Incomplete" }, name: "Unassigned Incomplete" }
+  ];
+  messageHandler({ data: { version: 1, id: "brand-counts", ok: true, command: "app.snapshot", payload: {
+    discovery: { brands: [{ name: "Brand A" }, { name: "Brand B" }], books }, globalSettings: {},
+    bookSummaries: [
+      { bookId: books[0].id, assignedBrand: "Brand A", isCompleted: false, validationStatus: "Ready", workspaceStatus: "Not started", assets: [] },
+      { bookId: books[1].id, assignedBrand: "Brand A", isCompleted: true, validationStatus: "Ready", workspaceStatus: "Not started", assets: [] },
+      { bookId: books[2].id, assignedBrand: "Brand B", isCompleted: true, validationStatus: "Ready", workspaceStatus: "Not started", assets: [] },
+      { bookId: books[3].id, assignedBrand: null, isCompleted: false, validationStatus: "Ready", workspaceStatus: "Not started", assets: [] }
+    ]
+  } } });
+
+  assert.doesNotMatch(content.innerHTML, /data-action="book-sort"/);
+  assert.match(content.innerHTML, /<option value="All" selected>All \(2\/4\)<\/option>/);
+  assert.match(content.innerHTML, /<option value="Unassigned"[^>]*>Unassigned \(1\/1\)<\/option>/);
+  assert.match(content.innerHTML, /<option value="Brand A"[^>]*>Brand A \(1\/2\)<\/option>/);
+  assert.match(content.innerHTML, /<option value="Brand B"[^>]*>Brand B \(0\/1\)<\/option>/);
+});
+
 test("Book completion filter defaults to incomplete and combines independently with processing status", () => {
   const { messageHandler, content, contentListeners } = loadBridge("books");
   const readyBook = { id: { value: "Ready Book" }, name: "Ready Book" };
