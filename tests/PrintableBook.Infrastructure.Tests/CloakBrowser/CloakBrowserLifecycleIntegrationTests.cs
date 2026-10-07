@@ -2,6 +2,7 @@ using global::CloakBrowser;
 using Microsoft.Playwright;
 using PrintableBook.Core.Application.AmazonCrawl;
 using PrintableBook.Core.Application.Diagnostics;
+using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Infrastructure.AmazonCrawl;
 using PrintableBook.Infrastructure.CloakBrowser;
 
@@ -126,10 +127,11 @@ public sealed class CloakBrowserLifecycleIntegrationTests
 
         try
         {
-            var status = await client.OpenAsync().AsTask().WaitAsync(LaunchTimeout);
+            var profile = AmazonMarketplaceProfilePolicy.Resolve(GlobalSettings.Default, "en");
+            var status = await client.OpenAsync(profile).AsTask().WaitAsync(LaunchTimeout);
             Assert.Equal(CloakBrowserState.Ready, status.State);
 
-            var response = await client.FetchAsync(AmazonCrawlPolicy.BuildSearchUri("coloring books for adults"))
+            var response = await client.FetchAsync(profile, AmazonCrawlPolicy.BuildSearchUri(profile, "coloring books for adults"))
                 .AsTask()
                 .WaitAsync(OperationTimeout);
 
@@ -137,7 +139,7 @@ public sealed class CloakBrowserLifecycleIntegrationTests
             Assert.Contains("text/html", response.ContentType, StringComparison.OrdinalIgnoreCase);
             Assert.InRange(response.Html.Length, 1, AmazonCrawlPolicy.MaximumHtmlBytes);
 
-            var parsed = new AmazonSearchHtmlParser().Parse(response.Html);
+            var parsed = new AmazonSearchHtmlParser().Parse(response.Html, profile);
             Assert.Equal(AmazonSearchPageDiagnostic.Results, parsed.Diagnostic);
             Assert.NotEmpty(parsed.Candidates);
         }

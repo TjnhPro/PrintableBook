@@ -2,6 +2,7 @@ using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
+using PrintableBook.Core.Application.AmazonCrawl;
 using PrintableBook.Infrastructure.Discovery;
 using PrintableBook.Infrastructure.FileSystem;
 
@@ -63,6 +64,100 @@ public sealed class JsonGlobalSettingsStoreTests : IAsyncLifetime
         var loaded = await store.LoadAsync(paths);
 
         Assert.Equal(["coloring books", "books for adults"], loaded.GenericKeywords);
+        Assert.Equal(["coloring books", "books for adults"], loaded.GetEffectiveGenericKeywords("en"));
+        Assert.Empty(loaded.GetEffectiveGenericKeywords("de"));
+    }
+
+    [Fact]
+    public async Task LoadAsync_maps_legacy_generic_keywords_to_English_without_rewriting_the_file()
+    {
+        var paths = CreatePaths();
+        Directory.CreateDirectory(root);
+        const string legacy = "{\"maximumPageConcurrency\":4,\"artworkDetectionThreshold\":20,\"artworkMaximumSide\":2270,\"workingPageWidth\":2550,\"workingPageHeight\":2550,\"finalPageWidth\":2588,\"finalPageHeight\":2625,\"dpi\":300,\"genericKeywords\":[\" calm  coloring \",\"CALM COLORING\"]}";
+        await File.WriteAllTextAsync(paths.SettingsFile.Value, legacy);
+
+        var loaded = await CreateStore(paths).LoadAsync(paths);
+
+        Assert.Equal(["calm coloring"], loaded.GetEffectiveGenericKeywords("en"));
+        Assert.Empty(loaded.GetEffectiveGenericKeywords("fr"));
+        Assert.Equal(legacy, await File.ReadAllTextAsync(paths.SettingsFile.Value));
+    }
+
+    [Fact]
+    public async Task SaveAsync_round_trips_independent_language_profiles_and_mirrors_English_for_rollback()
+    {
+        var paths = CreatePaths();
+        var store = CreateStore(paths);
+        var profiles = new Dictionary<string, IReadOnlyList<string>>
+        {
+            ["en"] = [" English generic "],
+            ["de"] = [" German generic "],
+            ["ja"] = [" Japanese generic "]
+        };
+
+        await store.SaveAsync(GlobalSettings.Default with
+        {
+            GenericKeywords = ["stale legacy value"],
+            GenericKeywordsByLanguage = profiles
+        });
+        var loaded = await store.LoadAsync(paths);
+
+        Assert.Equal(["English generic"], loaded.GenericKeywords);
+        Assert.Equal(["English generic"], loaded.GetEffectiveGenericKeywords("en"));
+        Assert.Equal(["German generic"], loaded.GetEffectiveGenericKeywords("de"));
+        Assert.Equal(["Japanese generic"], loaded.GetEffectiveGenericKeywords("ja"));
+        Assert.Empty(loaded.GetEffectiveGenericKeywords("pt"));
+        Assert.Equal(8, loaded.EffectiveGenericKeywordsByLanguage.Count);
+
+        var persisted = await File.ReadAllTextAsync(paths.SettingsFile.Value);
+        Assert.Contains("\"genericKeywords\"", persisted, StringComparison.Ordinal);
+        Assert.Contains("\"genericKeywordsByLanguage\"", persisted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LoadAsync_prefers_legacy_English_when_both_storage_contracts_exist()
+    {
+        var paths = CreatePaths();
+        Directory.CreateDirectory(root);
+        await File.WriteAllTextAsync(paths.SettingsFile.Value,
+            "{\"maximumPageConcurrency\":4,\"artworkDetectionThreshold\":20,\"artworkMaximumSide\":2270,\"workingPageWidth\":2550,\"workingPageHeight\":2550,\"finalPageWidth\":2588,\"finalPageHeight\":2625,\"dpi\":300,\"genericKeywords\":[\"rollback edit\"],\"genericKeywordsByLanguage\":{\"en\":[\"old map value\"],\"de\":[\"German value\"]}} ");
+
+        var loaded = await CreateStore(paths).LoadAsync(paths);
+
+        Assert.Equal(["rollback edit"], loaded.GetEffectiveGenericKeywords("en"));
+        Assert.Equal(["German value"], loaded.GetEffectiveGenericKeywords("de"));
+    }
+
+    [Theory]
+    [InlineData("xx")]
+    [InlineData("")]
+    public async Task SaveAsync_rejects_unsupported_language_profiles(string languageCode)
+    {
+        var paths = CreatePaths();
+        var settings = GlobalSettings.Default with
+        {
+            GenericKeywordsByLanguage = new Dictionary<string, IReadOnlyList<string>> { [languageCode] = ["value"] }
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => CreateStore(paths).SaveAsync(settings).AsTask());
+        Assert.False(File.Exists(paths.SettingsFile.Value));
+    }
+
+    [Fact]
+    public async Task SaveAsync_rejects_duplicate_language_profiles_after_code_normalization()
+    {
+        var paths = CreatePaths();
+        var settings = GlobalSettings.Default with
+        {
+            GenericKeywordsByLanguage = new Dictionary<string, IReadOnlyList<string>>
+            {
+                ["de"] = ["first"],
+                ["DE"] = ["second"]
+            }
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => CreateStore(paths).SaveAsync(settings).AsTask());
+        Assert.False(File.Exists(paths.SettingsFile.Value));
     }
 
     [Fact]
@@ -99,6 +194,64 @@ public sealed class JsonGlobalSettingsStoreTests : IAsyncLifetime
 
         Assert.Empty(loaded.EffectiveGenericKeywords);
         Assert.Empty(loaded.GenericKeywords!);
+    }
+
+    [Fact]
+    public async Task LoadAsync_legacy_settings_materializes_default_amazon_marketplace_profiles_without_rewriting_file()
+    {
+        var paths = CreatePaths();
+        Directory.CreateDirectory(root);
+        const string legacy = "{\"maximumPageConcurrency\":4,\"artworkDetectionThreshold\":20,\"artworkMaximumSide\":2270,\"workingPageWidth\":2550,\"workingPageHeight\":2550,\"finalPageWidth\":2588,\"finalPageHeight\":2625,\"dpi\":300}";
+        await File.WriteAllTextAsync(paths.SettingsFile.Value, legacy);
+
+        var loaded = await CreateStore(paths).LoadAsync(paths);
+
+        Assert.Equal(8, loaded.AmazonMarketplaceProfiles!.Count);
+        Assert.Equal("https://www.amazon.de/", loaded.AmazonMarketplaceProfiles["de"].BaseUrl);
+        Assert.Equal("Malbuch, Malbücher, Ausmalbuch, Ausmalbücher", loaded.AmazonMarketplaceProfiles["de"].TitleTerms);
+        Assert.Equal(legacy, await File.ReadAllTextAsync(paths.SettingsFile.Value));
+    }
+
+    [Fact]
+    public async Task SaveAsync_normalizes_and_round_trips_amazon_marketplace_profiles()
+    {
+        var paths = CreatePaths();
+        var store = CreateStore(paths);
+        var profiles = AmazonMarketplaceProfilePolicy.DefaultProfiles.ToDictionary(pair => pair.Key, pair => pair.Value);
+        profiles["de"] = new AmazonMarketplaceSettings(" DE-BOOKS ", "https://amazon.de/", " de-DE ", " Malbuch, MALBUCH, Ausmalbuch ");
+
+        await store.SaveAsync(GlobalSettings.Default with { AmazonMarketplaceProfiles = profiles });
+        var loaded = await store.LoadAsync(paths);
+
+        Assert.Equal(new AmazonMarketplaceSettings("de-books", "https://amazon.de/", "de-DE", "Malbuch, Ausmalbuch"), loaded.AmazonMarketplaceProfiles!["de"]);
+        var runtime = AmazonMarketplaceProfilePolicy.Resolve(loaded, "de");
+        Assert.Equal("de-books", runtime.MarketCode);
+        Assert.Equal(["Malbuch", "Ausmalbuch"], runtime.TitleTerms);
+    }
+
+    [Theory]
+    [InlineData("http://www.amazon.de/")]
+    [InlineData("https://www.amazon.com/")]
+    [InlineData("https://www.amazon.de/s?k=cats")]
+    public async Task SaveAsync_rejects_invalid_or_cross_market_amazon_base_url(string baseUrl)
+    {
+        var paths = CreatePaths();
+        var profiles = AmazonMarketplaceProfilePolicy.DefaultProfiles.ToDictionary(pair => pair.Key, pair => pair.Value);
+        profiles["de"] = profiles["de"] with { BaseUrl = baseUrl };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => CreateStore(paths).SaveAsync(
+            GlobalSettings.Default with { AmazonMarketplaceProfiles = profiles }).AsTask());
+    }
+
+    [Fact]
+    public async Task SaveAsync_rejects_duplicate_amazon_profile_keys()
+    {
+        var paths = CreatePaths();
+        var profiles = AmazonMarketplaceProfilePolicy.DefaultProfiles.ToDictionary(pair => pair.Key, pair => pair.Value);
+        profiles["de"] = profiles["de"] with { ProfileKey = "us" };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => CreateStore(paths).SaveAsync(
+            GlobalSettings.Default with { AmazonMarketplaceProfiles = profiles }).AsTask());
     }
 
     [Theory]

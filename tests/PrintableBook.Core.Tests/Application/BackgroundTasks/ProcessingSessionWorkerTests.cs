@@ -202,6 +202,24 @@ public sealed class ProcessingSessionWorkerTests
     }
 
     [Fact]
+    public async Task Language_mismatched_assignment_is_rejected_before_processing()
+    {
+        var initial = Snapshot();
+        var summary = initial.BookSummaries[0] with
+        {
+            AssignedBrand = "Brand",
+            AssignmentStatus = BookBrandAssignmentStatus.LanguageMismatch
+        };
+        var application = new Application();
+        IBackgroundTaskWorker worker = CreateWorker(new Provider(initial with { BookSummaries = [summary] }), application, new FrameResolver(), new FileSystem(), new ImageInspector());
+
+        var failure = await Assert.ThrowsAsync<BackgroundTaskFailureException>(() => worker.ExecuteAsync(Request(), new Context(), CancellationToken.None).AsTask());
+
+        Assert.Equal("book_brand_assignment_invalid", failure.Code);
+        Assert.Null(application.Request);
+    }
+
+    [Fact]
     public async Task Unassigned_book_is_rejected_before_brand_validation_or_output_work()
     {
         var initial = Snapshot();

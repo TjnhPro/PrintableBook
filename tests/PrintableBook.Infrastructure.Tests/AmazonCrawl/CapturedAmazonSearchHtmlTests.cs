@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using PrintableBook.Core.Application.AmazonCrawl;
+using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Infrastructure.AmazonCrawl;
 
 namespace PrintableBook.Infrastructure.Tests.AmazonCrawl;
@@ -13,7 +14,9 @@ public sealed class CapturedAmazonSearchHtmlTests
         var path = Path.Combine(RepositoryRoot(), "docs", "screenshots", "keyword.html");
         Assert.True(File.Exists(path), $"Captured fixture is missing: {path}");
 
-        var result = new AmazonSearchHtmlParser().Parse(File.ReadAllText(path));
+        var result = new AmazonSearchHtmlParser().Parse(
+            File.ReadAllText(path),
+            AmazonMarketplaceProfilePolicy.Resolve(GlobalSettings.Default, "en"));
 
         Assert.Equal(AmazonSearchPageDiagnostic.Results, result.Diagnostic);
         Assert.Null(result.ReasonCode);

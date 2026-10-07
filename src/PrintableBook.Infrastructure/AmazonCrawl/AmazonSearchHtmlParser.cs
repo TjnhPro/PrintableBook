@@ -19,10 +19,11 @@ public sealed partial class AmazonSearchHtmlParser : IAmazonSearchHtmlParser
         ".//*[@data-cy='title-recipe']//h2"
     ];
 
-    public AmazonSearchParseResult Parse(string html)
+    public AmazonSearchParseResult Parse(string html, AmazonMarketplaceProfile profile)
     {
         ArgumentNullException.ThrowIfNull(html);
-        if (ChallengeMarker().IsMatch(html))
+        ArgumentNullException.ThrowIfNull(profile);
+        if (ChallengeMarker().IsMatch(html) || profile.ContainsMarker(html, profile.ChallengeMarkers))
         {
             return new(AmazonSearchPageDiagnostic.NeedsAttention, [], "amazon_challenge_detected");
         }
@@ -38,7 +39,7 @@ public sealed partial class AmazonSearchHtmlParser : IAmazonSearchHtmlParser
         if (nodes is null || nodes.Count == 0)
         {
             var text = Normalize(document.DocumentNode.InnerText);
-            return KnownEmptyMarker().IsMatch(text)
+            return KnownEmptyMarker().IsMatch(text) || profile.ContainsMarker(text, profile.NoResultMarkers)
                 ? new(AmazonSearchPageDiagnostic.NoSearchResult, [])
                 : new(AmazonSearchPageDiagnostic.UnexpectedMarkup, [], "amazon_markup_unsupported");
         }
@@ -47,7 +48,7 @@ public sealed partial class AmazonSearchHtmlParser : IAmazonSearchHtmlParser
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var node in nodes)
         {
-            if (IsSponsored(node)) continue;
+            if (IsSponsored(node, profile)) continue;
 
             var asin = WebUtility.HtmlDecode(node.GetAttributeValue("data-asin", string.Empty)).Trim().ToUpperInvariant();
             if (!AsinPattern().IsMatch(asin) || !seen.Add(asin)) continue;
@@ -69,8 +70,17 @@ public sealed partial class AmazonSearchHtmlParser : IAmazonSearchHtmlParser
         return new(AmazonSearchPageDiagnostic.Results, candidates);
     }
 
-    private static bool IsSponsored(HtmlNode node) =>
-        WebUtility.HtmlDecode(node.InnerText).Contains("Sponsored", StringComparison.Ordinal);
+    private static bool IsSponsored(HtmlNode node, AmazonMarketplaceProfile profile)
+    {
+        var className = node.GetAttributeValue("class", string.Empty);
+        if (className.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("AdHolder", StringComparer.OrdinalIgnoreCase) ||
+            node.SelectSingleNode(".//*[@data-component-type='sp-sponsored-result' or @data-ad-details or contains(concat(' ', normalize-space(@class), ' '), ' sponsored-label-info-icon ')]") is not null)
+        {
+            return true;
+        }
+
+        return profile.ContainsMarker(WebUtility.HtmlDecode(node.InnerText), profile.SponsoredMarkers);
+    }
 
     private static string Normalize(string value) => string.Join(' ',
         WebUtility.HtmlDecode(value)

@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using System.Text;
 using PrintableBook.Core.Abstractions;
 using PrintableBook.Core.Application.Processing;
+using PrintableBook.Core.Application.Brands;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 
@@ -62,7 +63,8 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
                     .ToArray() is { Length: > 0 } inactive ? inactive : null,
                 Metadata = NormalizeStoredMetadata(state.Metadata),
                 KeywordBuilder = state.KeywordBuilder?.NormalizeStored(),
-                AssignedBrand = string.IsNullOrWhiteSpace(state.AssignedBrand) ? null : state.AssignedBrand.Trim()
+                AssignedBrand = string.IsNullOrWhiteSpace(state.AssignedBrand) ? null : state.AssignedBrand.Trim(),
+                LanguageCode = SupportedLanguageCatalog.NormalizeStoredCode(state.LanguageCode)
             };
             return new(normalized, sourceVersion, legacy, explicitAutoKeys, explicitFrameKeys);
         }
@@ -87,7 +89,8 @@ public sealed class JsonBookWorkspaceStateStore(IFileSystem fileSystem) : IBookW
             InteriorFrameOverrides = NormalizeFrameOverrides(state.InteriorFrameOverrides),
             Metadata = NormalizeStoredMetadata(state.Metadata),
             KeywordBuilder = state.KeywordBuilder?.NormalizeStored(),
-            AssignedBrand = string.IsNullOrWhiteSpace(state.AssignedBrand) ? null : state.AssignedBrand.Trim()
+            AssignedBrand = string.IsNullOrWhiteSpace(state.AssignedBrand) ? null : state.AssignedBrand.Trim(),
+            LanguageCode = SupportedLanguageCatalog.NormalizeStoredCode(state.LanguageCode)
         };
         return fileSystem.WriteTextAtomicallyAsync(StateFile(workspace), JsonSerializer.Serialize(normalized, JsonOptions), cancellationToken);
     }

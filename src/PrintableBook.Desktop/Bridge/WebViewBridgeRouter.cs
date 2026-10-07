@@ -13,6 +13,7 @@ using PrintableBook.Core.Application.BackgroundTasks;
 using PrintableBook.Core.Application.BackgroundTasks.Workers;
 using PrintableBook.Core.Application.Storage;
 using PrintableBook.Core.Application.Brands;
+using PrintableBook.Core.Application.Books;
 using PrintableBook.Desktop.BackgroundTasks;
 using PrintableBook.Desktop.Updates;
 using PrintableBook.Core.Application.Production;
@@ -48,7 +49,9 @@ internal sealed class WebViewBridgeRouter(
     IAmazonSearchPageClient? amazonSearchPageClient = null,
     IS3StorageService? s3StorageService = null,
     IProductionPdfNameSuggestionService? productionPdfNameSuggestionService = null,
-    IInteriorShuffleService? interiorShuffleService = null)
+    IInteriorShuffleService? interiorShuffleService = null,
+    IBrandCloneService? brandCloneService = null,
+    IBookCloneService? bookCloneService = null)
 {
     private readonly IOperationDiagnostics diagnostics = diagnostics ?? new NoOpOperationDiagnostics();
     private readonly ProcessingMutationGate processingMutationGate = processingMutationGate ?? new ProcessingMutationGate();
@@ -111,14 +114,22 @@ internal sealed class WebViewBridgeRouter(
             if (request.Command == "amazon.browser.status")
             {
                 if (amazonSearchPageClient is null) return BridgeResponse.UnsupportedCommand(request.Id);
-                return BridgeResponse.Succeeded(request.Id, "amazon.browser.status", await amazonSearchPageClient.GetStatusAsync(cancellationToken));
+                var target = await ResolveAmazonMarketplaceAsync(request, cancellationToken);
+                if (target.Error is not null) return new BridgeResponse(Version, request.Id, false, null, target.Error);
+                return BridgeResponse.Succeeded(request.Id, "amazon.browser.status", await amazonSearchPageClient.GetStatusAsync(target.Profile!, cancellationToken));
             }
             if (request.Command == "amazon.browser.open")
             {
                 if (amazonSearchPageClient is null) return BridgeResponse.UnsupportedCommand(request.Id);
+                var target = await ResolveAmazonMarketplaceAsync(request, cancellationToken);
+                if (target.Error is not null) return new BridgeResponse(Version, request.Id, false, null, target.Error);
+                if (amazonAsinCrawlSessionService is not null && (await amazonAsinCrawlSessionService.GetAsync(target.BookId!, cancellationToken)).IsActive)
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "amazon_asin_crawl_active");
+                }
                 try
                 {
-                    return BridgeResponse.Succeeded(request.Id, "amazon.browser.status", await amazonSearchPageClient.OpenAsync(cancellationToken));
+                    return BridgeResponse.Succeeded(request.Id, "amazon.browser.status", await amazonSearchPageClient.OpenAsync(target.Profile!, cancellationToken));
                 }
                 catch (AmazonSearchPageException exception)
                 {
@@ -151,8 +162,12 @@ internal sealed class WebViewBridgeRouter(
                         var current = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
                         var book = current?.Discovery.Books.FirstOrDefault(item => string.Equals(item.Id.Value, crawlBookId, StringComparison.Ordinal));
                         if (book is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+                        var summary = current!.BookSummaries.FirstOrDefault(item => item.BookId == book.Id);
+                        if (summary is null) return new BridgeResponse(Version, request.Id, false, null, "book_not_found");
+                        if (settingsStore is null) return BridgeResponse.UnsupportedCommand(request.Id);
+                        var profile = AmazonMarketplaceProfilePolicy.Resolve(await settingsStore.LoadAsync(cancellationToken), summary.LanguageCode);
                         var trustedSource = await bookKeywordPreviewService.ResolveCrawlSourceAsync(book, previewReceipt, savedBuildId, cancellationToken);
-                        snapshot = await amazonAsinCrawlSessionService.StartAsync(crawlBookId, trustedSource.Keywords, cancellationToken);
+                        snapshot = await amazonAsinCrawlSessionService.StartAsync(crawlBookId, trustedSource.Keywords, profile, cancellationToken);
                         crawlSources[crawlBookId] = trustedSource;
                     }
                     else if (request.Command == "book.keywords.asin-crawl.cancel")
@@ -209,6 +224,178 @@ internal sealed class WebViewBridgeRouter(
                     return new BridgeResponse(Version, request.Id, false, null, "app_refresh_failed");
                 }
                 return BridgeResponse.Succeeded(request.Id, "app.snapshot", completedSnapshot);
+            }
+            if (request.Command == "brand.clone")
+            {
+                if (applicationLoadCoordinator is null || brandCloneService is null || request.Payload is not { } clonePayload ||
+                    !TryGetRequiredString(clonePayload, "brandName", out var requestedBrandName) ||
+                    !TryGetRequiredString(clonePayload, "languageCode", out var requestedLanguageCode))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_brand_clone");
+                }
+
+                var brandName = requestedBrandName.Trim();
+                if (!SupportedLanguageCatalog.TryGet(requestedLanguageCode, out var language))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "brand_clone_language_invalid");
+                }
+
+                await using (await processingMutationGate.EnterAsync(cancellationToken))
+                {
+                    if (await IsProcessingActiveAsync(cancellationToken))
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "processing_active");
+                    }
+
+                    ApplicationSnapshot snapshot;
+                    try
+                    {
+                        snapshot = await applicationLoadCoordinator.GetFreshAsync(cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+                    }
+
+                    var sourceBrand = snapshot.Discovery.Brands.FirstOrDefault(item => string.Equals(item.Name, brandName, StringComparison.Ordinal));
+                    if (sourceBrand is null)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "brand_clone_source_not_found");
+                    }
+
+                    BrandCloneResult result;
+                    try
+                    {
+                        result = await brandCloneService.CloneAsync(snapshot.Discovery.Paths, sourceBrand, language, cancellationToken);
+                    }
+                    catch (BrandCloneException exception)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, exception.Code);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "brand_clone_failed");
+                    }
+
+                    BackgroundTaskBridgeSnapshot? refreshTask = null;
+                    string? refreshWarning = null;
+                    try
+                    {
+                        refreshTask = BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(CancellationToken.None));
+                    }
+                    catch
+                    {
+                        refreshWarning = "Library refresh could not start.";
+                    }
+
+                    return BridgeResponse.Succeeded(request.Id, "brand.clone.completed", new
+                    {
+                        sourceBrandName = result.SourceBrand.Name,
+                        languageCode = result.Language.Code,
+                        languageName = result.Language.Name,
+                        destinationBrandName = result.DestinationBrand.Name,
+                        refreshTask,
+                        refreshWarning
+                    });
+                }
+            }
+            if (request.Command == "book.clone")
+            {
+                if (applicationLoadCoordinator is null || bookCloneService is null || request.Payload is not { } clonePayload ||
+                    !TryGetRequiredString(clonePayload, "bookId", out var requestedBookId) ||
+                    !TryGetRequiredString(clonePayload, "languageCode", out var requestedLanguageCode))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_book_clone");
+                }
+
+                var bookId = requestedBookId.Trim();
+                if (!SupportedLanguageCatalog.TryGet(requestedLanguageCode, out var language))
+                {
+                    return new BridgeResponse(Version, request.Id, false, null, "book_clone_language_invalid");
+                }
+
+                await using (await processingMutationGate.EnterAsync(cancellationToken))
+                {
+                    if (await IsProcessingActiveAsync(cancellationToken))
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "processing_active");
+                    }
+                    var writerError = await GetActiveStateWriterErrorAsync(cancellationToken);
+                    if (writerError is not null)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, writerError);
+                    }
+
+                    ApplicationSnapshot snapshot;
+                    try
+                    {
+                        snapshot = await applicationLoadCoordinator.GetFreshAsync(cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "snapshot_unavailable");
+                    }
+
+                    var sourceBook = snapshot.Discovery.Books.FirstOrDefault(item =>
+                        string.Equals(item.Id.Value, bookId, StringComparison.Ordinal));
+                    if (sourceBook is null)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "book_clone_source_not_found");
+                    }
+
+                    BookCloneResult result;
+                    try
+                    {
+                        result = await bookCloneService.CloneAsync(snapshot.Discovery.Paths, sourceBook, language, cancellationToken);
+                    }
+                    catch (BookCloneException exception)
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, exception.Code);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch
+                    {
+                        return new BridgeResponse(Version, request.Id, false, null, "book_clone_failed");
+                    }
+
+                    BackgroundTaskBridgeSnapshot? refreshTask = null;
+                    string? refreshWarning = null;
+                    try
+                    {
+                        refreshTask = BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(CancellationToken.None));
+                    }
+                    catch
+                    {
+                        refreshWarning = "Library refresh could not start.";
+                    }
+
+                    return BridgeResponse.Succeeded(request.Id, "book.clone.completed", new
+                    {
+                        sourceBookId = result.SourceBook.Id.Value,
+                        sourceBookName = result.SourceBook.Name,
+                        languageCode = result.Language.Code,
+                        languageName = result.Language.Name,
+                        destinationBookId = result.DestinationBook.Id.Value,
+                        destinationBookName = result.DestinationBook.Name,
+                        refreshTask,
+                        refreshWarning
+                    });
+                }
             }
             if (request.Command == "task.get")
             {
@@ -1206,10 +1393,8 @@ internal sealed class WebViewBridgeRouter(
             {
                 var settings = payload.Deserialize<GlobalSettings>(JsonOptions);
                 if (settings is null) return new BridgeResponse(Version, request.Id, false, null, "invalid_settings");
-                settings = settings with
-                {
-                    GenericKeywords = BookTextPolicy.NormalizePhrases(settings.EffectiveGenericKeywords, distinct: true)
-                };
+                settings = GenericKeywordProfilePolicy.NormalizeForSave(settings);
+                settings = AmazonMarketplaceProfilePolicy.NormalizeForSave(settings);
                 await settingsStore.SaveAsync(settings, cancellationToken);
                 return BridgeResponse.Succeeded(request.Id, "settings.saved", settings);
             }
@@ -1225,6 +1410,10 @@ internal sealed class WebViewBridgeRouter(
             {
                 return new BridgeResponse(Version, request.Id, false, null, exception.Code);
             }
+            catch (ArgumentException)
+            {
+                return new BridgeResponse(Version, request.Id, false, null, "invalid_settings");
+            }
         }
         catch (OperationCanceledException)
         {
@@ -1234,6 +1423,24 @@ internal sealed class WebViewBridgeRouter(
         {
             return BridgeResponse.Failed(request.Id, $"{request.Command.Replace('.', '_')}_failed", exception);
         }
+    }
+
+    private async ValueTask<(AmazonMarketplaceProfile? Profile, string? BookId, string? Error)> ResolveAmazonMarketplaceAsync(
+        BridgeRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (applicationLoadCoordinator is null || settingsStore is null || request.Payload is not { } payload ||
+            !TryGetRequiredString(payload, "bookId", out var bookId))
+        {
+            return (null, null, "invalid_amazon_browser");
+        }
+
+        var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+        if (snapshot is null) return (null, bookId, "snapshot_unavailable");
+        var summary = snapshot.BookSummaries.FirstOrDefault(item => string.Equals(item.BookId.Value, bookId, StringComparison.Ordinal));
+        return summary is null
+            ? (null, bookId, "book_not_found")
+            : (AmazonMarketplaceProfilePolicy.Resolve(await settingsStore.LoadAsync(cancellationToken), summary.LanguageCode), bookId, null);
     }
 
     private async ValueTask<bool> IsProcessingActiveAsync(CancellationToken cancellationToken)
@@ -1256,7 +1463,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.interior.shuffle" or "book.interior.open-folder" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.pdf-name-suggestions.get" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "diagnostics.get" or "s3.get" or "s3.credentials.replace" or "book.s3.check" or "book.s3.upload" or "book.s3.get" or "book.s3.cancel" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.clone" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.interior.shuffle" or "book.interior.open-folder" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.pdf-name-suggestions.get" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "brand.clone" or "diagnostics.get" or "s3.get" or "s3.credentials.replace" or "book.s3.check" or "book.s3.upload" or "book.s3.get" or "book.s3.cancel" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 

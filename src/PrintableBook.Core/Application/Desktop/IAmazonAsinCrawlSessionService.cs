@@ -16,7 +16,7 @@ public sealed record AmazonAsinCrawlSessionSnapshot(
 public interface IAmazonAsinCrawlSessionService
 {
     ValueTask<AmazonAsinCrawlSessionSnapshot> GetAsync(string bookId, CancellationToken cancellationToken = default);
-    ValueTask<AmazonAsinCrawlSessionSnapshot> StartAsync(string bookId, IReadOnlyList<string> keywords, CancellationToken cancellationToken = default);
+    ValueTask<AmazonAsinCrawlSessionSnapshot> StartAsync(string bookId, IReadOnlyList<string> keywords, AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default);
     ValueTask<AmazonAsinCrawlSessionSnapshot> CancelAsync(string bookId, CancellationToken cancellationToken = default);
     ValueTask<bool> StopAndWaitAsync(TimeSpan timeout, CancellationToken cancellationToken = default);
 }
@@ -38,10 +38,15 @@ public sealed class AmazonAsinCrawlSessionService(IBackgroundTaskManager taskMan
         return Snapshot(task);
     }
 
-    public async ValueTask<AmazonAsinCrawlSessionSnapshot> StartAsync(string bookId, IReadOnlyList<string> keywords, CancellationToken cancellationToken = default)
+    public async ValueTask<AmazonAsinCrawlSessionSnapshot> StartAsync(
+        string bookId,
+        IReadOnlyList<string> keywords,
+        AmazonMarketplaceProfile profile,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(bookId);
-        var request = AmazonAsinCrawlRequest.Create(keywords);
+        ArgumentNullException.ThrowIfNull(profile);
+        var request = AmazonAsinCrawlRequest.Create(keywords, profile);
         var initial = AmazonAsinCrawlView.Pending(request);
         var task = await taskManager.StartAsync(
             BackgroundTaskKind.AmazonAsinCrawl,

@@ -9,7 +9,6 @@ namespace PrintableBook.Infrastructure.CloakBrowser;
 
 public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAmazonBrowserLifetime, IAsyncDisposable, IDisposable
 {
-    private const string CartUrl = "https://www.amazon.com/gp/cart/view.html?ref_=nav_cart";
     private const string FetchScript = """
         async ({ url, timeoutMs, maxBytes }) => {
           const controller = new AbortController();
@@ -38,6 +37,7 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
     private readonly IOperationDiagnostics diagnostics;
     private CloakContextHandle? handle;
     private IPage? page;
+    private AmazonMarketplaceProfile? activeProfile;
     private CloakBrowserStatus status = new(CloakBrowserState.Closed);
     private bool disposed;
 
@@ -52,17 +52,17 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
         this.diagnostics = diagnostics;
     }
 
-    public async ValueTask<CloakBrowserStatus> GetStatusAsync(CancellationToken cancellationToken = default)
+    public async ValueTask<CloakBrowserStatus> GetStatusAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(profile);
         cancellationToken.ThrowIfCancellationRequested();
         await lifecycle.WaitAsync(cancellationToken);
         try
         {
-            if (status.State == CloakBrowserState.Ready && (page is null || page.IsClosed))
-            {
-                status = new(CloakBrowserState.Closed, "cloak_browser_closed");
-            }
-            return status;
+            var observed = status.State == CloakBrowserState.Ready && (page is null || page.IsClosed)
+                ? new CloakBrowserStatus(CloakBrowserState.Closed, "cloak_browser_closed")
+                : status;
+            return Describe(observed, profile, page is { IsClosed: false } ? activeProfile : null);
         }
         finally
         {
@@ -70,53 +70,79 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
         }
     }
 
-    public async ValueTask<CloakBrowserStatus> OpenAsync(CancellationToken cancellationToken = default)
+    public ValueTask<CloakBrowserStatus> OpenAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default) =>
+        OpenCoreAsync(profile, fresh: false, cancellationToken);
+
+    public ValueTask<CloakBrowserStatus> OpenFreshAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default) =>
+        OpenCoreAsync(profile, fresh: true, cancellationToken);
+
+    private async ValueTask<CloakBrowserStatus> OpenCoreAsync(
+        AmazonMarketplaceProfile profile,
+        bool fresh,
+        CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(profile);
         await lifecycle.WaitAsync(cancellationToken);
         try
         {
             ThrowIfDisposed();
-            if (status.State == CloakBrowserState.Ready && page is { IsClosed: false })
+            if (!fresh && status.State == CloakBrowserState.Ready && page is { IsClosed: false } &&
+                string.Equals(activeProfile?.MarketCode, profile.MarketCode, StringComparison.Ordinal))
             {
                 await page.BringToFrontAsync();
-                return status;
+                return Describe(status, profile, activeProfile);
             }
 
-            await CloseCoreAsync();
+            try
+            {
+                await CloseContextCoreAsync();
+            }
+            catch (Exception exception)
+            {
+                throw MapCloseException(exception);
+            }
             status = new(CloakBrowserState.Checking);
-            storage.EnsureWritable();
+            storage.EnsureWritable(profile);
             Environment.SetEnvironmentVariable("CLOAKBROWSER_CACHE_DIR", storage.Cache, EnvironmentVariableTarget.Process);
             status = new(CloakBrowserState.Opening);
-            diagnostics.Record("amazon.browser.opening", detail: "CloakBrowser 0.5.11");
+            diagnostics.Record("amazon.browser.opening", profile.MarketCode, $"{profile.Domain}; CloakBrowser 0.5.11");
 
-            handle = await CloakLauncher.LaunchPersistentContextAsync(storage.Profile, new LaunchContextOptions
+            handle = await CloakLauncher.LaunchPersistentContextAsync(storage.ProfileFor(profile), new LaunchContextOptions
             {
                 Headless = false,
                 Humanize = false,
                 NoViewport = true,
-                Locale = "en-US"
+                Locale = profile.Locale
             }).WaitAsync(TimeSpan.FromMinutes(5), cancellationToken);
+            activeProfile = profile;
             page = handle.Context.Pages.FirstOrDefault() ?? await handle.NewPageAsync();
             status = new(CloakBrowserState.WarmingUp);
-            await page.GotoAsync(CartUrl, new PageGotoOptions
+            await page.GotoAsync(new Uri(profile.MarketplaceUri, "gp/cart/view.html?ref_=nav_cart").AbsoluteUri, new PageGotoOptions
             {
                 WaitUntil = WaitUntilState.DOMContentLoaded,
                 Timeout = 45_000
             }).WaitAsync(cancellationToken);
 
-            if (!AmazonCrawlPolicy.IsAllowedUri(TryUri(page.Url)))
+            if (!AmazonCrawlPolicy.IsAllowedUri(profile, TryUri(page.Url)))
             {
                 throw new AmazonSearchPageException("amazon_origin_not_ready", "Amazon did not open on the expected origin.");
             }
 
             await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
             status = new(CloakBrowserState.Ready);
-            diagnostics.Record("amazon.browser.ready");
-            return status;
+            diagnostics.Record("amazon.browser.ready", profile.MarketCode, profile.Domain);
+            return Describe(status, profile, activeProfile);
         }
         catch (OperationCanceledException)
         {
-            await CloseCoreAsync();
+            try
+            {
+                await CloseContextCoreAsync();
+            }
+            catch (Exception exception)
+            {
+                diagnostics.Record("amazon.browser.close.warning", profile.MarketCode, exception.Message);
+            }
             status = new(CloakBrowserState.Closed);
             throw;
         }
@@ -142,11 +168,12 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
         }
     }
 
-    public async ValueTask<BrowserFetchResponse> FetchAsync(Uri uri, CancellationToken cancellationToken = default)
+    public async ValueTask<BrowserFetchResponse> FetchAsync(AmazonMarketplaceProfile profile, Uri uri, CancellationToken cancellationToken = default)
     {
-        if (!AmazonCrawlPolicy.IsAllowedUri(uri))
+        ArgumentNullException.ThrowIfNull(profile);
+        if (!AmazonCrawlPolicy.IsAllowedUri(profile, uri))
         {
-            throw new AmazonSearchPageException("amazon_url_not_allowed", "Only Amazon.com search pages are allowed.");
+            throw new AmazonSearchPageException("amazon_url_not_allowed", $"Only {profile.Domain} search pages are allowed.");
         }
 
         await lifecycle.WaitAsync(cancellationToken);
@@ -157,9 +184,10 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
             {
                 throw new AmazonSearchPageException("amazon_origin_not_ready", "Open the Amazon browser before searching.");
             }
-            if (!AmazonCrawlPolicy.IsAllowedUri(TryUri(page.Url)))
+            if (!string.Equals(activeProfile?.MarketCode, profile.MarketCode, StringComparison.Ordinal) ||
+                !AmazonCrawlPolicy.IsAllowedUri(profile, TryUri(page.Url)))
             {
-                throw new AmazonSearchPageException("amazon_origin_not_ready", "Return the browser to Amazon.com before searching.");
+                throw new AmazonSearchPageException("amazon_origin_not_ready", $"Return the browser to {profile.Domain} before searching.");
             }
 
             string payloadJson;
@@ -187,7 +215,7 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
             {
                 throw new AmazonSearchPageException("amazon_response_too_large", "Amazon returned more data than the safe response limit.");
             }
-            if (!AmazonCrawlPolicy.IsAllowedUri(TryUri(payload.FinalUrl)))
+            if (!AmazonCrawlPolicy.IsAllowedUri(profile, TryUri(payload.FinalUrl)))
             {
                 throw new AmazonSearchPageException("amazon_redirect_not_allowed", "Amazon redirected the search outside the allowed origin.");
             }
@@ -226,19 +254,32 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
         }
     }
 
-    public async ValueTask ShutdownAsync(CancellationToken cancellationToken = default)
+    public async ValueTask CloseAsync(CancellationToken cancellationToken = default)
     {
         await lifecycle.WaitAsync(cancellationToken);
         try
         {
-            await CloseCoreAsync();
-            status = new(CloakBrowserState.Closed);
+            var closingMarketCode = activeProfile?.MarketCode;
+            try
+            {
+                await CloseContextCoreAsync();
+                status = new(CloakBrowserState.Closed);
+            }
+            catch (Exception exception)
+            {
+                var mapped = MapCloseException(exception);
+                status = new(CloakBrowserState.Error, mapped.Code);
+                diagnostics.Record("amazon.browser.close.warning", closingMarketCode, exception.Message);
+                throw mapped;
+            }
         }
         finally
         {
             lifecycle.Release();
         }
     }
+
+    public ValueTask ShutdownAsync(CancellationToken cancellationToken = default) => CloseAsync(cancellationToken);
 
     public async ValueTask DisposeAsync()
     {
@@ -257,18 +298,47 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
         lifecycle.Dispose();
     }
 
-    private async ValueTask CloseCoreAsync()
+    private async ValueTask CloseContextCoreAsync()
     {
+        var current = handle;
         page = null;
-        if (handle is null) return;
-        try { await handle.CloseAsync(); }
-        catch (PlaywrightException) { }
-        finally
+        handle = null;
+        activeProfile = null;
+        if (current is null) return;
+
+        Exception? failure = null;
+        try
         {
-            await handle.DisposeAsync();
-            handle = null;
+            await current.CloseAsync();
         }
+        catch (Exception exception)
+        {
+            failure = exception;
+        }
+
+        try
+        {
+            await current.DisposeAsync();
+        }
+        catch (Exception exception)
+        {
+            failure ??= exception;
+        }
+
+        if (failure is not null) throw failure;
     }
+
+    private static CloakBrowserStatus Describe(
+        CloakBrowserStatus value,
+        AmazonMarketplaceProfile target,
+        AmazonMarketplaceProfile? active) =>
+        value with
+        {
+            TargetMarketCode = target.MarketCode,
+            TargetMarketName = target.MarketName,
+            TargetDomain = target.Domain,
+            ActiveMarketCode = active?.MarketCode
+        };
 
     private static Uri? TryUri(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri : null;
 
@@ -334,6 +404,12 @@ public sealed class CloakBrowserAmazonPageClient : IAmazonSearchPageClient, IAma
         }
         return new("cloak_browser_launch_failed", "CloakBrowser could not be opened. Check the browser setup and retry.", innerException: exception);
     }
+
+    private static AmazonSearchPageException MapCloseException(Exception exception) =>
+        exception as AmazonSearchPageException ?? new(
+            "cloak_browser_close_failed",
+            "The Amazon browser context could not be closed cleanly.",
+            innerException: exception);
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(disposed, this);
 

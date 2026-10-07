@@ -34,7 +34,7 @@ public sealed class AmazonAsinCrawlWorker(
         try
         {
             context.Report("amazon.browser.ensure", 0, request.Keywords.Count, "Preparing Amazon browser");
-            await pageClient.OpenAsync(token);
+            await pageClient.OpenFreshAsync(request.Profile, token);
             Publish(AmazonAsinCrawlOutcome.Running);
 
             for (var index = 0; index < request.Keywords.Count; index++)
@@ -46,9 +46,9 @@ public sealed class AmazonAsinCrawlWorker(
 
                 try
                 {
-                    var response = await FetchWithRetryAsync(AmazonCrawlPolicy.BuildSearchUri(request.Keywords[index]), token);
-                    var parsed = parser.Parse(response.Html);
-                    rows[index] = AmazonAsinSelection.Select(index, request.Keywords[index], parsed, selected);
+                    var response = await FetchWithRetryAsync(AmazonCrawlPolicy.BuildSearchUri(request.Profile, request.Keywords[index]), token);
+                    var parsed = parser.Parse(response.Html, request.Profile);
+                    rows[index] = AmazonAsinSelection.Select(index, request.Keywords[index], parsed, selected, request.Profile);
 
                     if (parsed.Diagnostic is AmazonSearchPageDiagnostic.NeedsAttention or AmazonSearchPageDiagnostic.UnexpectedMarkup)
                     {
@@ -92,12 +92,24 @@ public sealed class AmazonAsinCrawlWorker(
                 exception.NeedsAttention ? AmazonAsinCrawlOutcome.NeedsAttention : AmazonAsinCrawlOutcome.Failed,
                 exception.Code);
         }
+        finally
+        {
+            try
+            {
+                await pageClient.CloseAsync(CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                var detail = exception is AmazonSearchPageException pageException ? pageException.Code : exception.Message;
+                context.Report("amazon.browser.close.warning", detail: detail, subject: request.Profile.MarketCode);
+            }
+        }
 
         async ValueTask<BrowserFetchResponse> FetchWithRetryAsync(Uri uri, CancellationToken tokenValue)
         {
             for (var attempt = 0; ; attempt++)
             {
-                try { return await pageClient.FetchAsync(uri, tokenValue); }
+                try { return await pageClient.FetchAsync(request.Profile, uri, tokenValue); }
                 catch (AmazonSearchPageException exception) when (exception.Retryable && attempt == 0)
                 {
                     await delay.WaitAsync(tokenValue);
@@ -120,7 +132,17 @@ public sealed class AmazonAsinCrawlWorker(
         {
             var completed = rows.Count(row => row.Status is not AmazonAsinKeywordStatus.Pending and not AmazonAsinKeywordStatus.Searching and not AmazonAsinKeywordStatus.NotProcessed);
             var final = string.Join(',', rows.Where(row => row.Status == AmazonAsinKeywordStatus.Selected).Select(row => row.Asin));
-            var view = new AmazonAsinCrawlView(outcome, rows.ToArray(), completed, rows.Length, final, request.RequestFingerprint, stopReason);
+            var view = new AmazonAsinCrawlView(
+                outcome,
+                rows.ToArray(),
+                completed,
+                rows.Length,
+                final,
+                request.RequestFingerprint,
+                stopReason,
+                request.Profile.MarketCode,
+                request.Profile.MarketName,
+                request.Profile.Domain);
             context.SetView(view);
             return view;
         }

@@ -1,5 +1,6 @@
 using PrintableBook.Core.Application.AmazonCrawl;
 using PrintableBook.Core.Application.BackgroundTasks;
+using PrintableBook.Core.Application.Desktop;
 
 namespace PrintableBook.Core.Tests.Application.AmazonCrawl;
 
@@ -33,14 +34,16 @@ public sealed class AmazonAsinCrawlWorkerTests
         var worker = new AmazonAsinCrawlWorker(page, parser, new NoDelay());
 
         var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)worker).ExecuteAsync(
-            AmazonAsinCrawlRequest.Create(["one", "two", "three"]), context, CancellationToken.None));
+            AmazonAsinCrawlRequest.Create(["one", "two", "three"], Profile()), context, CancellationToken.None));
 
         Assert.Equal(AmazonAsinCrawlOutcome.Completed, result.Outcome);
         Assert.Equal("B000000001,B000000004,B000000006", result.FinalAsins);
         Assert.Equal(
             [AmazonAsinKeywordStatus.Selected, AmazonAsinKeywordStatus.Selected, AmazonAsinKeywordStatus.Selected],
             result.Rows.Select(row => row.Status));
-        Assert.Equal(CloakBrowserState.Ready, page.Status.State);
+        Assert.Equal(CloakBrowserState.Closed, page.Status.State);
+        Assert.Equal(1, page.FreshOpenCount);
+        Assert.Equal(1, page.CloseCount);
     }
 
     [Fact]
@@ -56,7 +59,7 @@ public sealed class AmazonAsinCrawlWorkerTests
         var context = new RecordingContext();
 
         var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)new AmazonAsinCrawlWorker(page, parser, new NoDelay())).ExecuteAsync(
-            AmazonAsinCrawlRequest.Create(["one", "two"]), context, CancellationToken.None));
+            AmazonAsinCrawlRequest.Create(["one", "two"], Profile()), context, CancellationToken.None));
 
         Assert.Equal(AmazonAsinCrawlOutcome.Partial, result.Outcome);
         Assert.Equal("B000000001", result.FinalAsins);
@@ -76,7 +79,7 @@ public sealed class AmazonAsinCrawlWorkerTests
         var context = new RecordingContext();
 
         var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)new AmazonAsinCrawlWorker(page, parser, new NoDelay())).ExecuteAsync(
-            AmazonAsinCrawlRequest.Create(["one", "two", "three"]), context, CancellationToken.None));
+            AmazonAsinCrawlRequest.Create(["one", "two", "three"], Profile()), context, CancellationToken.None));
 
         Assert.Equal(AmazonAsinCrawlOutcome.NeedsAttention, result.Outcome);
         Assert.Equal("B000000001", result.FinalAsins);
@@ -95,7 +98,7 @@ public sealed class AmazonAsinCrawlWorkerTests
         var context = new RecordingContext();
 
         var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)new AmazonAsinCrawlWorker(page, parser, new NoDelay())).ExecuteAsync(
-            AmazonAsinCrawlRequest.Create(["one", "two", "three"]), context, CancellationToken.None));
+            AmazonAsinCrawlRequest.Create(["one", "two", "three"], Profile()), context, CancellationToken.None));
 
         Assert.Equal(AmazonAsinCrawlOutcome.Failed, result.Outcome);
         Assert.Equal("amazon_searchbox_missing", result.StopReasonCode);
@@ -118,7 +121,7 @@ public sealed class AmazonAsinCrawlWorkerTests
         var context = new RecordingContext();
 
         var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)new AmazonAsinCrawlWorker(page, parser, new NoDelay())).ExecuteAsync(
-            AmazonAsinCrawlRequest.Create(["one", "two", "three"]), context, CancellationToken.None));
+            AmazonAsinCrawlRequest.Create(["one", "two", "three"], Profile()), context, CancellationToken.None));
 
         Assert.Equal(AmazonAsinCrawlOutcome.Failed, result.Outcome);
         Assert.Equal("amazon_fetch_payload_invalid", result.StopReasonCode);
@@ -142,15 +145,38 @@ public sealed class AmazonAsinCrawlWorkerTests
         var context = new RecordingContext();
 
         var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)new AmazonAsinCrawlWorker(page, new QueueParser([]), new NoDelay())).ExecuteAsync(
-            AmazonAsinCrawlRequest.Create(["one", "two"]), context, CancellationToken.None));
+            AmazonAsinCrawlRequest.Create(["one", "two"], Profile()), context, CancellationToken.None));
 
         Assert.Equal(AmazonAsinCrawlOutcome.NeedsAttention, result.Outcome);
         Assert.Equal("cloak_browser_license_required", result.StopReasonCode);
         Assert.All(result.Rows, row => Assert.Equal(AmazonAsinKeywordStatus.NotProcessed, row.Status));
         Assert.Same(result, context.View);
+        Assert.Equal(1, page.CloseCount);
+    }
+
+    [Fact]
+    public async Task Final_close_failure_records_warning_without_replacing_completed_outcome()
+    {
+        var page = new FakePageClient([Response("one")])
+        {
+            CloseException = new AmazonSearchPageException("cloak_browser_close_failed", "close failed")
+        };
+        var context = new RecordingContext();
+
+        var result = Assert.IsType<AmazonAsinCrawlView>(await ((IBackgroundTaskWorker)new AmazonAsinCrawlWorker(
+            page,
+            new QueueParser([Parsed(("B000000001", "Coloring book"))]),
+            new NoDelay())).ExecuteAsync(
+                AmazonAsinCrawlRequest.Create(["one"], Profile()), context, CancellationToken.None));
+
+        Assert.Equal(AmazonAsinCrawlOutcome.Completed, result.Outcome);
+        Assert.Equal("B000000001", result.FinalAsins);
+        Assert.Contains(context.Reports, report => report.Step == "amazon.browser.close.warning" && report.Detail == "cloak_browser_close_failed");
     }
 
     private static BrowserFetchResponse Response(string marker) => new(200, true, false, "https://www.amazon.com/s", "text/html", marker);
+
+    private static AmazonMarketplaceProfile Profile() => AmazonMarketplaceProfilePolicy.Resolve(GlobalSettings.Default, "en");
 
     private static AmazonSearchParseResult Parsed(params (string Asin, string Title)[] candidates) =>
         new(AmazonSearchPageDiagnostic.Results, candidates.Select(item => new AmazonSearchCandidate(item.Asin, item.Title)).ToArray());
@@ -163,20 +189,34 @@ public sealed class AmazonAsinCrawlWorkerTests
     private sealed class QueueParser(IEnumerable<AmazonSearchParseResult> results) : IAmazonSearchHtmlParser
     {
         private readonly Queue<AmazonSearchParseResult> results = new(results);
-        public AmazonSearchParseResult Parse(string html) => results.Dequeue();
+        public AmazonSearchParseResult Parse(string html, AmazonMarketplaceProfile profile) => results.Dequeue();
     }
 
     private sealed class FakePageClient(IEnumerable<object> responses) : IAmazonSearchPageClient
     {
         private readonly Queue<object> responses = new(responses);
         public Exception? OpenException { get; init; }
+        public Exception? CloseException { get; init; }
         public CloakBrowserStatus Status { get; private set; } = new(CloakBrowserState.Closed);
         public int FetchCount { get; private set; }
-        public ValueTask<CloakBrowserStatus> GetStatusAsync(CancellationToken cancellationToken = default) => ValueTask.FromResult(Status);
-        public ValueTask<CloakBrowserStatus> OpenAsync(CancellationToken cancellationToken = default) => OpenException is null
+        public int FreshOpenCount { get; private set; }
+        public int CloseCount { get; private set; }
+        public ValueTask<CloakBrowserStatus> GetStatusAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default) => ValueTask.FromResult(Status);
+        public ValueTask<CloakBrowserStatus> OpenAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default) => OpenException is null
             ? ValueTask.FromResult(Status = new(CloakBrowserState.Ready))
             : ValueTask.FromException<CloakBrowserStatus>(OpenException);
-        public ValueTask<BrowserFetchResponse> FetchAsync(Uri uri, CancellationToken cancellationToken = default)
+        public ValueTask<CloakBrowserStatus> OpenFreshAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default)
+        {
+            FreshOpenCount++;
+            return OpenAsync(profile, cancellationToken);
+        }
+        public ValueTask CloseAsync(CancellationToken cancellationToken = default)
+        {
+            CloseCount++;
+            Status = new(CloakBrowserState.Closed);
+            return CloseException is null ? ValueTask.CompletedTask : ValueTask.FromException(CloseException);
+        }
+        public ValueTask<BrowserFetchResponse> FetchAsync(AmazonMarketplaceProfile profile, Uri uri, CancellationToken cancellationToken = default)
         {
             FetchCount++;
             var next = responses.Dequeue();
@@ -190,7 +230,8 @@ public sealed class AmazonAsinCrawlWorkerTests
     {
         public BackgroundTaskId TaskId { get; } = new("amazon-test");
         public object? View { get; private set; }
-        public void Report(string step, int? completed = null, int? total = null, string? detail = null, string? subject = null) { }
+        public List<(string Step, string? Detail, string? Subject)> Reports { get; } = [];
+        public void Report(string step, int? completed = null, int? total = null, string? detail = null, string? subject = null) => Reports.Add((step, detail, subject));
         public void SetView<TView>(TView view) where TView : class => View = view;
     }
 }

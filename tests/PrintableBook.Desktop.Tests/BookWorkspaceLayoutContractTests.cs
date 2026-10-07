@@ -343,7 +343,9 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("Reassign this Book from", script, StringComparison.Ordinal);
         Assert.Contains("Existing files and outputs will not be moved or changed", script, StringComparison.Ordinal);
         Assert.Contains("The existing assignment is preserved", script, StringComparison.Ordinal);
-        Assert.Contains("Only Brands whose Author matches", script, StringComparison.Ordinal);
+        Assert.Contains("Only Brands whose Language and Author match", script, StringComparison.Ordinal);
+        Assert.Contains("No ${languageNameFor(summary)} Brand available.", script, StringComparison.Ordinal);
+        Assert.Contains("No ${languageNameFor(summary)} Brand matches this Book Author.", script, StringComparison.Ordinal);
         Assert.Contains("aria-describedby=\"${errorId}\"", script, StringComparison.Ordinal);
         Assert.Contains("patchBookMetadataValidationUi", script, StringComparison.Ordinal);
         Assert.Contains("scrollIntoView?.({ block: \"nearest\" })", script, StringComparison.Ordinal);
@@ -471,6 +473,23 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("? renderAsinResearchWorkspace(book, summary)", script, StringComparison.Ordinal);
         Assert.Contains("state.selectedBookTab !== \"asin\"", script, StringComparison.Ordinal);
         Assert.Contains(".asin-research-workspace { display:grid; gap:20px; min-width:0; }", layout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ConfigurationEditsAmazonMarketProfilesByLanguage()
+    {
+        var frontend = Path.Combine(AppContext.BaseDirectory, "Frontend");
+        var script = File.ReadAllText(Path.Combine(frontend, "js", "app.js"));
+
+        Assert.Contains("Amazon market profiles", script, StringComparison.Ordinal);
+        Assert.Contains("data-action=\"amazon-market-language\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-amazon-profile-field=\"profileKey\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-amazon-profile-field=\"baseUrl\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-amazon-profile-field=\"locale\"", script, StringComparison.Ordinal);
+        Assert.Contains("data-amazon-profile-field=\"titleTerms\"", script, StringComparison.Ordinal);
+        Assert.Contains("Comma-separated title phrases", script, StringComparison.Ordinal);
+        Assert.Contains("payload.amazonMarketplaceProfiles", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("textarea id=\"amazon-title-terms\"", script, StringComparison.Ordinal);
     }
 
     [Fact]

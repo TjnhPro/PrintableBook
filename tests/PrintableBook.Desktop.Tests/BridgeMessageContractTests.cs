@@ -11,7 +11,9 @@ using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Application.Processing;
 using PrintableBook.Core.Application.Brands;
+using PrintableBook.Core.Application.Books;
 using PrintableBook.Core.Application.Production;
+using PrintableBook.Core.Application.AmazonCrawl;
 using PrintableBook.Core.Domain.Books;
 using PrintableBook.Core.Domain.Processing;
 using System.Text.Json;
@@ -146,6 +148,175 @@ public sealed class BridgeMessageContractTests
         Assert.True(response.Ok);
         Assert.Equal("background.task", response.Command);
         Assert.Equal("Failed", Assert.IsType<BackgroundTaskBridgeSnapshot>(response.Payload).State);
+    }
+
+    [Theory]
+    [InlineData("{\"version\":1,\"id\":\"clone\",\"command\":\"brand.clone\"}")]
+    [InlineData("{\"version\":1,\"id\":\"clone\",\"command\":\"brand.clone\",\"payload\":{\"brandName\":\"Brand One\"}}")]
+    [InlineData("{\"version\":1,\"id\":\"clone\",\"command\":\"brand.clone\",\"payload\":{\"brandName\":12,\"languageCode\":\"de\"}}")]
+    public async Task Brand_clone_rejects_a_malformed_payload(string request)
+    {
+        var response = await new WebViewBridgeRouter(
+            applicationLoadCoordinator: CreateCoordinator(new StubSnapshotService(CreateSnapshot())),
+            brandCloneService: new StubBrandCloneService())
+            .HandleAsync(request);
+
+        Assert.Equal("invalid_brand_clone", response.Error);
+    }
+
+    [Fact]
+    public async Task Brand_clone_canonicalizes_language_and_returns_the_refresh_contract()
+    {
+        var service = new StubBrandCloneService();
+        var response = await new WebViewBridgeRouter(
+            applicationLoadCoordinator: CreateCoordinator(new StubSnapshotService(CreateSnapshot())),
+            brandCloneService: service)
+            .HandleAsync("""{"version":1,"id":"clone","command":"brand.clone","payload":{"brandName":" Brand One ","languageCode":" FR "}}""");
+
+        var json = MainWindow.SerializeBridgeResponse(response);
+        Assert.True(response.Ok);
+        Assert.Equal("brand.clone.completed", response.Command);
+        Assert.Equal("fr", service.Language?.Code);
+        Assert.Contains("\"sourceBrandName\":\"Brand One\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"languageCode\":\"fr\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"languageName\":\"French\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"destinationBrandName\":\"Brand One_fr\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"refreshTask\":{", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Brand_clone_rejects_an_invalid_language_and_a_stale_source()
+    {
+        var service = new StubBrandCloneService();
+        var router = new WebViewBridgeRouter(
+            applicationLoadCoordinator: CreateCoordinator(new StubSnapshotService(CreateSnapshot())),
+            brandCloneService: service);
+
+        var invalidLanguage = await router.HandleAsync("""{"version":1,"id":"language","command":"brand.clone","payload":{"brandName":"Brand One","languageCode":"xx"}}""");
+        var staleSource = await router.HandleAsync("""{"version":1,"id":"source","command":"brand.clone","payload":{"brandName":"Missing Brand","languageCode":"de"}}""");
+
+        Assert.Equal("brand_clone_language_invalid", invalidLanguage.Error);
+        Assert.Equal("brand_clone_source_not_found", staleSource.Error);
+        Assert.Equal(0, service.Calls);
+    }
+
+    [Fact]
+    public async Task Brand_clone_is_blocked_while_interior_processing_is_active()
+    {
+        var service = new StubBrandCloneService();
+        var process = new StubProcessSessionService(new ProcessSessionSnapshot(true, false, "Brand One", new BookId("Book One"), "interior-pages", []));
+        var response = await new WebViewBridgeRouter(
+            applicationLoadCoordinator: CreateCoordinator(new StubSnapshotService(CreateSnapshot())),
+            processSessionService: process,
+            brandCloneService: service)
+            .HandleAsync("""{"version":1,"id":"clone","command":"brand.clone","payload":{"brandName":"Brand One","languageCode":"de"}}""");
+
+        Assert.Equal("processing_active", response.Error);
+        Assert.Equal(0, service.Calls);
+    }
+
+    [Fact]
+    public async Task Duplicate_brand_clone_requests_are_serialized_and_the_second_collision_is_stable()
+    {
+        var service = new BlockingBrandCloneService();
+        var router = new WebViewBridgeRouter(
+            applicationLoadCoordinator: CreateCoordinator(new StubSnapshotService(CreateSnapshot())),
+            brandCloneService: service);
+        const string request = "{\"version\":1,\"id\":\"clone\",\"command\":\"brand.clone\",\"payload\":{\"brandName\":\"Brand One\",\"languageCode\":\"de\"}}";
+
+        var first = router.HandleAsync(request).AsTask();
+        await service.FirstEntered.Task;
+        var second = router.HandleAsync(request.Replace("\"id\":\"clone\"", "\"id\":\"clone-duplicate\"")).AsTask();
+
+        Assert.False(second.IsCompleted);
+        service.AllowFirst.TrySetResult(null);
+        Assert.True((await first).Ok);
+        Assert.Equal("brand_clone_destination_exists", (await second).Error);
+        Assert.Equal(2, service.Calls);
+    }
+
+    [Fact]
+    public async Task Brand_clone_returns_snapshot_unavailable_without_calling_the_clone_service()
+    {
+        var service = new StubBrandCloneService();
+        var response = await new WebViewBridgeRouter(
+            applicationLoadCoordinator: CreateCoordinator(new ThrowingSnapshotService(new IOException("sensitive path"))),
+            brandCloneService: service)
+            .HandleAsync("""{"version":1,"id":"clone","command":"brand.clone","payload":{"brandName":"Brand One","languageCode":"de"}}""");
+
+        Assert.Equal("snapshot_unavailable", response.Error);
+        Assert.DoesNotContain("sensitive", MainWindow.SerializeBridgeResponse(response), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, service.Calls);
+    }
+
+    [Theory]
+    [InlineData("{\"version\":1,\"id\":\"clone\",\"command\":\"book.clone\"}")]
+    [InlineData("{\"version\":1,\"id\":\"clone\",\"command\":\"book.clone\",\"payload\":{\"bookId\":\"Book One\"}}")]
+    [InlineData("{\"version\":1,\"id\":\"clone\",\"command\":\"book.clone\",\"payload\":{\"bookId\":12,\"languageCode\":\"de\"}}")]
+    public async Task Book_clone_rejects_a_malformed_payload(string request)
+    {
+        var response = await new WebViewBridgeRouter(
+            applicationLoadCoordinator: CreateCoordinator(new StubSnapshotService(CreateSnapshot())),
+            bookCloneService: new StubBookCloneService())
+            .HandleAsync(request);
+
+        Assert.Equal("invalid_book_clone", response.Error);
+    }
+
+    [Fact]
+    public async Task Book_clone_canonicalizes_language_and_returns_the_refresh_contract()
+    {
+        var service = new StubBookCloneService();
+        var response = await new WebViewBridgeRouter(
+            applicationLoadCoordinator: CreateCoordinator(new StubSnapshotService(CreateSnapshot())),
+            bookCloneService: service)
+            .HandleAsync("""{"version":1,"id":"clone","command":"book.clone","payload":{"bookId":" Book One ","languageCode":" DE "}}""");
+
+        var json = MainWindow.SerializeBridgeResponse(response);
+        Assert.True(response.Ok);
+        Assert.Equal("book.clone.completed", response.Command);
+        Assert.Equal("de", service.Language?.Code);
+        Assert.Contains("\"sourceBookId\":\"Book One\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"languageCode\":\"de\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"destinationBookId\":\"Book One_de\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"refreshTask\":{", json, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(BackgroundTaskKind.ProductionAction, "production_action_active")]
+    [InlineData(BackgroundTaskKind.CacheCleanup, "cache_cleanup_active")]
+    public async Task Book_clone_is_blocked_while_a_state_writer_is_active(BackgroundTaskKind activeKind, string expected)
+    {
+        var manager = new RetainedSnapshotTaskManager(CreateSnapshot()) { ActiveKind = activeKind };
+        var service = new StubBookCloneService();
+        var response = await new WebViewBridgeRouter(
+            applicationLoadCoordinator: new ApplicationLoadCoordinator(manager),
+            backgroundTaskManager: manager,
+            bookCloneService: service)
+            .HandleAsync("""{"version":1,"id":"clone","command":"book.clone","payload":{"bookId":"Book One","languageCode":"de"}}""");
+
+        Assert.Equal(expected, response.Error);
+        Assert.Equal(0, service.Calls);
+    }
+
+    [Fact]
+    public async Task Duplicate_book_clone_requests_are_serialized_and_the_second_collision_is_stable()
+    {
+        var service = new BlockingBookCloneService();
+        var router = new WebViewBridgeRouter(
+            applicationLoadCoordinator: CreateCoordinator(new StubSnapshotService(CreateSnapshot())),
+            bookCloneService: service);
+        const string request = "{\"version\":1,\"id\":\"clone\",\"command\":\"book.clone\",\"payload\":{\"bookId\":\"Book One\",\"languageCode\":\"de\"}}";
+
+        var first = router.HandleAsync(request).AsTask();
+        await service.FirstEntered.Task;
+        var second = router.HandleAsync(request.Replace("\"id\":\"clone\"", "\"id\":\"clone-duplicate\"")).AsTask();
+
+        Assert.False(second.IsCompleted);
+        service.AllowFirst.TrySetResult(null);
+        Assert.True((await first).Ok);
+        Assert.Equal("book_clone_destination_exists", (await second).Error);
+        Assert.Equal(2, service.Calls);
     }
 
     [Fact]
@@ -291,12 +462,29 @@ public sealed class BridgeMessageContractTests
         var settingsStore = new StubSettingsStore();
         var router = new WebViewBridgeRouter(settingsStore: settingsStore);
 
-        var response = await router.HandleAsync("""{"version":1,"id":"request-5","command":"settings.save","payload":{"maximumPageConcurrency":6,"artworkDetectionThreshold":20,"artworkMaximumSide":2270,"workingPageWidth":2550,"workingPageHeight":2550,"finalPageWidth":2588,"finalPageHeight":2625,"dpi":300,"genericKeywords":[" coloring\tbooks ","COLORING BOOKS","books for adults"]}}""");
+        var response = await router.HandleAsync("""{"version":1,"id":"request-5","command":"settings.save","payload":{"maximumPageConcurrency":6,"artworkDetectionThreshold":20,"artworkMaximumSide":2270,"workingPageWidth":2550,"workingPageHeight":2550,"finalPageWidth":2588,"finalPageHeight":2625,"dpi":300,"genericKeywords":["stale legacy"],"genericKeywordsByLanguage":{"en":[" coloring\tbooks ","COLORING BOOKS","books for adults"],"de":[" German generic "]}}}""");
 
         Assert.True(response.Ok);
         Assert.Equal("settings.saved", response.Command);
         Assert.Equal(6, settingsStore.Saved!.MaximumPageConcurrency);
         Assert.Equal(["coloring books", "books for adults"], settingsStore.Saved.GenericKeywords);
+        Assert.Equal(["coloring books", "books for adults"], settingsStore.Saved.GetEffectiveGenericKeywords("en"));
+        Assert.Equal(["German generic"], settingsStore.Saved.GetEffectiveGenericKeywords("de"));
+        Assert.Empty(settingsStore.Saved.GetEffectiveGenericKeywords("ja"));
+        Assert.Equal(8, settingsStore.Saved.GenericKeywordsByLanguage!.Count);
+    }
+
+    [Fact]
+    public async Task SettingsSaveRequestRejectsUnsupportedGenericKeywordLanguage()
+    {
+        var settingsStore = new StubSettingsStore();
+        var router = new WebViewBridgeRouter(settingsStore: settingsStore);
+
+        var response = await router.HandleAsync("""{"version":1,"id":"request-invalid","command":"settings.save","payload":{"maximumPageConcurrency":6,"artworkDetectionThreshold":20,"artworkMaximumSide":2270,"workingPageWidth":2550,"workingPageHeight":2550,"finalPageWidth":2588,"finalPageHeight":2625,"dpi":300,"genericKeywordsByLanguage":{"xx":["invalid"]}}}""");
+
+        Assert.False(response.Ok);
+        Assert.Equal("invalid_settings", response.Error);
+        Assert.Null(settingsStore.Saved);
     }
 
     [Fact]
@@ -864,6 +1052,7 @@ public sealed class BridgeMessageContractTests
         var crawl = new StubAmazonAsinCrawlSessionService();
         var router = new WebViewBridgeRouter(
             new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(CreateSnapshot())),
+            settingsStore: new StubSettingsStore(),
             bookKeywordPreviewService: preview,
             amazonAsinCrawlSessionService: crawl);
 
@@ -871,6 +1060,7 @@ public sealed class BridgeMessageContractTests
 
         Assert.True(response.Ok);
         Assert.Equal(["cute cats"], crawl.Keywords);
+        Assert.Equal("us", crawl.Profile?.MarketCode);
         Assert.Equal("signed-receipt", preview.ResolvedReceipt);
         var json = JsonSerializer.Serialize(response.Payload, new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.Contains("\"sourceFingerprint\":\"source\"", json, StringComparison.Ordinal);
@@ -1652,6 +1842,125 @@ public sealed class BridgeMessageContractTests
         }
     }
 
+    private sealed class StubBrandCloneService : IBrandCloneService
+    {
+        public int Calls { get; private set; }
+        public SupportedLanguageOption? Language { get; private set; }
+
+        public ValueTask<BrandCloneResult> CloneAsync(
+            ApplicationPaths paths,
+            DiscoveredBrand sourceBrand,
+            SupportedLanguageOption language,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            Language = language;
+            var destinationName = LanguageEditionNamingPolicy.CreateDestinationName(sourceBrand.Name, language);
+            var destination = new DiscoveredBrand(destinationName, new DirectoryReference(Path.Combine(paths.BrandsDirectory.Value, destinationName)));
+            return ValueTask.FromResult(new BrandCloneResult(sourceBrand, language, destination));
+        }
+    }
+
+    private sealed class BlockingBrandCloneService : IBrandCloneService
+    {
+        public TaskCompletionSource<object?> FirstEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<object?> AllowFirst { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int Calls { get; private set; }
+
+        public async ValueTask<BrandCloneResult> CloneAsync(
+            ApplicationPaths paths,
+            DiscoveredBrand sourceBrand,
+            SupportedLanguageOption language,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            if (Calls > 1)
+            {
+                throw new BrandCloneException("brand_clone_destination_exists", "The destination Brand already exists.");
+            }
+
+            FirstEntered.TrySetResult(null);
+            await AllowFirst.Task.WaitAsync(cancellationToken);
+            var destinationName = LanguageEditionNamingPolicy.CreateDestinationName(sourceBrand.Name, language);
+            var destination = new DiscoveredBrand(destinationName, new DirectoryReference(Path.Combine(paths.BrandsDirectory.Value, destinationName)));
+            return new BrandCloneResult(sourceBrand, language, destination);
+        }
+    }
+
+    private sealed class StubBookCloneService : IBookCloneService
+    {
+        public int Calls { get; private set; }
+        public SupportedLanguageOption? Language { get; private set; }
+
+        public ValueTask<BookCloneResult> CloneAsync(
+            ApplicationPaths paths,
+            DiscoveredBook sourceBook,
+            SupportedLanguageOption language,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            Language = language;
+            return ValueTask.FromResult(CreateResult(paths, sourceBook, language));
+        }
+
+        private static BookCloneResult CreateResult(
+            ApplicationPaths paths,
+            DiscoveredBook sourceBook,
+            SupportedLanguageOption language)
+        {
+            var destinationName = LanguageEditionNamingPolicy.CreateDestinationName(sourceBook.Name, language);
+            var destinationDirectory = new DirectoryReference(Path.Combine(paths.SourcesDirectory.Value, destinationName));
+            var destinationId = new BookId(destinationName);
+            var destinationWorkspace = new BookWorkspace(
+                destinationId,
+                new DirectoryReference(Path.Combine(destinationDirectory.Value, ".workspace")),
+                new DirectoryReference(Path.Combine(destinationDirectory.Value, ".workspace", "processed")),
+                new DirectoryReference(Path.Combine(destinationDirectory.Value, ".workspace", "output-temp")));
+            return new BookCloneResult(
+                sourceBook,
+                language,
+                new DiscoveredBook(destinationName, destinationId, destinationDirectory, destinationWorkspace));
+        }
+    }
+
+    private sealed class BlockingBookCloneService : IBookCloneService
+    {
+        public TaskCompletionSource<object?> FirstEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<object?> AllowFirst { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int Calls { get; private set; }
+
+        public async ValueTask<BookCloneResult> CloneAsync(
+            ApplicationPaths paths,
+            DiscoveredBook sourceBook,
+            SupportedLanguageOption language,
+            CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            if (Calls > 1)
+            {
+                throw new BookCloneException("book_clone_destination_exists", "The destination Book already exists.");
+            }
+
+            FirstEntered.TrySetResult(null);
+            await AllowFirst.Task.WaitAsync(cancellationToken);
+            var destinationName = LanguageEditionNamingPolicy.CreateDestinationName(sourceBook.Name, language);
+            var destinationDirectory = new DirectoryReference(Path.Combine(paths.SourcesDirectory.Value, destinationName));
+            var destinationId = new BookId(destinationName);
+            return new BookCloneResult(
+                sourceBook,
+                language,
+                new DiscoveredBook(
+                    destinationName,
+                    destinationId,
+                    destinationDirectory,
+                    new BookWorkspace(
+                        destinationId,
+                        new DirectoryReference(Path.Combine(destinationDirectory.Value, ".workspace")),
+                        new DirectoryReference(Path.Combine(destinationDirectory.Value, ".workspace", "processed")),
+                        new DirectoryReference(Path.Combine(destinationDirectory.Value, ".workspace", "output-temp")))));
+        }
+    }
+
     private sealed class StubProductionFilePicker(FileReference? selection) : IProductionFilePicker
     {
         public DirectoryReference? InitialDirectory { get; private set; }
@@ -1938,10 +2247,12 @@ public sealed class BridgeMessageContractTests
     private sealed class StubAmazonAsinCrawlSessionService : IAmazonAsinCrawlSessionService
     {
         public IReadOnlyList<string>? Keywords { get; private set; }
+        public AmazonMarketplaceProfile? Profile { get; private set; }
         public ValueTask<AmazonAsinCrawlSessionSnapshot> GetAsync(string bookId, CancellationToken cancellationToken = default) => ValueTask.FromResult(Snapshot(bookId));
-        public ValueTask<AmazonAsinCrawlSessionSnapshot> StartAsync(string bookId, IReadOnlyList<string> keywords, CancellationToken cancellationToken = default)
+        public ValueTask<AmazonAsinCrawlSessionSnapshot> StartAsync(string bookId, IReadOnlyList<string> keywords, AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default)
         {
             Keywords = keywords;
+            Profile = profile;
             return ValueTask.FromResult(Snapshot(bookId));
         }
         public ValueTask<AmazonAsinCrawlSessionSnapshot> CancelAsync(string bookId, CancellationToken cancellationToken = default) => ValueTask.FromResult(Snapshot(bookId));

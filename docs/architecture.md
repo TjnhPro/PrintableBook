@@ -206,6 +206,8 @@ Keyword Builder v4 tách **Shuffle preview** khỏi **Save**. Core canonicalize 
 
 Application phát hành opaque receipt gồm payload versioned và HMAC-SHA256 bằng process-local key. Bridge/WebView không được tự khẳng định output: Save xác minh receipt, Book ownership, Generic Keywords fingerprint, rebuild cùng seed và so exact digest trước khi ghi state. Restart làm receipt cũ hết hiệu lực; `preview.open` rebuild persisted v4 và phát receipt mới mà không đổi BuildId/output.
 
+Global Settings lưu Generic Keywords theo canonical language code cho tám profile `en`, `de`, `fr`, `es`, `it`, `pt`, `ja`, `nl`. Load settings legacy ánh xạ `genericKeywords` vào `en` trong memory nhưng không rewrite; Save normalize toàn bộ map trong một lần ghi atomically và mirror `en` về field legacy cho rollback. Application chỉ resolve profile sau khi load Book state: Language thiếu có effective value `en`, Language persisted không hỗ trợ fail closed, và tuyệt đối không fallback chéo profile. Vì receipt fingerprint chỉ chứa profile thực sự được chọn, sửa profile của Language khác không làm preview hiện tại stale.
+
 ASIN Research dùng chính Ads Keyword trong preview đã xác minh:
 
 ```text
@@ -218,9 +220,11 @@ WebView signed preview/build reference
 
 `CloakBrowser/` chỉ sở hữu persistent browser, profile/cache, navigation và fixed JavaScript fetch. `AmazonCrawl/` chỉ nhận HTML và parse DOM bằng Html Agility Pack. Hai folder không reference nhau; Core điều phối qua interface trung lập. Browser là singleton app-wide, còn draft/task/result được giữ theo Book trong app session.
 
-Profile nằm ở `<AppRoot>/.cloakbrowser/profile-v1`, downloaded Chromium ở `<AppRoot>/.cloakbrowser/cache`, và Playwright driver được ship trong `.playwright/`. Updater chỉ thay `.playwright/`; không backup, replace hoặc xóa `.cloakbrowser/`.
+Global Settings lưu tám `amazonMarketplaceProfiles`, mỗi profile gồm `profileKey`, `baseUrl`, `locale` và chuỗi `titleTerms` phân tách bằng dấu phẩy. Settings legacy thiếu map này được materialize bằng default MVP trong memory; runtime resolve URL/profile/locale/title matcher duy nhất từ settings đã normalize. Save yêu cầu đủ tám Language, profile key unique/safe, HTTPS Amazon origin đúng Language, locale không rỗng và ít nhất một Title Term. Localized parser markers vẫn là code-owned best-effort policy, không phải user settings.
 
-Crawler có lane riêng, concurrency 1, input tối đa 30 phrase, fetch 20 giây, toàn task 10 phút và response HTML tối đa 5 MiB. Raw keyword arrays từ WebView bị từ chối. Session trả source fingerprint/receipt digest; frontend chỉ merge stable-dedupe ASIN hợp lệ khi source receipt và per-Book target revision vẫn current, sau đó gọi same-seed Ads ASIN preview update. Crawl không tự Save. URL/final redirect chỉ chấp nhận HTTPS `amazon.com`/`www.amazon.com`. Receipt, seed, signature, raw HTML, cookie, license và profile path không đi qua diagnostics.
+Default English `us` nằm ở `<AppRoot>/.cloakbrowser/profile-v1`; các profile key khác nằm ở `<AppRoot>/.cloakbrowser/profile-<key>-v1`. Downloaded Chromium ở `<AppRoot>/.cloakbrowser/cache`, và Playwright driver được ship trong `.playwright/`. Updater chỉ thay `.playwright/`; không backup, replace hoặc xóa `.cloakbrowser/`.
+
+Crawler có lane riêng, concurrency 1, input tối đa 30 phrase, fetch 20 giây, toàn task 10 phút và response HTML tối đa 5 MiB. Raw keyword arrays từ WebView bị từ chối. Session trả source fingerprint/receipt digest; frontend chỉ merge stable-dedupe ASIN hợp lệ khi source receipt và per-Book target revision vẫn current, sau đó gọi same-seed Ads ASIN preview update. Crawl không tự Save. URL/final redirect chỉ chấp nhận HTTPS host của profile market đã resolve. Receipt, seed, signature, raw HTML, cookie, license và profile path không đi qua diagnostics.
 
 ## S3 publication boundary
 

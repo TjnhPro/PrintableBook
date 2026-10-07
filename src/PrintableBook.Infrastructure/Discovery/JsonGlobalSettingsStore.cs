@@ -2,7 +2,6 @@ using System.Text.Json;
 using PrintableBook.Core.Application.Desktop;
 using PrintableBook.Core.Application.Discovery;
 using PrintableBook.Core.Abstractions;
-using PrintableBook.Core.Domain.Books;
 
 namespace PrintableBook.Infrastructure.Discovery;
 
@@ -17,16 +16,16 @@ public sealed class JsonGlobalSettingsStore(IApplicationRootDiscovery discovery,
 
     public async ValueTask<GlobalSettings> LoadAsync(ApplicationPaths paths, CancellationToken cancellationToken = default)
     {
-        if (!await fileSystem.FileExistsAsync(paths.SettingsFile, cancellationToken)) return Normalize(GlobalSettings.Default);
+        if (!await fileSystem.FileExistsAsync(paths.SettingsFile, cancellationToken)) return NormalizeLoaded(GlobalSettings.Default);
         var settings = JsonSerializer.Deserialize<GlobalSettings>(await fileSystem.ReadTextAsync(paths.SettingsFile, cancellationToken), Options) ?? GlobalSettings.Default;
-        settings = Normalize(settings);
+        settings = NormalizeLoaded(settings);
         Validate(settings);
         return settings;
     }
 
     public async ValueTask SaveAsync(GlobalSettings settings, CancellationToken cancellationToken = default)
     {
-        settings = Normalize(settings);
+        settings = NormalizeForSave(settings);
         Validate(settings);
         var paths = (await discovery.DiscoverAsync(cancellationToken)).Paths;
         await fileSystem.WriteTextAtomicallyAsync(paths.SettingsFile, JsonSerializer.Serialize(settings, Options), cancellationToken);
@@ -56,11 +55,24 @@ public sealed class JsonGlobalSettingsStore(IApplicationRootDiscovery discovery,
         }
     }
 
+    private static GlobalSettings NormalizeLoaded(GlobalSettings settings)
+    {
+        settings = GenericKeywordProfilePolicy.NormalizeLoaded(settings);
+        settings = AmazonMarketplaceProfilePolicy.NormalizeLoaded(settings);
+        return Normalize(settings);
+    }
+
+    private static GlobalSettings NormalizeForSave(GlobalSettings settings)
+    {
+        settings = GenericKeywordProfilePolicy.NormalizeForSave(settings);
+        settings = AmazonMarketplaceProfilePolicy.NormalizeForSave(settings);
+        return Normalize(settings);
+    }
+
     private static GlobalSettings Normalize(GlobalSettings settings) => settings with
     {
         ArtworkSourceNormalization = settings.EffectiveArtworkSourceNormalization,
         BorderLineDetection = settings.EffectiveBorderLineDetection,
-        GenericKeywords = BookTextPolicy.NormalizePhrases(settings.EffectiveGenericKeywords, distinct: true),
         S3Storage = settings.EffectiveS3Storage
     };
 

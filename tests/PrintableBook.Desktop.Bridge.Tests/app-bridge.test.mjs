@@ -113,6 +113,13 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
   };
   const brandSettingsEditor = { dataset: { brandSettings: "" }, value: "{}" };
   const genericKeywordsEditor = { dataset: { genericKeywords: "" }, value: "" };
+  const genericKeywordLanguageSelector = { dataset: { action: "generic-keyword-language", genericKeywordLanguage: "" }, value: "en", disabled: false };
+  const genericKeywordLanguageLabel = { textContent: "English (en)" };
+  const amazonMarketLanguageSelector = { dataset: { action: "amazon-market-language", amazonMarketLanguage: "" }, value: "en", disabled: false };
+  const amazonMarketLanguageLabel = { textContent: "English (en)" };
+  const amazonProfileInputs = [
+    ["profileKey", "us"], ["baseUrl", "https://www.amazon.com/"], ["locale", "en-US"], ["titleTerms", "coloring book, coloring books"]
+  ].map(([field, value]) => ({ dataset: { amazonProfileField: field }, value, disabled: false }));
   const settingsInputs = [
     ["maximumPageConcurrency", "4"], ["artworkDetectionThreshold", "20"], ["artworkMaximumSide", "2270"], ["workingPageWidth", "2550"], ["workingPageHeight", "2550"], ["finalPageWidth", "2588"], ["finalPageHeight", "2625"], ["dpi", "300"]
   ].map(([setting, value]) => ({ dataset: { setting }, value }));
@@ -167,10 +174,14 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
       get activeElement() { return documentActiveElement; },
       getElementById: (id) => ({ "bridge-status": status, "app-content": content, "refresh-button": refreshButton, "update-dialog-root": updateDialog }[id]),
       createElement: (tagName) => ({ tagName, className: "", textContent: "", attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } }),
-      querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : selector === "[data-setting]" ? settingsInputs : selector === '[data-setting], [data-generic-keywords]' ? [...settingsInputs, genericKeywordsEditor] : selector === '[data-action]' ? [processFocusTarget] : [],
+      querySelectorAll: (selector) => selector === "[data-preview-book-id][data-source-reference]" ? visibleTiles : selector === "[data-route]" ? routeButtons : selector === "[data-setting]" ? settingsInputs : selector === "[data-amazon-profile-field]" ? amazonProfileInputs : selector === '[data-setting], [data-generic-keywords], [data-generic-keyword-language], [data-amazon-profile-field], [data-amazon-market-language]' ? [...settingsInputs, genericKeywordsEditor, genericKeywordLanguageSelector, ...amazonProfileInputs, amazonMarketLanguageSelector] : selector === '[data-action]' ? [processFocusTarget] : [],
       querySelector: (selector) => {
         if (selector === "[data-brand-settings]") return brandSettingsEditor;
         if (selector === "[data-generic-keywords]") return genericKeywordsEditor;
+        if (selector === "[data-generic-keyword-language]") return genericKeywordLanguageSelector;
+        if (selector === "[data-generic-keyword-language-label]") return genericKeywordLanguageLabel;
+        if (selector === "[data-amazon-market-language]") return amazonMarketLanguageSelector;
+        if (selector === "[data-amazon-market-language-label]") return amazonMarketLanguageLabel;
         if (selector === ".intro-template-workspace" && contentMarkup.includes('class="intro-template-workspace"')) return introWorkspace;
         if (selector === ".interior-artwork-workspace" && contentMarkup.includes('class="interior-artwork-workspace"')) return artworkWorkspace;
         if (selector === ".book-drawer-body" && contentMarkup.includes('class="book-detail-body book-drawer-body"')) return bookDrawerBody;
@@ -189,7 +200,7 @@ function loadBridge(activeRoute = null, visibleTiles = []) {
     CSS: { escape: (value) => String(value).replace(/["\\]/g, "\\$&") }
   });
 
-  return { messageHandler, status, content, settingsSaveButton, settingsLoadButton, settingsFeedback, processQueueScroll, processFocusTarget, setDocumentActiveElement: (element) => { documentActiveElement = element; }, brandResultCount, brandSettingsEditor, genericKeywordsEditor, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getBookDetailPanelRenderCount: () => bookDetailPanelRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getLatestProductionWorkspaceMarkup: () => latestProductionWorkspaceMarkup, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
+  return { messageHandler, status, content, settingsSaveButton, settingsLoadButton, settingsFeedback, processQueueScroll, processFocusTarget, setDocumentActiveElement: (element) => { documentActiveElement = element; }, brandResultCount, brandSettingsEditor, genericKeywordsEditor, genericKeywordLanguageSelector, genericKeywordLanguageLabel, amazonMarketLanguageSelector, amazonMarketLanguageLabel, amazonProfileInputs, refreshButton, updateDialog, versionLabel, contentListeners, documentListeners, routeButtons, intervals, intervalDelays, messages, clipboardWrites, browserWindow, searchInput, pdfLibraryFeedback, productionFinalButton, productionFeedback, productionWorkspace, getFullRenderCount: () => fullRenderCount, getBookDrawerBodyRenderCount: () => bookDrawerBodyRenderCount, getBookDetailPanelRenderCount: () => bookDetailPanelRenderCount, getProductionWorkspaceRenderCount: () => productionWorkspaceRenderCount, getLatestProductionWorkspaceMarkup: () => latestProductionWorkspaceMarkup, getIntroWorkspaceRenderCount: () => introWorkspaceRenderCount, getArtworkWorkspaceRenderCount: () => artworkWorkspaceRenderCount, introPaginationFocus };
 }
 
 const pdfLibrarySnapshot = () => ({
@@ -270,6 +281,23 @@ const diagnosticsSnapshot = () => ({
   }]
 });
 
+const languageEditionSnapshot = ({
+  books = [{ id: { value: "AnimalBook" }, name: "AnimalBook" }],
+  summaries = [{
+    bookId: { value: "AnimalBook" }, workspaceStatus: "Not started", languageCode: "en", languageName: "English",
+    assignmentStatus: "Unassigned", metadata: { title: "ANIMAL BOOK", author: "Jane Doe" },
+    validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [], outputSummaries: []
+  }],
+  brands = [],
+  brandSummaries = []
+} = {}) => ({
+  discovery: { brands, books },
+  globalSettings: {},
+  supportedLanguages: [{ code: "en", name: "English" }, { code: "de", name: "German" }, { code: "fr", name: "French" }],
+  brandSummaries,
+  bookSummaries: summaries
+});
+
 const updateSnapshot = (phase, overrides = {}) => ({
   phase,
   currentVersion: "0.1.1",
@@ -316,12 +344,26 @@ test("webview shell exposes every top-level desktop route", () => {
   assert.match(page, /id="app-content"/);
 });
 
-test("Configuration saves reusable Generic Keywords from a fixed five-line input", () => {
-  const { messageHandler, content, contentListeners, settingsSaveButton, settingsLoadButton, settingsFeedback, genericKeywordsEditor, messages } = loadBridge("configuration");
+test("Configuration preserves and saves language-scoped keyword and Amazon market drafts", () => {
+  const { messageHandler, content, contentListeners, settingsSaveButton, settingsLoadButton, settingsFeedback, genericKeywordsEditor, genericKeywordLanguageSelector, genericKeywordLanguageLabel, amazonMarketLanguageSelector, amazonMarketLanguageLabel, amazonProfileInputs, messages } = loadBridge("configuration");
+  const amazonMarketplaceProfiles = {
+    en: { profileKey: "us", baseUrl: "https://www.amazon.com/", locale: "en-US", titleTerms: "coloring book, coloring books" },
+    de: { profileKey: "de", baseUrl: "https://www.amazon.de/", locale: "de-DE", titleTerms: "Malbuch, Ausmalbuch" },
+    fr: { profileKey: "fr", baseUrl: "https://www.amazon.fr/", locale: "fr-FR", titleTerms: "livre de coloriage" },
+    es: { profileKey: "es", baseUrl: "https://www.amazon.es/", locale: "es-ES", titleTerms: "libro para colorear" },
+    it: { profileKey: "it", baseUrl: "https://www.amazon.it/", locale: "it-IT", titleTerms: "libro da colorare" },
+    pt: { profileKey: "br", baseUrl: "https://www.amazon.com.br/", locale: "pt-BR", titleTerms: "livro de colorir" },
+    ja: { profileKey: "jp", baseUrl: "https://www.amazon.co.jp/", locale: "ja-JP", titleTerms: "塗り絵, ぬりえ" },
+    nl: { profileKey: "nl", baseUrl: "https://www.amazon.nl/", locale: "nl-NL", titleTerms: "kleurboek" }
+  };
   messageHandler({ data: { version: 1, id: "settings-snapshot", ok: true, command: "app.snapshot", payload: {
     discovery: { brands: [], books: [] },
-    globalSettings: { maximumPageConcurrency: 4, artworkDetectionThreshold: 20, artworkMaximumSide: 2270, workingPageWidth: 2550, workingPageHeight: 2550, finalPageWidth: 2588, finalPageHeight: 2625, dpi: 300, genericKeywords: ["coloring books"] },
-    bookSummaries: []
+    globalSettings: { maximumPageConcurrency: 4, artworkDetectionThreshold: 20, artworkMaximumSide: 2270, workingPageWidth: 2550, workingPageHeight: 2550, finalPageWidth: 2588, finalPageHeight: 2625, dpi: 300, genericKeywords: ["coloring books"], genericKeywordsByLanguage: { en: ["coloring books"], de: ["German saved"] }, amazonMarketplaceProfiles },
+    bookSummaries: [],
+    supportedLanguages: [
+      { code: "en", name: "English" }, { code: "de", name: "German" }, { code: "fr", name: "French" }, { code: "es", name: "Spanish" },
+      { code: "it", name: "Italian" }, { code: "pt", name: "Portuguese" }, { code: "ja", name: "Japanese" }, { code: "nl", name: "Dutch" }
+    ]
   } } });
 
   assert.match(content.innerHTML, /class="configuration-page"/);
@@ -334,8 +376,26 @@ test("Configuration saves reusable Generic Keywords from a fixed five-line input
   assert.match(content.innerHTML, /Border tolerances/);
   assert.match(content.innerHTML, /Border acceptance rules/);
   assert.match(content.innerHTML, /Generic Keywords/);
+  assert.match(content.innerHTML, /data-action="generic-keyword-language"/);
+  assert.match(content.innerHTML, /Japanese \(ja\)/);
   assert.match(content.innerHTML, /class="control keyword-list-input" rows="5" data-generic-keywords/);
+  assert.match(content.innerHTML, /Amazon market profiles/);
+  assert.match(content.innerHTML, /data-action="amazon-market-language"/);
+  assert.match(content.innerHTML, /data-amazon-profile-field="titleTerms"/);
+  assert.match(content.innerHTML, /Comma-separated title phrases/);
   genericKeywordsEditor.value = " coloring\tbooks \n\n books for adults ";
+  genericKeywordLanguageSelector.value = "de";
+  contentListeners.change({ target: genericKeywordLanguageSelector });
+  assert.equal(genericKeywordsEditor.value, "German saved");
+  assert.equal(genericKeywordLanguageLabel.textContent, "German (de)");
+  genericKeywordsEditor.value = " German generic ";
+  amazonProfileInputs.find(input => input.dataset.amazonProfileField === "titleTerms").value = "coloring book, coloring books, cozy coloring book";
+  amazonMarketLanguageSelector.value = "de";
+  contentListeners.change({ target: amazonMarketLanguageSelector });
+  assert.equal(amazonProfileInputs.find(input => input.dataset.amazonProfileField === "baseUrl").value, "https://www.amazon.de/");
+  assert.equal(amazonMarketLanguageLabel.textContent, "German (de)");
+  amazonProfileInputs.find(input => input.dataset.amazonProfileField === "profileKey").value = "de-books";
+  amazonProfileInputs.find(input => input.dataset.amazonProfileField === "titleTerms").value = "Malbuch, Ausmalbuch, Mandala Malbuch";
   const form = { dataset: { form: "configuration" } };
   let prevented = false;
   contentListeners.submit({ target: form, preventDefault: () => { prevented = true; } });
@@ -343,6 +403,12 @@ test("Configuration saves reusable Generic Keywords from a fixed five-line input
   assert.equal(prevented, true);
   assert.equal(messages.at(-1).command, "settings.save");
   assert.deepEqual(messages.at(-1).payload.genericKeywords, ["coloring books", "books for adults"]);
+  assert.deepEqual(messages.at(-1).payload.genericKeywordsByLanguage.en, ["coloring books", "books for adults"]);
+  assert.deepEqual(messages.at(-1).payload.genericKeywordsByLanguage.de, ["German generic"]);
+  assert.deepEqual(Object.keys(messages.at(-1).payload.genericKeywordsByLanguage), ["en", "de", "fr", "es", "it", "pt", "ja", "nl"]);
+  assert.deepEqual(Object.keys(messages.at(-1).payload.amazonMarketplaceProfiles), ["en", "de", "fr", "es", "it", "pt", "ja", "nl"]);
+  assert.equal(messages.at(-1).payload.amazonMarketplaceProfiles.en.titleTerms, "coloring book, coloring books, cozy coloring book");
+  assert.deepEqual(messages.at(-1).payload.amazonMarketplaceProfiles.de, { profileKey: "de-books", baseUrl: "https://www.amazon.de/", locale: "de-DE", titleTerms: "Malbuch, Ausmalbuch, Mandala Malbuch" });
   assert.deepEqual(messages.at(-1).payload.artworkSourceNormalization, { normalizedSourceSize: 2048 });
   assert.equal(messages.at(-1).payload.borderLineDetection.pass1SearchDepth, 200);
   assert.equal(messages.at(-1).payload.borderLineDetection.minimumSpanRatio, 0.7);
@@ -351,6 +417,9 @@ test("Configuration saves reusable Generic Keywords from a fixed five-line input
   assert.equal(settingsSaveButton.textContent, "Saving…");
   assert.equal(settingsFeedback.textContent, "Saving…");
   assert.equal(genericKeywordsEditor.disabled, true);
+  assert.equal(genericKeywordLanguageSelector.disabled, true);
+  assert.equal(amazonMarketLanguageSelector.disabled, true);
+  assert.equal(amazonProfileInputs.every(input => input.disabled), true);
   contentListeners.submit({ target: form, preventDefault: () => { } });
   assert.equal(messages.filter(message => message.command === "settings.save").length, 1, "Configuration must suppress duplicate saves while pending");
 
@@ -362,6 +431,7 @@ test("Configuration saves reusable Generic Keywords from a fixed five-line input
   messageHandler({ data: { version: 1, id: messages.at(-1).id, ok: false, error: "invalid_settings" } });
   assert.equal(settingsSaveButton.disabled, false);
   assert.equal(genericKeywordsEditor.disabled, false);
+  assert.equal(amazonProfileInputs.every(input => !input.disabled), true);
   assert.equal(settingsFeedback.dataset.state, "error");
   assert.equal(settingsFeedback.attributes.role, "alert");
   assert.match(settingsFeedback.textContent, /Review the configuration values/);
@@ -1419,6 +1489,123 @@ test("Build Final Interior alone uses the Building busy label", () => {
   assert.equal(productionFinalButton.textContent, "Building…");
   assert.equal(productionFinalButton.attributes["aria-busy"], "true");
   assert.equal(productionWorkspace.attributes["aria-busy"], "true");
+});
+
+test("Book clone previews the language edition, prevents double submit, and opens the refreshed clone", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "books", ok: true, command: "app.snapshot", payload: languageEditionSnapshot() } });
+
+  const openBook = { dataset: { action: "select-book", bookId: "AnimalBook" }, closest: () => openBook };
+  contentListeners.click({ target: openBook });
+  assert.match(content.innerHTML, /<span>Language<\/span><input class="control" value="English" readonly/);
+
+  const openClone = { dataset: { action: "open-book-clone", bookId: "AnimalBook" }, closest: () => openClone };
+  contentListeners.click({ target: openClone });
+  assert.match(content.innerHTML, /<legend>Clone Book<\/legend>/);
+  assert.match(content.innerHTML, /data-action="submit-book-clone"[^>]*disabled/);
+
+  contentListeners.change({ target: { dataset: { action: "clone-book-language" }, value: "de" } });
+  assert.match(content.innerHTML, /Destination Book name[\s\S]*value="AnimalBook_de"/);
+  assert.doesNotMatch(content.innerHTML, /data-action="submit-book-clone"[^>]*disabled/);
+
+  const submit = { dataset: { action: "submit-book-clone" }, closest: () => submit };
+  const beforeSubmit = messages.length;
+  contentListeners.click({ target: submit });
+  contentListeners.click({ target: submit });
+  assert.equal(messages.length, beforeSubmit + 1, "pending clone must ignore duplicate submit");
+  assert.deepEqual(messages.at(-1), { version: 1, id: "request-1", command: "book.clone", payload: { bookId: "AnimalBook", languageCode: "de" } });
+  assert.match(content.innerHTML, /Cloning…/);
+  assert.match(content.innerHTML, /aria-busy="true" disabled/);
+
+  messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "book.clone.completed", payload: {
+    destinationBookId: "AnimalBook_de", destinationBookName: "AnimalBook_de",
+    languageCode: "de", languageName: "German",
+    refreshTask: { taskId: "clone-refresh", kind: "LibraryRefresh", state: "Running" }
+  } } });
+  const refreshed = languageEditionSnapshot({
+    books: [
+      { id: { value: "AnimalBook" }, name: "AnimalBook" },
+      { id: { value: "AnimalBook_de" }, name: "AnimalBook_de" }
+    ],
+    summaries: [
+      languageEditionSnapshot().bookSummaries[0],
+      {
+        bookId: { value: "AnimalBook_de" }, workspaceStatus: "Not started", languageCode: "de", languageName: "German",
+        assignmentStatus: "Unassigned", metadata: { title: "ANIMAL BOOK", author: "Jane Doe", asin: "B012345678" },
+        keywordBuilder: null, validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: [], outputSummaries: []
+      }
+    ]
+  });
+  messageHandler({ data: { version: 1, id: "clone-refresh", ok: true, command: "app.snapshot", payload: refreshed } });
+
+  assert.match(content.innerHTML, /Book &#39;AnimalBook_de&#39; was cloned successfully/);
+  assert.match(content.innerHTML, /<h2 id="book-detail-title"[^>]*>ANIMAL BOOK<\/h2>[\s\S]*AnimalBook_de/);
+  assert.match(content.innerHTML, /<span>Language<\/span><input class="control" value="German" readonly/);
+  assert.match(content.innerHTML, /Unassigned/);
+  assert.doesNotMatch(content.innerHTML, /data-book-id="AnimalBook" aria-current="true"/);
+});
+
+test("Book clone keeps its destination and actionable error when clone or refresh fails", () => {
+  const { messageHandler, content, contentListeners, messages } = loadBridge("books");
+  messageHandler({ data: { version: 1, id: "books", ok: true, command: "app.snapshot", payload: languageEditionSnapshot() } });
+  const openBook = { dataset: { action: "select-book", bookId: "AnimalBook" }, closest: () => openBook };
+  const openClone = { dataset: { action: "open-book-clone", bookId: "AnimalBook" }, closest: () => openClone };
+  const submit = { dataset: { action: "submit-book-clone" }, closest: () => submit };
+  contentListeners.click({ target: openBook });
+  contentListeners.click({ target: openClone });
+  contentListeners.change({ target: { dataset: { action: "clone-book-language" }, value: "de" } });
+  contentListeners.click({ target: submit });
+  messageHandler({ data: { version: 1, id: messages.at(-1).id, ok: false, error: "book_clone_destination_exists" } });
+  assert.match(content.innerHTML, /role="alert"[\s\S]*destination Book already exists/);
+
+  contentListeners.change({ target: { dataset: { action: "clone-book-language" }, value: "fr" } });
+  contentListeners.click({ target: submit });
+  messageHandler({ data: { version: 1, id: messages.at(-1).id, ok: true, command: "book.clone.completed", payload: {
+    destinationBookId: "AnimalBook_fr", destinationBookName: "AnimalBook_fr",
+    refreshTask: { taskId: "failed-refresh", kind: "LibraryRefresh", state: "Running" }
+  } } });
+  messageHandler({ data: { version: 1, id: "failed-refresh", ok: true, command: "background.task", payload: {
+    taskId: "failed-refresh", kind: "LibraryRefresh", state: "Failed", errorMessage: "scan failed"
+  } } });
+  assert.match(content.innerHTML, /value="AnimalBook_fr"/);
+  assert.match(content.innerHTML, /role="alert"[\s\S]*refreshed library could not be loaded/);
+  assert.match(content.innerHTML, /Use Refresh to retry/);
+});
+
+test("Brand assignment filters by language before author and preserves an invalid current assignment", () => {
+  const bookSummary = {
+    bookId: { value: "AnimalBook_de" }, workspaceStatus: "Not started", languageCode: "de", languageName: "German",
+    assignedBrand: "EnglishBrand", assignmentStatus: "LanguageMismatch", assignmentReason: "Book and Brand languages differ.",
+    metadata: { title: "ANIMAL BOOK", author: "Jane Doe" },
+    validationChecks: [], sourceFolders: [], publishedArtifacts: [], interiorPages: [], logs: [], assets: []
+  };
+  const books = [{ id: { value: "AnimalBook_de" }, name: "AnimalBook_de" }];
+  const englishBrand = { name: "EnglishBrand" };
+  const germanWrongAuthor = { name: "GermanWrongAuthor" };
+
+  const noGerman = loadBridge("books");
+  noGerman.messageHandler({ data: { version: 1, id: "no-german", ok: true, command: "app.snapshot", payload: languageEditionSnapshot({
+    books, summaries: [bookSummary], brands: [englishBrand],
+    brandSummaries: [{ brandName: "EnglishBrand", languageCode: "en", languageName: "English", author: "Jane Doe" }]
+  }) } });
+  const openNoGerman = { dataset: { action: "select-book", bookId: "AnimalBook_de" }, closest: () => openNoGerman };
+  noGerman.contentListeners.click({ target: openNoGerman });
+  assert.match(noGerman.content.innerHTML, /No German Brand available\./);
+  assert.match(noGerman.content.innerHTML, /value="EnglishBrand" selected disabled>EnglishBrand — Language mismatch/);
+
+  const wrongAuthor = loadBridge("books");
+  wrongAuthor.messageHandler({ data: { version: 1, id: "wrong-author", ok: true, command: "app.snapshot", payload: languageEditionSnapshot({
+    books, summaries: [{ ...bookSummary, assignedBrand: null, assignmentStatus: "Unassigned" }], brands: [englishBrand, germanWrongAuthor],
+    brandSummaries: [
+      { brandName: "EnglishBrand", languageCode: "en", languageName: "English", author: "Jane Doe" },
+      { brandName: "GermanWrongAuthor", languageCode: "de", languageName: "German", author: "Someone Else" }
+    ]
+  }) } });
+  const openWrongAuthor = { dataset: { action: "select-book", bookId: "AnimalBook_de" }, closest: () => openWrongAuthor };
+  wrongAuthor.contentListeners.click({ target: openWrongAuthor });
+  assert.match(wrongAuthor.content.innerHTML, /No German Brand matches this Book Author\./);
+  const assignmentMarkup = wrongAuthor.content.innerHTML.match(/<fieldset class="catalog-card book-settings-card book-settings-assignment"[\s\S]*?<\/fieldset>/)?.[0] ?? "";
+  assert.doesNotMatch(assignmentMarkup, /<option value="GermanWrongAuthor"/);
 });
 
 test("Book detail changes tabs without redrawing its drawer shell", () => {

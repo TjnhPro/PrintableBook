@@ -12,11 +12,17 @@ Tạo một thư mục Brand dưới `brands/`. Một Brand gồm hai folder tù
 
 Trong card **Brand Information**, nhập một Primary Author rồi nhấn **Save Author**. MVP dùng contract `1 Brand = 1 Author`; Author có thể để trống nhưng Brand đó sẽ không xuất hiện trong danh sách assign của Book. So sánh Author bỏ qua chữ hoa/thường và khoảng trắng ở đầu/cuối, nhưng không sửa khoảng trắng ở giữa hay dấu câu. Nếu việc đổi Author làm các Book đang assign trở nên invalid, ứng dụng hiển thị số Book bị ảnh hưởng trước khi Save và không tự đổi assignment.
 
+Mỗi Brand còn có Language persisted, hiển thị read-only trong Brand Information. Dữ liệu legacy chưa có Language được xem là English mà không rewrite file. Dùng **Clone Brand** để tạo edition ngôn ngữ khác; suffix trong tên chỉ phục vụ đặt tên và không quyết định Language.
+
 Kích thước hợp lệ: `frame.png` phải là `Artwork maximum side × Artwork maximum side`; `background.png` phải đúng `Final Interior Page`; ảnh trong `IntroTemplate/` phải là `1024 × 1024 px`, `2048 × 2048 px`, hoặc đúng `Final Interior Page` (mặc định `2588 × 2625 px`). Ba file PSD chỉ được kiểm tra tồn tại, không được đọc như ảnh. Với ảnh Intro đúng Final Interior Page, ứng dụng đưa thẳng artwork đó vào PDF, không thêm viền hay xử lý ảnh. Sau khi chọn **Validate Brand**, lỗi chỉ rõ file nào sai, kích thước hiện tại và kích thước cần sửa.
 
 ![Brands and templates](assets/screenshots/0.1/12-brands-templates.png)
 
 ## 3. Chuẩn bị Book
+
+Book Settings hiển thị Language read-only. Dùng **Clone Book** ở header Book detail để chọn Language và xem trước tên destination. Clone giữ Book Information, Publishing ASIN và cấu hình Interior có thể tái sử dụng, nhưng luôn bắt đầu `Unassigned` và không mang theo Keyword Builder, Ads ASIN, Production, cache, log hay output. Sau refresh thành công, app tự mở Book mới; nếu refresh lỗi sau khi clone đã tạo xong, dùng **Refresh** thay vì submit clone lần nữa.
+
+Brand Assignment chỉ liệt kê Brand có cả Language và Author khớp Book. Assignment cũ khác Language được giữ để review/unassign nhưng processing bị chặn. Chi tiết về legacy compatibility, dữ liệu được giữ/reset và recovery nằm trong [Language editions and clone boundaries](language-editions-and-cloning.md).
 
 Trong tab **Overview** của Book detail, card **Book Information** lưu riêng:
 
@@ -30,7 +36,7 @@ Trong tab **Overview** của Book detail, card **Book Information** lưu riêng:
 
 Tab **ASIN Research** chứa một Keyword Builder workspace hai panel: **Build inputs** bên trái và **Generated output** bên phải. Crawl Results nằm ngay dưới Book Keywords trong Build inputs:
 
-1. Mở **Settings → Keyword Builder**, nhập **Generic Keywords** dùng chung, mỗi dòng một phrase, rồi Save settings.
+1. Mở **Configuration → Keyword Builder defaults**, chọn Language rồi nhập **Generic Keywords**, mỗi dòng một phrase. Có thể đổi qua lại giữa các Language mà draft chưa Save vẫn được giữ; nút **Save** ghi atomically toàn bộ profile đang hiển thị trong session.
 2. Trong Book detail, nhập **Book Keywords** riêng của Book, mỗi dòng một phrase.
 3. Có thể nhập nhiều **Ads ASIN (product targets)** trên một dòng, phân cách bằng dấu phẩy. Field này dành cho advertising targets và hoàn toàn tách biệt với ASIN trong Book Information.
 4. Nhấn **Shuffle**. App normalize khoảng trắng, loại Book phrase trùng Generic phrase không phân biệt hoa/thường, xử lý Generic trước Book, rồi tạo một preview chưa lưu.
@@ -41,6 +47,8 @@ Mỗi `keyword_*` tối đa 50 ký tự và không bao giờ cắt giữa word. 
 Sau khi packing hợp lệ, app shuffle word trong từng `keyword_1…keyword_7` có dữ liệu, shuffle các phrase của Ads Keyword và shuffle danh sách Ads ASIN bằng một seed bảo mật. Field rỗng hoặc chỉ có một phần tử được bỏ qua. Preview mang receipt đã ký; Save rebuild cùng seed và từ chối receipt bị sửa, hết hiệu lực, thuộc Book khác hoặc stale. Bấm **Shuffle** lần nữa để chủ động tạo thứ tự mới.
 
 Ads Keyword giữ tối đa 30 phrase: ưu tiên tối đa 20 Generic và 10 Book; nếu một bên thiếu thì bên còn lại bù phần trống. Generic được chọn trước Book để tính quota, sau đó toàn bộ phrase đã chọn được shuffle trước khi lưu.
+
+Generic Keywords có profile riêng cho `en`, `de`, `fr`, `es`, `it`, `pt`, `ja` và `nl`. Keyword Builder luôn chọn profile bằng Language đã persist trong state của Book; Book legacy chưa có Language được xem là `en`, còn mã Language không hợp lệ bị từ chối. Profile trống nghĩa là không dùng Generic Keywords và không fallback sang `en` hay profile khác. Settings legacy chỉ có `genericKeywords` vẫn được đọc như profile `en` mà không tự rewrite file; mỗi lần Save mới sẽ đồng thời mirror profile `en` về field legacy để có thể rollback sang phiên bản cũ.
 
 Generated keywords và Ads Keyword là read-only. **Copy to Clipboard** copy chín giá trị đang hiển thị (`keyword_1…keyword_7`, Ads Keyword, Ads ASIN) trên một dòng, phân cách bằng tab và không kèm label; field rỗng vẫn giữ cột. Preview chưa Save cũng có thể copy để review.
 
@@ -73,15 +81,16 @@ Với Book theo cấu trúc phẳng cũ, tiếp tục đặt `Book interior/`, `
 ASIN Research dùng Crawl Results đã gộp trong panel Build inputs và chỉ tạo preview/draft quảng cáo; nó không tự lưu Book.
 
 1. Nhập Book Keywords và bấm **Shuffle**. Ads Keyword read-only của preview (tối đa 30 phrase) là nguồn crawl duy nhất; không còn ô Search Keywords riêng.
-2. Bấm **Open Browser** nếu cần đăng nhập hoặc xử lý thông báo Amazon. Nếu chưa mở, **Crawl ASINs** sẽ tự mở browser.
-3. Lần chạy đầu tải CloakBrowser Chromium vài trăm MB. Profile và binary cache nằm tại `.cloakbrowser/` cạnh app để các lần sau không tải lại. Để dùng binary mới nhất, lấy free access key từ `https://cloakbrowser.dev/free` rồi đặt vào biến môi trường `CLOAKBROWSER_LICENSE_KEY` trước khi mở app; Printable Book không đọc, lưu hoặc hiển thị key trong settings/bridge/log.
-4. Review từng row. App chỉ lấy title chứa `coloring book` hoặc `coloring books`, tối đa một ASIN unique cho mỗi phrase; viewport desktop hiển thị năm row và scroll phần còn lại.
-5. Khi crawl kết thúc, app merge/dedupe ASIN hợp lệ vào **Ads ASIN** draft và cập nhật preview bằng cùng seed. Manual target hiện có được giữ. Nếu Book Keywords/Ads ASIN đã đổi trong lúc crawl, kết quả cũ không được apply.
-6. Review preview mới, sau đó bấm **Save**. Crawl không tự Save Book.
+2. Trước lần dùng đầu, mở **Configuration → Amazon market profiles**. Chọn từng Language để review Browser profile key, Amazon Base URL, Locale và Title Terms. Title Terms nhập trên một dòng và phân cách bằng dấu phẩy. Draft được giữ khi đổi Language; nút Save chung ghi toàn bộ profile.
+3. Bấm **Open Browser** nếu cần đăng nhập hoặc xử lý thông báo Amazon. Nếu chưa mở, **Crawl ASINs** sẽ tự mở browser. Market luôn lấy từ Language đã lưu của Book, không chọn thủ công trong ASIN Research.
+4. Lần chạy đầu tải CloakBrowser Chromium vài trăm MB. Mỗi profile và binary cache nằm tại `.cloakbrowser/` cạnh app để các lần sau không tải lại. Default English giữ `profile-v1`; các key khác dùng `profile-<key>-v1`. Để dùng binary mới nhất, lấy free access key từ `https://cloakbrowser.dev/free` rồi đặt vào biến môi trường `CLOAKBROWSER_LICENSE_KEY` trước khi mở app; Printable Book không đọc, lưu hoặc hiển thị key trong settings/bridge/log.
+5. Review từng row. App dùng Title Terms của market đang active và lấy tối đa một ASIN unique cho mỗi phrase; viewport desktop hiển thị năm row và scroll phần còn lại.
+6. Khi crawl kết thúc, app merge/dedupe ASIN hợp lệ vào **Ads ASIN** draft và cập nhật preview bằng cùng seed. Manual target hiện có được giữ. Nếu Book Keywords/Ads ASIN đã đổi trong lúc crawl, kết quả cũ không được apply.
+7. Review preview mới, sau đó bấm **Save**. Crawl không tự Save Book.
 
 Nếu Amazon báo CAPTCHA, robot check hoặc rate limit, crawl dừng và giữ các ASIN đã tìm được. Xử lý trong cửa sổ browser rồi chạy lại. Đóng Book Detail không hủy crawl; mở lại cùng Book sẽ nối lại trạng thái trong app session. App restart sẽ xóa draft/result research nhưng không xóa browser profile.
 
-Nếu báo license/access key không hợp lệ, cập nhật `CLOAKBROWSER_LICENSE_KEY`, đóng app và mở lại. Nếu tải browser lỗi, kiểm tra network, dung lượng đĩa, antivirus và quyền ghi tại folder app; không xóa `.cloakbrowser/profile-v1` nếu muốn giữ Amazon session.
+Nếu báo license/access key không hợp lệ, cập nhật `CLOAKBROWSER_LICENSE_KEY`, đóng app và mở lại. Nếu tải browser lỗi, kiểm tra network, dung lượng đĩa, antivirus và quyền ghi tại folder app; không xóa folder profile tương ứng nếu muốn giữ Amazon session.
 
 ## 4. Refresh Library
 

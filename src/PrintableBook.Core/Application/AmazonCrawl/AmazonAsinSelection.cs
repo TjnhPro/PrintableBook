@@ -1,17 +1,17 @@
-using System.Text.RegularExpressions;
-
 namespace PrintableBook.Core.Application.AmazonCrawl;
 
-public static partial class AmazonAsinSelection
+public static class AmazonAsinSelection
 {
     public static AmazonAsinKeywordResult Select(
         int inputIndex,
         string keyword,
         AmazonSearchParseResult parsed,
-        ISet<string> selected)
+        ISet<string> selected,
+        AmazonMarketplaceProfile profile)
     {
         ArgumentNullException.ThrowIfNull(parsed);
         ArgumentNullException.ThrowIfNull(selected);
+        ArgumentNullException.ThrowIfNull(profile);
 
         if (parsed.Diagnostic == AmazonSearchPageDiagnostic.NeedsAttention)
         {
@@ -26,7 +26,7 @@ public static partial class AmazonAsinSelection
             return new(inputIndex, keyword, AmazonAsinKeywordStatus.NoSearchResult, ReasonCode: "amazon_no_search_result");
         }
 
-        var matches = parsed.Candidates.Where(candidate => ColoringBookTitle().IsMatch(candidate.Title)).ToArray();
+        var matches = parsed.Candidates.Where(candidate => profile.MatchesTitle(candidate.Title)).ToArray();
         if (matches.Length == 0)
         {
             return new(inputIndex, keyword, AmazonAsinKeywordStatus.NoMatchingTitle, ReasonCode: "amazon_no_matching_title");
@@ -41,7 +41,4 @@ public static partial class AmazonAsinSelection
         selected.Add(candidate.Asin);
         return new(inputIndex, keyword, AmazonAsinKeywordStatus.Selected, candidate.Asin);
     }
-
-    [GeneratedRegex(@"\bcoloring\s+books?\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex ColoringBookTitle();
 }

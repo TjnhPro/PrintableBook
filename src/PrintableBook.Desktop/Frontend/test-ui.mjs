@@ -71,6 +71,47 @@ const expected = [
   ,"missingArtifacts"
   ,"uploadCompletedCount"
   ,'aria-live="polite"'
+  ,'supportedLanguages'
+  ,'brandCloneDestinationName'
+  ,'data-action="open-brand-clone"'
+  ,'data-action="clone-brand-language"'
+  ,'data-action="submit-brand-clone"'
+  ,'command === "brand.clone.completed"'
+  ,'Brand cloned. Validate this Brand before processing.'
+  ,'Cloning…'
+  ,'invalid_brand_clone'
+  ,'brand_clone_destination_exists'
+  ,'brand_clone_source_not_found'
+  ,'brand_clone_language_invalid'
+  ,'snapshot_unavailable'
+  ,'brand_clone_failed'
+  ,'state.brandCloneAwaitingSnapshot = true'
+  ,'bookCloneDestinationName'
+  ,'data-action="open-book-clone"'
+  ,'data-action="clone-book-language"'
+  ,'data-action="submit-book-clone"'
+  ,'command === "book.clone.completed"'
+  ,'state.bookCloneAwaitingSnapshot = true'
+  ,'book_clone_destination_exists'
+  ,'book_clone_state_invalid'
+  ,'Book Language'
+  ,'Language mismatch'
+  ,'No ${languageNameFor(summary)} Brand available.'
+  ,'No ${languageNameFor(summary)} Brand matches this Book Author.'
+  ,'persistedGenericKeywords(languageCodeFor(summary)).length'
+  ,'Amazon Market:'
+  ,'amazon.browser.status", { bookId: id }'
+  ,'amazon.browser.open", { bookId: target.dataset.bookId }'
+  ,'amazon_asin_crawl_active: "An ASIN crawl is using the Amazon browser.'
+  ,'targetMarketName: valueFor(view, "marketName"'
+  ,'Amazon market profiles'
+  ,'data-action="amazon-market-language"'
+  ,'data-amazon-profile-field="profileKey"'
+  ,'data-amazon-profile-field="baseUrl"'
+  ,'data-amazon-profile-field="locale"'
+  ,'data-amazon-profile-field="titleTerms"'
+  ,'Comma-separated title phrases'
+  ,'payload.amazonMarketplaceProfiles'
 ];
 
 for (const value of expected) {
@@ -91,6 +132,22 @@ if (app.includes('tabButton("overview"') || app.includes("Review the summary and
 
 if (app.includes("storage.settings.save") || app.includes("storage.book.check") || app.includes("storage.book.upload")) {
   throw new Error("Legacy standalone Storage bridge commands must not remain in the UI.");
+}
+
+if (!/const cloneBlocked = !state\.brandCloneLanguageCode \|\| !cloneDestination \|\| cloneDestinationExists \|\| cloneBusy \|\| processIsActive\(\)/.test(app)) {
+  throw new Error("Clone Brand must stay disabled until the request is safe to submit.");
+}
+
+if (!/state\.brandFilter = "";[\s\S]*state\.inspectedBrand = cloneDestination;[\s\S]*resetBrandClone\(false\)/.test(app)) {
+  throw new Error("Clone refresh must reveal and select the newly cloned Brand.");
+}
+
+if (!/const blocked = !state\.bookCloneLanguageCode \|\| !destination \|\| destinationExists \|\| busy \|\| writerActive/.test(app)) {
+  throw new Error("Clone Book must stay disabled until the request is safe to submit.");
+}
+
+if (!/const languageCandidates = languageBrandsFor\(summary\);[\s\S]*const candidates = matchingBrandsFor\(summary\)/.test(app)) {
+  throw new Error("Brand Assignment must filter Language before Author.");
 }
 
 console.log(`UI contract passed (${expected.length} checks).`);

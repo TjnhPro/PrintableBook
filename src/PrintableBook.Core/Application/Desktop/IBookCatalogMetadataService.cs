@@ -60,11 +60,22 @@ public sealed class BookCatalogMetadataService(
     {
         ArgumentNullException.ThrowIfNull(book);
         ArgumentNullException.ThrowIfNull(keywords);
+        var state = await LoadStateAsync(book, cancellationToken);
         var genericKeywords = settingsStore is null
             ? []
-            : (await settingsStore.LoadAsync(cancellationToken)).EffectiveGenericKeywords;
+            : (await settingsStore.LoadAsync(cancellationToken)).GetEffectiveGenericKeywords(state.LanguageCode);
         var result = keywordBuilder.Build(genericKeywords, keywords, adsAsin, Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow);
-        var state = await LoadStateAsync(book, cancellationToken);
+        var saved = state.KeywordBuilder?.NormalizeStored();
+        if (saved is not null &&
+            saved.AlgorithmVersion == BookKeywordBuilder.CurrentAlgorithmVersion &&
+            !string.IsNullOrWhiteSpace(saved.BuildId) &&
+            !string.IsNullOrWhiteSpace(saved.ShuffleSeed) &&
+            !string.IsNullOrWhiteSpace(saved.InputFingerprint) &&
+            !string.IsNullOrWhiteSpace(saved.OutputDigest) &&
+            string.Equals(saved.InputFingerprint, result.InputFingerprint, StringComparison.Ordinal))
+        {
+            return state.KeywordBuilder!;
+        }
         await stateStore.SaveAsync(book.Workspace, state with { KeywordBuilder = result }, cancellationToken);
         return result;
     }
@@ -77,13 +88,22 @@ public sealed class BookCatalogMetadataService(
         ArgumentNullException.ThrowIfNull(book);
         ArgumentNullException.ThrowIfNull(brand);
         var state = await LoadStateAsync(book, cancellationToken);
+        var bookLanguage = SupportedLanguageCatalog.GetEffective(state.LanguageCode);
+        var brandMetadata = await brandMetadataStore.LoadAsync(brand.Directory, cancellationToken);
+        var brandLanguage = SupportedLanguageCatalog.GetEffective(brandMetadata?.LanguageCode);
+        if (!string.Equals(bookLanguage.Code, brandLanguage.Code, StringComparison.Ordinal))
+        {
+            throw new BookCatalogMetadataException(
+                "book_brand_language_mismatch",
+                $"Book Language '{bookLanguage.Name}' must match Brand Language '{brandLanguage.Name}' before assignment.");
+        }
+
         var bookAuthor = state.Metadata?.Author;
         if (string.IsNullOrWhiteSpace(bookAuthor))
         {
             throw new BookCatalogMetadataException("book_author_required", "Save a Book Author before assigning a Brand.");
         }
 
-        var brandMetadata = await brandMetadataStore.LoadAsync(brand.Directory, cancellationToken);
         if (string.IsNullOrWhiteSpace(brandMetadata?.Author))
         {
             throw new BookCatalogMetadataException("brand_author_required", $"Brand '{brand.Name}' does not have an Author.");
@@ -104,13 +124,17 @@ public sealed class BookCatalogMetadataService(
         await stateStore.SaveAsync(book.Workspace, state with { AssignedBrand = null }, cancellationToken);
     }
 
-    public ValueTask SaveBrandAuthorAsync(
+    public async ValueTask SaveBrandAuthorAsync(
         DiscoveredBrand brand,
         string? author,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(brand);
-        return brandMetadataStore.SaveAsync(brand.Directory, BrandMetadata.Create(author), cancellationToken);
+        var existing = await brandMetadataStore.LoadAsync(brand.Directory, cancellationToken);
+        await brandMetadataStore.SaveAsync(
+            brand.Directory,
+            BrandMetadata.Create(author, existing?.LanguageCode),
+            cancellationToken);
     }
 
     private async ValueTask<BookProcessingState> LoadStateAsync(DiscoveredBook book, CancellationToken cancellationToken) =>

@@ -52,15 +52,51 @@ public sealed class BookCatalogMetadataServiceTests
     }
 
     [Fact]
-    public async Task SaveBrandAuthor_normalizes_display_text()
+    public async Task Assign_rejects_language_mismatch_before_author_validation()
+    {
+        var stateStore = new StateStore(BookProcessingState.NotStarted(new BookId("book")) with { LanguageCode = "de" });
+        var brandStore = new BrandStore();
+        var service = new BookCatalogMetadataService(stateStore, brandStore);
+        var brand = Brand("Brand A");
+        brandStore.Set(brand, BrandMetadata.Create(null, "en"));
+
+        var mismatch = await Assert.ThrowsAsync<BookCatalogMetadataException>(() => service.AssignBrandAsync(Book(), brand).AsTask());
+
+        Assert.Equal("book_brand_language_mismatch", mismatch.Code);
+        Assert.Equal(0, stateStore.Saves);
+    }
+
+    [Fact]
+    public async Task Assign_accepts_matching_non_English_language_and_author()
+    {
+        var stateStore = new StateStore(BookProcessingState.NotStarted(new BookId("book")) with
+        {
+            LanguageCode = "de",
+            Metadata = BookProductionMetadata.Create(null, null, null, null, "Jane")
+        });
+        var brandStore = new BrandStore();
+        var service = new BookCatalogMetadataService(stateStore, brandStore);
+        var brand = Brand("Brand A");
+        brandStore.Set(brand, BrandMetadata.Create("jane", "de"));
+
+        await service.AssignBrandAsync(Book(), brand);
+
+        Assert.Equal("Brand A", stateStore.State!.AssignedBrand);
+    }
+
+    [Fact]
+    public async Task SaveBrandAuthor_normalizes_display_text_and_preserves_language()
     {
         var brandStore = new BrandStore();
         var service = new BookCatalogMetadataService(new StateStore(), brandStore);
         var brand = Brand("Brand A");
+        brandStore.Set(brand, BrandMetadata.Create("Old Author", "de"));
 
         await service.SaveBrandAuthorAsync(brand, " Jane Doe ");
 
-        Assert.Equal("Jane Doe", (await brandStore.LoadAsync(brand.Directory))!.Author);
+        var saved = await brandStore.LoadAsync(brand.Directory);
+        Assert.Equal("Jane Doe", saved!.Author);
+        Assert.Equal("de", saved.LanguageCode);
     }
 
     [Fact]
@@ -159,7 +195,58 @@ public sealed class BookCatalogMetadataServiceTests
     }
 
     [Fact]
-    public async Task SaveKeywordBuilder_validation_failure_does_not_load_or_save_state()
+    public async Task SaveKeywordBuilder_loads_generic_keywords_for_the_persisted_book_language()
+    {
+        var stateStore = new StateStore(BookProcessingState.NotStarted(new BookId("book")) with { LanguageCode = "fr" });
+        var settingsStore = new SettingsStore(GlobalSettings.Default with
+        {
+            GenericKeywordsByLanguage = new Dictionary<string, IReadOnlyList<string>>
+            {
+                ["en"] = ["English generic"],
+                ["fr"] = ["French generic"]
+            }
+        });
+        var service = new BookCatalogMetadataService(
+            stateStore,
+            new BrandStore(),
+            new BookKeywordBuilder(new NoOpKeywordShuffler()),
+            settingsStore);
+
+        var result = await service.SaveKeywordBuilderAsync(Book(), ["French book phrase"], null);
+
+        Assert.Equal(["French generic"], result.GenericKeywords);
+        Assert.DoesNotContain("English generic", result.GenericKeywords!);
+        Assert.Equal(1, stateStore.Loads);
+        Assert.Equal(1, stateStore.Saves);
+    }
+
+    [Fact]
+    public async Task SaveKeywordBuilder_does_not_write_state_when_effective_inputs_are_unchanged()
+    {
+        var stateStore = new StateStore(BookProcessingState.NotStarted(new BookId("book")) with { LanguageCode = "de" });
+        var settingsStore = new SettingsStore(GlobalSettings.Default with
+        {
+            GenericKeywordsByLanguage = new Dictionary<string, IReadOnlyList<string>>
+            {
+                ["de"] = ["German generic"]
+            }
+        });
+        var service = new BookCatalogMetadataService(
+            stateStore,
+            new BrandStore(),
+            new BookKeywordBuilder(new NoOpKeywordShuffler()),
+            settingsStore);
+
+        var first = await service.SaveKeywordBuilderAsync(Book(), ["Book phrase"], "B0123");
+        var second = await service.SaveKeywordBuilderAsync(Book(), ["Book phrase"], "B0123");
+
+        Assert.Same(first, second);
+        Assert.Equal(2, stateStore.Loads);
+        Assert.Equal(1, stateStore.Saves);
+    }
+
+    [Fact]
+    public async Task SaveKeywordBuilder_validation_failure_loads_language_but_does_not_save_state()
     {
         var stateStore = new StateStore(BookProcessingState.NotStarted(new BookId("book")));
         var service = new BookCatalogMetadataService(stateStore, new BrandStore());
@@ -168,7 +255,7 @@ public sealed class BookCatalogMetadataServiceTests
             service.SaveKeywordBuilderAsync(Book(), [new string('a', 51)], null).AsTask());
 
         Assert.Equal("keyword_word_too_long", exception.Error.Code);
-        Assert.Equal(0, stateStore.Loads);
+        Assert.Equal(1, stateStore.Loads);
         Assert.Equal(0, stateStore.Saves);
     }
 
@@ -240,6 +327,7 @@ public sealed class BookCatalogMetadataServiceTests
         Assert.True(BookBrandExecutionPolicy.Evaluate("Brand A", BookBrandAssignmentStatus.Valid, null).IsAllowed);
         Assert.Equal("book_brand_mismatch", BookBrandExecutionPolicy.Evaluate("Brand A", BookBrandAssignmentStatus.Valid, "Brand B").Code);
         Assert.Equal("book_brand_assignment_invalid", BookBrandExecutionPolicy.Evaluate("Brand A", BookBrandAssignmentStatus.AuthorMismatch, "Brand A").Code);
+        Assert.Equal("book_brand_assignment_invalid", BookBrandExecutionPolicy.Evaluate("Brand A", BookBrandAssignmentStatus.LanguageMismatch, "Brand A").Code);
     }
 
     private static DiscoveredBook Book()

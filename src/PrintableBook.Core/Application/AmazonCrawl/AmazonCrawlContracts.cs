@@ -11,7 +11,6 @@ public static class AmazonCrawlPolicy
     public const int MaximumHtmlBytes = 5 * 1024 * 1024;
     public static readonly TimeSpan FetchTimeout = TimeSpan.FromSeconds(20);
     public static readonly TimeSpan CrawlTimeout = TimeSpan.FromMinutes(10);
-    public static readonly Uri Marketplace = new("https://www.amazon.com/");
 
     public static IReadOnlyList<string> NormalizeKeywords(IEnumerable<string> values)
     {
@@ -36,23 +35,36 @@ public static class AmazonCrawlPolicy
         return keywords;
     }
 
-    public static string Fingerprint(IReadOnlyList<string> normalizedKeywords)
+    public static string Fingerprint(AmazonMarketplaceProfile profile, IReadOnlyList<string> normalizedKeywords)
     {
+        ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(normalizedKeywords);
-        var canonical = $"amazon.com\n{string.Join('\n', normalizedKeywords.Select(value => value.ToUpperInvariant()))}";
+        var canonical = $"{profile.MarketCode}\n{profile.Domain}\n{string.Join('\n', normalizedKeywords.Select(value => value.ToUpperInvariant()))}";
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
     }
 
-    public static Uri BuildSearchUri(string normalizedKeyword)
+    public static string SourceFingerprint(IReadOnlyList<string> normalizedKeywords)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(normalizedKeyword);
-        return new UriBuilder(Marketplace) { Path = "s", Query = $"k={Uri.EscapeDataString(normalizedKeyword)}" }.Uri;
+        ArgumentNullException.ThrowIfNull(normalizedKeywords);
+        var canonical = string.Join('\n', normalizedKeywords.Select(value => value.ToUpperInvariant()));
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
     }
 
-    public static bool IsAllowedUri(Uri? uri) => uri is not null &&
+    public static Uri BuildSearchUri(AmazonMarketplaceProfile profile, string normalizedKeyword)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentException.ThrowIfNullOrWhiteSpace(normalizedKeyword);
+        return new UriBuilder(profile.MarketplaceUri) { Path = "s", Query = $"k={Uri.EscapeDataString(normalizedKeyword)}" }.Uri;
+    }
+
+    public static bool IsAllowedUri(AmazonMarketplaceProfile profile, Uri? uri)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        return uri is not null &&
         uri.Scheme == Uri.UriSchemeHttps &&
-        (string.Equals(uri.Host, "www.amazon.com", StringComparison.OrdinalIgnoreCase) ||
-         string.Equals(uri.Host, "amazon.com", StringComparison.OrdinalIgnoreCase));
+        (string.Equals(uri.Host, $"www.{profile.Domain}", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(uri.Host, profile.Domain, StringComparison.OrdinalIgnoreCase));
+    }
 }
 
 public sealed class AmazonCrawlValidationException(string code, string message) : ArgumentException(message)
@@ -62,12 +74,14 @@ public sealed class AmazonCrawlValidationException(string code, string message) 
 
 public sealed record AmazonAsinCrawlRequest(
     IReadOnlyList<string> Keywords,
-    string RequestFingerprint)
+    string RequestFingerprint,
+    AmazonMarketplaceProfile Profile)
 {
-    public static AmazonAsinCrawlRequest Create(IEnumerable<string> keywords)
+    public static AmazonAsinCrawlRequest Create(IEnumerable<string> keywords, AmazonMarketplaceProfile profile)
     {
+        ArgumentNullException.ThrowIfNull(profile);
         var normalized = AmazonCrawlPolicy.NormalizeKeywords(keywords);
-        return new AmazonAsinCrawlRequest(normalized, AmazonCrawlPolicy.Fingerprint(normalized));
+        return new AmazonAsinCrawlRequest(normalized, AmazonCrawlPolicy.Fingerprint(profile, normalized), profile);
     }
 }
 
@@ -109,7 +123,10 @@ public sealed record AmazonAsinCrawlView(
     int TotalCount,
     string FinalAsins,
     string RequestFingerprint,
-    string? StopReasonCode = null)
+    string? StopReasonCode = null,
+    string MarketCode = "us",
+    string MarketName = "United States",
+    string MarketplaceDomain = "amazon.com")
 {
     public int SelectedCount => Rows.Count(row => row.Status == AmazonAsinKeywordStatus.Selected);
 
@@ -119,7 +136,10 @@ public sealed record AmazonAsinCrawlView(
         0,
         request.Keywords.Count,
         string.Empty,
-        request.RequestFingerprint);
+        request.RequestFingerprint,
+        MarketCode: request.Profile.MarketCode,
+        MarketName: request.Profile.MarketName,
+        MarketplaceDomain: request.Profile.Domain);
 }
 
 public enum AmazonSearchPageDiagnostic
@@ -139,7 +159,7 @@ public sealed record AmazonSearchParseResult(
 
 public interface IAmazonSearchHtmlParser
 {
-    AmazonSearchParseResult Parse(string html);
+    AmazonSearchParseResult Parse(string html, AmazonMarketplaceProfile profile);
 }
 
 public sealed record BrowserFetchResponse(
@@ -162,13 +182,21 @@ public enum CloakBrowserState
     Error
 }
 
-public sealed record CloakBrowserStatus(CloakBrowserState State, string? ReasonCode = null);
+public sealed record CloakBrowserStatus(
+    CloakBrowserState State,
+    string? ReasonCode = null,
+    string? TargetMarketCode = null,
+    string? TargetMarketName = null,
+    string? TargetDomain = null,
+    string? ActiveMarketCode = null);
 
 public interface IAmazonSearchPageClient
 {
-    ValueTask<CloakBrowserStatus> GetStatusAsync(CancellationToken cancellationToken = default);
-    ValueTask<CloakBrowserStatus> OpenAsync(CancellationToken cancellationToken = default);
-    ValueTask<BrowserFetchResponse> FetchAsync(Uri uri, CancellationToken cancellationToken = default);
+    ValueTask<CloakBrowserStatus> GetStatusAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default);
+    ValueTask<CloakBrowserStatus> OpenAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default);
+    ValueTask<CloakBrowserStatus> OpenFreshAsync(AmazonMarketplaceProfile profile, CancellationToken cancellationToken = default);
+    ValueTask CloseAsync(CancellationToken cancellationToken = default);
+    ValueTask<BrowserFetchResponse> FetchAsync(AmazonMarketplaceProfile profile, Uri uri, CancellationToken cancellationToken = default);
 }
 
 public interface IAmazonBrowserLifetime
