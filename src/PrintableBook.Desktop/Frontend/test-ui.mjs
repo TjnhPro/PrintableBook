@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 const app = readFileSync(new URL("./js/app.js", import.meta.url), "utf8");
+const bookWorkspaceCss = readFileSync(new URL("./css/book-workspace.css", import.meta.url), "utf8");
 const expected = [
   'tabButton("settings", "Settings")',
   'tabButton("asin", "Keyword")',
@@ -162,8 +163,19 @@ if (!/data-book-completion-card[\s\S]*aria-busy=[\s\S]*data-action="set-book-com
   throw new Error("Book completion must expose pending state and disable repeated submission.");
 }
 
-if (!/const statusCounts = bookStatuses\.map\([\s\S]*matchesBookStatusFilter/.test(app)) {
-  throw new Error("The Complete filter count must use the persisted completion marker.");
+if (!/const bookCompletionFilters = \["Incomplete", "Complete", "All"\]/.test(app)
+    || !/bookCompletion: "Incomplete"/.test(app)
+    || !/data-action="book-completion-filter"/.test(app)
+    || !/const completionCounts = bookCompletionFilters\.map\([\s\S]*matchesBookCompletionFilter/.test(app)) {
+  throw new Error("Book completion must be a separate filter that defaults to incomplete Books.");
+}
+
+if (/const bookStatuses = \[[^\]]*"Complete"/.test(app)) {
+  throw new Error("Complete must not be part of the processing Status filter.");
+}
+
+if (!/\.book-settings-background,\.book-settings-templates,\.book-settings-completion \{ grid-column:span 4; \}/.test(bookWorkspaceCss)) {
+  throw new Error("Brand background, Brand PSD templates and Book completion must use a 4-4-4 grid.");
 }
 
 console.log(`UI contract passed (${expected.length} checks).`);
