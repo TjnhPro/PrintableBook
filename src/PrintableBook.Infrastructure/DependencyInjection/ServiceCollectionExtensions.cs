@@ -49,6 +49,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IArtworkSourceNormalizer, MagickArtworkSourceNormalizer>();
         services.AddSingleton<IBorderLineDetector, MagickBorderLineDetector>();
         services.AddSingleton<IBorderPixelDetector, MagickBorderPixelDetector>();
+        services.AddSingleton<PrintableBook.Core.Application.Production.IAppPlusProcessingService, PrintableBook.Infrastructure.Production.AppPlusProcessingService>();
         services.AddSingleton<IBorderBoundsCropProcessor, MagickBorderBoundsCropProcessor>();
         services.AddSingleton<IArtworkTrimProcessor, MagickArtworkTrimProcessor>();
         services.AddSingleton<ISquareCropProcessor, MagickSquareCropProcessor>();

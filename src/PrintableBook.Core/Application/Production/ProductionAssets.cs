@@ -6,7 +6,8 @@ public enum ProductionAssetKind
 {
     FinalCover = 0,
     InteriorCover = 1,
-    BookOwner = 2
+    BookOwner = 2,
+    AppPlus = 3
 }
 
 public sealed record ProductionAssetDefinition(
@@ -23,7 +24,8 @@ public static class ProductionAssets
     [
         new(ProductionAssetKind.FinalCover, "final_cover.png", new ImageSize(5242, 2626), "production-final-cover", "production-final-cover", null),
         new(ProductionAssetKind.InteriorCover, "interior_cover.png", null, "production-interior-cover", "production-interior-cover", "interior-cover.png"),
-        new(ProductionAssetKind.BookOwner, "interior_book_owner.png", null, "production-book-owner", "production-book-owner", "interior-book-owner.png")
+        new(ProductionAssetKind.BookOwner, "interior_book_owner.png", null, "production-book-owner", "production-book-owner", "interior-book-owner.png"),
+        new(ProductionAssetKind.AppPlus, "app_plus.png", null, "production-app-plus", "production-app-plus", null)
     ];
 
     public static ProductionAssetDefinition Get(ProductionAssetKind kind) =>

@@ -3214,3 +3214,23 @@ test("Diagnostics route requests and renders sanitized responsiveness events", (
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.tasks", payload: [{ kind: "LibraryRefresh", state: "Running", subject: "Library", step: "discovery" }] } });
   assert.match(content.innerHTML, /Active/);
 });
+
+
+test("App Plus uses the assigned Brand split and starts its own production action", () => {
+  const { messageHandler, contentListeners, content, messages } = loadBridge("books");
+  const snapshot = productionSnapshot();
+  snapshot.brandSummaries[0].appPlusSplit = "0|1000|1500|2000";
+  snapshot.bookSummaries[0].production.assets.push({ assetKind: "app-plus", fileName: "app_plus.png", sourceStatus: "Ready to process" });
+  messageHandler({ data: { version: 1, id: "app-plus", ok: true, command: "app.snapshot", payload: snapshot } });
+  const open = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => open };
+  contentListeners.click({ target: open });
+  const tab = { dataset: { action: "book-tab", bookTab: "production" }, closest: () => tab };
+  contentListeners.click({ target: tab });
+  assert.match(content.innerHTML, /<legend>App Plus<\/legend>/);
+  assert.match(content.innerHTML, /Split: 0\|1000\|1500\|2000/);
+  assert.match(content.innerHTML, /data-production-action="process-app-plus"[^>]*data-production-source-exists="true"/);
+  const process = { dataset: { action: "start-production-action", productionAction: "process-app-plus", bookId: "Book 001" }, closest: () => process };
+  contentListeners.click({ target: process });
+  assert.equal(messages.at(-1).command, "book.production.action.start");
+  assert.equal(messages.at(-1).payload.action, "process-app-plus");
+});

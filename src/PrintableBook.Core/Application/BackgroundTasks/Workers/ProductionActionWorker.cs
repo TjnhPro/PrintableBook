@@ -9,7 +9,8 @@ public enum ProductionActionKind
 {
     BuildCoverPdf = 0,
     ProcessInteriorCover = 1,
-    ProcessBookOwner = 2
+    ProcessBookOwner = 2,
+    ProcessAppPlus = 3
 }
 
 public sealed record ProductionActionRequest(
@@ -26,7 +27,8 @@ public sealed record ProductionActionResult(
 public sealed class ProductionActionWorker(
     IApplicationSnapshotProvider snapshotProvider,
     IProductionPageProcessingService pageProcessingService,
-    IProductionCoverPdfService coverPdfService) : BackgroundTaskWorker<ProductionActionRequest, ProductionActionResult>
+    IProductionCoverPdfService coverPdfService,
+    IAppPlusProcessingService? appPlusProcessingService = null) : BackgroundTaskWorker<ProductionActionRequest, ProductionActionResult>
 {
     public override BackgroundTaskKind Kind => BackgroundTaskKind.ProductionAction;
 
@@ -57,6 +59,7 @@ public sealed class ProductionActionWorker(
         {
             return request.Action switch
             {
+                ProductionActionKind.ProcessAppPlus => await ProcessAppPlusAsync(book, request, snapshot, cancellationToken),
                 ProductionActionKind.BuildCoverPdf => await BuildCoverAsync(book, request, context, cancellationToken),
                 ProductionActionKind.ProcessInteriorCover => await ProcessPageAsync(book, request, ProductionAssetKind.InteriorCover, "Processing Interior Cover", context, snapshot, cancellationToken),
                 ProductionActionKind.ProcessBookOwner => await ProcessPageAsync(book, request, ProductionAssetKind.BookOwner, "Processing Book Owner", context, snapshot, cancellationToken),
@@ -75,6 +78,21 @@ public sealed class ProductionActionWorker(
         {
             throw new BackgroundTaskFailureException("production_cover_size_invalid", exception.Message);
         }
+    }
+
+    private async ValueTask<ProductionActionResult> ProcessAppPlusAsync(DiscoveredBook book, ProductionActionRequest request, ApplicationSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        var resolution = PrintableBook.Core.Application.Brands.BookBrandExecutionResolver.ResolveBatch(snapshot, [request.BookId]);
+        if (!resolution.IsSuccess) throw new BackgroundTaskFailureException(resolution.Failure!.Code, resolution.Failure.Message);
+        var split = snapshot.BrandSummaries?.FirstOrDefault(b => b.BrandName == resolution.Brand!.Name)?.AppPlusSplit;
+        try
+        {
+            if (appPlusProcessingService is null) throw new InvalidOperationException("App Plus service unavailable.");
+            var output = new PrintableBook.Core.Abstractions.DirectoryReference(Path.Combine(book.Directory.Value, "Output"));
+            await appPlusProcessingService.ProcessAsync(book.Workspace, output, split!, cancellationToken);
+            return new(request.BookId, request.Action, output.Value, DateTimeOffset.UtcNow);
+        }
+        catch (ArgumentException exception) { throw new BackgroundTaskFailureException("invalid_app_plus_split", exception.Message); }
     }
 
     private async ValueTask<ProductionActionResult> BuildCoverAsync(

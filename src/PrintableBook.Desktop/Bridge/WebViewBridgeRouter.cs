@@ -628,6 +628,29 @@ internal sealed class WebViewBridgeRouter(
                 }
             }
 
+            if (request.Command == "brand.app-plus-split.save")
+            {
+                if (applicationLoadCoordinator is null || request.Payload is not { } appPlusPayload ||
+                    !appPlusPayload.TryGetProperty("brandName", out var name) || name.ValueKind != JsonValueKind.String ||
+                    !appPlusPayload.TryGetProperty("appPlusSplit", out var split) || split.ValueKind != JsonValueKind.String)
+                    return new BridgeResponse(Version, request.Id, false, null, "invalid_app_plus_split");
+                try
+                {
+                    var normalized = AppPlusSplit.Parse(split.GetString());
+                    await using (await processingMutationGate.EnterAsync(cancellationToken))
+                    {
+                        if (await IsProcessingActiveAsync(cancellationToken)) return new BridgeResponse(Version, request.Id, false, null, "processing_active");
+                        var snapshot = await applicationLoadCoordinator.GetLatestCompletedSnapshotAsync(cancellationToken);
+                        var brand = snapshot?.Discovery.Brands.FirstOrDefault(b => b.Name == name.GetString());
+                        if (brand is null) return new BridgeResponse(Version, request.Id, false, null, "brand_not_found");
+                        if (bookCatalogMetadataService is null) return BridgeResponse.UnsupportedCommand(request.Id);
+                        await bookCatalogMetadataService.SaveAppPlusSplitAsync(brand, string.Join("|", normalized), cancellationToken);
+                    }
+                    return BridgeResponse.Succeeded(request.Id, "background.task", BackgroundTaskBridgeSnapshot.From(await applicationLoadCoordinator.StartRefreshAsync(cancellationToken)));
+                }
+                catch (ArgumentException) { return new BridgeResponse(Version, request.Id, false, null, "invalid_app_plus_split"); }
+            }
+
             if (request.Command is "book.metadata.save" or "book.brand.assign" or "book.brand.unassign" or "brand.author.save")
             {
                 if (applicationLoadCoordinator is null || bookCatalogMetadataService is null || request.Payload is not { } metadataPayload)
@@ -1491,7 +1514,7 @@ internal sealed class WebViewBridgeRouter(
     private static BridgeResponse RouteSynchronous(BridgeRequest request) => request.Command switch
     {
         "app.ping" => BridgeResponse.Pong(request.Id),
-        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.clone" or "book.completion.set" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.interior.shuffle" or "book.interior.open-folder" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.pdf-name-suggestions.get" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.author.save" or "brand.validate" or "brand.clone" or "diagnostics.get" or "s3.get" or "s3.credentials.replace" or "book.s3.check" or "book.s3.upload" or "book.s3.get" or "book.s3.cancel" => new BridgeResponse(Version, request.Id, true, null, null),
+        "app.refresh" or "app.refresh.result" or "task.get" or "task.list" or "task.cancel" or "cache.clear" or "cache.clear.result" or "book.validate" or "book.clone" or "book.completion.set" or "book.metadata.save" or "book.keywords.shuffle" or "book.keywords.preview.open" or "book.keywords.preview.update-ads-asin" or "book.keywords.save" or "book.keywords.asin-crawl.start" or "book.keywords.asin-crawl.get" or "book.keywords.asin-crawl.cancel" or "amazon.browser.open" or "amazon.browser.status" or "book.brand.assign" or "book.brand.unassign" or "book.cover.select" or "book.interior.frame-mode.set" or "book.interior.settings.save" or "book.interior.shuffle" or "book.interior.open-folder" or "book.background.set" or "book.interior.active.set" or "book.brand.templates.copy" or "book.production.pdf-name-suggestions.get" or "book.production.asset.import" or "book.production.action.start" or "book.output.preview" or "book.output.open-folder" or "book.output.open" or "book.output.reveal" or "book.output.copy-path" or "settings.save" or "process.get" or "process.cancel" or "process.start" or "brand.app-plus-split.save" or "brand.author.save" or "brand.validate" or "brand.clone" or "diagnostics.get" or "s3.get" or "s3.credentials.replace" or "book.s3.check" or "book.s3.upload" or "book.s3.get" or "book.s3.cancel" => new BridgeResponse(Version, request.Id, true, null, null),
         _ => BridgeResponse.UnsupportedCommand(request.Id)
     };
 
@@ -1653,10 +1676,11 @@ internal sealed class WebViewBridgeRouter(
                 "final-cover" => ProductionAssetKind.FinalCover,
                 "interior-cover" => ProductionAssetKind.InteriorCover,
                 "book-owner" => ProductionAssetKind.BookOwner,
+                "app-plus" => ProductionAssetKind.AppPlus,
                 _ => default
             }
             : default;
-        return value.ValueKind == JsonValueKind.String && value.GetString() is "final-cover" or "interior-cover" or "book-owner";
+        return value.ValueKind == JsonValueKind.String && value.GetString() is "final-cover" or "interior-cover" or "book-owner" or "app-plus";
     }
 
     private static bool TryParseProductionAction(JsonElement value, out ProductionActionKind action)
@@ -1667,10 +1691,11 @@ internal sealed class WebViewBridgeRouter(
                 "build-cover-pdf" => ProductionActionKind.BuildCoverPdf,
                 "process-interior-cover" => ProductionActionKind.ProcessInteriorCover,
                 "process-book-owner" => ProductionActionKind.ProcessBookOwner,
+                "process-app-plus" => ProductionActionKind.ProcessAppPlus,
                 _ => default
             }
             : default;
-        return value.ValueKind == JsonValueKind.String && value.GetString() is "build-cover-pdf" or "process-interior-cover" or "process-book-owner";
+        return value.ValueKind == JsonValueKind.String && value.GetString() is "build-cover-pdf" or "process-interior-cover" or "process-book-owner" or "process-app-plus";
     }
 
     private static bool TryParseTaskId(JsonElement value, out BackgroundTaskId taskId)

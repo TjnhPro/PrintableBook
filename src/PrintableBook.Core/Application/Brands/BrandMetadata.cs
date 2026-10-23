@@ -1,11 +1,11 @@
 namespace PrintableBook.Core.Application.Brands;
 
-public sealed record BrandMetadata(string? Author, string? LanguageCode = null)
+public sealed record BrandMetadata(string? Author, string? LanguageCode = null, string? AppPlusSplit = null)
 {
     public static BrandMetadata Create(string? author, string? languageCode = null) =>
         new(NormalizeAuthor(author), SupportedLanguageCatalog.NormalizeStoredCode(languageCode));
 
-    public BrandMetadata Normalize() => Create(Author, LanguageCode);
+    public BrandMetadata Normalize() => Create(Author, LanguageCode) with { AppPlusSplit = AppPlusSplit };
 
     public SupportedLanguageOption EffectiveLanguage => SupportedLanguageCatalog.GetEffective(LanguageCode);
 

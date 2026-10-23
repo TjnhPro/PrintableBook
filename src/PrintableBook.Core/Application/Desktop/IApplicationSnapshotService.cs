@@ -58,7 +58,7 @@ public interface ILocalOutputActionService
     ValueTask CopyPathAsync(FileReference file, CancellationToken cancellationToken = default);
 }
 public sealed record BookDesktopSummary(BookId BookId, string ValidationStatus, IReadOnlyList<BookValidationCheck> ValidationChecks, BookProcessingStatus WorkspaceStatus, string? CurrentStep, string? FailureMessage, IReadOnlyList<string> PublishedArtifacts, IReadOnlyList<InteriorPageSummary> InteriorPages, IReadOnlyList<BookProcessingLogEntry> Logs, int InteriorSourcePageCount, IReadOnlyList<BookFolderSummary>? SourceFolders = null, IReadOnlyList<string>? CoverCandidates = null, string? SelectedCoverReference = null, DateTimeOffset? LastRunAt = null, IReadOnlyList<InteriorSourcePageSummary>? InteriorSourcePages = null, IReadOnlyList<BookAssetSummary>? Assets = null, IReadOnlyList<BookValidationCheck>? FullBookValidationChecks = null, IReadOnlyList<BookOutputSummary>? OutputSummaries = null, string? RepresentativeCoverReference = null, bool HasBackground = true, int ActiveInteriorSourcePageCount = 0, bool HasIntro = false, IReadOnlyList<string>? SelectedIntroInteriorSourceKeys = null, ProductionDesktopSummary? Production = null, BookProductionMetadata? Metadata = null, string? AssignedBrand = null, BookBrandAssignmentStatus AssignmentStatus = BookBrandAssignmentStatus.Unassigned, string? AssignmentReason = null, bool WorkspaceStateAvailable = true, string? WorkspaceStateError = null, int LegacyFrameModePageCount = 0, BookKeywordBuilderState? KeywordBuilder = null, InteriorShuffleDesktopSummary? InteriorShuffle = null, string LanguageCode = "en", string LanguageName = "English", bool IsCompleted = false);
-public sealed record BrandDesktopSummary(string BrandName, BrandValidationStatus ValidationStatus, DateTimeOffset? ValidatedAtUtc, string? Fingerprint, string? Author = null, string MetadataStatus = "Missing", string? MetadataError = null, string LanguageCode = "en", string LanguageName = "English");
+public sealed record BrandDesktopSummary(string BrandName, BrandValidationStatus ValidationStatus, DateTimeOffset? ValidatedAtUtc, string? Fingerprint, string? Author = null, string MetadataStatus = "Missing", string? MetadataError = null, string LanguageCode = "en", string LanguageName = "English", string? AppPlusSplit = null);
 public sealed record ApplicationSnapshot(ApplicationDiscovery Discovery, GlobalSettings GlobalSettings, IReadOnlyList<BookDesktopSummary> BookSummaries, DateTimeOffset RefreshedAt, IReadOnlyList<BrandDesktopSummary>? BrandSummaries = null, IReadOnlyList<BrandImageSizeRequirement>? BrandImageSizeRequirements = null, IReadOnlyList<SupportedLanguageOption>? SupportedLanguages = null);
 
 public interface IApplicationSnapshotService
@@ -127,7 +127,7 @@ public sealed class ApplicationSnapshotService(
                     : await brandValidationService.CheckStateAsync(brand.Directory, settings, cancellationToken);
             }
             var language = SupportedLanguageCatalog.GetEffective(metadata?.LanguageCode);
-            brandSummaries.Add(new BrandDesktopSummary(brand.Name, state.Status, state.ValidatedAtUtc, state.Fingerprint, metadata?.Author, metadataStatus, metadataError, language.Code, language.Name));
+            brandSummaries.Add(new BrandDesktopSummary(brand.Name, state.Status, state.ValidatedAtUtc, state.Fingerprint, metadata?.Author, metadataStatus, metadataError, language.Code, language.Name, metadata?.AppPlusSplit));
             composedBrands.Add(ApplyValidatedBrandFacts(brand, state));
         }
         var brandsByName = composedBrands.ToDictionary(brand => brand.Name, StringComparer.Ordinal);
@@ -439,6 +439,7 @@ public sealed class ApplicationSnapshotService(
                     ProductionAssetKind.FinalCover => "Final Cover",
                     ProductionAssetKind.InteriorCover => "Interior Cover",
                     ProductionAssetKind.BookOwner => "Book Owner",
+                    ProductionAssetKind.AppPlus => "App Plus",
                     _ => definition.FileName
                 },
                 definition.FileName,
@@ -641,6 +642,7 @@ public sealed class ApplicationSnapshotService(
         ProductionAssetKind.FinalCover => "final-cover",
         ProductionAssetKind.InteriorCover => "interior-cover",
         ProductionAssetKind.BookOwner => "book-owner",
+        ProductionAssetKind.AppPlus => "app-plus",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported Production asset kind.")
     };
 
