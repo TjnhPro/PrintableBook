@@ -290,12 +290,13 @@ public sealed class BookWorkspaceLayoutContractTests
         Assert.Contains("class=\"production-asset-controls\"", script, StringComparison.Ordinal);
         Assert.DoesNotContain(".production-preview-grid", layout, StringComparison.Ordinal);
         Assert.Contains(".production-group>legend", layout, StringComparison.Ordinal);
-        Assert.Contains(".production-final-action { grid-column:1/-1;", layout, StringComparison.Ordinal);
+        Assert.Contains(".production-summary-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr));", layout, StringComparison.Ordinal);
+        Assert.Contains(".production-summary-card { display:flex; flex-direction:column;", layout, StringComparison.Ordinal);
         Assert.Contains("<legend>Suggested PDF filenames</legend>", script, StringComparison.Ordinal);
         Assert.Contains("Cover PDF filename", script, StringComparison.Ordinal);
         Assert.Contains("Interior PDF filename", script, StringComparison.Ordinal);
         Assert.Contains("readonly aria-describedby=\"production-pdf-name-help production-pdf-name-error\"", script, StringComparison.Ordinal);
-        Assert.Contains(".production-pdf-name-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)) auto;", layout, StringComparison.Ordinal);
+        Assert.Contains(".production-pdf-name-grid { display:grid; grid-template-columns:minmax(0,1fr);", layout, StringComparison.Ordinal);
         Assert.Contains(".production-pdf-name-error[hidden] { display:none; }", layout, StringComparison.Ordinal);
         Assert.Contains("@media (max-width:900px)", layout, StringComparison.Ordinal);
     }
@@ -369,7 +370,7 @@ public sealed class BookWorkspaceLayoutContractTests
         var layout = File.ReadAllText(Path.Combine(frontend, "css", "book-workspace.css"));
 
         Assert.Contains("Brand Information", script, StringComparison.Ordinal);
-        Assert.Contains("One Brand has one Primary Author", script, StringComparison.Ordinal);
+        Assert.Contains("Author and language for this Brand.", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"brand-author-input\"", script, StringComparison.Ordinal);
         Assert.Contains("data-action=\"save-brand-author\"", script, StringComparison.Ordinal);
         Assert.Contains("assigned Book${impactedBooks === 1", script, StringComparison.Ordinal);
