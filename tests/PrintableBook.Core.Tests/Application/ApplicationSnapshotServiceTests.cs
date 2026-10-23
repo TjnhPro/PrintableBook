@@ -214,7 +214,8 @@ public sealed class ApplicationSnapshotServiceTests
         Assert.Collection(production.Assets,
             asset => Assert.Equal(("final-cover", "Missing"), (asset.AssetKind, asset.SourceStatus)),
             asset => Assert.Equal(("interior-cover", "Missing"), (asset.AssetKind, asset.SourceStatus)),
-            asset => Assert.Equal(("book-owner", "Missing"), (asset.AssetKind, asset.SourceStatus)));
+            asset => Assert.Equal(("book-owner", "Missing"), (asset.AssetKind, asset.SourceStatus)),
+            asset => Assert.Equal(("app-plus", "Missing"), (asset.AssetKind, asset.SourceStatus)));
         Assert.Equal("Missing", production.CoverOutputStatus);
         Assert.Equal("Missing", production.InteriorOutputStatus);
     }
@@ -257,7 +258,7 @@ public sealed class ApplicationSnapshotServiceTests
         Assert.Equal("Production", production.InteriorOutputKind);
         Assert.Equal("Stale", production.InteriorOutputStatus);
         Assert.Equal(timestamp, production.InteriorBuiltAtUtc);
-        Assert.All(production.Assets.Where(asset => asset.AssetKind != "final-cover"), asset =>
+        Assert.All(production.Assets.Where(asset => asset.AssetKind is "interior-cover" or "book-owner"), asset =>
         {
             Assert.Equal("Processed", asset.ProcessedStatus);
             Assert.Contains("?v=", asset.SourceLocalImageUrl);

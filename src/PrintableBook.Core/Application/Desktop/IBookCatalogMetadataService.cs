@@ -22,6 +22,7 @@ public interface IBookCatalogMetadataService
     ValueTask AssignBrandAsync(DiscoveredBook book, DiscoveredBrand brand, CancellationToken cancellationToken = default);
     ValueTask UnassignBrandAsync(DiscoveredBook book, CancellationToken cancellationToken = default);
     ValueTask SetCompletionAsync(DiscoveredBook book, bool isCompleted, CancellationToken cancellationToken = default);
+    ValueTask SaveAppPlusSplitAsync(DiscoveredBrand brand, string split, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     ValueTask SaveBrandAuthorAsync(DiscoveredBrand brand, string? author, CancellationToken cancellationToken = default);
 }
 
@@ -136,6 +137,13 @@ public sealed class BookCatalogMetadataService(
         await stateStore.SaveAsync(book.Workspace, state with { IsCompleted = isCompleted }, cancellationToken);
     }
 
+    public async ValueTask SaveAppPlusSplitAsync(DiscoveredBrand brand, string split, CancellationToken cancellationToken = default)
+    {
+        var values = PrintableBook.Core.Application.Production.AppPlusSplit.Parse(split);
+        var existing = await brandMetadataStore.LoadAsync(brand.Directory, cancellationToken) ?? new BrandMetadata(null);
+        await brandMetadataStore.SaveAsync(brand.Directory, existing with { AppPlusSplit = string.Join("|", values) }, cancellationToken);
+    }
+
     public async ValueTask SaveBrandAuthorAsync(
         DiscoveredBrand brand,
         string? author,
@@ -145,7 +153,7 @@ public sealed class BookCatalogMetadataService(
         var existing = await brandMetadataStore.LoadAsync(brand.Directory, cancellationToken);
         await brandMetadataStore.SaveAsync(
             brand.Directory,
-            BrandMetadata.Create(author, existing?.LanguageCode),
+            BrandMetadata.Create(author, existing?.LanguageCode) with { AppPlusSplit = existing?.AppPlusSplit },
             cancellationToken);
     }
 

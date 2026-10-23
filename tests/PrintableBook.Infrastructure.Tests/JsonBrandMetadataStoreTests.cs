@@ -17,12 +17,13 @@ public sealed class JsonBrandMetadataStoreTests : IAsyncLifetime
     [Fact]
     public async Task SaveAsync_round_trips_trimmed_author_in_brand_local_file()
     {
-        await Store().SaveAsync(BrandDirectory(), BrandMetadata.Create(" Jane Doe ", " DE "));
+        await Store().SaveAsync(BrandDirectory(), BrandMetadata.Create(" Jane Doe ", " DE ") with { AppPlusSplit = "0|1000|1500|2000" });
 
         var restored = await Store().LoadAsync(BrandDirectory());
         var json = await File.ReadAllTextAsync(Path.Combine(BrandDirectory().Value, "brand.metadata.json"));
         Assert.Equal("Jane Doe", restored!.Author);
         Assert.Equal("de", restored.LanguageCode);
+        Assert.Equal("0|1000|1500|2000", restored.AppPlusSplit);
         Assert.Equal("German", restored.EffectiveLanguage.Name);
         Assert.Contains("\"author\": \"Jane Doe\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain(".tmp", string.Join('|', Directory.EnumerateFiles(BrandDirectory().Value)), StringComparison.Ordinal);

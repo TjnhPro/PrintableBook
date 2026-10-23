@@ -13,6 +13,22 @@ public sealed class S3StorageWorkerTests : IAsyncLifetime
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), $"PrintableBook.S3Worker.{Guid.NewGuid():N}");
 
+    [Theory]
+    [InlineData(0)] [InlineData(1)] [InlineData(4)]
+    public async Task App_plus_outputs_are_optional_and_uploaded_when_present(int count)
+    {
+        const string bookId = "AppPlus";
+        var output = await CreateOutputAsync(bookId);
+        for (var i = 1; i <= count; i++) await File.WriteAllTextAsync(Path.Combine(output, $"app_plus_{i}.png"), $"image-{i}");
+        var session = new FakeObjectSession();
+        var (worker, request) = CreateWorker(bookId, session, S3StorageAction.Upload);
+        var result = Assert.IsType<S3StorageBookView>(await ((IBackgroundTaskWorker)worker).ExecuteAsync(request, new Context(), CancellationToken.None));
+        Assert.Equal(S3StorageOutcome.Completed, result.Outcome);
+        Assert.Equal(7 + count, result.TotalCount);
+        Assert.Equal(7 + count, session.Uploaded.Count);
+        Assert.Equal(Enumerable.Range(0, 7 + count), result.Files.Select(f => f.Index));
+    }
+
     [Fact]
     public async Task Upload_preflights_all_files_and_uploads_only_missing_or_changed_files()
     {

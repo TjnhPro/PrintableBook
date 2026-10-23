@@ -3214,3 +3214,52 @@ test("Diagnostics route requests and renders sanitized responsiveness events", (
   messageHandler({ data: { version: 1, id: "request-1", ok: true, command: "background.tasks", payload: [{ kind: "LibraryRefresh", state: "Running", subject: "Library", step: "discovery" }] } });
   assert.match(content.innerHTML, /Active/);
 });
+
+
+test("Production folder buttons open templates and Output and recover after a missing folder", () => {
+  const { messageHandler, contentListeners, content, messages, status } = loadBridge("books");
+  const snapshot = productionSnapshot();
+  snapshot.bookSummaries[0].production.assets.push({ assetKind: "app-plus", fileName: "app_plus.png", sourceStatus: "Missing" });
+  messageHandler({ data: { version: 1, id: "folders", ok: true, command: "app.snapshot", payload: snapshot } });
+  const open = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => open };
+  contentListeners.click({ target: open });
+  const tab = { dataset: { action: "book-tab", bookTab: "production" }, closest: () => tab };
+  contentListeners.click({ target: tab });
+  assert.match(content.innerHTML, /production-final-action[\s\S]*?data-production-folder="templates"/);
+  assert.match(content.innerHTML, /production-app-plus[\s\S]*?data-production-folder="output"/);
+  for (const folder of ["templates", "output"]) {
+    const button = { dataset: { action: "open-production-folder", bookId: "Book 001", productionFolder: folder }, closest: () => button };
+    contentListeners.click({ target: button });
+    const request = messages.at(-1);
+    assert.equal(request.command, "book.production.open-folder");
+    assert.deepEqual(request.payload, { bookId: "Book 001", folder });
+    const count = messages.length;
+    contentListeners.click({ target: button });
+    assert.equal(messages.length, count);
+    messageHandler({ data: { version: 1, id: request.id, ok: false, error: "production_folder_not_found" } });
+    assert.match(status.textContent, /folder does not exist/);
+    contentListeners.click({ target: button });
+    const retry = messages.at(-1);
+    messageHandler({ data: { version: 1, id: retry.id, ok: true, command: "book.production.folder.opened", payload: { bookId: "Book 001", folder } } });
+    assert.match(status.textContent, folder === "templates" ? /Final Interior templates/ : /App Plus Output/);
+  }
+});
+
+test("App Plus uses the assigned Brand split and starts its own production action", () => {
+  const { messageHandler, contentListeners, content, messages } = loadBridge("books");
+  const snapshot = productionSnapshot();
+  snapshot.brandSummaries[0].appPlusSplit = "0|1000|1500|2000";
+  snapshot.bookSummaries[0].production.assets.push({ assetKind: "app-plus", fileName: "app_plus.png", sourceStatus: "Ready to process" });
+  messageHandler({ data: { version: 1, id: "app-plus", ok: true, command: "app.snapshot", payload: snapshot } });
+  const open = { dataset: { action: "select-book", bookId: "Book 001" }, closest: () => open };
+  contentListeners.click({ target: open });
+  const tab = { dataset: { action: "book-tab", bookTab: "production" }, closest: () => tab };
+  contentListeners.click({ target: tab });
+  assert.match(content.innerHTML, /<legend>App Plus<\/legend>/);
+  assert.match(content.innerHTML, /Split: 0\|1000\|1500\|2000/);
+  assert.match(content.innerHTML, /data-production-action="process-app-plus"[^>]*data-production-source-exists="true"/);
+  const process = { dataset: { action: "start-production-action", productionAction: "process-app-plus", bookId: "Book 001" }, closest: () => process };
+  contentListeners.click({ target: process });
+  assert.equal(messages.at(-1).command, "book.production.action.start");
+  assert.equal(messages.at(-1).payload.action, "process-app-plus");
+});

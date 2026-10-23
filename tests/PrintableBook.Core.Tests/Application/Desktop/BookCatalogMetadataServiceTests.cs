@@ -90,13 +90,19 @@ public sealed class BookCatalogMetadataServiceTests
         var brandStore = new BrandStore();
         var service = new BookCatalogMetadataService(new StateStore(), brandStore);
         var brand = Brand("Brand A");
-        brandStore.Set(brand, BrandMetadata.Create("Old Author", "de"));
+        brandStore.Set(brand, BrandMetadata.Create("Old Author", "de") with { AppPlusSplit = "0|1|2|3" });
 
         await service.SaveBrandAuthorAsync(brand, " Jane Doe ");
 
         var saved = await brandStore.LoadAsync(brand.Directory);
         Assert.Equal("Jane Doe", saved!.Author);
         Assert.Equal("de", saved.LanguageCode);
+        Assert.Equal("0|1|2|3", saved.AppPlusSplit);
+        await service.SaveAppPlusSplitAsync(brand, "1|2|3|4");
+        saved = await brandStore.LoadAsync(brand.Directory);
+        Assert.Equal("Jane Doe", saved!.Author);
+        Assert.Equal("de", saved.LanguageCode);
+        Assert.Equal("1|2|3|4", saved.AppPlusSplit);
     }
 
     [Fact]

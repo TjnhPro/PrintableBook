@@ -8,6 +8,7 @@
 
   state.bookKeywordBuilderDrafts = new Map();
   state.bookKeywordBuilderValidation = new Map();
+  state.productionFolderOpenPending = "";
   state.interiorFolderOpenPending = false;
   state.interiorFolderOpenBookId = "";
   state.storageRequestBooks = new Map();
@@ -897,6 +898,12 @@
       button.textContent = active ? "Working…" : button.dataset.productionIdleLabel;
       button.setAttribute("aria-busy", String(active));
     });
+    workspace.querySelectorAll?.('[data-action="open-production-folder"]').forEach((button) => {
+      const pending = state.productionFolderOpenPending === `${button.dataset.bookId}:${button.dataset.productionFolder}`;
+      button.disabled = Boolean(state.productionFolderOpenPending);
+      button.textContent = pending ? "Opening…" : "Open Folder";
+      button.setAttribute("aria-busy", String(pending));
+    });
     const finalButton = workspace.querySelector?.('[data-action="build-final-interior"]');
     if (finalButton) {
       finalButton.disabled = finalButton.dataset.productionReady !== "true" || processIsActive() || state.processStartPending || applicationIsLoading();
@@ -1492,7 +1499,7 @@
     const selected = availableBrands.find((brand) => valueFor(brand, "name", "") === state.inspectedBrand);
     const search = state.brandFilter.trim().toLocaleLowerCase();
     const allBrands = availableBrands.filter((brand) => !search || valueFor(brand, "name", "").toLocaleLowerCase().includes(search));
-    const assets = valueFor(selected, "assets", []);
+    const assets = valueFor(selected, "assets", []).filter(asset => !(valueFor(asset, "type", "") === "Folder" && valueFor(asset, "name", "").toLowerCase() === "appplus"));
     const selectedValidation = brandSummaryFor(selected);
     const validationStatus = brandValidationStatus(valueFor(selectedValidation, "validationStatus", "NotValidated"));
     const validationResult = valueFor(state.brandValidationResult, "brandName", "") === state.inspectedBrand ? state.brandValidationResult : null;
@@ -1565,10 +1572,12 @@
     const cloneFeedbackError = cloneDestinationExists || state.brandCloneFeedbackError;
     const cloneGroup = selected && state.brandCloneOpen ? `<fieldset class="brand-clone-group" aria-busy="${cloneBusy}" ${cloneBusy ? "disabled" : ""}><legend>Clone Brand</legend><div class="brand-clone-grid"><label class="field"><span>Source Brand</span><input class="control" value="${escapeHtml(sourceBrandName)}" readonly aria-readonly="true"></label><label class="field"><span>Language</span><select class="control" data-action="clone-brand-language"><option value="">Select language</option>${supportedLanguages().map((option) => { const code = String(valueFor(option, "code", "")); return `<option value="${escapeHtml(code)}" ${code === state.brandCloneLanguageCode ? "selected" : ""}>${escapeHtml(valueFor(option, "name", code))}</option>`; }).join("")}</select></label><label class="field"><span>Destination Brand name</span><input class="control" value="${escapeHtml(cloneDestination)}" placeholder="Select a language" readonly aria-readonly="true"></label></div><div class="brand-clone-footer"><p class="brand-clone-feedback ${cloneFeedbackError ? "is-error" : ""}" role="${cloneFeedbackError ? "alert" : "status"}" aria-live="polite">${escapeHtml(cloneFeedback)}</p><div class="brand-clone-actions"><button class="button-secondary" type="button" data-action="cancel-brand-clone">Cancel</button><button class="button-primary" type="button" data-action="submit-brand-clone" aria-busy="${cloneBusy}" ${cloneBlocked ? "disabled" : ""}>${cloneBusy ? "Cloning…" : "Clone Brand"}</button></div></div></fieldset>` : "";
     const cloneNotice = selected && state.brandCloneNotice ? `<p class="brand-clone-notice" role="status" aria-live="polite">${escapeHtml(state.brandCloneNotice)}</p>` : "";
-    const brandInfo = selected ? `<section class="catalog-card brand-region-card"><div class="catalog-card-heading"><div><h3>Brand Information</h3><p>One Brand has one Primary Author and one persisted Language.</p></div><span class="status-badge ${metadata.tone}">${escapeHtml(metadata.label)}</span></div><label class="field"><span>Language</span><input class="control" value="${escapeHtml(languageNameFor(brandSummaryFor(selected)))}" readonly aria-readonly="true"></label><label class="field"><span>Author</span><input class="control" data-action="brand-author-input" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" value="${escapeHtml(authorDraft)}" placeholder="Unknown" autocomplete="off"></label>${impactedBooks ? `<p class="catalog-warning" role="alert">Saving this Author will make ${impactedBooks} assigned Book${impactedBooks === 1 ? "" : "s"} invalid. Their assignments will be kept for review.</p>` : ""}<div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" role="${state.catalogFeedbackError ? "alert" : "status"}" aria-live="polite">${state.catalogMutationTarget === valueFor(selected, "name", "") ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-brand-author" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "brand.author.save"}" ${!authorDirty || state.catalogMutationPending || processIsActive() ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "brand.author.save" ? "Saving…" : "Save Author"}</button></div></section>` : "";
-    const validationInfo = selected ? `<section class="catalog-card brand-region-card brand-validation-card"><div class="catalog-card-heading"><div><h3>Brand Validation</h3><p>Check every required asset before processing.</p></div>${badge(validationStatus)}</div><dl class="brand-validation-facts"><div><dt>Last validated</dt><dd>${escapeHtml(dateTime(valueFor(selectedValidation, "validatedAtUtc", null)))}</dd></div><div><dt>Files checked</dt><dd>IntroTemplate + 5 required files</dd></div></dl><p class="panel-note">Validate IntroTemplate, frame.png, background.png, cover.psd, app_plus.psd, and book_owner.psd.</p><div class="brand-validation-action"><button class="button-primary" data-action="validate-brand" ${processIsActive() ? "disabled" : ""}>Validate Brand</button></div></section>` : "";
+    const brandInfo = selected ? `<fieldset class="catalog-card brand-region-card"><legend>Brand Information</legend><div class="catalog-card-heading"><div><p>Author and language for this Brand.</p></div><span class="status-badge ${metadata.tone}">${escapeHtml(metadata.label)}</span></div><label class="field"><span>Language</span><input class="control" value="${escapeHtml(languageNameFor(brandSummaryFor(selected)))}" readonly aria-readonly="true"></label><label class="field"><span>Author</span><input class="control" data-action="brand-author-input" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" value="${escapeHtml(authorDraft)}" placeholder="Unknown" autocomplete="off"></label>${impactedBooks ? `<p class="catalog-warning" role="alert">Saving this Author will make ${impactedBooks} assigned Book${impactedBooks === 1 ? "" : "s"} invalid. Their assignments will be kept for review.</p>` : ""}<div class="catalog-actions"><p class="catalog-feedback ${state.catalogFeedbackError ? "is-error" : ""}" role="${state.catalogFeedbackError ? "alert" : "status"}" aria-live="polite">${state.catalogMutationTarget === valueFor(selected, "name", "") ? escapeHtml(state.catalogFeedback) : ""}</p><button class="button-primary" data-action="save-brand-author" data-brand-name="${escapeHtml(valueFor(selected, "name", ""))}" aria-busy="${state.catalogMutationPending && state.catalogMutationCommand === "brand.author.save"}" ${!authorDirty || state.catalogMutationPending || processIsActive() ? "disabled" : ""}>${state.catalogMutationPending && state.catalogMutationCommand === "brand.author.save" ? "Saving…" : "Save Author"}</button></div></fieldset>` : "";
+    const splitValues = String(valueFor(brandSummaryFor(selected), "appPlusSplit", "") || "").split("|");
+    const splitGroup = selected ? `<fieldset class="catalog-card brand-region-card" data-app-plus-settings><legend>App Plus Split</legend><div class="catalog-form-grid app-plus-split-grid">${[0,1,2,3].map(i => `<label class="field"><span>Y${i + 1} (px)</span><input class="control" type="number" min="0" max="10000" step="1" data-app-plus-y="${i}" value="${escapeHtml(splitValues[i] || "")}" required></label>`).join("")}</div><p class="catalog-feedback" role="status">${state.catalogMutationTarget === sourceBrandName ? escapeHtml(state.catalogFeedback) : ""}</p><div class="brand-validation-action"><button class="button-primary" data-action="save-app-plus-split" data-brand-name="${escapeHtml(sourceBrandName)}" ${state.catalogMutationPending || processIsActive() ? "disabled" : ""}>Save</button></div></fieldset>` : "";
+    const validationInfo = selected ? `<fieldset class="catalog-card brand-region-card brand-validation-card"><legend>Brand Validation</legend><div class="catalog-card-heading"><div><p>Check every required asset before processing.</p></div>${badge(validationStatus)}</div><dl class="brand-validation-facts"><div><dt>Last validated</dt><dd>${escapeHtml(dateTime(valueFor(selectedValidation, "validatedAtUtc", null)))}</dd></div><div><dt>Files checked</dt><dd>IntroTemplate + 5 required files</dd></div></dl><p class="panel-note">Validate IntroTemplate, frame.png, background.png, cover.psd, app_plus.psd, and book_owner.psd.</p><div class="brand-validation-action"><button class="button-primary" data-action="validate-brand" ${processIsActive() ? "disabled" : ""}>Validate Brand</button></div></fieldset>` : "";
     const detail = selected
-      ? `<section class="panel brand-detail-panel"><header class="brand-panel-header"><div><p class="eyebrow">Selected Brand</p><h2>${escapeHtml(valueFor(selected, "name", ""))}</h2></div><div class="brand-detail-actions"><button class="button-secondary" type="button" data-action="open-brand-clone" aria-expanded="${state.brandCloneOpen}" ${cloneBusy || processIsActive() ? "disabled" : ""}>Clone Brand</button><div class="brand-detail-badges"><span class="status-badge ${metadata.tone}">${escapeHtml(metadata.label)}</span>${badge(validationStatus)}</div></div></header>${cloneNotice}${cloneGroup}<div class="brand-detail-scroll"><div class="brand-region-grid">${brandInfo}${validationInfo}</div>${validationMessage}${assetInventory}</div></section>`
+      ? `<section class="panel brand-detail-panel"><header class="brand-panel-header"><div><p class="eyebrow">Selected Brand</p><h2>${escapeHtml(valueFor(selected, "name", ""))}</h2></div><div class="brand-detail-actions"><button class="button-secondary" type="button" data-action="open-brand-clone" aria-expanded="${state.brandCloneOpen}" ${cloneBusy || processIsActive() ? "disabled" : ""}>Clone Brand</button><div class="brand-detail-badges"><span class="status-badge ${metadata.tone}">${escapeHtml(metadata.label)}</span>${badge(validationStatus)}</div></div></header>${cloneNotice}${cloneGroup}<div class="brand-detail-scroll"><div class="brand-region-grid">${brandInfo}${splitGroup}${validationInfo}</div>${validationMessage}${assetInventory}</div></section>`
       : `<section class="panel brand-detail-panel"><header class="brand-panel-header"><div><p class="eyebrow">Selected Brand</p><h2>Brand detail</h2></div></header><div class="brand-detail-scroll"><div class="brand-detail-empty"><strong>No Brand selected</strong><p>Add a Brand folder or refresh the library to inspect its templates.</p></div></div></section>`;
     content.innerHTML = `<section class="brands-page"><div class="page-header"><div><h1>Brands & templates</h1><p>Inspect reusable Brand assets and resolve exact file requirements before processing.</p></div></div><div class="brand-workspace"><section class="panel brand-list-panel"><header class="brand-panel-header"><div><h2>Brands</h2><p data-brand-result-count aria-live="polite">${allBrands.length} of ${availableBrands.length} shown</p></div></header><label class="brand-search"><span class="sr-only">Search Brands by name</span><input class="control" type="search" data-action="filter-brands" value="${escapeHtml(state.brandFilter)}" placeholder="Search Brand name…" autocomplete="off"></label><div class="brand-list-scroll" data-brand-list>${brandListMarkup(allBrands)}</div></section>${detail}</div></section>`;
   };
@@ -1613,11 +1622,20 @@
     const coverPreviewUrl = valueFor(coverOutput, "thumbnailImageUrl", "");
     const taskBusy = productionActionActive();
     const controlsBusy = taskBusy || processIsActive() || state.cacheCleanupActive || applicationIsLoading();
-    const actionFor = (kind) => kind === "final-cover" ? "build-cover-pdf" : kind === "interior-cover" ? "process-interior-cover" : "process-book-owner";
-    const actionLabel = (kind) => kind === "final-cover" ? "Build Cover PDF" : kind === "interior-cover" ? "Process Interior Cover" : "Process Book Owner";
+    const actionFor = (kind) => kind === "app-plus" ? "process-app-plus" : kind === "final-cover" ? "build-cover-pdf" : kind === "interior-cover" ? "process-interior-cover" : "process-book-owner";
+    const actionLabel = (kind) => kind === "app-plus" ? "Process" : kind === "final-cover" ? "Build Cover PDF" : kind === "interior-cover" ? "Process Interior Cover" : "Process Book Owner";
+    const openFolderButton = (folder, label) => {
+      const pending = state.productionFolderOpenPending === `${bookId(book)}:${folder}`;
+      return `<button class="button-secondary" data-action="open-production-folder" data-production-folder="${folder}" data-book-id="${escapeHtml(bookId(book))}" title="${label}" aria-label="${label}" aria-busy="${pending}" ${state.productionFolderOpenPending ? "disabled" : ""}>${pending ? "Opening…" : "Open Folder"}</button>`;
+    };
     const group = (asset) => {
       const kind = valueFor(asset, "assetKind", "");
       const label = valueFor(asset, "displayName", "Production asset");
+      if (kind === "app-plus") {
+        const split = valueFor(brandSummaries().find(b => valueFor(b, "brandName", "") === assignedBrandName(summary)), "appPlusSplit", "");
+        const ready = valueFor(asset, "sourceStatus", "Missing") !== "Missing" && Boolean(split) && assignmentStatus(summary) === "Valid";
+        return `<fieldset class="production-group production-summary-card production-app-plus"><legend>App Plus</legend><p>Source: ${escapeHtml(valueFor(asset, "fileName", "app_plus.png"))}</p><p>Split: ${escapeHtml(split || "Configure App Plus Split in the assigned Brand first.")}</p><p class="production-action-help">Save four cropped PNGs to Output.</p><div class="production-card-actions panel-actions"><button class="button-secondary" data-action="upload-production-asset" data-production-asset="app-plus" data-production-idle-label="Upload" data-book-id="${escapeHtml(bookId(book))}" ${controlsBusy ? "disabled" : ""}>Upload</button>${openFolderButton("output", "Open App Plus Output folder")}<button class="button-primary" data-action="start-production-action" data-production-action="process-app-plus" data-production-source-exists="${ready}" data-production-idle-label="Process" data-book-id="${escapeHtml(bookId(book))}" ${!ready || controlsBusy ? "disabled" : ""}>Process</button></div></fieldset>`;
+      }
       const sourceStatus = valueFor(asset, "sourceStatus", "Missing");
       const processedStatus = valueFor(asset, "processedStatus", "Not applicable");
       const exists = sourceStatus !== "Missing";
@@ -1640,11 +1658,11 @@
     const namesPending = state.productionPdfNamePending.has(id);
     const namesError = state.productionPdfNameErrors.get(id) ?? "";
     const suggestedName = (label, inputId, value) => `<label class="field production-pdf-name-field" for="${inputId}"><span>${label}</span><input id="${inputId}" class="control" type="text" value="${escapeHtml(value)}" placeholder="${namesPending ? "Generating…" : "Unavailable"}" readonly aria-describedby="production-pdf-name-help production-pdf-name-error"></label>`;
-    const nameSuggestions = `<fieldset class="production-group production-pdf-names" aria-busy="${namesPending}"><legend>Suggested PDF filenames</legend><div class="production-pdf-name-grid">${suggestedName("Cover PDF filename", "production-cover-pdf-name", valueFor(suggestedNames, "coverFileName", ""))}${suggestedName("Interior PDF filename", "production-interior-pdf-name", valueFor(suggestedNames, "interiorFileName", ""))}<button class="button-secondary" data-action="randomize-pdf-names" data-book-id="${escapeHtml(id)}" ${namesPending ? "disabled" : ""}>${namesPending ? suggestedNames ? "Randomizing…" : "Generating…" : namesError ? "Retry" : "Randomize"}</button></div><p id="production-pdf-name-help" class="production-action-help">Suggestions only. Production keeps the canonical Cover and Interior filenames; rename downloaded files when needed.</p><p id="production-pdf-name-error" class="production-pdf-name-error" role="${namesError ? "alert" : "status"}" aria-live="polite" ${namesError ? "" : "hidden"}>${escapeHtml(namesError)}</p></fieldset>`;
+    const nameSuggestions = `<fieldset class="production-group production-summary-card production-pdf-names" aria-busy="${namesPending}"><legend>Suggested PDF filenames</legend><div class="production-pdf-name-grid">${suggestedName("Cover PDF filename", "production-cover-pdf-name", valueFor(suggestedNames, "coverFileName", ""))}${suggestedName("Interior PDF filename", "production-interior-pdf-name", valueFor(suggestedNames, "interiorFileName", ""))}</div><p id="production-pdf-name-help" class="production-action-help">Use these names when downloading your PDFs.</p><p id="production-pdf-name-error" class="production-pdf-name-error" role="${namesError ? "alert" : "status"}" aria-live="polite" ${namesError ? "" : "hidden"}>${escapeHtml(namesError)}</p><div class="panel-actions"><button class="button-secondary" data-action="randomize-pdf-names" data-book-id="${escapeHtml(id)}" ${namesPending ? "disabled" : ""}>${namesPending ? suggestedNames ? "Randomizing…" : "Generating…" : namesError ? "Retry" : "Randomize"}</button></div></fieldset>`;
     const finalBusy = productionInteriorIsRunning();
     const finalBlocked = processIsActive() || state.processStartPending || applicationIsLoading();
-    const finalInterior = `<fieldset class="production-group production-final-action"><legend>Final Interior</legend><div><p>Order: Interior Cover → Book Owner → Intro → randomized Interior. Background pages follow the saved HasBackground setting.</p><p id="production-final-help">${escapeHtml(readiness.reason)} Only Build Final Interior replaces the current Interior PDF. Process Interior refreshes processed-page previews only.</p><small>Current output: ${escapeHtml(valueFor(production, "interiorOutputKind", "Legacy"))} · ${dateTime(valueFor(production, "interiorBuiltAtUtc", null))}</small></div><button class="button-primary" data-action="build-final-interior" data-production-ready="${readiness.ready}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-final-help" aria-busy="${finalBusy}" ${readiness.ready && !finalBlocked ? "" : "disabled"}>${finalBusy ? "Building…" : "Build Final Interior"}</button></fieldset>`;
-    return `<section class="production-workspace" aria-busy="${taskBusy || finalBusy}">${feedback}<div class="production-group-grid">${nameSuggestions}${finalInterior}${assets.length ? assets.map(group).join("") : "<p class=\"empty-copy production-assets-empty\">Production workspace status is unavailable. Refresh the library.</p>"}</div></section>`;
+    const finalInterior = `<fieldset class="production-group production-summary-card production-final-action"><legend>Final Interior</legend><div><p>Interior Cover → Book Owner → Intro → shuffled pages. Background follows Book settings.</p><p id="production-final-help">${escapeHtml(readiness.ready ? "Build and replace the Interior PDF." : readiness.reason)}</p><small>${escapeHtml(valueFor(production, "interiorOutputKind", "Legacy"))} · ${dateTime(valueFor(production, "interiorBuiltAtUtc", null))}</small></div><div class="panel-actions">${openFolderButton("templates", "Open Final Interior templates folder")}<button class="button-primary" data-action="build-final-interior" data-production-ready="${readiness.ready}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-final-help" aria-busy="${finalBusy}" ${readiness.ready && !finalBlocked ? "" : "disabled"}>${finalBusy ? "Building…" : "Build Final Interior"}</button></div></fieldset>`;
+    return `<section class="production-workspace" aria-busy="${taskBusy || finalBusy}">${feedback}<div class="production-summary-grid">${nameSuggestions}${finalInterior}${assets.filter(asset => valueFor(asset, "assetKind", "") === "app-plus").map(group).join("")}</div><div class="production-group-grid">${assets.length ? assets.filter(asset => valueFor(asset, "assetKind", "") !== "app-plus").map(group).join("") : "<p class=\"empty-copy production-assets-empty\">Production workspace status is unavailable. Refresh the library.</p>"}</div></section>`;
   };
 
   const renderBookInformation = (book, summary) => {
@@ -2669,7 +2687,7 @@
     if (currentRoute() === "books" && state.bookDrawerOpen) updateBookCatalogMutationUi();
     if (currentRoute() === "brands") render("brands", false);
   };
-  const catalogErrorMessage = (code) => ({ invalid_book_completion: "The completion request is invalid. Refresh and retry.", invalid_book_metadata: "Book Information is invalid. Review Title, Subtitle, Subcover, ASIN, and Author, then retry.", invalid_keyword_builder: "Keyword Builder input is invalid.", keyword_preview_invalid: "This preview is invalid or expired. Shuffle again.", keyword_preview_stale: "Inputs changed after this preview. Shuffle again.", keyword_preview_version_unsupported: "This saved output uses an older shuffle version. Shuffle again.", keyword_legacy_shuffle_required: "Shuffle once to update this legacy keyword output.", keyword_word_too_long: "A keyword word is longer than 50 characters. Shorten it and retry.", keyword_capacity_exceeded: "The ordered keyword stream needs more than seven fields. Remove, shorten, or reorder source keywords.", invalid_brand_author: "Brand Author must be a single line.", book_author_required: "Save a Book Author before assigning a Brand.", brand_author_required: "The selected Brand does not have an Author.", book_brand_language_mismatch: "Book Language must match Brand Language before assignment.", book_brand_author_mismatch: "Book Author must match Brand Author before assignment.", brand_metadata_invalid: "Brand metadata could not be read. Fix the metadata file and retry.", processing_active: "Interior Processing is running. Try again when it finishes.", production_action_active: "A Production action is running. Try again when it finishes.", cache_cleanup_active: "Cache Cleanup is running. Try again when it finishes.", snapshot_unavailable: "The library snapshot is unavailable. Refresh and retry.", book_not_found: "This Book is no longer available. Refresh the library.", brand_not_found: "This Brand is no longer available. Refresh the library." })[code] ?? "The change could not be saved. Refresh and retry.";
+  const catalogErrorMessage = (code) => ({ invalid_app_plus_split: "Enter four increasing integer Y positions from 0 to 10000.", invalid_book_completion: "The completion request is invalid. Refresh and retry.", invalid_book_metadata: "Book Information is invalid. Review Title, Subtitle, Subcover, ASIN, and Author, then retry.", invalid_keyword_builder: "Keyword Builder input is invalid.", keyword_preview_invalid: "This preview is invalid or expired. Shuffle again.", keyword_preview_stale: "Inputs changed after this preview. Shuffle again.", keyword_preview_version_unsupported: "This saved output uses an older shuffle version. Shuffle again.", keyword_legacy_shuffle_required: "Shuffle once to update this legacy keyword output.", keyword_word_too_long: "A keyword word is longer than 50 characters. Shorten it and retry.", keyword_capacity_exceeded: "The ordered keyword stream needs more than seven fields. Remove, shorten, or reorder source keywords.", invalid_brand_author: "Brand Author must be a single line.", book_author_required: "Save a Book Author before assigning a Brand.", brand_author_required: "The selected Brand does not have an Author.", book_brand_language_mismatch: "Book Language must match Brand Language before assignment.", book_brand_author_mismatch: "Book Author must match Brand Author before assignment.", brand_metadata_invalid: "Brand metadata could not be read. Fix the metadata file and retry.", processing_active: "Interior Processing is running. Try again when it finishes.", production_action_active: "A Production action is running. Try again when it finishes.", cache_cleanup_active: "Cache Cleanup is running. Try again when it finishes.", snapshot_unavailable: "The library snapshot is unavailable. Refresh and retry.", book_not_found: "This Book is no longer available. Refresh the library.", brand_not_found: "This Brand is no longer available. Refresh the library." })[code] ?? "The change could not be saved. Refresh and retry.";
   document.addEventListener("keydown", (event) => {
     const activeTab = event.target.closest?.('[role="tab"][data-action="book-tab"]');
     if (activeTab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
@@ -2772,6 +2790,18 @@
       render("books", false);
     }
     if (action === "validate-brand") { const requestId = send("brand.validate", { brandName: state.inspectedBrand }); state.brandValidationRequestBrands.set(requestId, state.inspectedBrand); }
+    if (action === "save-app-plus-split") {
+      const inputs = [...document.querySelectorAll("[data-app-plus-y]")];
+      if (inputs.some(input => !input.reportValidity())) return;
+      const values = inputs.map(input => Number(input.value));
+      if (values.some((value, i) => i > 0 && value <= values[i - 1])) {
+        const feedback = document.querySelector("[data-app-plus-settings] .catalog-feedback");
+        feedback.textContent = "Y positions must increase from Y1 to Y4.";
+        return;
+      }
+      beginCatalogMutation("brand.app-plus-split.save", target.dataset.brandName, { brandName: target.dataset.brandName, appPlusSplit: values.join("|") });
+      return;
+    }
     if (action === "save-brand-author") {
       const brandName = target.dataset.brandName;
       beginCatalogMutation("brand.author.save", brandName, { brandName, author: state.brandAuthorDrafts.get(brandName) ?? "" });
@@ -2919,6 +2949,14 @@
       state.brandTemplateCopyPending = true;
       refreshBookDrawerBody();
       send("book.brand.templates.copy", { bookId: target.dataset.bookId });
+    }
+    if (action === "open-production-folder" && !state.productionFolderOpenPending) {
+      state.productionFolderOpenPending = `${target.dataset.bookId}:${target.dataset.productionFolder}`;
+      state.productionFeedback = "Opening folder…";
+      state.productionFeedbackError = false;
+      state.productionFeedbackWarning = false;
+      updateProductionInteractionUi();
+      send("book.production.open-folder", { bookId: target.dataset.bookId, folder: target.dataset.productionFolder });
     }
     if (action === "upload-production-asset" && !state.productionImportPending && !productionActionActive()) {
       state.productionImportPending = target.dataset.productionAsset;
@@ -3423,7 +3461,7 @@
         status.textContent = "Interior order randomized";
         if (state.bookDrawerOpen && state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();
       }
-      if (["book.completion.set", "book.metadata.save", "book.brand.assign", "book.brand.unassign", "brand.author.save"].includes(requestCommand)) {
+      if (["book.completion.set", "book.metadata.save", "book.brand.assign", "book.brand.unassign", "brand.author.save", "brand.app-plus-split.save"].includes(requestCommand)) {
         state.catalogMutationPending = false;
         state.catalogMutationAwaitingSnapshot = true;
         state.catalogFeedback = "Saved. Refreshing library…";
@@ -3668,6 +3706,14 @@
           : "Opened the PDF preview.";
       setPdfLibraryFeedback(message);
       status.textContent = message;
+    } else if (ok && command === "book.production.folder.opened") {
+      state.productionFolderOpenPending = "";
+      state.productionFeedback = valueFor(valueFor(response, "payload", {}), "folder", "") === "templates"
+        ? "Opened Final Interior templates folder." : "Opened App Plus Output folder.";
+      state.productionFeedbackError = false;
+      state.productionFeedbackWarning = false;
+      updateProductionInteractionUi();
+      status.textContent = state.productionFeedback;
     } else if (ok && command === "book.interior.folder.opened") {
       state.interiorFolderOpenPending = false;
       state.interiorFolderOpenBookId = "";
@@ -3803,6 +3849,19 @@
         status.textContent = "Random Interior needs attention";
         return;
       }
+      if (requestCommand === "book.production.open-folder") {
+        state.productionFolderOpenPending = "";
+        state.productionFeedback = ({
+          invalid_production_folder_action: "The folder action was invalid. Refresh and try again.",
+          production_folder_not_found: "The folder does not exist yet. Copy Brand templates or process the Book first.",
+          production_folder_launch_failed: "Windows could not open the folder. Check folder permissions and try again."
+        })[String(error)] ?? "The Production folder could not be opened. Try again.";
+        state.productionFeedbackError = true;
+        state.productionFeedbackWarning = false;
+        updateProductionInteractionUi();
+        status.textContent = state.productionFeedback;
+        return;
+      }
       if (requestCommand === "book.interior.open-folder") {
         state.interiorFolderOpenPending = false;
         state.interiorFolderOpenBookId = "";
@@ -3822,7 +3881,7 @@
         status.textContent = "Settings could not be saved";
         return;
       }
-      if (["book.completion.set", "book.metadata.save", "book.keywords.shuffle", "book.keywords.preview.open", "book.keywords.preview.update-ads-asin", "book.keywords.save", "book.brand.assign", "book.brand.unassign", "brand.author.save"].includes(requestCommand)) {
+      if (["book.completion.set", "book.metadata.save", "book.keywords.shuffle", "book.keywords.preview.open", "book.keywords.preview.update-ads-asin", "book.keywords.save", "book.brand.assign", "book.brand.unassign", "brand.author.save", "brand.app-plus-split.save"].includes(requestCommand)) {
         state.catalogMutationPending = false;
         state.catalogMutationAwaitingSnapshot = false;
         if (requestCommand.startsWith("book.keywords.")) state.keywordBuilderPending.delete(state.catalogMutationTarget || state.selectedBookId);
