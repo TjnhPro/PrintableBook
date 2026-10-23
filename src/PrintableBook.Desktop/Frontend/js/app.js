@@ -8,6 +8,7 @@
 
   state.bookKeywordBuilderDrafts = new Map();
   state.bookKeywordBuilderValidation = new Map();
+  state.productionFolderOpenPending = "";
   state.interiorFolderOpenPending = false;
   state.interiorFolderOpenBookId = "";
   state.storageRequestBooks = new Map();
@@ -897,6 +898,12 @@
       button.textContent = active ? "Working…" : button.dataset.productionIdleLabel;
       button.setAttribute("aria-busy", String(active));
     });
+    workspace.querySelectorAll?.('[data-action="open-production-folder"]').forEach((button) => {
+      const pending = state.productionFolderOpenPending === `${button.dataset.bookId}:${button.dataset.productionFolder}`;
+      button.disabled = Boolean(state.productionFolderOpenPending);
+      button.textContent = pending ? "Opening…" : "Open Folder";
+      button.setAttribute("aria-busy", String(pending));
+    });
     const finalButton = workspace.querySelector?.('[data-action="build-final-interior"]');
     if (finalButton) {
       finalButton.disabled = finalButton.dataset.productionReady !== "true" || processIsActive() || state.processStartPending || applicationIsLoading();
@@ -1617,13 +1624,17 @@
     const controlsBusy = taskBusy || processIsActive() || state.cacheCleanupActive || applicationIsLoading();
     const actionFor = (kind) => kind === "app-plus" ? "process-app-plus" : kind === "final-cover" ? "build-cover-pdf" : kind === "interior-cover" ? "process-interior-cover" : "process-book-owner";
     const actionLabel = (kind) => kind === "app-plus" ? "Process" : kind === "final-cover" ? "Build Cover PDF" : kind === "interior-cover" ? "Process Interior Cover" : "Process Book Owner";
+    const openFolderButton = (folder, label) => {
+      const pending = state.productionFolderOpenPending === `${bookId(book)}:${folder}`;
+      return `<button class="button-secondary" data-action="open-production-folder" data-production-folder="${folder}" data-book-id="${escapeHtml(bookId(book))}" title="${label}" aria-label="${label}" aria-busy="${pending}" ${state.productionFolderOpenPending ? "disabled" : ""}>${pending ? "Opening…" : "Open Folder"}</button>`;
+    };
     const group = (asset) => {
       const kind = valueFor(asset, "assetKind", "");
       const label = valueFor(asset, "displayName", "Production asset");
       if (kind === "app-plus") {
         const split = valueFor(brandSummaries().find(b => valueFor(b, "brandName", "") === assignedBrandName(summary)), "appPlusSplit", "");
         const ready = valueFor(asset, "sourceStatus", "Missing") !== "Missing" && Boolean(split) && assignmentStatus(summary) === "Valid";
-        return `<fieldset class="production-group production-summary-card production-app-plus"><legend>App Plus</legend><p>Source: ${escapeHtml(valueFor(asset, "fileName", "app_plus.png"))}</p><p>Split: ${escapeHtml(split || "Configure App Plus Split in the assigned Brand first.")}</p><p class="production-action-help">Save four cropped PNGs to Output.</p><div class="production-card-actions panel-actions"><button class="button-secondary" data-action="upload-production-asset" data-production-asset="app-plus" data-production-idle-label="Upload" data-book-id="${escapeHtml(bookId(book))}" ${controlsBusy ? "disabled" : ""}>Upload</button><button class="button-primary" data-action="start-production-action" data-production-action="process-app-plus" data-production-source-exists="${ready}" data-production-idle-label="Process" data-book-id="${escapeHtml(bookId(book))}" ${!ready || controlsBusy ? "disabled" : ""}>Process</button></div></fieldset>`;
+        return `<fieldset class="production-group production-summary-card production-app-plus"><legend>App Plus</legend><p>Source: ${escapeHtml(valueFor(asset, "fileName", "app_plus.png"))}</p><p>Split: ${escapeHtml(split || "Configure App Plus Split in the assigned Brand first.")}</p><p class="production-action-help">Save four cropped PNGs to Output.</p><div class="production-card-actions panel-actions"><button class="button-secondary" data-action="upload-production-asset" data-production-asset="app-plus" data-production-idle-label="Upload" data-book-id="${escapeHtml(bookId(book))}" ${controlsBusy ? "disabled" : ""}>Upload</button>${openFolderButton("output", "Open App Plus Output folder")}<button class="button-primary" data-action="start-production-action" data-production-action="process-app-plus" data-production-source-exists="${ready}" data-production-idle-label="Process" data-book-id="${escapeHtml(bookId(book))}" ${!ready || controlsBusy ? "disabled" : ""}>Process</button></div></fieldset>`;
       }
       const sourceStatus = valueFor(asset, "sourceStatus", "Missing");
       const processedStatus = valueFor(asset, "processedStatus", "Not applicable");
@@ -1650,7 +1661,7 @@
     const nameSuggestions = `<fieldset class="production-group production-summary-card production-pdf-names" aria-busy="${namesPending}"><legend>Suggested PDF filenames</legend><div class="production-pdf-name-grid">${suggestedName("Cover PDF filename", "production-cover-pdf-name", valueFor(suggestedNames, "coverFileName", ""))}${suggestedName("Interior PDF filename", "production-interior-pdf-name", valueFor(suggestedNames, "interiorFileName", ""))}</div><p id="production-pdf-name-help" class="production-action-help">Use these names when downloading your PDFs.</p><p id="production-pdf-name-error" class="production-pdf-name-error" role="${namesError ? "alert" : "status"}" aria-live="polite" ${namesError ? "" : "hidden"}>${escapeHtml(namesError)}</p><div class="panel-actions"><button class="button-secondary" data-action="randomize-pdf-names" data-book-id="${escapeHtml(id)}" ${namesPending ? "disabled" : ""}>${namesPending ? suggestedNames ? "Randomizing…" : "Generating…" : namesError ? "Retry" : "Randomize"}</button></div></fieldset>`;
     const finalBusy = productionInteriorIsRunning();
     const finalBlocked = processIsActive() || state.processStartPending || applicationIsLoading();
-    const finalInterior = `<fieldset class="production-group production-summary-card production-final-action"><legend>Final Interior</legend><div><p>Interior Cover → Book Owner → Intro → shuffled pages. Background follows Book settings.</p><p id="production-final-help">${escapeHtml(readiness.ready ? "Build and replace the Interior PDF." : readiness.reason)}</p><small>${escapeHtml(valueFor(production, "interiorOutputKind", "Legacy"))} · ${dateTime(valueFor(production, "interiorBuiltAtUtc", null))}</small></div><div class="panel-actions"><button class="button-primary" data-action="build-final-interior" data-production-ready="${readiness.ready}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-final-help" aria-busy="${finalBusy}" ${readiness.ready && !finalBlocked ? "" : "disabled"}>${finalBusy ? "Building…" : "Build Final Interior"}</button></div></fieldset>`;
+    const finalInterior = `<fieldset class="production-group production-summary-card production-final-action"><legend>Final Interior</legend><div><p>Interior Cover → Book Owner → Intro → shuffled pages. Background follows Book settings.</p><p id="production-final-help">${escapeHtml(readiness.ready ? "Build and replace the Interior PDF." : readiness.reason)}</p><small>${escapeHtml(valueFor(production, "interiorOutputKind", "Legacy"))} · ${dateTime(valueFor(production, "interiorBuiltAtUtc", null))}</small></div><div class="panel-actions">${openFolderButton("templates", "Open Final Interior templates folder")}<button class="button-primary" data-action="build-final-interior" data-production-ready="${readiness.ready}" data-book-id="${escapeHtml(bookId(book))}" aria-describedby="production-final-help" aria-busy="${finalBusy}" ${readiness.ready && !finalBlocked ? "" : "disabled"}>${finalBusy ? "Building…" : "Build Final Interior"}</button></div></fieldset>`;
     return `<section class="production-workspace" aria-busy="${taskBusy || finalBusy}">${feedback}<div class="production-summary-grid">${nameSuggestions}${finalInterior}${assets.filter(asset => valueFor(asset, "assetKind", "") === "app-plus").map(group).join("")}</div><div class="production-group-grid">${assets.length ? assets.filter(asset => valueFor(asset, "assetKind", "") !== "app-plus").map(group).join("") : "<p class=\"empty-copy production-assets-empty\">Production workspace status is unavailable. Refresh the library.</p>"}</div></section>`;
   };
 
@@ -2939,6 +2950,14 @@
       refreshBookDrawerBody();
       send("book.brand.templates.copy", { bookId: target.dataset.bookId });
     }
+    if (action === "open-production-folder" && !state.productionFolderOpenPending) {
+      state.productionFolderOpenPending = `${target.dataset.bookId}:${target.dataset.productionFolder}`;
+      state.productionFeedback = "Opening folder…";
+      state.productionFeedbackError = false;
+      state.productionFeedbackWarning = false;
+      updateProductionInteractionUi();
+      send("book.production.open-folder", { bookId: target.dataset.bookId, folder: target.dataset.productionFolder });
+    }
     if (action === "upload-production-asset" && !state.productionImportPending && !productionActionActive()) {
       state.productionImportPending = target.dataset.productionAsset;
       state.productionFocusSelector = `[data-action="upload-production-asset"][data-production-asset="${target.dataset.productionAsset}"]`;
@@ -3687,6 +3706,14 @@
           : "Opened the PDF preview.";
       setPdfLibraryFeedback(message);
       status.textContent = message;
+    } else if (ok && command === "book.production.folder.opened") {
+      state.productionFolderOpenPending = "";
+      state.productionFeedback = valueFor(valueFor(response, "payload", {}), "folder", "") === "templates"
+        ? "Opened Final Interior templates folder." : "Opened App Plus Output folder.";
+      state.productionFeedbackError = false;
+      state.productionFeedbackWarning = false;
+      updateProductionInteractionUi();
+      status.textContent = state.productionFeedback;
     } else if (ok && command === "book.interior.folder.opened") {
       state.interiorFolderOpenPending = false;
       state.interiorFolderOpenBookId = "";
@@ -3820,6 +3847,19 @@
         state.interiorShuffleFeedbackError = true;
         if (state.bookDrawerOpen && state.selectedBookTab === "artwork") refreshInteriorArtworkWorkspace();
         status.textContent = "Random Interior needs attention";
+        return;
+      }
+      if (requestCommand === "book.production.open-folder") {
+        state.productionFolderOpenPending = "";
+        state.productionFeedback = ({
+          invalid_production_folder_action: "The folder action was invalid. Refresh and try again.",
+          production_folder_not_found: "The folder does not exist yet. Copy Brand templates or process the Book first.",
+          production_folder_launch_failed: "Windows could not open the folder. Check folder permissions and try again."
+        })[String(error)] ?? "The Production folder could not be opened. Try again.";
+        state.productionFeedbackError = true;
+        state.productionFeedbackWarning = false;
+        updateProductionInteractionUi();
+        status.textContent = state.productionFeedback;
         return;
       }
       if (requestCommand === "book.interior.open-folder") {

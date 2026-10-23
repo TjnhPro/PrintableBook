@@ -709,6 +709,67 @@ public sealed class BridgeMessageContractTests
         }
     }
 
+    [Theory]
+    [InlineData("templates", ".workspace/templates")]
+    [InlineData("output", "Output")]
+    public async Task Production_open_folder_uses_the_book_directory_without_requiring_PDF_outputs(string folder, string relativePath)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"PrintableBook.ProductionFolder.{Guid.NewGuid():N}");
+        var bookDirectory = Path.Combine(root, "Book One");
+        var expected = Path.GetFullPath(Path.Combine(bookDirectory, relativePath));
+        Directory.CreateDirectory(expected);
+        try
+        {
+            var current = CreateSnapshot();
+            var book = current.Discovery.Books[0] with { Directory = new DirectoryReference(bookDirectory) };
+            var snapshot = current with { Discovery = current.Discovery with { Books = [book] } };
+            var actions = new RecordingOutputActionService();
+            var router = new WebViewBridgeRouter(
+                new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)), outputActionService: actions);
+
+            var response = await router.HandleAsync(JsonSerializer.Serialize(new
+            {
+                version = 1, id = "production-folder", command = "book.production.open-folder",
+                payload = new { bookId = "Book One", folder, folderPath = Path.Combine(root, "untrusted") }
+            }));
+
+            Assert.True(response.Ok);
+            Assert.Equal("book.production.folder.opened", response.Command);
+            Assert.Equal(new DirectoryReference(expected), actions.OpenedFolder);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("templates", "Book One", "production_folder_not_found")]
+    [InlineData("output", "Book One", "production_folder_not_found")]
+    [InlineData("output", "Unknown Book", "production_folder_not_found")]
+    [InlineData("../outside", "Book One", "invalid_production_folder_action")]
+    public async Task Production_open_folder_rejects_missing_or_unrecognized_targets(string folder, string bookId, string error)
+    {
+        var current = CreateSnapshot();
+        var book = current.Discovery.Books[0] with
+        {
+            Directory = new DirectoryReference(Path.Combine(Path.GetTempPath(), $"PrintableBook.Missing.{Guid.NewGuid():N}"))
+        };
+        var snapshot = current with { Discovery = current.Discovery with { Books = [book] } };
+        var actions = new RecordingOutputActionService();
+        var router = new WebViewBridgeRouter(
+            new ApplicationLoadCoordinator(new RetainedSnapshotTaskManager(snapshot)), outputActionService: actions);
+
+        var response = await router.HandleAsync(JsonSerializer.Serialize(new
+        {
+            version = 1, id = "production-folder", command = "book.production.open-folder", payload = new { bookId, folder }
+        }));
+
+        Assert.False(response.Ok);
+        Assert.Equal(error, response.Error);
+        Assert.Null(actions.OpenedFolder);
+    }
+
     [Fact]
     public async Task Interior_open_folder_derives_the_canonical_Book_interior_directory()
     {
