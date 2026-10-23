@@ -49,6 +49,12 @@ public sealed class S3StorageWorker(
                 S3StorageFileView[] staged;
                 await using (lease)
                 {
+                    var optional = Enumerable.Range(1, 4).Select(i => $"app_plus_{i}.png").Where(name => File.Exists(Path.Combine(outputRoot, name))).ToArray();
+                    var rows = view.Files.Concat(optional.Select((name, index) => {
+                        var key = S3StoragePolicy.ObjectKey(operation.Settings.Folder, asin, name);
+                        return new S3StorageFileView(view.Files.Count + index, name, key, S3StoragePolicy.PublicUrl(operation.Settings, key), "image/png", S3StorageFileState.Pending);
+                    })).ToArray();
+                    view = view with { Files = rows, TotalCount = rows.Length };
                     EnsureCapacity(outputRoot, stagingRoot, view.Files);
                     staged = await Task.WhenAll(view.Files.Select(row => StageAsync(row, outputRoot, stagingRoot, gate, cancellationToken)));
                 }
